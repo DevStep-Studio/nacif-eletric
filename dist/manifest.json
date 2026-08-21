@@ -1,0 +1,23 @@
+{
+  "name": "NACIF Solutions Eletric",
+  "short_name": "NACIF",
+  "description": "Geração automática de projetos elétricos, quadros, memoriais, materiais e orçamento conforme NBR 5410.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#051917",
+  "theme_color": "#00d8b8",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,305 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@layer base {
+  :root {
+    --font-inter: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --background: 210 25% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 171.11 100% 42.35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 165 40% 96%;
+    --secondary-foreground: 174 35% 20%;
+    --muted: 165 24% 95%;
+    --muted-foreground: 173 12% 43%;
+    --accent: 165 40% 97%;
+    --accent-foreground: 174 35% 11%;
+    --destructive: 0 84% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 168 24% 88%;
+    --input: 168 24% 88%;
+    --ring: 171.11 100% 42.35%;
+    --chart-1: 171.11 100% 42.35%;
+    --chart-2: 170 96% 44%;
+    --chart-3: 168 84% 55%;
+    --chart-4: 166 57% 74%;
+    --chart-5: 172 100% 25%;
+    --radius: 0.75rem;
+    --sidebar-background: 165 25% 98%;
+    --sidebar-foreground: 174 35% 11%;
+    --sidebar-primary: 171.11 100% 42.35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 165 40% 97%;
+    --sidebar-accent-foreground: 174 35% 11%;
+    --sidebar-border: 168 24% 88%;
+    --sidebar-ring: 171.11 100% 42.35%;
+    --brand-accent: #00d8b8;
+    --brand-accent-soft: #E8FCF8;
+  }
+
+  .dark {
+
+    --background: 222 47% 6%;
+    --foreground: 210 40% 96%;
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 171.11 100% 42.35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 47% 14%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 222 47% 14%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 172 60% 18%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 96%;
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 171.11 100% 42.35%;
+    --chart-1: 171.11 100% 42.35%;
+    --chart-2: 170 96% 58%;
+    --chart-3: 168 84% 65%;
+    --chart-4: 166 57% 74%;
+    --chart-5: 172 100% 25%;
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 171.11 100% 42.35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 172 60% 18%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 222 30% 18%;
+    --sidebar-ring: 171.11 100% 42.35%;
+  }
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-height: 100%;
+  }
+
+  body {
+    @apply overflow-x-hidden bg-background text-foreground;
+  }
+}
+
+button.rounded-full,
+a.rounded-full,
+label.rounded-full,
+[role="button"].rounded-full {
+  border-radius: 12px !important;
+}
+
+@keyframes appPageIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes appItemIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-page-enter {
+  animation: appPageIn 180ms ease-out both;
+}
+
+.app-page-enter > * > * {
+  animation: appItemIn 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-page-enter,
+  .app-page-enter > * > * {
+    animation: none;
+  }
+}
+
+.solar-designer-map.leaflet-container {
+  background: #0f172a;
+  font-family: var(--font-inter);
+}
+
+.solar-designer-map .leaflet-control-attribution {
+  border-radius: 8px 0 0 0;
+  background: rgba(255, 255, 255, 0.86);
+  color: #334155;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.solar-designer-map .leaflet-control-zoom {
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 4px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+}
+
+.solar-designer-map .leaflet-control-zoom a {
+  border: 0;
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.solar-designer-map .leaflet-pm-toolbar {
+  margin-top: 70px;
+}
+
+.solar-designer-map .leaflet-pm-toolbar .button-container,
+.solar-designer-map .leaflet-pm-toolbar .leaflet-pm-icon-action {
+  border-radius: 9px;
+}
+
+.solar-designer-map .leaflet-pm-toolbar .button-container {
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.2);
+}
+
+.solar-designer-map .leaflet-pm-toolbar .button-container a {
+  background-color: rgba(255, 255, 255, 0.96);
+}
+
+.solar-designer-map .leaflet-pm-toolbar .button-container.active a,
+.solar-designer-map .leaflet-pm-toolbar .button-container a:hover {
+  background-color: #e6f2fa;
+}
+
+.solar-designer-map .leaflet-interactive:focus {
+  outline: none;
+}
+
+.solar-edge-workspace {
+  background-color: #172637;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.solar-tool-ribbon {
+  scrollbar-width: none;
+}
+
+.solar-tool-ribbon::-webkit-scrollbar {
+  display: none;
+}
+
+.solar-designer-map--edge .leaflet-tile {
+  filter: saturate(0.82) contrast(1.03) brightness(0.93);
+}
+
+.solar-designer-map--edge .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.72);
+  color: #273244;
+}
+
+.solar-designer-map--edge .leaflet-control-zoom {
+  margin-bottom: 100px;
+}
+
+.solar-designer-map--edge .leaflet-pm-toolbar {
+  display: none;
+}
+
+.solar-designer-map--edge .leaflet-pm-toolbar .button-container {
+  border-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.25);
+}
+
+.solar-designer-map--edge .leaflet-pm-toolbar .button-container a {
+  background-color: rgba(247, 250, 255, 0.94);
+}
+
+.solar-panel-shape {
+  filter: drop-shadow(0 0.7px 0.7px rgba(0, 0, 0, 0.32));
+  pointer-events: none;
+  stroke-linejoin: round;
+}
+
+.solar-panel-cell-lines {
+  pointer-events: none;
+  stroke-linecap: square;
+}
+
+.solar-designer-map [class*="solar-panels"] {
+  pointer-events: none;
+}
+
+.solar-measure-label {
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+}
+
+.solar-measure-label span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  height: 18px;
+  border-radius: 2px;
+  background: rgba(31, 41, 55, 0.62);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  transform-origin: center;
+}
+
+.solar-designer-mini-map.leaflet-container {
+  background: #111827;
+}
+
+.solar-designer-mini-map .leaflet-tile {
+  filter: saturate(0.76) contrast(1.02) brightness(0.9);
+}
+
+.solar-designer-map--edge .marker-icon {
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: -6px !important;
+  margin-top: -6px !important;
+  border: 2px solid #2d8df4 !important;
+  border-radius: 50% !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.34);
+}
+
+@media (min-width: 1280px) {
+  .solar-designer-map--edge .leaflet-control-zoom {
+    margin-right: 18px;
+    margin-bottom: 190px;
+  }
+
+}
