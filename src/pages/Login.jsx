@@ -5,50 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, Eye, EyeOff, Lock, LogIn, Mail, Loader2, UserRound } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Lock, LogIn, Mail, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 
 const REMEMBER_EMAIL_KEY = "voltai_remembered_login_email";
-const LOCAL_USERS_KEY = "voltai_local_users";
-const DEMO_EMAIL = "demo@nacifsolutions.com.br";
-const DEMO_PASSWORD = "demo1234";
 
 const readRememberedEmail = () => {
   if (typeof window === "undefined") return "";
   return window.localStorage.getItem(REMEMBER_EMAIL_KEY) || "";
-};
-
-const ensureDemoUser = () => {
-  if (!isLocalAuthMode || typeof window === "undefined") return;
-
-  const now = new Date().toISOString();
-  let users = [];
-  try {
-    users = JSON.parse(window.localStorage.getItem(LOCAL_USERS_KEY) || "[]");
-  } catch {
-    users = [];
-  }
-
-  const safeUsers = Array.isArray(users) ? users : [];
-  const demoIndex = safeUsers.findIndex((user) => user?.email === DEMO_EMAIL);
-  const demoUser = {
-    id: "local_user_demo",
-    email: DEMO_EMAIL,
-    password: DEMO_PASSWORD,
-    full_name: "Demonstração NACIF",
-    profession: "projetista",
-    profissao: "projetista",
-    role: safeUsers.length === 0 ? "admin" : "user",
-    plan: "profissional",
-    created_date: safeUsers[demoIndex]?.created_date || now,
-    updated_date: now,
-  };
-
-  const nextUsers = demoIndex >= 0
-    ? safeUsers.map((user, index) => index === demoIndex ? { ...user, ...demoUser, id: user.id || demoUser.id } : user)
-    : [...safeUsers, demoUser];
-
-  window.localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(nextUsers));
 };
 
 export default function Login() {
@@ -80,17 +44,6 @@ export default function Login() {
       setError(err.message || "Email ou senha inválidos.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDemoFill = () => {
-    ensureDemoUser();
-    setEmail(DEMO_EMAIL);
-    setPassword(DEMO_PASSWORD);
-    setRememberMe(true);
-    setError("");
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(REMEMBER_EMAIL_KEY, DEMO_EMAIL);
     }
   };
 
@@ -195,24 +148,6 @@ export default function Login() {
         </Link>
       </p>
 
-      <div className="relative my-5">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-slate-100" />
-        </div>
-        <div className="relative flex justify-center text-[11px] font-bold uppercase text-slate-300">
-          <span className="bg-white px-3">ou</span>
-        </div>
-      </div>
-
-      <Button
-        type="button"
-        variant="outline"
-        onClick={handleDemoFill}
-        className="h-11 w-full rounded-[8px] border-slate-200 bg-white text-xs font-extrabold text-slate-600 shadow-sm transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
-      >
-        <UserRound className="h-4 w-4 text-primary" aria-hidden="true" />
-        Preencher Dados de Demonstração
-      </Button>
     </AuthLayout>
   );
 }
