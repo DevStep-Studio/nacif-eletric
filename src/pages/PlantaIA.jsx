@@ -18,7 +18,7 @@ import {
   Trash2, Settings2, Download, House, SquarePlus, Minus, RotateCcw,
   DoorOpen, PanelTop, Cable, MousePointer2, Spline, Type,
   Zap, Lightbulb, Network, ShieldCheck,
-  AlertCircle, CheckCircle2, Coins, Calculator, ScanLine, Loader2
+  AlertCircle, CheckCircle2, Coins, Calculator, ScanLine, Loader2, Save
 } from "lucide-react";
 import FloorPlanCanvas, { createKonvaHouseTemplate } from "@/components/planta/FloorPlanCanvas";
 import { createDefaultLayerState, layerVisibilityForLegacyCanvas, normalizeLayerState } from "@/editor/layers/defaultLayers";
@@ -45,6 +45,7 @@ import {
   duplicateCable,
   findNearestTerminal,
   moveCable,
+  normalizeCableInstallationMode,
   normalizeConduitDiameter,
   normalizeCableRoute,
   normalizeCableRoutes,
@@ -99,6 +100,16 @@ const HEADER_ACTION_GROUP_CLASS = "flex min-w-0 flex-wrap items-center gap-1.5 r
 const HEADER_ACTION_LABEL_CLASS = "mr-1 hidden shrink-0 text-[10px] font-black uppercase tracking-[0.18em] text-[#64748B] xl:inline-flex";
 const POINT_TOOL_IDS = new Set(TOOL_TYPES.map((tool) => tool.id));
 const TOOL_DEFINITIONS_BY_ID = Object.freeze(Object.fromEntries(TOOL_TYPES.map((tool) => [String(tool.id), tool])));
+const ROUTE_INSTALLATION_OPTIONS = Object.freeze([
+  { id: "embutido", label: "Teto/Parede" },
+  { id: "piso", label: "Piso" },
+  { id: "externa", label: "Externo/Aparente" },
+  { id: "sobe", label: "Sobe" },
+  { id: "desce", label: "Desce" },
+]);
+const ROUTE_INSTALLATION_LABELS = Object.freeze(Object.fromEntries(
+  ROUTE_INSTALLATION_OPTIONS.map((option) => [option.id, option.label])
+));
 
 const firstTextValue = (...values) => (
   values
@@ -118,6 +129,10 @@ const pointToolIdCandidates = (point = {}) => {
     .map((value) => String(value ?? "").trim())
     .filter(Boolean);
 };
+
+const resolvePlantToolId = (point = {}) => (
+  pointToolIdCandidates(point).find((candidate) => POINT_TOOL_IDS.has(candidate)) || ""
+);
 
 const DEFAULT_POINT_HEIGHT_BY_TYPE = {
   arandela: "alta",
@@ -1491,7 +1506,7 @@ function drawPlantLegend(doc, points, routes, stats = {}) {
   y += 12;
 
   const pointCounts = points.reduce((acc, point) => {
-    const type = String(point.type || "");
+    const type = resolvePlantToolId(point);
     if (!type) return acc;
     acc[type] = (acc[type] || 0) + 1;
     return acc;
@@ -1643,14 +1658,14 @@ function drawPlantLegend(doc, points, routes, stats = {}) {
       y += 16;
     }
 
-    const legendColor = points.find((point) => point.type === item.id && point.color)?.color || item.color;
+    const legendColor = points.find((point) => resolvePlantToolId(point) === item.id && point.color)?.color || item.color;
     const legendItem = { ...item, color: legendColor };
     drawSymbol(legendItem, rowX + 8, y - 2);
     const rowHeight = writeLegendLabel(PLANT_SYMBOL_LABELS[item.id] || item.label, pointCounts[item.id] || 0, rowX + 25, y);
     y += rowHeight;
   });
 
-  const usedRoutes = new Set(routes.map((r) => r.mode || "embutido"));
+  const usedRoutes = new Set(routes.map((route) => normalizeCableInstallationMode(route.mode, "embutido")));
   const routeItems = CONDUIT_SYMBOLS.filter((tool) => usedRoutes.has(tool.id));
   if (routeItems.length > 0 && y <= bottom - 62) {
     y += 4;
@@ -1664,19 +1679,32 @@ function drawPlantLegend(doc, points, routes, stats = {}) {
   }
   routeItems.forEach((item) => {
     if (y > bottom - 44) return;
-    const count = routes.filter((route) => (route.mode || "embutido") === item.id).length;
+    const count = routes.filter((route) => normalizeCableInstallationMode(route.mode, "embutido") === item.id).length;
     doc.setDrawColor(15, 23, 42);
     doc.setLineWidth(0.95);
     
-    if (item.dash === "dashed") {
+    if (item.id === "sobe" || item.id === "desce") {
+      const centerX = rowX + 8;
+      const centerY = y - 1;
+      doc.circle(centerX, centerY, 4.8, "S");
+      if (item.id === "desce") {
+        doc.line(centerX - 3.2, centerY - 3.2, centerX + 3.2, centerY + 3.2);
+        doc.line(centerX + 3.2, centerY - 3.2, centerX - 3.2, centerY + 3.2);
+        doc.line(centerX + 4, centerY + 4, rowX + 18, y + 9);
+      } else {
+        doc.circle(centerX, centerY, 1.4, "F");
+        doc.line(centerX + 4, centerY - 4, rowX + 18, y - 11);
+      }
+    } else if (item.dash === "dashed") {
       doc.setLineDash([3, 2.5], 0);
+      doc.line(rowX, y - 1, rowX + 17, y - 1);
     } else if (item.dash === "dashdot") {
       doc.setLineDash([5, 2.5, 1.2, 2.5], 0);
+      doc.line(rowX, y - 1, rowX + 17, y - 1);
     } else {
       doc.setLineDash([]);
+      doc.line(rowX, y - 1, rowX + 17, y - 1);
     }
-    
-    doc.line(rowX, y - 1, rowX + 17, y - 1);
     doc.setLineDash([]);
 
     doc.setTextColor(15, 23, 42);
@@ -1686,37 +1714,39 @@ function drawPlantLegend(doc, points, routes, stats = {}) {
     y += rowHeight;
   });
 
-  y = Math.min(y + 8, bottom - 130);
-  doc.setDrawColor(188, 213, 229);
-  doc.line(x + 10, y, x + w - 10, y);
-  y += 12;
+  if (y <= bottom - 128) {
+    y += 8;
+    doc.setDrawColor(188, 213, 229);
+    doc.line(x + 10, y, x + w - 10, y);
+    y += 12;
 
-  doc.setTextColor(0, 100, 166);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.text("RESUMO DA PRANCHA", rowX, y + 2);
-  y += 14;
-
-  const summaryRows = [
-    ["Ambientes", stats.roomsCount || 0],
-    ["Pontos", stats.pointsCount || 0],
-    ["Eletrodutos", stats.routesCount || 0],
-    ["Circuitos", stats.circuitsCount || 0],
-    ["Escala", `${Math.round(normalizeScalePxPerMeter(stats.scalePxPerMeter))} px/m`],
-  ];
-  doc.setFontSize(9.8);
-  summaryRows.forEach(([label, value], index) => {
-    if (index % 2 === 0) {
-      doc.setFillColor(248, 251, 253);
-      doc.rect(rowX - 4, y - 8, w - 28, 14, "F");
-    }
-    doc.setTextColor(82, 97, 115);
+    doc.setTextColor(0, 100, 166);
     doc.setFont("helvetica", "bold");
-    doc.text(label, rowX, y + 2);
-    doc.setTextColor(15, 23, 42);
-    doc.text(String(value), valueX, y + 2, { align: "right" });
+    doc.setFontSize(10.5);
+    doc.text("RESUMO DA PRANCHA", rowX, y + 2);
     y += 14;
-  });
+
+    const summaryRows = [
+      ["Ambientes", stats.roomsCount || 0],
+      ["Pontos", stats.pointsCount || 0],
+      ["Eletrodutos", stats.routesCount || 0],
+      ["Circuitos", stats.circuitsCount || 0],
+      ["Escala", `${Math.round(normalizeScalePxPerMeter(stats.scalePxPerMeter))} px/m`],
+    ];
+    doc.setFontSize(9.8);
+    summaryRows.forEach(([label, value], index) => {
+      if (index % 2 === 0) {
+        doc.setFillColor(248, 251, 253);
+        doc.rect(rowX - 4, y - 8, w - 28, 14, "F");
+      }
+      doc.setTextColor(82, 97, 115);
+      doc.setFont("helvetica", "bold");
+      doc.text(label, rowX, y + 2);
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(value), valueX, y + 2, { align: "right" });
+      y += 14;
+    });
+  }
 
   const scanner = stats.scannerReport || null;
   if (scanner?.counts && y < bottom - 88) {
@@ -1754,30 +1784,32 @@ function drawPlantLegend(doc, points, routes, stats = {}) {
     });
   }
 
-  y = Math.max(y + 6, bottom - 58);
-  doc.setDrawColor(188, 213, 229);
-  doc.line(x + 10, y, x + w - 10, y);
-  y += 10;
+  if (y <= bottom - 52) {
+    y += 6;
+    doc.setDrawColor(188, 213, 229);
+    doc.line(x + 10, y, x + w - 10, y);
+    y += 10;
 
-  doc.setTextColor(15, 23, 42);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.6);
-  const notes = stats.scannerReport ? [
-    "1. Conferir medidas e posicoes em obra.",
-    "2. Orcamento do scanner e estimativo para construtora.",
-    "3. Documento gerado automaticamente; validar por profissional.",
-  ] : [
-    "1. Conferir medidas e posicoes em obra.",
-    "2. Eletrodutos devem respeitar ocupacao.",
-    "3. Circuitos de iluminacao: minimo 1.5 mm2.",
-    "4. Tomadas e forca: minimo 2.5 mm2.",
-  ];
-  notes.forEach((note) => {
-    if (y > bottom - 8) return;
-    const lines = doc.splitTextToSize(note, w - 32);
-    doc.text(lines, rowX, y);
-    y += lines.length * 5.7 + 2.5;
-  });
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.6);
+    const notes = stats.scannerReport ? [
+      "1. Conferir medidas e posicoes em obra.",
+      "2. Orcamento do scanner e estimativo para construtora.",
+      "3. Documento gerado automaticamente; validar por profissional.",
+    ] : [
+      "1. Conferir medidas e posicoes em obra.",
+      "2. Eletrodutos devem respeitar ocupacao.",
+      "3. Circuitos de iluminacao: minimo 1.5 mm2.",
+      "4. Tomadas e forca: minimo 2.5 mm2.",
+    ];
+    notes.forEach((note) => {
+      if (y > bottom - 8) return;
+      const lines = doc.splitTextToSize(note, w - 32);
+      doc.text(lines, rowX, y);
+      y += lines.length * 5.7 + 2.5;
+    });
+  }
   
   return doc;
 }
@@ -1845,6 +1877,9 @@ export default function PlantaIA() {
   const historyIndexRef = useRef(-1);
   const hydratedProjectRef = useRef("");
   const autosaveTimerRef = useRef(null);
+  const saveFeedbackTimerRef = useRef(null);
+  const latestPlantSnapshotRef = useRef(null);
+  const latestScannerReportRef = useRef(null);
   const latestRoutesRef = useRef([]);
   const lastCircuitPromptRef = useRef("");
   const [historyMeta, setHistoryMeta] = useState({ canUndo: false, canRedo: false });
@@ -1853,6 +1888,10 @@ export default function PlantaIA() {
   useEffect(() => {
     latestRoutesRef.current = routes;
   }, [routes]);
+
+  useEffect(() => {
+    latestScannerReportRef.current = scannerReport;
+  }, [scannerReport]);
 
   const syncHistoryMeta = () => {
     const index = historyIndexRef.current;
@@ -1888,6 +1927,7 @@ export default function PlantaIA() {
   };
 
   const applyDesignSnapshot = (snapshot) => {
+    latestPlantSnapshotRef.current = snapshot;
     setImageUrl(snapshot.imageUrl || null);
     setImageLayout(snapshot.imageLayout || null);
     setImportedFileName(snapshot.importedFileName || "");
@@ -1931,6 +1971,7 @@ export default function PlantaIA() {
     historyRef.current = history;
     historyIndexRef.current = history.length - 1;
     applyDesignSnapshot(nextSnapshot);
+    latestPlantSnapshotRef.current = nextSnapshot;
     if (options.clearSelection) setSelectedElement(null);
     syncHistoryMeta();
   };
@@ -2081,6 +2122,8 @@ export default function PlantaIA() {
       setSelectedProjectData(null);
       setGeneratedCircuits([]);
       setScannerReport(null);
+      latestScannerReportRef.current = null;
+      latestPlantSnapshotRef.current = null;
       setRouteCircuitId("auto");
       hydratedProjectRef.current = "";
       return;
@@ -2092,6 +2135,7 @@ export default function PlantaIA() {
           setSelectedProjectData(project);
           setGeneratedCircuits(normalizeProjectCircuits(project.circuits || []));
           setScannerReport(project.plant_scanner_report || null);
+          latestScannerReportRef.current = project.plant_scanner_report || null;
           setRouteCircuitId("auto");
           const design = normalizePlantDesign(project.plant_design || project.plantDesign);
           applyDesignSnapshot(design);
@@ -2107,6 +2151,8 @@ export default function PlantaIA() {
           setSelectedProjectData(null);
           setGeneratedCircuits([]);
           setScannerReport(null);
+          latestScannerReportRef.current = null;
+          latestPlantSnapshotRef.current = null;
           setRouteCircuitId("auto");
           hydratedProjectRef.current = "";
         }
@@ -2114,29 +2160,86 @@ export default function PlantaIA() {
     return () => { cancelled = true; };
   }, [selectedProject]);
 
+  const markPlantDesignSaved = () => {
+    setSaved(true);
+    if (saveFeedbackTimerRef.current) clearTimeout(saveFeedbackTimerRef.current);
+    saveFeedbackTimerRef.current = setTimeout(() => setSaved(false), 1400);
+  };
+
+  const persistPlantDesignSnapshot = async (snapshot, { silent = false } = {}) => {
+    if (!selectedProject || !snapshot) return false;
+    if (!silent) setSaving(true);
+
+    const report = latestScannerReportRef.current;
+    const payload = {
+      plant_design: snapshot,
+      plant_points_count: snapshot.points.length,
+      plant_routes_count: snapshot.routes.length,
+      plant_scanner_report: report,
+      plant_scan_counts: report?.counts || {},
+    };
+
+    try {
+      const updatedProject = await backend.entities.Project.update(selectedProject, payload);
+      setSelectedProjectData((current) => current ? { ...current, ...payload, ...(updatedProject || {}) } : updatedProject);
+      setProjects((current) => current.map((item) => (
+        item.id === selectedProject ? { ...item, ...payload, ...(updatedProject || {}) } : item
+      )));
+      markPlantDesignSaved();
+      return true;
+    } catch (error) {
+      console.error("Erro ao salvar planta:", error);
+      return false;
+    } finally {
+      if (!silent) setSaving(false);
+    }
+  };
+
+  const handleSavePlantDesign = async () => {
+    const snapshot = currentDesignSnapshot();
+    latestPlantSnapshotRef.current = snapshot;
+    await persistPlantDesignSnapshot(snapshot);
+  };
+
   useEffect(() => {
     if (!selectedProject || hydratedProjectRef.current !== selectedProject) return undefined;
     const snapshot = currentDesignSnapshot();
-    autosaveTimerRef.current = setTimeout(async () => {
-      try {
-        await backend.entities.Project.update(selectedProject, {
-          plant_design: snapshot,
-          plant_points_count: snapshot.points.length,
-          plant_routes_count: snapshot.routes.length,
-          plant_scanner_report: scannerReport,
-          plant_scan_counts: scannerReport?.counts || {},
-        });
-        setSaved(true);
-        setTimeout(() => setSaved(false), 1200);
-      } catch (error) {
-        console.error(error);
-      }
+    latestPlantSnapshotRef.current = snapshot;
+    autosaveTimerRef.current = setTimeout(() => {
+      persistPlantDesignSnapshot(snapshot, { silent: true });
     }, 900);
 
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
   }, [selectedProject, imageUrl, imageLayout, importedFileName, importStatus, importedPlanElements, points, rooms, walls, openings, roomLabels, routes, scalePxPerMeter, showWallDimensions, showDeviceDimensions, unitSettings, editorLayers, snapSettings, scannerReport]);
+
+  useEffect(() => {
+    if (!selectedProject || hydratedProjectRef.current !== selectedProject) return undefined;
+
+    const flushPendingPlantSave = () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      const snapshot = latestPlantSnapshotRef.current || currentDesignSnapshot();
+      persistPlantDesignSnapshot(snapshot, { silent: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushPendingPlantSave();
+    };
+
+    window.addEventListener("pagehide", flushPendingPlantSave);
+    window.addEventListener("beforeunload", flushPendingPlantSave);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flushPendingPlantSave);
+      window.removeEventListener("beforeunload", flushPendingPlantSave);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [selectedProject]);
+
+  useEffect(() => () => {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    if (saveFeedbackTimerRef.current) clearTimeout(saveFeedbackTimerRef.current);
+  }, []);
 
   const loadHouseTemplate = () => {
     const template = createKonvaHouseTemplate();
@@ -2847,8 +2950,9 @@ export default function PlantaIA() {
   };
 
   const getRouteDash = (mode = routeMode) => {
-    if (mode === "piso") return [12, 10];
-    if (mode === "externa") return [18, 8, 4, 8];
+    const installationMode = normalizeCableInstallationMode(mode, "embutido");
+    if (installationMode === "piso") return [12, 10];
+    if (installationMode === "externa") return [18, 8, 4, 8];
     return [];
   };
 
@@ -3749,11 +3853,7 @@ export default function PlantaIA() {
     setRouteEditMode("");
   };
 
-  const routeModeLabel = (mode) => {
-    if (mode === "piso") return "Piso";
-    if (mode === "externa") return "Externo";
-    return "Teto/Parede";
-  };
+  const routeModeLabel = (mode) => ROUTE_INSTALLATION_LABELS[normalizeCableInstallationMode(mode, "embutido")] || "Teto/Parede";
 
   const mountedRoomsForAi = () => rooms.map((room) => ({
     name: room.label,
@@ -3900,16 +4000,6 @@ export default function PlantaIA() {
     const snapshot = currentDesignSnapshot({ points: nextPoints, routes: nextRoutes });
     commitDesign({ points: nextPoints, routes: nextRoutes });
     return { nextPoints, nextRoutes, snapshot, circuit: preparedCircuit };
-  };
-
-  const persistPlantDesignSnapshot = async (snapshot) => {
-    if (!selectedProject || !snapshot) return;
-    await backend.entities.Project.update(selectedProject, {
-      plant_design: snapshot,
-      plant_points_count: snapshot.points.length,
-      plant_routes_count: snapshot.routes.length,
-    });
-    setSelectedProjectData((current) => current ? { ...current, plant_design: snapshot } : current);
   };
 
   const handleApplyExistingCircuitToPoint = async () => {
@@ -4802,6 +4892,15 @@ export default function PlantaIA() {
 
               <div className={HEADER_ACTION_GROUP_CLASS}>
                 <span className={HEADER_ACTION_LABEL_CLASS}>Saída</span>
+                <Button
+                  variant="outline"
+                  className="h-11 rounded-[12px] border-[#00d8b8] font-extrabold text-[#0f4f49]"
+                  onClick={handleSavePlantDesign}
+                  disabled={!selectedProject || saving}
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Save className="h-4 w-4" />}
+                  {saving ? "Salvando..." : saved ? "Salvo" : "Salvar"}
+                </Button>
                 <Button variant="outline" className="h-11 rounded-[12px] font-extrabold" onClick={() => { setZoom(1); setSelectedElement(null); setFitRequest(value => value + 1); }}>
                   <MousePointer2 className="h-4 w-4" />
                   Enquadrar
@@ -5592,6 +5691,32 @@ export default function PlantaIA() {
                         </Select>
                       </label>
                       <label className="block space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-[#64748B]">Instalação na planta</span>
+                        <Select
+                          value={normalizeCableInstallationMode(selectedRoute.mode, "embutido")}
+                          onValueChange={(value) => {
+                            const installationMode = normalizeCableInstallationMode(value, "embutido");
+                            const patch = {
+                              mode: installationMode,
+                              dash: getRouteDash(installationMode),
+                            };
+                            if (installationMode === "externa") patch.routingMode = "orthogonal";
+                            updateRouteProperties(selectedRoute.id, patch);
+                          }}
+                        >
+                          <SelectTrigger className="h-8 rounded-md border-[#CDEFE8] bg-[#F8FBFD] text-[11px] font-extrabold">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ROUTE_INSTALLATION_OPTIONS.map((option) => (
+                              <SelectItem key={option.id} value={option.id} className="text-xs font-bold">
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <label className="block space-y-1">
                         <span className="text-[9px] font-black uppercase tracking-wider text-[#64748B]">Bitola da Infraestrutura</span>
                         <Select
                           value={selectedRouteConduitDiameter}
@@ -6209,12 +6334,8 @@ export default function PlantaIA() {
                       </label>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-1">
-                      {[
-                        { id: "embutido", label: "Teto/Parede" },
-                        { id: "piso", label: "Piso" },
-                        { id: "externa", label: "Externo" },
-                      ].map((mode) => (
+                    <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+                      {ROUTE_INSTALLATION_OPTIONS.map((mode) => (
                         <button
                           key={mode.id}
                           type="button"

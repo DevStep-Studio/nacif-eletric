@@ -104,9 +104,11 @@ export const PLANT_SYMBOL_LABELS = {
 };
 
 export const CONDUIT_SYMBOLS = [
-  { id: "embutido", label: "Eletroduto embutido no teto ou na alvenaria", dash: "solid" },
+  { id: "embutido", label: "Eletroduto no teto/parede", dash: "solid" },
   { id: "piso", label: "Eletroduto no piso", dash: "dashed" },
   { id: "externa", label: "Eletroduto sobre o teto (externa)", dash: "dashdot" },
+  { id: "sobe", label: "Eletroduto sobe", dash: "sobe" },
+  { id: "desce", label: "Eletroduto desce", dash: "desce" },
   { id: "nfr", label: "Neutro, Fase, Retorno", dash: "ticks" },
 ];
 

@@ -27,7 +27,10 @@ import {
   X,
   PanelTop,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Save,
+  Loader2,
+  CheckCircle2
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 
@@ -1832,11 +1835,17 @@ export default function PanelGenerator() {
   const [metrics, setMetrics] = useState(null);
   const [panelBoards, setPanelBoards] = useState([]);
   const [activeBoardId, setActiveBoardId] = useState("");
+  const [savingLayout, setSavingLayout] = useState(false);
+  const [savedLayout, setSavedLayout] = useState(false);
   const [scale, setScale] = useState(null);
   const [fitScale, setFitScale] = useState(0.85);
   const [showLegend, setShowLegend] = useState(true);
   const [legendPosition, setLegendPosition] = useState(() => ({ x: PANEL_W - 230, y: 38 }));
   const [legendDrag, setLegendDrag] = useState(null);
+  const layoutSaveFeedbackTimerRef = useRef(null);
+  const latestPanelBoardsRef = useRef([]);
+  const latestActiveBoardIdRef = useRef("");
+  const latestPanelLayoutRef = useRef({ rails: [], wires: [], infrastructure: [] });
   
   // ESTADOS DO EDITOR INTERATIVO
   const [rails, setRails] = useState([]);
@@ -2081,6 +2090,15 @@ export default function PanelGenerator() {
     if (exitWiringMode) setWiringMode(false);
   }, []);
 
+  useEffect(() => {
+    latestPanelBoardsRef.current = panelBoards;
+    latestActiveBoardIdRef.current = activeBoardId;
+  }, [activeBoardId, panelBoards]);
+
+  useEffect(() => {
+    latestPanelLayoutRef.current = { rails, wires, infrastructure };
+  }, [infrastructure, rails, wires]);
+
   // Carregar projetos
   useEffect(() => {
     backend.entities.Project.list().then(setProjects);
@@ -2164,8 +2182,15 @@ export default function PanelGenerator() {
     setNewCompRail(rails[0].id);
   }, [newCompRail, rails]);
 
-  const persistPanelBoards = async (nextBoards, activeId = activeBoardId) => {
-    if (!selectedId) return;
+  const markPanelLayoutSaved = () => {
+    setSavedLayout(true);
+    if (layoutSaveFeedbackTimerRef.current) clearTimeout(layoutSaveFeedbackTimerRef.current);
+    layoutSaveFeedbackTimerRef.current = setTimeout(() => setSavedLayout(false), 1400);
+  };
+
+  const persistPanelBoards = async (nextBoards, activeId = activeBoardId, { silent = true } = {}) => {
+    if (!selectedId) return false;
+    if (!silent) setSavingLayout(true);
     const activeBoard = nextBoards.find((board) => board.id === activeId) || nextBoards[0];
     const activeLayout = activeBoard?.layout || { rails: [], wires: [], infrastructure: [] };
     setPanelBoards(nextBoards);
@@ -2175,8 +2200,13 @@ export default function PanelGenerator() {
         panel_boards: nextBoards,
         panel_layout: activeLayout,
       });
+      if (!silent) markPanelLayoutSaved();
+      return true;
     } catch (err) {
       console.error("Erro ao salvar quadros:", err);
+      return false;
+    } finally {
+      if (!silent) setSavingLayout(false);
     }
   };
 
@@ -2230,6 +2260,56 @@ export default function PanelGenerator() {
     ));
     await persistPanelBoards(nextBoards, activeBoardId);
   };
+
+  const panelBoardsWithCurrentLayout = () => {
+    const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
+    const activeId = activeBoardId || currentBoards[0]?.id || "";
+    const layoutObj = { rails, wires, infrastructure };
+    return {
+      activeId,
+      boards: currentBoards.map((board) => (
+        board.id === activeId ? { ...board, layout: layoutObj } : board
+      )),
+    };
+  };
+
+  const handleSavePanelLayout = async () => {
+    const { boards, activeId } = panelBoardsWithCurrentLayout();
+    if (!boards.length) return;
+    await persistPanelBoards(boards, activeId, { silent: false });
+  };
+
+  useEffect(() => {
+    if (!selectedId) return undefined;
+
+    const flushPendingPanelSave = () => {
+      const currentBoards = latestPanelBoardsRef.current.length > 0
+        ? latestPanelBoardsRef.current
+        : normalizePanelBoards(project);
+      const activeId = latestActiveBoardIdRef.current || currentBoards[0]?.id || "";
+      const layoutObj = latestPanelLayoutRef.current || { rails: [], wires: [], infrastructure: [] };
+      const nextBoards = currentBoards.map((board) => (
+        board.id === activeId ? { ...board, layout: layoutObj } : board
+      ));
+      if (nextBoards.length > 0) persistPanelBoards(nextBoards, activeId, { silent: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushPendingPanelSave();
+    };
+
+    window.addEventListener("pagehide", flushPendingPanelSave);
+    window.addEventListener("beforeunload", flushPendingPanelSave);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flushPendingPanelSave);
+      window.removeEventListener("beforeunload", flushPendingPanelSave);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [selectedId]);
+
+  useEffect(() => () => {
+    if (layoutSaveFeedbackTimerRef.current) clearTimeout(layoutSaveFeedbackTimerRef.current);
+  }, []);
 
   const restoreLayoutSnapshot = (snapshot) => {
     if (!snapshot) return;
@@ -7695,6 +7775,16 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     title={wiringMode ? "Cancelar fiação" : "Fiação rápida"}
                   >
                     <Cable className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 rounded-lg border-emerald-200 px-3 text-xs font-extrabold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                    onClick={handleSavePanelLayout}
+                    disabled={!selectedId || savingLayout}
+                  >
+                    {savingLayout ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : savedLayout ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+                    {savingLayout ? "Salvando" : savedLayout ? "Salvo" : "Salvar"}
                   </Button>
                   <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={handleExportSvg} aria-label="Exportar SVG" title="Exportar SVG">
                     <Download className="h-4 w-4" />

@@ -6,6 +6,7 @@ import {
   createManualCable,
   duplicateCable,
   moveCable,
+  normalizeCableInstallationMode,
   normalizeCableRoute,
   pointToTerminal,
   removeCableNode,
@@ -127,6 +128,11 @@ assert.equal(persisted.routeMode, "manual", "salva e recarrega modo manual da ro
 assert.equal(persisted.locked, true, "salva e recarrega bloqueio");
 assert.equal(persisted.visible, false, "salva e recarrega visibilidade");
 assert.equal(persisted.points.length, 1, "salva e recarrega pontos intermediarios");
+assert.equal(normalizeCableRoute({ ...persisted, mode: "piso" }).mode, "piso", "preserva instalacao no piso");
+assert.equal(normalizeCableRoute({ ...persisted, mode: "Teto/Parede" }).mode, "embutido", "converte instalacao teto/parede");
+assert.equal(normalizeCableRoute({ ...persisted, mode: "externo aparente" }).mode, "externa", "converte instalacao aparente");
+assert.equal(normalizeCableInstallationMode("floor"), "piso", "normaliza alias floor");
+assert.equal(normalizeCableInstallationMode("curved"), "embutido", "routing antigo nao vira instalacao invalida");
 
 ["free", "orthogonal", "curved"].forEach((routingMode) => {
   const cable = createManualCable({ source: { x: 1, y: 2 }, target: { x: 3, y: 4 }, routingMode });

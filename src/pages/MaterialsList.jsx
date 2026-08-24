@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import PageHeader from "@/components/PageHeader";
 import { buildProjectBudgetMaterials } from "@/lib/projectBudgetMaterials";
-import MaterialSymbol from "@/components/MaterialSymbol";
+import MaterialSymbol, { getMaterialSymbolDataUri } from "@/components/MaterialSymbol";
 
 const SUPPLIERS = [
   {
@@ -257,13 +257,11 @@ function CategoryBadge({ category }) {
 }
 
 function MaterialPhoto({ material, variant = "compact" }) {
-  const [imageIndex, setImageIndex] = useState(0);
-  const imageCandidates = productImageCandidates(material);
-  const currentImage = imageCandidates[imageIndex];
+  const hasReferencePhoto = productImageCandidates(material).length > 0;
   const googleUrl = googleImagesUrl(material);
   const sizeClass = variant === "expanded"
     ? "h-28 w-full sm:h-[118px] lg:h-[118px] lg:w-[118px]"
-    : "h-[88px] w-full sm:h-24 lg:h-[88px] lg:w-[88px] xl:h-24 xl:w-24";
+    : "h-16 w-16";
 
   return (
     <a
@@ -271,19 +269,9 @@ function MaterialPhoto({ material, variant = "compact" }) {
       target="_blank"
       rel="noreferrer"
       className={`group relative flex shrink-0 items-center justify-center overflow-hidden rounded-[16px] border border-[#d9d9d9] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] ${sizeClass}`}
-      title={`Buscar ${material.name} no Google Imagens`}
+      title={`${hasReferencePhoto ? "Buscar referencias" : "Buscar imagens"} de ${material.name}`}
     >
-      {currentImage ? (
-        <img
-          src={currentImage}
-          alt={material.name}
-          className="h-full w-full object-contain p-3 transition duration-300 group-hover:scale-105"
-          loading="lazy"
-          onError={() => setImageIndex((value) => value + 1)}
-        />
-      ) : (
-        <MaterialSymbol name={material.name} className="h-full w-full rounded-none border-0 bg-transparent" />
-      )}
+      <MaterialSymbol name={material.name} className="h-full w-full rounded-none border-0 bg-transparent" />
       <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-[8px] border border-[#BCEEE5] bg-white/95 text-[#004E82] opacity-0 shadow-sm transition group-hover:opacity-100">
         <ExternalLink className="h-3.5 w-3.5" />
       </span>
@@ -298,8 +286,8 @@ function MaterialProductCard({ material }) {
 
   if (!expanded) {
     return (
-      <article className="rounded-[18px] border border-[#e7e2d6] bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.03)] transition hover:border-primary/30 hover:shadow-[0_16px_38px_rgba(15,23,42,0.055)] sm:p-5">
-        <div className="grid min-w-0 gap-4 sm:grid-cols-[96px_minmax(0,1fr)] lg:grid-cols-[96px_minmax(0,1fr)_260px] lg:items-center">
+      <article className="rounded-[14px] border border-[#e7e2d6] bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.03)] transition hover:border-primary/30 hover:shadow-[0_16px_38px_rgba(15,23,42,0.055)] sm:p-4">
+        <div className="grid min-w-0 gap-3 lg:grid-cols-[72px_minmax(0,1.45fr)_92px_104px_128px_128px_96px] lg:items-center">
           <MaterialPhoto material={material} />
 
           <div className="min-w-0 lg:pr-4">
@@ -313,20 +301,34 @@ function MaterialProductCard({ material }) {
             <p className="mt-1 truncate text-sm font-semibold text-[#6b7280]">{material.brand}</p>
           </div>
 
-          <div className="flex items-center justify-between gap-4 border-t border-[#eee9dd] pt-4 sm:col-span-2 lg:col-span-1 lg:border-t-0 lg:pt-0 lg:text-right">
-            <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#7a8495]">melhor preço</p>
-              <p className="mt-1 text-xl font-extrabold text-primary sm:text-2xl">{formatCurrency(bestOffer.total)}</p>
-              <p className="mt-0.5 truncate text-sm font-semibold text-[#6b7280]">{bestOffer.supplier}</p>
+          <div className="grid grid-cols-2 gap-3 border-t border-[#eee9dd] pt-3 text-sm lg:contents lg:border-t-0 lg:pt-0">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#7a8495] lg:hidden">Qtd.</p>
+              <p className="mt-1 font-extrabold text-[#111827] lg:mt-0 lg:text-right">{formatQty(material.qty)}</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setExpanded(true)}
-              className="inline-flex h-11 shrink-0 items-center gap-2 rounded-[12px] border border-[#CDEFE8] bg-white px-5 text-sm font-extrabold text-[#111827] transition hover:bg-[#F2FFFC]"
-            >
-              Detalhes
-              <ChevronDown className="h-4 w-4" />
-            </button>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#7a8495] lg:hidden">Unidade</p>
+              <p className="mt-1 font-extrabold text-[#111827] lg:mt-0 lg:text-center">{material.unit}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#7a8495] lg:hidden">Valor unit.</p>
+              <p className="mt-1 font-extrabold text-[#111827] lg:mt-0 lg:text-right">{formatCurrency(material.price)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#7a8495] lg:hidden">Total</p>
+              <p className="mt-1 font-extrabold text-primary lg:mt-0 lg:text-right">{formatCurrency(material.referenceTotal)}</p>
+            </div>
+            <div className="col-span-2 flex justify-start lg:col-span-1 lg:justify-end">
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="inline-flex h-10 shrink-0 items-center gap-2 rounded-[12px] border border-[#CDEFE8] bg-white px-4 text-sm font-extrabold text-[#111827] transition hover:bg-[#F2FFFC]"
+                title={`Melhor estimativa: ${bestOffer.supplier} ${formatCurrency(bestOffer.total)}`}
+              >
+                Detalhes
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </article>
@@ -522,21 +524,24 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
   const handlePrint = (size) => {
     const rows = materials.map((material) => `
       <tr>
+        <td style="text-align:center"><img src="${getMaterialSymbolDataUri(material.name)}" alt="" style="width:24px;height:24px;object-fit:contain" /></td>
         <td><strong>${material.name}</strong><br><span style="font-size:7pt;color:#666">${material.brand || ""} · ${material.code || ""}</span></td>
-        <td style="text-align:center">${formatQty(material.qty)} ${material.unit}</td>
-        <td style="text-align:right">R$ ${(material.price || 0).toFixed(2)}</td>
+        <td style="text-align:right">${formatQty(material.qty)}</td>
+        <td style="text-align:center">${material.unit}</td>
+        <td style="text-align:right">${formatCurrency(material.price)}</td>
         <td style="text-align:right">${material.bestOffer.supplier}<br><span style="font-size:7pt;color:#666">${formatCurrency(material.bestOffer.unitPrice)}</span></td>
-        <td style="text-align:right;font-weight:bold">R$ ${material.bestOffer.total.toFixed(2)}</td>
+        <td style="text-align:right;font-weight:bold">${formatCurrency(material.referenceTotal)}</td>
       </tr>`).join("");
     const html = `
       <h2>Lista de Materiais — ${project?.name || ""}</h2>
       <p class="sub">Quantitativo automático com cotação IA estimada · NACIF Solutions Eletric · NBR 5410:2004</p>
       <table>
-        <thead><tr><th>Material</th><th style="text-align:center">Qtd.</th><th style="text-align:right">Referência</th><th style="text-align:right">Melhor compra</th><th style="text-align:right">Total IA</th></tr></thead>
+        <thead><tr><th style="text-align:center">Desenho</th><th>Material</th><th style="text-align:right">Qtd.</th><th style="text-align:center">Unidade</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Melhor compra</th><th style="text-align:right">Total</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="totals">
-        <div class="grand-total">Total estimado IA: R$ ${recommendation.mixedTotal.toFixed(2)}</div>
+        <div class="grand-total">Total referência: ${formatCurrency(recommendation.referenceTotal)}</div>
+        <div class="grand-total">Menor preço estimado IA: ${formatCurrency(recommendation.mixedTotal)}</div>
       </div>`;
     openHTMLPrint({
       htmlContent: html,
@@ -657,9 +662,20 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
                     Nenhum material encontrado.
                   </div>
                 ) : (
-                  filtered.map((material) => (
-                    <MaterialProductCard key={material.name} material={material} />
-                  ))
+                  <>
+                    <div className="hidden rounded-[12px] border border-[#CDEFE8] bg-[#F8FBFD] px-4 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B] lg:grid lg:grid-cols-[72px_minmax(0,1.45fr)_92px_104px_128px_128px_96px] lg:items-center">
+                      <span>Desenho</span>
+                      <span>Material</span>
+                      <span className="text-right">Qtd.</span>
+                      <span className="text-center">Unidade</span>
+                      <span className="text-right">Valor unit.</span>
+                      <span className="text-right">Total</span>
+                      <span className="text-right">Ações</span>
+                    </div>
+                    {filtered.map((material) => (
+                      <MaterialProductCard key={material.name} material={material} />
+                    ))}
+                  </>
                 )}
               </div>
 

@@ -1,6 +1,12 @@
 import { useRef } from "react";
 import { Circle, Group, Line, Arrow, Rect, Text } from "react-konva";
-import { DEFAULT_CONDUIT_DIAMETER, cablePath, normalizeConduitDiameter, normalizeRouteSystem } from "@/lib/manualCableEditor";
+import {
+  DEFAULT_CONDUIT_DIAMETER,
+  cablePath,
+  normalizeCableInstallationMode,
+  normalizeConduitDiameter,
+  normalizeRouteSystem,
+} from "@/lib/manualCableEditor";
 
 const pctToPx = (value, total) => (Number(value || 0) / 100) * total;
 
@@ -158,15 +164,16 @@ export default function CableRenderer({
           );
         };
         
+        const installationMode = normalizeCableInstallationMode(cable.mode);
         const getDashPattern = (mode) => {
           if (mode === "piso") return [8, 6];
           if (mode === "externa") return [12, 6, 2, 6];
           return undefined;
         };
         
-        const dashPattern = getDashPattern(cable.mode);
-        const isSobe = cable.mode === "sobe";
-        const isDesce = cable.mode === "desce";
+        const dashPattern = getDashPattern(installationMode);
+        const isSobe = installationMode === "sobe";
+        const isDesce = installationMode === "desce";
 
         const handleClick = (event) => {
           event.cancelBubble = true;

@@ -71,6 +71,7 @@ const DEFAULT_CABLE_COLORS = {
 
 const VALID_CABLE_TYPES = new Set(["ELÉTRICA", "TELECOM", "L1", "L2", "L3", "N", "PE", "CUSTOM"]);
 const VALID_ROUTING_MODES = new Set(["free", "orthogonal", "curved"]);
+const VALID_CABLE_INSTALLATION_MODES = new Set(["embutido", "piso", "externa", "sobe", "desce"]);
 const DESIGN_WIDTH = 1400;
 const DESIGN_HEIGHT = 900;
 const POINT_TERMINAL_OFFSETS_PX = {
@@ -139,6 +140,33 @@ export const cablePath = (cable = {}) => {
   ];
 };
 
+export const normalizeCableInstallationMode = (value = "", fallback = "embutido") => {
+  const source = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+  if (!source) return fallback;
+  if (VALID_CABLE_INSTALLATION_MODES.has(source)) return source;
+  if (source.includes("piso") || source.includes("floor")) return "piso";
+  if (source.includes("extern") || source.includes("aparente") || source.includes("sobrepor")) return "externa";
+  if (source.includes("sobe") || source.includes("subida") || source === "up") return "sobe";
+  if (source.includes("desce") || source.includes("descida") || source === "down") return "desce";
+  if (
+    source.includes("embut") ||
+    source.includes("teto") ||
+    source.includes("parede") ||
+    source.includes("alvenaria") ||
+    source === "embedded" ||
+    VALID_ROUTING_MODES.has(source)
+  ) {
+    return "embutido";
+  }
+
+  return VALID_CABLE_INSTALLATION_MODES.has(fallback) ? fallback : "embutido";
+};
+
 export const syncCableFromPath = (cable = {}, nextPath = []) => {
   const path = nextPath.map((point, index) => ({
     id: point.id || (index === 0 ? "source" : index === nextPath.length - 1 ? "target" : createCablePointId("node")),
@@ -190,7 +218,7 @@ export const normalizeCableRoute = (route = {}, index = 0) => {
     color: route.color || route.circuit_color || route.stroke || route.strokeColor || DEFAULT_CABLE_COLORS[type] || colorForRouteSystem(systemType),
     thickness: Math.max(0.8, Math.min(8, Number(route.thickness) || Number(route.strokeWidth) || 1.4)),
     routingMode: VALID_ROUTING_MODES.has(route.routingMode) ? route.routingMode : "free",
-    mode: route.mode || route.routingMode || "embutido",
+    mode: normalizeCableInstallationMode(route.mode || route.installationMode || route.installation_mode || route.routeInstallationMode, "embutido"),
     gauge: route.gauge || route.wire_gauge || undefined,
     conduit_diameter: conduitDiameter || undefined,
     circuit_name: route.circuit_name || route.circuit || undefined,
@@ -243,7 +271,7 @@ export const createManualCable = ({
     systemType: normalizedSystemType,
     color: color || DEFAULT_CABLE_COLORS[cableType] || colorForRouteSystem(normalizedSystemType),
     thickness,
-    mode,
+    mode: normalizeCableInstallationMode(mode, "embutido"),
     gauge: gauge || undefined,
     wire_gauge: wire_gauge || undefined,
     conduit_diameter: conduitDiameter || undefined,
@@ -393,4 +421,4 @@ export const validateCableConnections = (cables = [], terminals = []) => {
   return warnings;
 };
 
-export { DEFAULT_CABLE_COLORS, VALID_CABLE_TYPES, VALID_ROUTING_MODES };
+export { DEFAULT_CABLE_COLORS, VALID_CABLE_TYPES, VALID_ROUTING_MODES, VALID_CABLE_INSTALLATION_MODES };
