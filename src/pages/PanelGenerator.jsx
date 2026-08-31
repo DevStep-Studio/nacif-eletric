@@ -6,7 +6,7 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
-import { buildPanelBoardsWithLayout, calcProjectMetrics, generateDefaultPanelLayout } from "@/lib/electricalEngine";
+import { buildPanelBoardsWithLayout, calcMainProtection, calcProjectMetrics, generateDefaultPanelLayout } from "@/lib/electricalEngine";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -216,13 +216,42 @@ const isSolarProject = (project) => (
   project?.project_type === "Solar" || Boolean(project?.solar_config)
 );
 
+// Alinha o disjuntor e o IDR gerais de um layout salvo ao dimensionamento atual
+// (mesma fonte do editor de circuitos), para o quadro bater com diagrama, orçamento
+// e materiais. Não altera disjuntores de circuito nem quadros solares.
+const reconcileMainProtection = (parsed, project, options = {}) => {
+  if (!project || isSolarProject(project) || options.forceDistribution === false) return parsed;
+  if (!Array.isArray(parsed?.rails) || parsed.rails.length === 0) return parsed;
+  const main = calcMainProtection(project);
+  const isGeneral = (component = {}) => (
+    !component.locked
+    && (component.type === "breaker" || component.type === "dr")
+    && (
+      component.isGeneral === true
+      || ["gen_brk", "gen_dr"].includes(String(component.id || ""))
+      || /geral/i.test(String(component.label || component.name || ""))
+    )
+  );
+  return {
+    ...parsed,
+    rails: parsed.rails.map((rail) => ({
+      ...rail,
+      components: (rail.components || []).map((component) => {
+        if (!isGeneral(component)) return component;
+        const spec = component.type === "dr" ? main.dr : main.breaker;
+        return { ...component, current: spec.current, poles: spec.poles, curve: spec.curve || component.curve };
+      }),
+    })),
+  };
+};
+
 const parsePanelLayout = (layout, project = null, options = {}) => {
   if (layout && typeof layout === "object") {
-    return {
+    return reconcileMainProtection({
       rails: Array.isArray(layout.rails) ? layout.rails : [],
       wires: Array.isArray(layout.wires) ? layout.wires : [],
       infrastructure: Array.isArray(layout.infrastructure) ? layout.infrastructure : [],
-    };
+    }, project, options);
   }
 
   if (layout && typeof layout === "string") {

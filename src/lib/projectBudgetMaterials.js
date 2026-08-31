@@ -1,5 +1,5 @@
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
-import { calcProjectMetrics } from "@/lib/electricalEngine";
+import { calcMainProtection, calcProjectMetrics } from "@/lib/electricalEngine";
 import {
   BUDGET_MATERIAL_PRICES,
   buildConduitBudgetItems,
@@ -8,6 +8,7 @@ import {
   getBudgetDrMaterial,
   getBudgetDrMaterialFromDevice,
   isGeneratedBudgetSource,
+  isPanelAssemblyBudgetItem,
   phaseCountForBudgetCircuit,
   resolveBudgetSupplyType,
 } from "@/lib/budgetElectricalMaterials";
@@ -145,6 +146,44 @@ const getProjectPanelWires = (project = {}) => (
   getProjectPanelLayouts(project).flatMap((layout) => layout.wires || [])
 );
 
+const asArray = (value) => (Array.isArray(value) ? value : []);
+
+// O projeto tem uma planta baixa / projeto de infraestrutura desenhado ou importado?
+const projectHasFloorPlan = (project = {}, plantDesign = {}) => {
+  const imported = plantDesign.importedPlanElements || project?.importedPlanElements || {};
+  return (
+    asArray(plantDesign.routes).length > 0
+    || asArray(plantDesign.points).length > 0
+    || asArray(plantDesign.rooms).length > 0
+    || asArray(plantDesign.walls).length > 0
+    || asArray(imported.lines).length > 0
+    || Boolean(plantDesign.imageUrl)
+    || Boolean(project?.floor_plan || project?.floorPlan || project?.plantDocument)
+  );
+};
+
+// O projeto tem um layout de quadro real (com componentes montados nos trilhos)?
+const projectHasPanelLayout = (project = {}) => (
+  getProjectPanelComponents(project).some((component) => component?.type && component.type !== "spacer")
+);
+
+const isGeneralPanelComponent = (component = {}) => (
+  !component?.locked
+  && (
+    component?.isGeneral === true
+    || ["gen_brk", "gen_dr"].includes(String(component?.id || ""))
+    || /geral/i.test(String(component?.label || component?.name || ""))
+  )
+);
+
+// Alinha o disjuntor/IDR geral do quadro ao dimensionamento (mesma fonte do editor
+// de circuitos), para o orçamento e os materiais baterem com as demais telas.
+const withMainProtectionOverride = (component = {}, mainProtection = null) => {
+  if (!mainProtection || !isGeneralPanelComponent(component)) return component;
+  const spec = component.type === "dr" ? mainProtection.dr : mainProtection.breaker;
+  return { ...component, current: spec.current, poles: spec.poles, curve: spec.curve || component.curve };
+};
+
 const breakerMaterialFromComponent = (component = {}) => {
   const current = Math.max(6, Number(component.current || component.breaker_a || component.rating || component.breaker) || 16);
   const poles = Math.max(1, Number(component.poles || component.breaker_poles || 1) || 1);
@@ -191,15 +230,23 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
       baseMaterialTotal: 0,
       materialTotal: 0,
       productAdjustmentValue: 0,
+      isPanelAssemblyOnly: false,
+      budgetScope: "installation",
     };
   }
 
   const metrics = calcProjectMetrics(project);
   const circuits = metrics.circuits || [];
+  const mainProtection = calcMainProtection(project, metrics);
   const productMultiplier = Math.max(0, 1 + (Number(productAdjustment) || 0) / 100);
   const plantDesign = project?.plant_design || project?.plantDesign || {};
   const plantRoutes = Array.isArray(plantDesign.routes) ? plantDesign.routes : [];
   const plantPoints = Array.isArray(plantDesign.points) ? plantDesign.points : [];
+  // Projeto de "montar quadro": tem o layout do quadro mas nenhuma planta baixa.
+  // Nesse caso o orçamento lista apenas o que compõe o quadro — sem infraestrutura
+  // (eletrodutos, caixas, curvas), acabamentos (tomadas, interruptores, pontos de
+  // luz) nem o cabeamento de distribuição, que dependem da planta baixa.
+  const isPanelAssemblyOnly = !projectHasFloorPlan(project, plantDesign) && projectHasPanelLayout(project);
   const inferredInfraType = plantRoutes.some((route) => String(route.mode || "").toLowerCase().includes("externa"))
     ? "galvanizado"
     : (project?.infra_type || project?.plant_infra_type || "embutido");
@@ -220,7 +267,7 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
 
   if (panelBreakers.length > 0) {
     panelBreakers.forEach((component) => {
-      baseMaterials.push(breakerMaterialFromComponent(component));
+      baseMaterials.push(breakerMaterialFromComponent(withMainProtectionOverride(component, mainProtection)));
     });
   }
 
@@ -233,6 +280,8 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
       };
       baseMaterials.push(breakerMaterialFromComponent(breakerComponent));
     }
+    // Sem planta baixa não há traçado de cabos a quantificar.
+    if (isPanelAssemblyOnly) return;
     const cableName = `Cabo ${circuit.wire_gauge} (m)`;
     const conductorCount = conductorCountForBudgetCircuit(circuit);
     baseMaterials.push({
@@ -247,7 +296,7 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
   if (hasBudgetElectricalSource) {
     if (drComponents.length > 0) {
       drComponents.forEach((component) => {
-        const drMaterial = getBudgetDrMaterialFromDevice(component, { supplyType: budgetSupplyType });
+        const drMaterial = getBudgetDrMaterialFromDevice(withMainProtectionOverride(component, mainProtection), { supplyType: budgetSupplyType });
         baseMaterials.push({ name: drMaterial.name, qty: drMaterial.qty, price: drMaterial.price, category: "proteção" });
       });
     } else {
@@ -270,7 +319,8 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
     const quadro = dins <= 12 ? "12" : dins <= 24 ? "24" : "36";
     baseMaterials.push({ name: `Quadro ${quadro} DIN`, qty: 1, price: BUDGET_BASE_MATERIAL_PRICES[`Quadro ${quadro} DIN`] || 110, category: "quadro" });
 
-    const conduitItems = buildConduitBudgetItems({
+    // Eletrodutos só entram quando há planta baixa (traçado de infraestrutura).
+    const conduitItems = isPanelAssemblyOnly ? [] : buildConduitBudgetItems({
       plantRoutes,
       infraType: inferredInfraType,
       scalePxPerMeter: plantDesign.scalePxPerMeter || 50,
@@ -296,6 +346,8 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
       panelDinModules: dins,
       conduitMeters: conduitItems.reduce((sum, item) => sum + Number(item.qty || 0), 0),
     }).forEach((item) => {
+      // Projeto só de quadro: mantém apenas os complementos de montagem do quadro.
+      if (isPanelAssemblyOnly && !isPanelAssemblyBudgetItem(item)) return;
       baseMaterials.push(item);
     });
   }
@@ -356,6 +408,8 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
     inferredInfraType,
     budgetSupplyType,
     budgetPhaseCount,
+    isPanelAssemblyOnly,
+    budgetScope: isPanelAssemblyOnly ? "panel" : "installation",
     materials,
     baseMaterials: aggregatedBaseMaterials,
     customManualItems,

@@ -4,7 +4,7 @@ import ProfessionalBoardSheetSVG from "@/components/ProfessionalBoardSheetSVG";
 import QgbtDiagramSheetSVG from "@/components/QgbtDiagramSheetSVG";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
-import { calcProjectMetrics, autoBalancePhases } from "@/lib/electricalEngine";
+import { calcProjectMetrics, autoBalancePhases, selectDrRating } from "@/lib/electricalEngine";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
@@ -792,7 +792,7 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
     x: 80,
     y: 200,
     title: "DISJUNTOR GERAL (DJ)",
-    subtitle: `${mainBreakerAmps}A / Curva C`,
+    subtitle: `${projMetrics?.generalBreakerPoles || 2}P · ${mainBreakerAmps}A / Curva C`,
     value: `${mainBreakerAmps}A`,
     phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
     accentColor: "#00d8b8",
@@ -825,8 +825,8 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
     type: "fase"
   });
 
-  // 4. DR Geral
-  const drAmps = mainBreakerAmps > 40 ? 63 : 40;
+  // 4. DR Geral — In do IDR ≥ In do disjuntor geral (mesmo dimensionamento das demais telas)
+  const drAmps = projMetrics?.generalDr || selectDrRating(mainBreakerAmps);
   initialNodes.push({
     id: "node-dr",
     type: "dr",
@@ -1423,7 +1423,7 @@ export default function UnifilarDiagram() {
     const defaultData = {
       feed: { title: "ALIMENTAÇÃO", subtitle: "220V Mono", val: "Entrada", clr: "#eb5e4a" },
       breaker: { title: "DISJUNTOR", subtitle: "20A / Curva B", val: "20A", clr: "#00d8b8" },
-      dr: { title: "IDR GERAL", subtitle: "Diferencial 30mA", val: "40A", clr: "#005188" },
+      dr: { title: "IDR GERAL", subtitle: "Diferencial 30mA", val: `${metrics?.generalDr || 40}A`, clr: "#005188" },
       dps: { title: "DPS CLASSE II", subtitle: "Surto 15kA", val: "275V", clr: "#dc2626" },
       busbar: { title: "BARRAMENTO", subtitle: "Fases", val: "Cobre", clr: "#eab308" },
       circuit: { title: "CIRCUITO FINAL", subtitle: "Tomada Geral", val: "16A", clr: "#16a34a" },

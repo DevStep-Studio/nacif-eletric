@@ -112,6 +112,37 @@ export function selectBreaker(nominal_a) {
   return SIZES.find(s => s >= nominal_a) || 400;
 }
 
+// ─── Seleção do IDR de entrada (In ≥ In do disjuntor geral) ───────────────────────────────────
+// Piso de 40 A: alinha com a base de materiais/orçamento, que cota IDR a partir de 40 A.
+export const DR_RATINGS = [40, 63, 80, 100, 125];
+
+export function selectDrRating(breaker_a) {
+  const n = Number(breaker_a) || 0;
+  return DR_RATINGS.find(r => r >= n) || DR_RATINGS[DR_RATINGS.length - 1];
+}
+
+// Polos da proteção geral (disjuntor e IDR) conforme a alimentação.
+export function mainProtectionPoles(supply_type) {
+  if (supply_type === "Trifásico") return { breaker: 3, dr: 4 };
+  return { breaker: 2, dr: 2 };
+}
+
+// ─── Proteção geral: fonte única de verdade do dimensionamento da entrada ─────────────────────
+// Usada pelo editor de circuitos, balanceamento, diagrama, quadro, orçamento e materiais
+// para que o disjuntor geral e o IDR geral batam em todas as telas.
+export function calcMainProtection(project = {}, precomputedMetrics = null) {
+  const metrics = precomputedMetrics || calcProjectMetrics(project);
+  const poles = mainProtectionPoles(project?.supply_type || "Monofásico");
+  // Sem circuitos dimensionados o valor não tem significado — usa 40 A como padrão de entrada.
+  const hasCircuits = (metrics?.circuits?.length || 0) > 0;
+  const breakerCurrent = hasCircuits ? (Number(metrics?.generalBreaker) || 40) : 40;
+  return {
+    breaker: { current: breakerCurrent, poles: poles.breaker, curve: "C" },
+    dr: { current: selectDrRating(breakerCurrent), poles: poles.dr, sensitivity_ma: 30 },
+    current: Number(metrics?.generalCurrent) || 0,
+  };
+}
+
 // ─── Cálculo da queda de tensão ────────────────────────────────────────────────────────────────
 export function calcVoltageDrop(power_w, voltage, supply_type, length_m, wire_gauge, power_factor = 0.92) {
   const wireData = WIRE_TABLE.find(w => w.gauge === wire_gauge) || WIRE_TABLE[1];
@@ -238,6 +269,10 @@ export function calcProjectMetrics(project) {
   // Corrente geral = fase mais carregada (NBR 5410 — proteção geral)
   const generalCurrent = Math.round(maxI * 10) / 10;
   const generalBreaker = selectBreaker(maxI * 1.25);
+  const generalPolesSet = mainProtectionPoles(project?.supply_type || "Monofásico");
+  const generalBreakerPoles = generalPolesSet.breaker;
+  const generalDr = selectDrRating(generalBreaker);
+  const generalDrPoles = generalPolesSet.dr;
 
   // Validações NBR 5410
   const validations = [];
@@ -254,6 +289,7 @@ export function calcProjectMetrics(project) {
   return {
     circuits, phaseLoad, imbalance_pct, neutral_a, totalPower,
     totalDins, panelSize, generalBreaker, generalCurrent: Math.round(generalCurrent * 10) / 10,
+    generalBreakerPoles, generalDr, generalDrPoles,
     validations, nbrScore,
   };
 }
@@ -309,8 +345,13 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   };
   
   const totalPower = circuits.reduce((sum, c) => sum + (c.power_w || 0), 0);
-  const genCurrent = Math.max(32, Math.min(125, Math.ceil((totalPower / (voltage * 0.92)) * 1.25 / 10) * 10));
-  const genPoles = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 2;
+  // Proteção geral vem do dimensionamento (mesma fonte do editor de circuitos),
+  // para o quadro bater com balanceamento, diagrama, orçamento e materiais.
+  const mainProtection = calcMainProtection({ ...proj, circuits, supply_type: supply, voltage });
+  const genCurrent = mainProtection.breaker.current;
+  const genPoles = mainProtection.breaker.poles;
+  const genDrCurrent = mainProtection.dr.current;
+  const genDrPoles = mainProtection.dr.poles;
   
   const rail1Components = [];
   
@@ -348,8 +389,8 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       id: "gen_dr",
       type: "dr",
       label: "IDR GERAL",
-      current: genCurrent > 40 ? 63 : 40,
-      poles: supply === "Trifásico" ? 4 : 2,
+      current: genDrCurrent,
+      poles: genDrPoles,
       phase: supply === "Trifásico" ? "ABCN" : supply === "Bifásico" ? "AB" : "AN",
       supply_type: supply,
       status: "ON"

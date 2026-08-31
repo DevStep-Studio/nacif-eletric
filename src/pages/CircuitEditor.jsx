@@ -391,7 +391,7 @@ export default function CircuitEditor() {
             <>
               <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 <ExecutiveMetric icon={Zap} label="Carga total" value={formatNumber(m.totalPower / 1000, " kW")} sub={`${formatNumber(m.generalCurrent, " A")} corrente geral`} />
-                <ExecutiveMetric icon={ShieldCheck} label="Geral" value={`${m.generalBreaker}A`} sub={`${project.supply_type || "Alimentação"} · ${project.voltage || "-"}V`} />
+                <ExecutiveMetric icon={ShieldCheck} label="Geral" value={`${m.generalBreakerPoles || 2}P ${m.generalBreaker}A`} sub={`IDR ${m.generalDrPoles || 2}P ${m.generalDr}A 30mA · ${project.supply_type || "Alimentação"}`} />
                 <ExecutiveMetric icon={Layers} label="Quadro" value={`${m.panelSize} DIN`} sub={`${m.totalDins} módulos + reserva`} />
                 <ExecutiveMetric icon={CircleGauge} label="DR / críticos" value={`${drCount} / ${criticalCount}`} sub="circuitos com atenção" tone={criticalCount ? "warning" : "default"} />
                 <ExecutiveMetric

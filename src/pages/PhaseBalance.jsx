@@ -141,7 +141,7 @@ export default function PhaseBalance() {
                   {[
                     { label: "Desequilíbrio", value: `${m.imbalance_pct}%` },
                     { label: "Neutro estimado", value: formatAmp(m.neutral_a) },
-                    { label: "Disjuntor geral", value: `${m.generalBreaker} A` },
+                    { label: "Proteção geral", value: `DJ ${m.generalBreaker}A · IDR ${m.generalDr}A` },
                   ].map((item) => (
                     <div key={item.label} className="rounded-[14px] border border-[#CDEFE8] bg-[#F7FBFE] p-4 shadow-[0_10px_24px_rgba(0,100,166,0.035)]">
                       <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#667085]">{item.label}</p>

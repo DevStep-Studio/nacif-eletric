@@ -182,6 +182,7 @@ export default function BudgetPage() {
     baseMaterialTotal,
     materialTotal,
     productAdjustmentValue,
+    isPanelAssemblyOnly,
   } = buildProjectBudgetMaterials(project, { productAdjustment });
   const subtotal = materialTotal + Number(laborCost || 0);
   const total = subtotal * (1 + Number(margin || 0) / 100);
@@ -354,6 +355,11 @@ export default function BudgetPage() {
               <div>
                 <h3 className="font-semibold">Lista de Materiais</h3>
                 <p className="mt-1 text-xs font-semibold text-muted-foreground">Quantitativo com unidade, valor unitário e total por item.</p>
+                {isPanelAssemblyOnly && (
+                  <p className="mt-1 text-xs font-semibold text-primary">
+                    Escopo: montagem de quadro · itens de infraestrutura (planta baixa) não incluídos.
+                  </p>
+                )}
               </div>
               <span className="rounded-lg bg-primary/10 px-3 py-1 text-xs font-black text-primary">{materials.length} itens</span>
             </div>

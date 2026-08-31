@@ -202,8 +202,9 @@ function enrichMaterial(material) {
   };
 }
 
-function buildMaterials(project) {
-  return buildProjectBudgetMaterials(project).materials.map(enrichMaterial);
+function buildBudget(project) {
+  const budget = buildProjectBudgetMaterials(project);
+  return { ...budget, materials: budget.materials.map(enrichMaterial) };
 }
 
 function buildAiRecommendation(materials) {
@@ -462,7 +463,9 @@ export default function MaterialsList() {
     });
   }, [selected]);
 
-  const materials = useMemo(() => buildMaterials(project), [project]);
+  const budget = useMemo(() => buildBudget(project), [project]);
+  const materials = budget.materials;
+  const isPanelAssemblyOnly = budget.isPanelAssemblyOnly;
   const recommendation = useMemo(() => buildAiRecommendation(materials), [materials]);
   const activeInsight = aiInsight || recommendation;
 
@@ -599,6 +602,11 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
 
       {project ? (
         <>
+          {isPanelAssemblyOnly && (
+            <div className="min-w-0 rounded-[16px] border border-[#CDEFE8] bg-[#F2FFFC] px-4 py-3 text-sm font-semibold text-[#004E82]">
+              Escopo: montagem de quadro. A lista traz apenas o material do quadro — itens de infraestrutura (eletrodutos, caixas, tomadas, cabeamento) aparecem depois que a planta baixa for criada.
+            </div>
+          )}
           <div className="grid min-w-0 gap-3 sm:gap-4 md:grid-cols-2 2xl:grid-cols-4">
             {[
               { label: "Itens técnicos", value: materials.length, icon: Package },

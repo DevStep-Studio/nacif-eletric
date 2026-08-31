@@ -4,11 +4,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { GitBranch, Download } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
+import { calcMainProtection } from "@/lib/electricalEngine";
 
 function DiagramSVG({ project }) {
   const circuits = project?.circuits || [];
   const voltage = project?.voltage || 220;
   const supply = project?.supply_type || "Monofásico";
+  const mainProtection = calcMainProtection(project);
   const svgRef = useRef(null);
 
   const PHASES = supply === "Trifásico" ? ["A", "B", "C"] : supply === "Bifásico" ? ["A", "B"] : ["A"];
@@ -61,15 +63,15 @@ function DiagramSVG({ project }) {
 
           {/* DR Geral */}
           <rect x="220" y="82" width="50" height="36" rx="4" fill="none" stroke="#004E82" strokeWidth="1.5" />
-          <text x="245" y="96" fill="#004E82" fontSize="8" textAnchor="middle">DR</text>
-          <text x="245" y="109" fill="#004E82" fontSize="8" textAnchor="middle">30mA</text>
+          <text x="245" y="95" fill="#004E82" fontSize="8" textAnchor="middle">IDR {mainProtection.dr.current}A</text>
+          <text x="245" y="109" fill="#004E82" fontSize="8" textAnchor="middle">{mainProtection.dr.sensitivity_ma}mA</text>
           <line x1="270" y1="100" x2="310" y2="100" stroke="#00d8b8" strokeWidth="2" />
 
           {/* Disjuntor Geral */}
           <rect x="310" y="82" width="55" height="36" rx="4" fill="none" stroke="#123D5C" strokeWidth="1.5" />
           <text x="337" y="96" fill="#123D5C" fontSize="8" textAnchor="middle">DJ GERAL</text>
           <text x="337" y="109" fill="#123D5C" fontSize="8" textAnchor="middle">
-            {circuits.length > 0 ? `${Math.ceil(circuits.reduce((s, c) => s + (c.current_a || 0), 0) * 1.2)}A` : "40A"}
+            {mainProtection.breaker.poles}P {mainProtection.breaker.current}A
           </text>
           <line x1="365" y1="100" x2="400" y2="100" stroke="#00d8b8" strokeWidth="2" />
 

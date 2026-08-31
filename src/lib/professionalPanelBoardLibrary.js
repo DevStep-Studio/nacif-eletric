@@ -306,12 +306,16 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
         })),
       ];
 
-  const generalBreakerFromLayout = mainBreakerComponent
-    ? asNumber(mainBreakerComponent.current, generalBreaker)
-    : generalBreaker;
-  const generalPolesFromLayout = mainBreakerComponent
-    ? asNumber(mainBreakerComponent.poles, system.generalPoles)
-    : system.generalPoles;
+  // Proteção geral segue o dimensionamento (métricas); o componente do layout é
+  // só fallback quando não há métricas, para bater com editor/diagrama/orçamento.
+  const generalBreakerFromLayout = asNumber(
+    metrics?.generalBreaker,
+    mainBreakerComponent ? asNumber(mainBreakerComponent.current, generalBreaker) : generalBreaker,
+  );
+  const generalPolesFromLayout = asNumber(
+    metrics?.generalBreakerPoles,
+    mainBreakerComponent ? asNumber(mainBreakerComponent.poles, system.generalPoles) : system.generalPoles,
+  );
   const feederGauge = feederGaugeByCurrent(Math.max(generalCurrent, generalBreakerFromLayout));
   const dpsPoleCount = dpsComponents.length
     ? dpsComponents.reduce((sum, component) => sum + asNumber(component.poles, 1), 0)

@@ -44,6 +44,21 @@ export const GENERATED_BUDGET_SOURCES = new Set([
   "scanner-planta-ia",
 ]);
 
+// Categorias de material que pertencem à montagem do quadro elétrico em si.
+// Quando o projeto não tem planta baixa (só o layout do quadro), o orçamento
+// deve se restringir a esses itens — sem infraestrutura, acabamentos ou cabeamento.
+export const PANEL_ASSEMBLY_BUDGET_CATEGORIES = new Set([
+  "quadro",
+  "protecao",
+  "conectores",
+  "identificacao",
+  "consumiveis",
+]);
+
+export const isPanelAssemblyBudgetItem = (item = {}) => (
+  PANEL_ASSEMBLY_BUDGET_CATEGORIES.has(normalizeText(item?.category))
+);
+
 const CONDUIT_DIAMETER_OPTIONS = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '3"', '4"'];
 const DEFAULT_CONDUIT_DIAMETER = '3/4"';
 const DN_TO_CONDUIT_DIAMETER = {

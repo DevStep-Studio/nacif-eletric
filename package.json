@@ -11,6 +11,8 @@
     "test:cables": "node scripts/manual-cable-editor-smoke.mjs",
     "test:editor-foundation": "node scripts/editor-foundation-smoke.mjs",
     "test:panel-generator": "node scripts/panel-generator-smoke.mjs",
+    "test:budget": "node scripts/budget-materials-smoke.mjs",
+    "test:main-protection": "node scripts/main-protection-smoke.mjs",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
   },

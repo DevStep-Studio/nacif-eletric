@@ -5,6 +5,7 @@ import {
   feederGaugeByCurrent,
   formatNumber,
 } from "@/lib/professionalPanelBoardLibrary";
+import { selectBreaker } from "@/lib/electricalEngine";
 
 const MAGENTA = "#ff38f5";
 const NODE_GREEN = "#00cf28";
@@ -323,8 +324,12 @@ export default function QgbtDiagramSheetSVG({ project = {}, metrics = {} }) {
     return { ...map, [code]: index };
   }, {});
   const phaseBreakerMax = visibleFeeders.reduce((max, feeder) => Math.max(max, feeder.current), 0);
-  const mainCurrent = asNumber(metrics?.generalBreaker || metrics?.generalCurrent, phaseBreakerMax || 80);
-  const generalBreaker = Math.max(40, Math.ceil(mainCurrent / 10) * 10);
+  // Disjuntor geral do dimensionamento; QGBT tem piso de 40 A. Sem métricas, ajusta o
+  // maior alimentador visível a um valor comercial — sem re-arredondar o valor canônico.
+  const generalBreaker = Math.max(
+    40,
+    asNumber(metrics?.generalBreaker, selectBreaker(phaseBreakerMax || 80)),
+  );
   const feederGauge = feederGaugeByCurrent(generalBreaker);
   const leftFeeders = visibleFeeders.filter((_, index) => index % 2 === 0);
   const rightFeeders = visibleFeeders.filter((_, index) => index % 2 === 1);
