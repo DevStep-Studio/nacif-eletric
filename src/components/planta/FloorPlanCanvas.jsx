@@ -3,6 +3,8 @@ import { Stage, Layer, Rect, Line, Circle, Text, Group, Image as KonvaImage, Arc
 import {
   Copy,
   DoorOpen,
+  Eye,
+  EyeOff,
   Maximize2,
   Minus,
   MousePointer2,
@@ -202,6 +204,13 @@ const DEFAULT_POSITION_LABEL = {
   fontSize: 8,
   x: -34,
   y: 24,
+};
+const DEFAULT_POWER_LABEL = {
+  text: TECH_BLACK,
+  fontSize: 8,
+  width: 64,
+  x: -26,
+  y: 17,
 };
 
 const emptyBounds = () => ({ minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
@@ -1120,11 +1129,14 @@ function ElectricalPoint({
   onCircuitDoubleClick,
   onCircuitLabelSelect,
   onPointLabelSelect,
+  onPositionLabelSelect,
+  onPowerLabelSelect,
   onHover,
   onAlignPosition,
   onClearAlignment,
   selected = false,
   selectedTextField = "",
+  showPositionLabels = true,
 }) {
   const x = pctToPx(point.x, width);
   const y = pctToPx(point.y, height);
@@ -1146,9 +1158,20 @@ function ElectricalPoint({
   const positionLabelHeight = Math.max(13, positionLabelFontSize + 7);
   const positionLabelX = Number.isFinite(Number(point.positionLabelX)) ? Number(point.positionLabelX) : DEFAULT_POSITION_LABEL.x;
   const positionLabelY = Number.isFinite(Number(point.positionLabelY)) ? Number(point.positionLabelY) : DEFAULT_POSITION_LABEL.y;
-
-  const normalizedRot = (((point.rotation || 0) % 360) + 360) % 360;
-  const isUpsideDown = normalizedRot > 90 && normalizedRot <= 270;
+  const pointRotation = Number(point.rotation) || 0;
+  const showPositionLabel = showPositionLabels && point.positionLabelHidden !== true && Boolean(installLabel);
+  const powerValue = Number(point.load_w) || 0;
+  const powerLabel = powerValue > 0 ? `${point.load_w} VA` : "";
+  const showPowerLabel = point.powerLabelHidden !== true && Boolean(powerLabel);
+  const powerLabelFontSize = clamp(Number(point.powerLabelFontSize) || DEFAULT_POWER_LABEL.fontSize, 6, 16);
+  const powerLabelColor = point.powerLabelColor || DEFAULT_POWER_LABEL.text;
+  const powerLabelWidth = Math.max(
+    42,
+    Number(point.powerLabelWidth) || Math.max(DEFAULT_POWER_LABEL.width, powerLabel.length * powerLabelFontSize * 0.64 + 8),
+  );
+  const powerLabelHeight = Math.max(12, powerLabelFontSize + 5);
+  const powerLabelX = Number.isFinite(Number(point.powerLabelX)) ? Number(point.powerLabelX) : DEFAULT_POWER_LABEL.x;
+  const powerLabelY = Number.isFinite(Number(point.powerLabelY)) ? Number(point.powerLabelY) : DEFAULT_POWER_LABEL.y;
 
   const ReadableText = (props) => {
     const { counterRotate = true, ...textProps } = props;
@@ -1158,9 +1181,8 @@ function ElectricalPoint({
     const h = props.fontSize || 10;
     const cx = (props.x || 0) + w / 2;
     const cy = (props.y || 0) + h / 2;
-    const readableRotation = -(Number(point.rotation) || 0) + (isUpsideDown ? 180 : 0);
     return (
-      <Group x={cx} y={cy} rotation={readableRotation}>
+      <Group x={cx} y={cy} rotation={-pointRotation}>
         <Text {...textProps} x={-w / 2} y={-h / 2} align={align} />
       </Group>
     );
@@ -1289,7 +1311,7 @@ function ElectricalPoint({
         <Group
           x={point.circuit_dx ?? 14}
           y={point.circuit_dy ?? -35}
-          rotation={-(Number(point.rotation) || 0)}
+          rotation={-pointRotation}
           draggable={!routeToolActive}
           onMouseDown={(event) => {
             event.cancelBubble = true;
@@ -1363,14 +1385,11 @@ function ElectricalPoint({
           />
         </Group>
       )}
-      {point.load_w > 0 && (
-        <ReadableText x={-26} y={17} width={64} text={`${point.load_w} VA`} fontFamily="Arial" fontSize={8} fill={TECH_BLACK} />
-      )}
-      {installLabel && (
+      {showPowerLabel && (
         <Group
-          x={positionLabelX}
-          y={positionLabelY}
-          rotation={-(Number(point.rotation) || 0)}
+          x={powerLabelX}
+          y={powerLabelY}
+          rotation={-pointRotation}
           draggable={!routeToolActive}
           onMouseDown={(event) => {
             event.cancelBubble = true;
@@ -1380,15 +1399,77 @@ function ElectricalPoint({
           }}
           onClick={(event) => {
             event.cancelBubble = true;
-            if (!routeToolActive) onSelect?.({ type: "point", id: point.id });
+            if (!routeToolActive) onPowerLabelSelect?.(point.id);
           }}
           onTap={(event) => {
             event.cancelBubble = true;
-            if (!routeToolActive) onSelect?.({ type: "point", id: point.id });
+            if (!routeToolActive) onPowerLabelSelect?.(point.id);
           }}
           onDragStart={(event) => {
             event.cancelBubble = true;
-            if (!routeToolActive) onSelect?.({ type: "point", id: point.id });
+            if (!routeToolActive) onPowerLabelSelect?.(point.id);
+          }}
+          onDragMove={(event) => {
+            event.cancelBubble = true;
+          }}
+          onDragEnd={(event) => {
+            event.cancelBubble = true;
+            if (routeToolActive) return;
+            onMovePoint?.(point.id, {
+              powerLabelX: event.target.x(),
+              powerLabelY: event.target.y(),
+            });
+          }}
+        >
+          {selectedTextField === "powerLabel" && (
+            <Rect
+              x={-3}
+              y={-3}
+              width={powerLabelWidth + 6}
+              height={powerLabelHeight + 2}
+              fill="#ffffff"
+              stroke="#00d8b8"
+              strokeWidth={1}
+              dash={[4, 3]}
+            />
+          )}
+          <Text
+            x={0}
+            y={0}
+            width={powerLabelWidth}
+            height={powerLabelHeight}
+            text={powerLabel}
+            fontFamily="Arial"
+            fontSize={powerLabelFontSize}
+            fontStyle="bold"
+            fill={powerLabelColor}
+            align="center"
+          />
+        </Group>
+      )}
+      {showPositionLabel && (
+        <Group
+          x={positionLabelX}
+          y={positionLabelY}
+          rotation={-pointRotation}
+          draggable={!routeToolActive}
+          onMouseDown={(event) => {
+            event.cancelBubble = true;
+          }}
+          onTouchStart={(event) => {
+            event.cancelBubble = true;
+          }}
+          onClick={(event) => {
+            event.cancelBubble = true;
+            if (!routeToolActive) onPositionLabelSelect?.(point.id);
+          }}
+          onTap={(event) => {
+            event.cancelBubble = true;
+            if (!routeToolActive) onPositionLabelSelect?.(point.id);
+          }}
+          onDragStart={(event) => {
+            event.cancelBubble = true;
+            if (!routeToolActive) onPositionLabelSelect?.(point.id);
           }}
           onDragMove={(event) => {
             event.cancelBubble = true;
@@ -1408,8 +1489,9 @@ function ElectricalPoint({
             width={positionLabelWidth}
             height={positionLabelHeight}
             fill={positionLabelFill}
-            stroke={positionLabelStroke}
-            strokeWidth={0.5}
+            stroke={selectedTextField === "positionLabel" ? "#00d8b8" : positionLabelStroke}
+            strokeWidth={selectedTextField === "positionLabel" ? 1.2 : 0.5}
+            dash={selectedTextField === "positionLabel" ? [4, 3] : undefined}
             cornerRadius={2}
             opacity={0.94}
           />
@@ -1439,6 +1521,7 @@ function EditorToolbar({
   scalePxPerMeter,
   showWallDimensions = true,
   showDeviceDimensions = false,
+  showPositionLabels = true,
   canUndo,
   canRedo,
   onSelectTool,
@@ -1451,6 +1534,7 @@ function EditorToolbar({
   onScalePxPerMeterChange,
   onToggleWallDimensions,
   onToggleDeviceDimensions,
+  onTogglePositionLabels,
   onFit,
   onRotateSelected,
   onDuplicateSelected,
@@ -1588,7 +1672,7 @@ function EditorToolbar({
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
             }}
-            className="h-6 w-[52px] border-0 bg-transparent px-0 text-center text-[11px] font-black text-[#0f4f49] outline-none"
+            className="h-6 w-[52px] rounded border-0 bg-transparent px-0 text-center text-[11px] font-black text-[#0f4f49] outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8] focus-visible:ring-offset-1"
           />
           <span className="text-[10px] font-black text-[#64748B]">px/m</span>
         </label>
@@ -1605,6 +1689,17 @@ function EditorToolbar({
           onClick={onToggleDeviceDimensions}
         >
           <Crosshair className="h-4 w-4 text-red-600" />
+        </ButtonIcon>
+        <ButtonIcon
+          title={showPositionLabels ? "Ocultar textos vermelhos de altura" : "Mostrar textos vermelhos de altura"}
+          active={showPositionLabels}
+          onClick={onTogglePositionLabels}
+        >
+          {showPositionLabels ? (
+            <Eye className="h-4 w-4 text-red-600" />
+          ) : (
+            <EyeOff className="h-4 w-4 text-red-600" />
+          )}
         </ButtonIcon>
       </div>
 
@@ -2479,7 +2574,9 @@ export default function FloorPlanCanvas({
   activeTool,
   routeToolActive = false,
   showDeviceDimensions = false,
+  showPositionLabels = true,
   onToggleDeviceDimensions,
+  onTogglePositionLabels,
   routeStartId = "",
   routeEditMode = "",
   routeDraft = null,
@@ -3034,6 +3131,7 @@ export default function FloorPlanCanvas({
         scalePxPerMeter={measurementScale}
         showWallDimensions={showWallDimensions}
         showDeviceDimensions={showDeviceDimensions}
+        showPositionLabels={showPositionLabels}
         canUndo={canUndo}
         canRedo={canRedo}
         onSelectTool={onSelectTool}
@@ -3049,6 +3147,7 @@ export default function FloorPlanCanvas({
         onScalePxPerMeterChange={onScalePxPerMeterChange}
         onToggleWallDimensions={onToggleWallDimensions}
         onToggleDeviceDimensions={onToggleDeviceDimensions}
+        onTogglePositionLabels={onTogglePositionLabels}
         onFit={fitViewport}
         onRotateSelected={onRotateSelected}
         onDuplicateSelected={onDuplicateSelected}
@@ -3292,6 +3391,7 @@ export default function FloorPlanCanvas({
                 active={sameId(hover, point.id) || ((selectedElement?.type === "point" || selectedElement?.type === "pointText") && sameId(selectedElement.id, point.id))}
                 selected={selectedElement?.type === "point" && sameId(selectedElement.id, point.id)}
                 selectedTextField={selectedElement?.type === "pointText" && sameId(selectedElement.id, point.id) ? selectedElement.field : ""}
+                showPositionLabels={showPositionLabels}
                 routeToolActive={routeToolActive}
                 routeStart={sameId(routeStartId, point.id)}
                 onSelect={onSelectElement}
@@ -3302,6 +3402,8 @@ export default function FloorPlanCanvas({
                 onCircuitDoubleClick={onCircuitDoubleClick}
                 onCircuitLabelSelect={(pointId) => onSelectElement?.({ type: "pointText", id: pointId, field: "circuitLabel" })}
                 onPointLabelSelect={(pointId) => onSelectElement?.({ type: "pointText", id: pointId, field: "label" })}
+                onPositionLabelSelect={(pointId) => onSelectElement?.({ type: "pointText", id: pointId, field: "positionLabel" })}
+                onPowerLabelSelect={(pointId) => onSelectElement?.({ type: "pointText", id: pointId, field: "powerLabel" })}
                 onAlignPosition={alignPosition}
                 onClearAlignment={clearAlignment}
               />

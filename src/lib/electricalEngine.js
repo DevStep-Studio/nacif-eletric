@@ -182,9 +182,22 @@ export function calcCircuit(circuit) {
   const nominal_a      = calcNominalCurrent(effectivePower, voltage, supply_type, fp);
   const corrected_a    = calcCorrectedCurrent(nominal_a, temp_ambient, group_count);
   const minWireArea    = minimumWireAreaForCircuit(type);
-  const wireData       = selectWireGauge(corrected_a, install_method, minWireArea);
+  let wireData         = selectWireGauge(corrected_a, install_method, minWireArea);
   const breaker_a      = selectBreaker(nominal_a * 1.25);
-  const vd             = calcVoltageDrop(effectivePower, voltage, supply_type, length_m, wireData.gauge, fp);
+  let vd               = calcVoltageDrop(effectivePower, voltage, supply_type, length_m, wireData.gauge, fp);
+  if (!vd.ok) {
+    const methodCol = METHOD_COL[install_method] || "B2";
+    const voltageDropWire = WIRE_TABLE.find((wire) => (
+      wire.area >= wireData.area &&
+      wire.area >= minWireArea &&
+      wire[methodCol] >= corrected_a &&
+      calcVoltageDrop(effectivePower, voltage, supply_type, length_m, wire.gauge, fp).ok
+    ));
+    if (voltageDropWire) {
+      wireData = voltageDropWire;
+      vd = calcVoltageDrop(effectivePower, voltage, supply_type, length_m, wireData.gauge, fp);
+    }
+  }
   const temp_factor    = TEMP_FACTORS[temp_ambient] || 1.0;
   const group_factor   = GROUP_FACTORS[Math.min(group_count, 9)] || 0.50;
   const poles          = POLES(supply_type);
@@ -215,36 +228,126 @@ export function calcCircuit(circuit) {
 }
 
 // ─── Balanceamento automático de fases ────────────────────────────────────────────────────────
-export function autoBalancePhases(circuits) {
-  const phases = { A: 0, B: 0, C: 0 };
-  return circuits.map(c => {
-    const calc = calcCircuit(c);
-    if (calc.supply_type === "Trifásico") {
-      phases.A += calc.project_current_a;
-      phases.B += calc.project_current_a;
-      phases.C += calc.project_current_a;
-      return { ...calc, phase: "ABC" };
+const PHASE_CODES = ["A", "B", "C"];
+const BIPHASE_PAIRS = ["AB", "BC", "AC"];
+
+const phaseOptionsForCircuit = (circuit = {}) => {
+  if (circuit.supply_type === "Trifásico") return ["ABC"];
+  if (circuit.supply_type === "Bifásico") return BIPHASE_PAIRS;
+  return PHASE_CODES;
+};
+
+const addCurrentToPhaseLoad = (phaseLoad, phase, current) => {
+  const next = { ...phaseLoad };
+  String(phase || "A").split("").forEach((phaseCode) => {
+    if (Object.prototype.hasOwnProperty.call(next, phaseCode)) {
+      next[phaseCode] += current;
     }
-    if (calc.supply_type === "Bifásico") {
-      // Seleciona o par de fases com menor carga combinada (balanceamento real)
-      const allPairs = [["A","B"],["B","C"],["A","C"]];
-      const pair = allPairs.reduce((best, p) =>
-        (phases[p[0]] + phases[p[1]]) < (phases[best[0]] + phases[best[1]]) ? p : best
-      );
-      phases[pair[0]] += calc.project_current_a;
-      phases[pair[1]] += calc.project_current_a;
-      return { ...calc, phase: pair[0] + pair[1] };
-    }
-    // Monofásico — atribui à fase com menor carga
-    const minPhase = Object.keys(phases).reduce((a, b) => phases[a] <= phases[b] ? a : b);
-    phases[minPhase] += calc.project_current_a;
-    return { ...calc, phase: minPhase };
   });
+  return next;
+};
+
+const phaseLoadScore = (phaseLoad) => {
+  const loads = PHASE_CODES.map((phase) => Number(phaseLoad[phase]) || 0);
+  const max = Math.max(...loads, 1);
+  const min = Math.min(...loads);
+  const average = loads.reduce((sum, value) => sum + value, 0) / PHASE_CODES.length;
+  const variance = loads.reduce((sum, value) => sum + (value - average) ** 2, 0);
+  return {
+    imbalance: (max - min) / max,
+    spread: max - min,
+    max,
+    variance,
+  };
+};
+
+const isBetterPhaseLoad = (candidate, currentBest) => {
+  if (!currentBest) return true;
+  const nextScore = candidate.score;
+  const bestScore = currentBest.score;
+  if (nextScore.imbalance !== bestScore.imbalance) return nextScore.imbalance < bestScore.imbalance;
+  if (nextScore.spread !== bestScore.spread) return nextScore.spread < bestScore.spread;
+  if (nextScore.max !== bestScore.max) return nextScore.max < bestScore.max;
+  return nextScore.variance < bestScore.variance;
+};
+
+const greedyPhaseAssignments = (items, phaseLoad) => {
+  const assignments = {};
+  let load = { ...phaseLoad };
+  [...items]
+    .sort((a, b) => b.current - a.current || a.index - b.index)
+    .forEach((item) => {
+      const bestOption = item.options
+        .map((phase) => {
+          const nextLoad = addCurrentToPhaseLoad(load, phase, item.current);
+          return { phase, load: nextLoad, score: phaseLoadScore(nextLoad) };
+        })
+        .sort((a, b) => (
+          a.score.imbalance - b.score.imbalance ||
+          a.score.spread - b.score.spread ||
+          a.score.max - b.score.max ||
+          a.score.variance - b.score.variance
+        ))[0];
+      assignments[item.index] = bestOption.phase;
+      load = bestOption.load;
+    });
+  return { assignments, load, score: phaseLoadScore(load) };
+};
+
+export function autoBalancePhases(circuits) {
+  const calculated = (Array.isArray(circuits) ? circuits : []).map(calcCircuit);
+  let basePhaseLoad = { A: 0, B: 0, C: 0 };
+  const fixedAssignments = {};
+  const variableItems = [];
+
+  calculated.forEach((circuit, index) => {
+    const current = Number(circuit.project_current_a) || 0;
+    const options = phaseOptionsForCircuit(circuit);
+    if (options.length === 1) {
+      fixedAssignments[index] = options[0];
+      basePhaseLoad = addCurrentToPhaseLoad(basePhaseLoad, options[0], current);
+      return;
+    }
+    variableItems.push({ index, current, options });
+  });
+
+  const rankedItems = [...variableItems].sort((a, b) => b.current - a.current || a.index - b.index);
+  let best = null;
+
+  if (rankedItems.length <= 12) {
+    const walk = (itemIndex, load, itemAssignments) => {
+      if (itemIndex >= rankedItems.length) {
+        const candidate = { assignments: itemAssignments, load, score: phaseLoadScore(load) };
+        if (isBetterPhaseLoad(candidate, best)) best = candidate;
+        return;
+      }
+
+      const item = rankedItems[itemIndex];
+      item.options.forEach((phase) => {
+        walk(
+          itemIndex + 1,
+          addCurrentToPhaseLoad(load, phase, item.current),
+          { ...itemAssignments, [item.index]: phase },
+        );
+      });
+    };
+    walk(0, basePhaseLoad, {});
+  } else {
+    best = greedyPhaseAssignments(rankedItems, basePhaseLoad);
+  }
+
+  const bestAssignments = best?.assignments || {};
+  return calculated.map((circuit, index) => ({
+    ...circuit,
+    phase: bestAssignments[index] || fixedAssignments[index] || phaseOptionsForCircuit(circuit)[0],
+  }));
 }
 
 // ─── Métricas do projeto ───────────────────────────────────────────────────────────────────────
 export function calcProjectMetrics(project) {
   const circuits = autoBalancePhases(project?.circuits || []);
+  // Circuitos com as fases "como estão" no projeto salvo, antes do balanceamento automático.
+  const rawCircuits = (project?.circuits || []).map(calcCircuit);
   const phaseLoad = { A: 0, B: 0, C: 0 };
   let totalPower = 0;
 
@@ -261,6 +364,22 @@ export function calcProjectMetrics(project) {
   const imbalance_pct = Math.round(((maxI - minI) / maxI) * 100);
   const neutral_a = Math.round((phaseLoad.A + phaseLoad.B + phaseLoad.C) * 0.1 * 10) / 10;
 
+  // Desequilíbrio "como está" (fases informadas nos circuitos), para comparar antes/depois do ajuste.
+  const storedPhaseLoad = { A: 0, B: 0, C: 0 };
+  rawCircuits.forEach((c) => {
+    const ph = String(c.phase || "A");
+    const I = Number(c.project_current_a) || 0;
+    if (ph === "ABC") { storedPhaseLoad.A += I; storedPhaseLoad.B += I; storedPhaseLoad.C += I; }
+    else if (ph.length === 2) {
+      if (storedPhaseLoad[ph[0]] != null) storedPhaseLoad[ph[0]] += I;
+      if (storedPhaseLoad[ph[1]] != null) storedPhaseLoad[ph[1]] += I;
+    } else if (storedPhaseLoad[ph] != null) { storedPhaseLoad[ph] += I; }
+    else { storedPhaseLoad.A += I; }
+  });
+  const storedMax = Math.max(storedPhaseLoad.A, storedPhaseLoad.B, storedPhaseLoad.C) || 1;
+  const storedMin = Math.min(storedPhaseLoad.A, storedPhaseLoad.B, storedPhaseLoad.C);
+  const storedImbalance_pct = Math.round(((storedMax - storedMin) / storedMax) * 100);
+
   const totalDins = circuits.reduce((s, c) => s + (c.din_modules || 1), 0) + 4 + 2; // + geral + DPS
   const drCircuits = circuits.filter(c => c.needs_dr).length;
   const drDins = Math.ceil(drCircuits / 2) * 2; // DRs 2P agrupam 2 circuitos
@@ -276,18 +395,67 @@ export function calcProjectMetrics(project) {
 
   // Validações NBR 5410
   const validations = [];
-  if (imbalance_pct > 10) validations.push({ severity: "error",   msg: `Desequilíbrio severo de fases: ${imbalance_pct}%` });
-  if (imbalance_pct > 5)  validations.push({ severity: "warning", msg: `Desequilíbrio de fases: ${imbalance_pct}% (recomendado < 5%)` });
-  circuits.forEach(c => {
-    if (!c.voltage_drop_ok) validations.push({ severity: "error", msg: `Circuito "${c.name}": queda de tensão ${c.voltage_drop_pct}% > 4%` });
-    if (!c.needs_dr && ["Tomadas de Uso Geral", "Chuveiro", "Ar Condicionado"].includes(c.type)) validations.push({ severity: "warning", msg: `Circuito "${c.name}": DR recomendado` });
+  if (imbalance_pct > 10) validations.push({
+    severity: "error",
+    code: "phase_imbalance",
+    msg: `Desequilíbrio severo de fases: ${imbalance_pct}%`,
+    action: "Redistribua os circuitos entre as fases até o desequilíbrio ficar em 5% ou menos.",
   });
-  if (!circuits.some(c => c.needs_dps)) validations.push({ severity: "warning", msg: "DPS não instalado — recomendado NBR 5410" });
+  else if (imbalance_pct > 5) validations.push({
+    severity: "warning",
+    code: "phase_imbalance",
+    msg: `Desequilíbrio de fases: ${imbalance_pct}% (recomendado < 5%)`,
+    action: "Rebalanceie os circuitos monofásicos e bifásicos para aproximar as correntes das fases A, B e C.",
+  });
+  circuits.forEach(c => {
+    if (!c.voltage_drop_ok) validations.push({
+      severity: "error",
+      code: "voltage_drop",
+      circuit_id: c.id || c.circuit_id,
+      msg: `Circuito "${c.name}": queda de tensão ${c.voltage_drop_pct}% > 4%`,
+      action: "Aumente a seção do condutor; se continuar acima de 4%, reduza o comprimento ou divida o circuito.",
+    });
+    if (!c.needs_dr && ["Tomadas de Uso Geral", "Chuveiro", "Ar Condicionado"].includes(c.type)) validations.push({
+      severity: "warning",
+      code: "dr_required",
+      circuit_id: c.id || c.circuit_id,
+      msg: `Circuito "${c.name}": DR recomendado`,
+      action: "Preveja proteção DR de 30 mA para esse circuito.",
+    });
+  });
+  if (!circuits.some(c => c.needs_dps)) validations.push({
+    severity: "warning",
+    code: "dps_required",
+    msg: "DPS não instalado — recomendado NBR 5410",
+    action: "Inclua DPS no quadro e atualize o diagrama do projeto.",
+  });
 
   const nbrScore = Math.max(0, 100 - validations.filter(v => v.severity === "error").length * 15 - validations.filter(v => v.severity === "warning").length * 5);
 
+  // Carga monofásica de maior corrente na fase mais carregada: é ela que trava o
+  // balanceamento automático, porque não pode ser dividida entre fases.
+  let imbalanceBlocker = null;
+  if (imbalance_pct > 5) {
+    const heaviestPhase = ["A", "B", "C"].reduce((a, b) => (phaseLoad[b] > phaseLoad[a] ? b : a));
+    const blocker = circuits
+      .filter((c) => {
+        const ph = String(c.phase || "A");
+        return ph.length === 1 && ph === heaviestPhase;
+      })
+      .sort((a, b) => (Number(b.project_current_a) || 0) - (Number(a.project_current_a) || 0))[0];
+    if (blocker) {
+      imbalanceBlocker = {
+        name: blocker.name || "circuito sem nome",
+        current_a: Math.round((Number(blocker.project_current_a) || 0) * 10) / 10,
+        phase: heaviestPhase,
+        supply_type: blocker.supply_type || "Monofásico",
+        type: blocker.type || null,
+      };
+    }
+  }
+
   return {
-    circuits, phaseLoad, imbalance_pct, neutral_a, totalPower,
+    circuits, phaseLoad, imbalance_pct, storedImbalance_pct, imbalanceBlocker, neutral_a, totalPower,
     totalDins, panelSize, generalBreaker, generalCurrent: Math.round(generalCurrent * 10) / 10,
     generalBreakerPoles, generalDr, generalDrPoles,
     validations, nbrScore,

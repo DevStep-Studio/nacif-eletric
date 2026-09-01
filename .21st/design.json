@@ -1,0 +1,267 @@
+{
+  "version": 1,
+  "project": {
+    "name": "volta-ia-app",
+    "productType": null,
+    "stack": [
+      "react",
+      "shadcn",
+      "tailwind-v3",
+      "vite"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "src/index.css"
+    ],
+    "components": [
+      "src/components/ui"
+    ],
+    "assets": [
+      "src/assets"
+    ],
+    "instructions": []
+  },
+  "design": {
+    "colorMode": "light-and-dark",
+    "colors": {
+      "--background": {
+        "value": "222 47% 6%",
+        "source": "src/index.css"
+      },
+      "--foreground": {
+        "value": "210 40% 96%",
+        "source": "src/index.css"
+      },
+      "--card-foreground": {
+        "value": "210 40% 96%",
+        "source": "src/index.css"
+      },
+      "--popover-foreground": {
+        "value": "210 40% 96%",
+        "source": "src/index.css"
+      },
+      "--primary": {
+        "value": "171.11 100% 42.35%",
+        "source": "src/index.css"
+      },
+      "--primary-foreground": {
+        "value": "0 0% 100%",
+        "source": "src/index.css"
+      },
+      "--secondary": {
+        "value": "222 47% 14%",
+        "source": "src/index.css"
+      },
+      "--secondary-foreground": {
+        "value": "210 40% 96%",
+        "source": "src/index.css"
+      },
+      "--muted": {
+        "value": "222 47% 14%",
+        "source": "src/index.css"
+      },
+      "--muted-foreground": {
+        "value": "215 20% 55%",
+        "source": "src/index.css"
+      },
+      "--accent": {
+        "value": "172 60% 18%",
+        "source": "src/index.css"
+      },
+      "--accent-foreground": {
+        "value": "210 40% 96%",
+        "source": "src/index.css"
+      },
+      "--destructive": {
+        "value": "0 62.8% 30.6%",
+        "source": "src/index.css"
+      },
+      "--destructive-foreground": {
+        "value": "210 40% 96%",
+        "source": "src/index.css"
+      },
+      "--border": {
+        "value": "222 30% 18%",
+        "source": "src/index.css"
+      },
+      "--ring": {
+        "value": "171.11 100% 42.35%",
+        "source": "src/index.css"
+      },
+      "--chart-1": {
+        "value": "171.11 100% 42.35%",
+        "source": "src/index.css"
+      },
+      "--chart-2": {
+        "value": "170 96% 58%",
+        "source": "src/index.css"
+      },
+      "--chart-3": {
+        "value": "168 84% 65%",
+        "source": "src/index.css"
+      },
+      "--chart-4": {
+        "value": "166 57% 74%",
+        "source": "src/index.css"
+      },
+      "--chart-5": {
+        "value": "172 100% 25%",
+        "source": "src/index.css"
+      },
+      "--sidebar-background": {
+        "value": "222 47% 8%",
+        "source": "src/index.css"
+      },
+      "--sidebar-foreground": {
+        "value": "210 40% 96%",
+        "source": "src/index.css"
+      },
+      "--sidebar-primary": {
+        "value": "171.11 100% 42.35%",
+        "source": "src/index.css"
+      },
+      "--sidebar-primary-foreground": {
+        "value": "0 0% 100%",
+        "source": "src/index.css"
+      },
+      "--sidebar-accent": {
+        "value": "172 60% 18%",
+        "source": "src/index.css"
+      },
+      "--sidebar-accent-foreground": {
+        "value": "210 40% 96%",
+        "source": "src/index.css"
+      },
+      "--sidebar-border": {
+        "value": "222 30% 18%",
+        "source": "src/index.css"
+      },
+      "--sidebar-ring": {
+        "value": "171.11 100% 42.35%",
+        "source": "src/index.css"
+      },
+      "--brand-accent": {
+        "value": "#00d8b8",
+        "source": "src/index.css"
+      },
+      "--brand-accent-soft": {
+        "value": "#E8FCF8",
+        "source": "src/index.css"
+      }
+    },
+    "typography": {
+      "--font-inter": {
+        "value": "'Inter', sans-serif",
+        "source": "src/index.css"
+      },
+      "--font-mono": {
+        "value": "'JetBrains Mono', monospace",
+        "source": "src/index.css"
+      }
+    },
+    "spacing": {},
+    "radius": {
+      "--radius": {
+        "value": "0.75rem",
+        "source": "src/index.css"
+      }
+    },
+    "shadows": {},
+    "motion": {},
+    "density": "unknown"
+  },
+  "components": {
+    "installed": [
+      "accordion",
+      "alert",
+      "alert-dialog",
+      "aspect-ratio",
+      "avatar",
+      "badge",
+      "breadcrumb",
+      "button",
+      "calendar",
+      "card",
+      "carousel",
+      "chart",
+      "checkbox",
+      "collapsible",
+      "command",
+      "context-menu",
+      "dialog",
+      "drawer",
+      "dropdown-menu",
+      "form",
+      "hover-card",
+      "input",
+      "input-otp",
+      "label",
+      "menubar",
+      "navigation-menu",
+      "pagination",
+      "popover",
+      "progress",
+      "radio-group",
+      "resizable",
+      "scroll-area",
+      "select",
+      "separator",
+      "sheet",
+      "sidebar",
+      "skeleton",
+      "slider",
+      "sonner",
+      "switch",
+      "table",
+      "tabs",
+      "textarea",
+      "toast",
+      "toaster",
+      "toggle",
+      "toggle-group",
+      "tooltip",
+      "use-toast"
+    ],
+    "preferredPrimitives": [
+      "radix-ui"
+    ],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [],
+    "avoid": []
+  },
+  "decisions": [],
+  "evidence": [
+    {
+      "fact": "components.installed",
+      "source": "src/components/ui"
+    },
+    {
+      "fact": "design.colorMode:light-and-dark",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:shadcn",
+      "source": "components.json"
+    },
+    {
+      "fact": "project.stack:tailwind-v3",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:vite",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-09-01T12:35:50.933Z"
+}

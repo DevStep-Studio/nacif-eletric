@@ -110,6 +110,27 @@ const ROUTE_INSTALLATION_OPTIONS = Object.freeze([
 const ROUTE_INSTALLATION_LABELS = Object.freeze(Object.fromEntries(
   ROUTE_INSTALLATION_OPTIONS.map((option) => [option.id, option.label])
 ));
+const POINT_TEXT_HIDDEN_FIELD_BY_SELECTION = Object.freeze({
+  label: "labelHidden",
+  circuitLabel: "circuitLabelHidden",
+  positionLabel: "positionLabelHidden",
+  powerLabel: "powerLabelHidden",
+});
+const POINT_TEXT_SELECTION_LABELS = Object.freeze({
+  label: "Texto do símbolo",
+  circuitLabel: "Texto do circuito",
+  positionLabel: "Texto de altura",
+  powerLabel: "Texto de potência",
+});
+
+const pointTextHiddenPatch = (field, hidden = true) => {
+  const property = POINT_TEXT_HIDDEN_FIELD_BY_SELECTION[field] || "circuitLabelHidden";
+  return { [property]: hidden };
+};
+
+const hasHiddenPointText = (point = {}) => (
+  Object.values(POINT_TEXT_HIDDEN_FIELD_BY_SELECTION).some((field) => point?.[field] === true)
+);
 
 const firstTextValue = (...values) => (
   values
@@ -1853,6 +1874,7 @@ export default function PlantaIA() {
   const [scalePxPerMeter, setScalePxPerMeter] = useState(DEFAULT_SCALE_PX_PER_METER);
   const [showWallDimensions, setShowWallDimensions] = useState(true);
   const [showDeviceDimensions, setShowDeviceDimensions] = useState(false);
+  const [showPositionLabels, setShowPositionLabels] = useState(true);
   const [unitSettings, setUnitSettings] = useState(() => normalizeUnitSettings());
   const [editorLayers, setEditorLayers] = useState(() => createDefaultLayerState());
   const [snapSettings, setSnapSettings] = useState(() => normalizeSnapSettings());
@@ -1919,6 +1941,7 @@ export default function PlantaIA() {
       scalePxPerMeter: normalizeScalePxPerMeter(Object.prototype.hasOwnProperty.call(overrides, "scalePxPerMeter") ? overrides.scalePxPerMeter : scalePxPerMeter),
       showWallDimensions: Object.prototype.hasOwnProperty.call(overrides, "showWallDimensions") ? overrides.showWallDimensions !== false : showWallDimensions !== false,
       showDeviceDimensions: Object.prototype.hasOwnProperty.call(overrides, "showDeviceDimensions") ? overrides.showDeviceDimensions === true : showDeviceDimensions === true,
+      showPositionLabels: Object.prototype.hasOwnProperty.call(overrides, "showPositionLabels") ? overrides.showPositionLabels !== false : showPositionLabels !== false,
       unitSettings: normalizeUnitSettings(Object.prototype.hasOwnProperty.call(overrides, "unitSettings") ? overrides.unitSettings : unitSettings),
       layers: normalizeLayerState(Object.prototype.hasOwnProperty.call(overrides, "layers") ? overrides.layers : editorLayers),
       snapSettings: normalizeSnapSettings(Object.prototype.hasOwnProperty.call(overrides, "snapSettings") ? overrides.snapSettings : snapSettings),
@@ -1942,6 +1965,7 @@ export default function PlantaIA() {
     setScalePxPerMeter(normalizeScalePxPerMeter(snapshot.scalePxPerMeter));
     setShowWallDimensions(snapshot.showWallDimensions !== false);
     setShowDeviceDimensions(snapshot.showDeviceDimensions === true);
+    setShowPositionLabels(snapshot.showPositionLabels !== false);
     setUnitSettings(normalizeUnitSettings(snapshot.unitSettings));
     setEditorLayers(normalizeLayerState(snapshot.layers));
     setSnapSettings(normalizeSnapSettings(snapshot.snapSettings));
@@ -2212,7 +2236,7 @@ export default function PlantaIA() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [selectedProject, imageUrl, imageLayout, importedFileName, importStatus, importedPlanElements, points, rooms, walls, openings, roomLabels, routes, scalePxPerMeter, showWallDimensions, showDeviceDimensions, unitSettings, editorLayers, snapSettings, scannerReport]);
+  }, [selectedProject, imageUrl, imageLayout, importedFileName, importStatus, importedPlanElements, points, rooms, walls, openings, roomLabels, routes, scalePxPerMeter, showWallDimensions, showDeviceDimensions, showPositionLabels, unitSettings, editorLayers, snapSettings, scannerReport]);
 
   useEffect(() => {
     if (!selectedProject || hydratedProjectRef.current !== selectedProject) return undefined;
@@ -4696,9 +4720,7 @@ export default function PlantaIA() {
   const deleteSelected = () => {
     if (!selectedElement?.id) return;
     if (selectedElement.type === "pointText") {
-      movePoint(selectedElement.id, selectedElement.field === "label"
-        ? { labelHidden: true }
-        : { circuitLabelHidden: true });
+      movePoint(selectedElement.id, pointTextHiddenPatch(selectedElement.field, true));
       setSelectedElement(null);
       return;
     }
@@ -5097,7 +5119,9 @@ export default function PlantaIA() {
                   <div className="space-y-3 rounded-md border border-[#FECACA] bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
                     <div className="flex items-center justify-between border-b border-[#FEE2E2] pb-2">
                       <div className="min-w-0">
-                        <p className="truncate text-[10px] font-black uppercase tracking-[0.22em] text-[#B91C1C]">Texto selecionado</p>
+                        <p className="truncate text-[10px] font-black uppercase tracking-[0.22em] text-[#B91C1C]">
+                          {POINT_TEXT_SELECTION_LABELS[selectedElement?.field] || "Texto selecionado"}
+                        </p>
                         <p className="mt-1 truncate text-[10px] font-bold text-[#64748B]">{routePointLabel(selectedPointTextPoint)}</p>
                       </div>
                       <button type="button" onClick={deleteSelected} className="rounded border border-[#FECACA] bg-[#FEF2F2] px-1.5 py-0.5 text-[9px] font-black uppercase text-[#B91C1C]">Excluir texto</button>
@@ -5118,10 +5142,7 @@ export default function PlantaIA() {
                         size="sm"
                         className="h-8 rounded-md border-[#CDEFE8] text-[10px] font-extrabold text-[#0f4f49]"
                         onClick={() => {
-                          const restorePatch = selectedElement.field === "label"
-                            ? { labelHidden: false }
-                            : { circuitLabelHidden: false };
-                          movePoint(selectedPointTextPoint.id, restorePatch);
+                          movePoint(selectedPointTextPoint.id, pointTextHiddenPatch(selectedElement?.field, false));
                         }}
                       >
                         Restaurar
@@ -5954,13 +5975,18 @@ export default function PlantaIA() {
                           </label>
                         );
                       })()}
-                      {(selectedPoint.labelHidden === true || selectedPoint.circuitLabelHidden === true) && (
+                      {hasHiddenPointText(selectedPoint) && (
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
                           className="h-8 w-full rounded-md border-[#CDEFE8] text-[10px] font-extrabold text-[#0f4f49]"
-                          onClick={() => movePoint(selectedPoint.id, { labelHidden: false, circuitLabelHidden: false })}
+                          onClick={() => movePoint(selectedPoint.id, {
+                            labelHidden: false,
+                            circuitLabelHidden: false,
+                            positionLabelHidden: false,
+                            powerLabelHidden: false,
+                          })}
                         >
                           Restaurar textos ocultos
                         </Button>
@@ -5992,16 +6018,27 @@ export default function PlantaIA() {
                       </Button>
                       <div className="space-y-2 rounded-md border border-[#E2EEF6] bg-[#F8FBFD] p-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#64748B]">Caixa de posicionamento</span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 rounded-md border-[#CDEFE8] px-2 text-[9px] font-extrabold text-[#0f4f49]"
-                            onClick={() => movePoint(selectedPoint.id, { positionLabelX: -34, positionLabelY: 24 })}
-                          >
-                            Recentrar
-                          </Button>
+                          <span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#64748B]">Texto de altura</span>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 rounded-md border-[#CDEFE8] px-2 text-[9px] font-extrabold text-[#0f4f49]"
+                              onClick={() => movePoint(selectedPoint.id, { positionLabelX: -34, positionLabelY: 24 })}
+                            >
+                              Recentrar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 rounded-md border-[#FECACA] px-2 text-[9px] font-extrabold text-[#B91C1C]"
+                              onClick={() => movePoint(selectedPoint.id, { positionLabelHidden: selectedPoint.positionLabelHidden !== true })}
+                            >
+                              {selectedPoint.positionLabelHidden === true ? "Restaurar" : "Excluir texto"}
+                            </Button>
+                          </div>
                         </div>
                         <div className="grid grid-cols-4 gap-2">
                           <label className="block space-y-1">
@@ -6060,6 +6097,68 @@ export default function PlantaIA() {
                           Arraste essa caixa diretamente na planta para não cobrir símbolos ou cotas.
                         </p>
                       </div>
+                      {Number(selectedPoint.load_w) > 0 && (
+                        <div className="space-y-2 rounded-md border border-[#E2EEF6] bg-[#F8FBFD] p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#64748B]">Texto de potência</span>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 rounded-md border-[#CDEFE8] px-2 text-[9px] font-extrabold text-[#0f4f49]"
+                                onClick={() => movePoint(selectedPoint.id, { powerLabelX: -26, powerLabelY: 17 })}
+                              >
+                                Recentrar
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 rounded-md border-[#FECACA] px-2 text-[9px] font-extrabold text-[#B91C1C]"
+                                onClick={() => movePoint(selectedPoint.id, { powerLabelHidden: selectedPoint.powerLabelHidden !== true })}
+                              >
+                                {selectedPoint.powerLabelHidden === true ? "Restaurar" : "Excluir texto"}
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <label className="block space-y-1">
+                              <span className="text-[8px] font-black uppercase tracking-wider text-[#64748B]">Texto</span>
+                              <input
+                                type="color"
+                                value={selectedPoint.powerLabelColor || "#050505"}
+                                onChange={(event) => movePoint(selectedPoint.id, { powerLabelColor: event.target.value })}
+                                className="h-8 w-full rounded-md border border-[#CDEFE8] bg-white p-1"
+                              />
+                            </label>
+                            <label className="block space-y-1">
+                              <span className="text-[8px] font-black uppercase tracking-wider text-[#64748B]">Fonte</span>
+                              <Input
+                                type="number"
+                                min="6"
+                                max="16"
+                                step="1"
+                                value={Number(selectedPoint.powerLabelFontSize) || 8}
+                                onChange={(event) => movePoint(selectedPoint.id, { powerLabelFontSize: Math.max(6, Math.min(16, Number(event.target.value) || 8)) })}
+                                className="h-8 rounded-md border-[#CDEFE8] bg-white px-1 text-center text-[11px] font-bold"
+                              />
+                            </label>
+                            <label className="block space-y-1">
+                              <span className="text-[8px] font-black uppercase tracking-wider text-[#64748B]">Largura</span>
+                              <Input
+                                type="number"
+                                min="42"
+                                max="150"
+                                step="2"
+                                value={Number(selectedPoint.powerLabelWidth) || 64}
+                                onChange={(event) => movePoint(selectedPoint.id, { powerLabelWidth: Math.max(42, Math.min(150, Number(event.target.value) || 64)) })}
+                                className="h-8 rounded-md border-[#CDEFE8] bg-white px-1 text-center text-[11px] font-bold"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      )}
                       <div className="space-y-2 rounded-md border border-[#E2EEF6] bg-[#F8FBFD] p-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#64748B]">Cotas de posição</span>
@@ -6880,10 +6979,12 @@ export default function PlantaIA() {
               scalePxPerMeter={scalePxPerMeter}
               showWallDimensions={showWallDimensions}
               showDeviceDimensions={showDeviceDimensions}
+              showPositionLabels={showPositionLabels}
               snapSettings={snapSettings}
               onScalePxPerMeterChange={(nextScale) => commitDesign({ scalePxPerMeter: normalizeScalePxPerMeter(nextScale) })}
               onToggleWallDimensions={() => commitDesign({ showWallDimensions: !showWallDimensions })}
               onToggleDeviceDimensions={() => commitDesign({ showDeviceDimensions: !showDeviceDimensions })}
+              onTogglePositionLabels={() => commitDesign({ showPositionLabels: !showPositionLabels })}
               onEditWallDimension={resizeArchitecturalWallToLength}
               fitRequest={fitRequest}
             />

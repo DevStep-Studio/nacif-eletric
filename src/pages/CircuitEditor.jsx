@@ -45,6 +45,90 @@ function formatPower(watts = 0) {
   return `${formatNumber(value)} W`;
 }
 
+const NBR_TARGET_IMBALANCE_PCT = 5;
+
+function phaseExtremes(metrics) {
+  const loads = ["A", "B", "C"].map((phase) => ({
+    phase,
+    load: Number(metrics?.phaseLoad?.[phase]) || 0,
+  }));
+  return {
+    highest: [...loads].sort((a, b) => b.load - a.load)[0],
+    lowest: [...loads].sort((a, b) => a.load - b.load)[0],
+  };
+}
+
+const DEDICATED_LOAD_HINT = /chuveiro|ar cond|bomba|motor|aquecedor|forno|cooktop|torneira|secadora|m[aá]quina|boiler/i;
+
+// Frase de solução para o circuito que trava o balanceamento, adaptada ao tipo de carga.
+function blockerRemedy(blocker) {
+  if (!blocker) return "";
+  if (DEDICATED_LOAD_HINT.test(String(blocker.type || blocker.name || ""))) {
+    return `converta o circuito "${blocker.name}" para 220 V (bifásico) — assim a carga passa a ocupar duas fases ao mesmo tempo`;
+  }
+  return `divida os pontos do circuito "${blocker.name}" em dois ou mais circuitos e distribua-os em fases diferentes`;
+}
+
+function buildNBRActionPlan(metrics, validations = []) {
+  const actions = [];
+  const added = new Set();
+  const addAction = (key, title, description, tone = "warning") => {
+    if (added.has(key)) return;
+    added.add(key);
+    actions.push({ key, title, description, tone });
+  };
+
+  if ((Number(metrics?.imbalance_pct) || 0) > NBR_TARGET_IMBALANCE_PCT) {
+    const { highest, lowest } = phaseExtremes(metrics);
+    const blocker = metrics?.imbalanceBlocker;
+    const tone = metrics.imbalance_pct > 10 ? "danger" : "warning";
+    if (blocker) {
+      addAction(
+        "phase_imbalance",
+        "Reduzir o desequilíbrio de fases",
+        `O balanceamento automático já distribuiu os circuitos da melhor forma possível, mas a fase ${highest.phase} (${formatNumber(highest.load, " A")}) segue ${metrics.imbalance_pct}% acima da fase ${lowest.phase} (${formatNumber(lowest.load, " A")}). O peso está na carga monofásica "${blocker.name}" (${formatNumber(blocker.current_a, " A")}), que sozinha não cabe em uma fase sem desequilibrar. Para chegar a 100%: ${blockerRemedy(blocker)}.`,
+        tone,
+      );
+    } else {
+      const transfer = Math.max(0, (highest.load - lowest.load) / 2);
+      addAction(
+        "phase_imbalance",
+        "Balancear as fases",
+        `A fase ${highest.phase} está com ${formatNumber(highest.load, " A")} e a fase ${lowest.phase} com ${formatNumber(lowest.load, " A")}. Clique em "Ajustar" para redistribuir cerca de ${formatNumber(transfer, " A")} de carga para a fase ${lowest.phase} e manter o desequilíbrio em até ${NBR_TARGET_IMBALANCE_PCT}%.`,
+        tone,
+      );
+    }
+  }
+
+  validations.forEach((validation) => {
+    if (validation.code === "phase_imbalance") return;
+    if (validation.code === "voltage_drop") {
+      addAction(
+        `voltage_drop-${validation.circuit_id || validation.msg}`,
+        "Corrigir queda de tensão",
+        `${validation.msg}. ${validation.action || "Aumente a seção do condutor, reduza o comprimento ou divida o circuito."}`,
+        "danger",
+      );
+      return;
+    }
+    if (validation.code === "dr_required") {
+      addAction(
+        `dr-${validation.circuit_id || validation.msg}`,
+        "Prever DR 30 mA",
+        `${validation.msg}. ${validation.action || "Adicione proteção DR de 30 mA ao circuito indicado."}`,
+      );
+      return;
+    }
+    if (validation.code === "dps_required") {
+      addAction("dps_required", "Prever DPS no quadro", validation.action || validation.msg);
+      return;
+    }
+    addAction(validation.msg, "Revisar item NBR", validation.action || validation.msg, validation.severity === "error" ? "danger" : "warning");
+  });
+
+  return actions;
+}
+
 function getCircuitStatus(circuit) {
   if (!circuit.voltage_drop_ok) {
     return {
@@ -256,7 +340,7 @@ function PhaseReviewPanel({ metrics }) {
               </div>
               <div className="mt-3 h-2.5 overflow-hidden rounded-md bg-[#EEF2F6]">
                 <div
-                  className="h-full rounded-md transition-all"
+                  className="h-full rounded-md transition-[width]"
                   style={{ width: `${(load / max) * 100}%`, background: PHASE_BAR[ph] }}
                 />
               </div>
@@ -271,9 +355,15 @@ function PhaseReviewPanel({ metrics }) {
   );
 }
 
-function ValidationPanel({ validations }) {
+function ValidationPanel({ metrics, validations, onAutoFix, saving = false, canAutoFix = false, feedback = null }) {
   const errorCount = validations.filter((item) => item.severity === "error").length;
   const warningCount = validations.filter((item) => item.severity === "warning").length;
+  const actionPlan = buildNBRActionPlan(metrics, validations);
+  const feedbackClass = feedback?.tone === "danger"
+    ? "border-red-200 bg-red-50 text-red-700"
+    : feedback?.tone === "warning"
+      ? "border-amber-200 bg-amber-50 text-amber-800"
+      : "border-emerald-200 bg-emerald-50 text-emerald-700";
 
   return (
     <section className="rounded-[18px] border border-[#BCEEE5] bg-white p-4 shadow-[0_16px_40px_rgba(0,100,166,0.055)]">
@@ -286,31 +376,85 @@ function ValidationPanel({ validations }) {
             Revisões NBR
           </h3>
         </div>
-        <span className="rounded-[10px] bg-[#E8FCF8] px-3 py-2 text-xs font-extrabold text-[#00d8b8] ring-1 ring-[#D6E8F3]">
-          {errorCount} erros · {warningCount} avisos
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-[10px] bg-[#E8FCF8] px-3 py-2 text-xs font-extrabold text-[#00d8b8] ring-1 ring-[#D6E8F3]">
+            {errorCount} erros · {warningCount} avisos
+          </span>
+          {canAutoFix && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={saving}
+              onClick={onAutoFix}
+              className="h-9 rounded-[10px] bg-[#00d8b8] px-3 text-[11px] font-extrabold hover:bg-[#00a98e]"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              {saving ? "Ajustando..." : "Ajustar projeto"}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {feedback && (
+        <div className={`mt-4 rounded-[14px] border px-4 py-3 text-sm font-bold ${feedbackClass}`}>
+          {feedback.message}
+        </div>
+      )}
 
       {validations.length === 0 ? (
         <div className="mt-4 rounded-[14px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-          Sem pendências críticas no cálculo atual.
+          Projeto em 100% no cálculo atual. Sem pendências críticas de NBR.
         </div>
       ) : (
-        <div className="mt-4 space-y-2">
-          {validations.map((v, i) => (
-            <div
-              key={i}
-              className={`flex items-start gap-2 rounded-[12px] border px-3 py-3 text-sm font-bold ${
-                v.severity === "error"
-                  ? "border-red-200 bg-red-50 text-red-600"
-                  : "border-amber-200 bg-amber-50 text-amber-700"
-              }`}
-            >
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{v.msg}</span>
+        <>
+          <div className="mt-4 rounded-[14px] border border-[#BCEEE5] bg-[#F2FFFC] p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#0f4f49]">Para chegar a 100%</p>
+              <span className="rounded-[9px] bg-white px-2.5 py-1 text-[10px] font-extrabold text-[#00a98e] ring-1 ring-[#D6E8F3]">
+                meta NBR
+              </span>
             </div>
-          ))}
-        </div>
+            <div className="mt-3 space-y-2">
+              {actionPlan.map((action, index) => (
+                <div
+                  key={action.key}
+                  className={`grid grid-cols-[24px_minmax(0,1fr)] gap-2 rounded-[12px] border bg-white px-3 py-2.5 ${
+                    action.tone === "danger" ? "border-red-100" : "border-[#CDEFE8]"
+                  }`}
+                >
+                  <span className={`flex h-6 w-6 items-center justify-center rounded-[8px] text-[11px] font-black ${
+                    action.tone === "danger" ? "bg-red-50 text-red-600" : "bg-[#E8FCF8] text-[#00a98e]"
+                  }`}>
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[12px] font-extrabold text-[#101828]">{action.title}</span>
+                    <span className="mt-0.5 block text-[12px] font-bold leading-snug text-[#667085]">{action.description}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {validations.map((v, i) => (
+              <div
+                key={`${v.code || "validation"}-${i}`}
+                className={`flex items-start gap-2 rounded-[12px] border px-3 py-3 text-sm font-bold ${
+                  v.severity === "error"
+                    ? "border-red-200 bg-red-50 text-red-600"
+                    : "border-amber-200 bg-amber-50 text-amber-700"
+                }`}
+              >
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block">{v.msg}</span>
+                  {v.action && <span className="mt-1 block text-xs font-semibold opacity-80">{v.action}</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </section>
   );
@@ -323,14 +467,20 @@ export default function CircuitEditor() {
   const [project, setProject] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [autoFixFeedback, setAutoFixFeedback] = useState(null);
 
   useEffect(() => { backend.entities.Project.list().then(setProjects); }, []);
   useEffect(() => {
-    if (selectedId) backend.entities.Project.get(selectedId).then(p => { setProject(p); setMetrics(calcProjectMetrics(p)); });
+    if (selectedId) backend.entities.Project.get(selectedId).then(p => {
+      setProject(p);
+      setMetrics(calcProjectMetrics(p));
+      setAutoFixFeedback(null);
+    });
   }, [selectedId]);
 
   const saveCircuits = async (circuits) => {
     setSaving(true);
+    setAutoFixFeedback(null);
     try {
       const balanced = autoBalancePhases(circuits);
       const updated = await backend.entities.Project.update(
@@ -339,6 +489,74 @@ export default function CircuitEditor() {
       );
       setProject(updated);
       setMetrics(calcProjectMetrics(updated));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const autoFixNBR = async () => {
+    if (!project || !selectedId) return;
+    setSaving(true);
+    try {
+      const storedCircuits = project.circuits || [];
+      const before = metrics || calcProjectMetrics(project);
+      const balanced = autoBalancePhases(storedCircuits);
+
+      const moved = balanced
+        .map((circuit, index) => ({
+          index,
+          from: storedCircuits[index]?.phase,
+          to: circuit.phase,
+          name: circuit.name,
+        }))
+        .filter((change) => change.from && change.to && change.from !== change.to);
+
+      const updated = await backend.entities.Project.update(
+        selectedId,
+        buildProjectElectricalSyncPayload(project, balanced)
+      );
+      const after = calcProjectMetrics(updated);
+      setProject(updated);
+      setMetrics(after);
+
+      const parts = [];
+      if (moved.length) {
+        const list = moved
+          .map((change) => `${change.name || `Circuito ${change.index + 1}`} → fase ${change.to}`)
+          .join(", ");
+        parts.push(`Circuitos rebalanceados: ${list}.`);
+      }
+      const beforeImbalance = Number.isFinite(before?.storedImbalance_pct)
+        ? before.storedImbalance_pct
+        : after.imbalance_pct;
+      if (beforeImbalance > after.imbalance_pct) {
+        parts.push(`Desequilíbrio de fases: ${beforeImbalance}% → ${after.imbalance_pct}%.`);
+      }
+      parts.push("Quadro e diagrama sincronizados com o balanceamento.");
+
+      let tone = "ok";
+      if (after.validations.length === 0) {
+        parts.push("Projeto em 100% de conformidade NBR.");
+      } else {
+        tone = "warning";
+        const blocker = after.imbalanceBlocker;
+        if (after.imbalance_pct > 5 && blocker) {
+          parts.push(
+            `As fases já estão no melhor balanceamento possível: o desequilíbrio restante de ${after.imbalance_pct}% vem da carga monofásica "${blocker.name}" (${formatNumber(blocker.current_a, " A")}). Para zerar, ${blockerRemedy(blocker)}.`
+          );
+        } else {
+          parts.push(
+            `Conformidade atual: ${after.nbrScore}%. Os itens restantes precisam de ajuste manual no circuito — veja a lista abaixo.`
+          );
+        }
+      }
+      setAutoFixFeedback({ tone, message: parts.join(" ") });
+    } catch (error) {
+      console.error(error);
+      setAutoFixFeedback({
+        tone: "danger",
+        message: "Não foi possível aplicar o ajuste automático. Tente novamente ou revise os circuitos manualmente.",
+      });
     } finally {
       setSaving(false);
     }
@@ -354,7 +572,7 @@ export default function CircuitEditor() {
   const drCount = circuits.filter((c) => c.needs_dr).length;
 
   return (
-    <div className="mx-auto max-w-[1520px] space-y-5 pb-20">
+    <div className="mx-auto w-full max-w-[1520px] space-y-5 pb-20">
       <PageHeader
         icon={Edit3}
         title="Editor de Circuitos"
@@ -405,7 +623,14 @@ export default function CircuitEditor() {
 
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
                 <PhaseReviewPanel metrics={m} />
-                <ValidationPanel validations={m.validations || []} />
+                <ValidationPanel
+                  metrics={m}
+                  validations={m.validations || []}
+                  onAutoFix={autoFixNBR}
+                  saving={saving}
+                  canAutoFix={(m.validations || []).length > 0}
+                  feedback={autoFixFeedback}
+                />
               </div>
             </>
           )}
