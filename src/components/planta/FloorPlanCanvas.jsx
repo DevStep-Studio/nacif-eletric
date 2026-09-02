@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import Konva from "konva";
 import { Stage, Layer, Rect, Line, Circle, Text, Group, Image as KonvaImage, Arc } from "react-konva";
+
+// Renderiza todo o canvas Konva em pelo menos 2x pixels reais, mesmo em monitor
+// comum (devicePixelRatio = 1): símbolos, textos e traços da planta deixam de
+// sair "chapados"/borrados. Precisa ser definido antes de qualquer Layer nascer.
+if (typeof window !== "undefined") {
+  Konva.pixelRatio = Math.min(3, Math.max(2, window.devicePixelRatio || 1));
+}
 import {
   Copy,
   DoorOpen,
@@ -2640,6 +2648,12 @@ export default function FloorPlanCanvas({
   const normalizedSnapSettings = useMemo(() => normalizeSnapSettings(snapSettings), [snapSettings]);
   const stageWidth = size.width;
   const stageHeight = size.height;
+  // Renderiza o canvas em pelo menos 2x pixels reais: deixa os símbolos, textos e
+  // traços da planta nítidos mesmo em monitor comum (devicePixelRatio = 1).
+  const renderPixelRatio = useMemo(() => {
+    if (typeof window === "undefined") return 2;
+    return Math.min(3, Math.max(2, window.devicePixelRatio || 1));
+  }, []);
   const hasImportedPlanElements = (importedPlanElements?.lines?.length || 0) > 0 || (importedPlanElements?.texts?.length || 0) > 0;
   const viewport = useMemo(() => ({
     x: (stageWidth - DESIGN.width * scale) / 2 + pan.x,
@@ -2745,6 +2759,21 @@ export default function FloorPlanCanvas({
   useEffect(() => {
     setPan({ x: 0, y: 0 });
   }, [fitRequest]);
+
+  // Konva usa suavização "low" por padrão ao redimensionar bitmaps; força "high" para
+  // a planta importada não ficar granulada quando reduzida/ampliada no editor.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    stage.getLayers().forEach((layer) => {
+      const nativeCtx = layer.getContext()?._context;
+      if (nativeCtx) {
+        nativeCtx.imageSmoothingEnabled = true;
+        nativeCtx.imageSmoothingQuality = "high";
+      }
+    });
+    stage.batchDraw();
+  }, [image, stageWidth, stageHeight, renderPixelRatio]);
 
   const visiblePoints = points.filter((point) => {
     const tool = TOOL_TYPES.find((item) => item.id === point.type);
@@ -3159,6 +3188,7 @@ export default function FloorPlanCanvas({
         ref={stageRef}
         width={stageWidth}
         height={stageHeight}
+        pixelRatio={renderPixelRatio}
         className="bg-white shadow-[0_18px_55px_rgba(15,23,42,0.08)]"
         onMouseDown={handleStagePointerDown}
         onTouchStart={handleStagePointerDown}
@@ -3197,7 +3227,7 @@ export default function FloorPlanCanvas({
                 y={planImageRect.y}
                 width={planImageRect.w}
                 height={planImageRect.h}
-                opacity={hasImportedPlanElements ? 0.78 : 0.92}
+                opacity={hasImportedPlanElements ? 0.9 : 0.97}
               />
             )}
             <Group x={contentOffset.x} y={contentOffset.y}>

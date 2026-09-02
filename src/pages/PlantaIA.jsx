@@ -680,13 +680,22 @@ const renderPdfFirstPage = async (file) => {
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const page = await pdf.getPage(1);
   const baseViewport = page.getViewport({ scale: 1 });
-  const targetWidth = 2200;
-  const scale = Math.min(3, Math.max(1.2, targetWidth / Math.max(1, baseViewport.width)));
+  // Rasteriza a página vetorial em alta resolução: plantas são desenho de linha,
+  // então quanto mais pixels, mais nítido o zoom no editor e na prancha final.
+  const targetWidth = 3800;
+  const maxRasterSide = 5200;
+  let scale = Math.min(4.5, Math.max(2, targetWidth / Math.max(1, baseViewport.width)));
+  const longestBaseSide = Math.max(baseViewport.width, baseViewport.height);
+  if (longestBaseSide * scale > maxRasterSide) {
+    scale = maxRasterSide / longestBaseSide;
+  }
   const viewport = page.getViewport({ scale });
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d", { alpha: false });
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, canvas.width, canvas.height);
   await page.render({ canvasContext: context, viewport }).promise;
@@ -710,7 +719,8 @@ const renderPdfFirstPage = async (file) => {
     })
     .filter(Boolean);
   return {
-    dataUrl: canvas.toDataURL("image/jpeg", 0.9),
+    // PNG (sem perdas) evita o serrilhado/"chuvisco" do JPEG em volta de cada linha e texto.
+    dataUrl: canvas.toDataURL("image/png"),
     width: canvas.width,
     height: canvas.height,
     texts,
@@ -719,7 +729,9 @@ const renderPdfFirstPage = async (file) => {
 
 const enhancePlanImage = async (src, options = {}) => {
   const image = await loadImage(src);
-  const maxSide = 1800;
+  // Preserva a resolução da planta importada (o dobro do que era antes) para o zoom
+  // no editor não ficar borrado. Só reduz plantas realmente gigantes.
+  const maxSide = 3600;
   const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
   let width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
   let height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
@@ -735,6 +747,8 @@ const enhancePlanImage = async (src, options = {}) => {
   let ctx = canvas.getContext("2d", { willReadFrequently: true });
   canvas.width = width;
   canvas.height = height;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
   ctx.drawImage(image, 0, 0, width, height);
@@ -747,6 +761,8 @@ const enhancePlanImage = async (src, options = {}) => {
     const croppedCtx = croppedCanvas.getContext("2d", { willReadFrequently: true });
     croppedCanvas.width = cropBounds.w;
     croppedCanvas.height = cropBounds.h;
+    croppedCtx.imageSmoothingEnabled = true;
+    croppedCtx.imageSmoothingQuality = "high";
     croppedCtx.fillStyle = "#ffffff";
     croppedCtx.fillRect(0, 0, cropBounds.w, cropBounds.h);
     croppedCtx.drawImage(
@@ -782,24 +798,58 @@ const enhancePlanImage = async (src, options = {}) => {
 
   const lines = extractPlanLineSegments(imageData, width, height);
   const data = imageData.data;
+  // Realce suave: aumenta o contraste em torno de um pivô, limpa o fundo de papel
+  // para branco puro e mantém a suavização (anti-aliasing) das linhas e as linhas
+  // finas de construção — sem o "corte" duro que deixava tudo serrilhado e lavado.
+  const contrast = 1.32;
+  const pivot = 140;
   for (let index = 0; index < data.length; index += 4) {
     const luminance = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
-    const boosted = luminance < 210 ? Math.max(0, (luminance - 128) * 1.55 + 96) : Math.min(255, luminance + 22);
-    const value = boosted < 232 ? Math.max(0, boosted - 18) : 255;
+    let value = (luminance - pivot) * contrast + pivot;
+    if (value >= 250) {
+      value = 255;
+    } else if (value > 216) {
+      value += (value - 216) * 0.4;
+    }
+    value = value < 0 ? 0 : value > 255 ? 255 : value;
     data[index] = value;
     data[index + 1] = value;
     data[index + 2] = value;
     data[index + 3] = 255;
   }
   ctx.putImageData(imageData, 0, 0);
+  // PNG mantém as linhas nítidas; cai para JPEG de alta qualidade só se o PNG ficar pesado demais.
+  const pngUrl = canvas.toDataURL("image/png");
+  const dataUrl = pngUrl.length > 5500000 ? canvas.toDataURL("image/jpeg", 0.95) : pngUrl;
   return {
-    dataUrl: canvas.toDataURL("image/jpeg", 0.9),
+    dataUrl,
     cropped,
     width,
     height,
     lines,
     texts: extractedTexts,
   };
+};
+
+// Converte um SVG (vetor, sem resolução fixa) em bitmap de alta resolução antes do
+// realce, para não cair no palpite de 1200x800 nem depender do redimensionamento do canvas.
+const rasterizeVectorImage = async (dataUrl) => {
+  const image = await loadImage(dataUrl);
+  const baseW = image.naturalWidth || image.width || 1400;
+  const baseH = image.naturalHeight || image.height || 990;
+  const rasterScale = Math.min(4, Math.max(2, 3000 / Math.max(baseW, baseH)));
+  const targetW = Math.max(1, Math.round(baseW * rasterScale));
+  const targetH = Math.max(1, Math.round(baseH * rasterScale));
+  const canvas = document.createElement("canvas");
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, targetW, targetH);
+  ctx.drawImage(image, 0, 0, targetW, targetH);
+  return { dataUrl: canvas.toDataURL("image/png"), width: targetW, height: targetH };
 };
 
 const prepareImportedPlanFromFile = async (file, extension, metadata) => {
@@ -809,10 +859,20 @@ const prepareImportedPlanFromFile = async (file, extension, metadata) => {
   let status = `${metadata} importado com realce de linhas e contraste.`;
 
   try {
-    const rendered = extension === "pdf"
-      ? await renderPdfFirstPage(file)
-      : { dataUrl: await readFileAsDataUrl(file), texts: [] };
-    const enhanced = extension === "svg"
+    let rendered;
+    if (extension === "pdf") {
+      rendered = await renderPdfFirstPage(file);
+    } else if (extension === "svg") {
+      const rawSvg = await readFileAsDataUrl(file);
+      try {
+        rendered = { ...(await rasterizeVectorImage(rawSvg)), texts: [] };
+      } catch {
+        rendered = { dataUrl: rawSvg, texts: [], width: 1400, height: 990, vectorFallback: true };
+      }
+    } else {
+      rendered = { dataUrl: await readFileAsDataUrl(file), texts: [] };
+    }
+    const enhanced = rendered.vectorFallback
       ? { dataUrl: rendered.dataUrl, cropped: false, width: rendered.width || 1200, height: rendered.height || 800, lines: [], texts: rendered.texts || [] }
       : await enhancePlanImage(rendered.dataUrl, { texts: rendered.texts || [] });
     const importedPlan = buildImportedPlanElements(enhanced);
