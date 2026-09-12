@@ -208,18 +208,23 @@ function PanelDiagram({ data }) {
         color={colors.red}
         sub={data.dpsDeviceCount ? `${data.dpsDeviceCount} dispositivo(s) no quadro` : "Proteção contra surtos no QD"}
       />
-      <line x1={center} y1={y + 186} x2={center} y2={y + 208} stroke={colors.ink} strokeWidth="1.3" />
-
-      <DeviceBlock
-        x={x + 64}
-        y={y + 208}
-        w={242}
-        title="IDR / DR"
-        value={data.drDeviceCount ? `${data.drDeviceCount} disp. · ${data.drCount} circ.` : data.drCount ? `${data.drCount} circuito(s)` : "prever"}
-        color={colors.blueDark}
-        sub="30mA para áreas molhadas e tomadas aplicáveis"
-      />
-      <line x1={center} y1={y + 242} x2={center} y2={busTop} stroke={colors.ink} strokeWidth="1.3" />
+      {data.showGeneralDr ? (
+        <>
+          <line x1={center} y1={y + 186} x2={center} y2={y + 208} stroke={colors.ink} strokeWidth="1.3" />
+          <DeviceBlock
+            x={x + 64}
+            y={y + 208}
+            w={242}
+            title="IDR / DR"
+            value={data.drDeviceCount ? `${data.drDeviceCount} disp. · ${data.drCount} circ.` : data.drCount ? `${data.drCount} circuito(s)` : "prever"}
+            color={colors.blueDark}
+            sub="30mA para áreas molhadas e tomadas aplicáveis"
+          />
+          <line x1={center} y1={y + 242} x2={center} y2={busTop} stroke={colors.ink} strokeWidth="1.3" />
+        </>
+      ) : (
+        <line x1={center} y1={y + 186} x2={center} y2={busTop} stroke={colors.ink} strokeWidth="1.3" />
+      )}
 
       <rect x={x + 54} y={busTop - 18} width={w - 108} height="24" rx="4" fill={colors.soft} stroke={colors.faint} strokeWidth="0.8" />
       <Text x={center} y={busTop - 2} size={8} weight={900} color={colors.ink} anchor="middle">

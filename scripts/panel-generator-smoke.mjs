@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { generateDefaultPanelLayout } from "../src/lib/electricalEngine.js";
+import { buildProfessionalPanelBoard, panelHasGeneralDr } from "../src/lib/professionalPanelBoardLibrary.js";
 
 const findComponent = (layout, id) => (
   layout.rails.flatMap((rail) => rail.components || []).find((component) => component.id === id)
@@ -93,5 +94,30 @@ assert.equal(
   "C3 - Tomadas cozinha",
   "texto técnico não vira identificação principal do usuário",
 );
+
+const layoutWithoutDr = {
+  ...monoLayout,
+  rails: monoLayout.rails.map((rail) => ({
+    ...rail,
+    components: (rail.components || []).filter((component) => component.type !== "dr"),
+  })),
+};
+const sheetWithoutDr = buildProfessionalPanelBoard({
+  ...monoProject,
+  panel_layout: layoutWithoutDr,
+}, { circuits: monoProject.circuits });
+assert.equal(sheetWithoutDr.drDeviceCount, 0, "prancha reconhece a remoção física do IDR");
+assert.equal(sheetWithoutDr.showGeneralDr, false, "unifilar não exibe IDR ausente do layout explícito");
+assert.equal(panelHasGeneralDr({ panel_layout: layoutWithoutDr }), false, "regra compartilhada reconhece quadro sem IDR");
+
+const sheetWithDr = buildProfessionalPanelBoard({
+  ...monoProject,
+  panel_layout: monoLayout,
+}, { circuits: monoProject.circuits });
+assert.equal(sheetWithDr.showGeneralDr, true, "unifilar mantém o IDR presente no quadro");
+assert.equal(panelHasGeneralDr({ panel_layout: monoLayout }), true, "regra compartilhada reconhece IDR instalado");
+
+const legacySheet = buildProfessionalPanelBoard(monoProject, { circuits: monoProject.circuits });
+assert.equal(legacySheet.showGeneralDr, true, "projeto legado sem layout mantém a previsão do IDR");
 
 console.log("panel generator smoke: ok");

@@ -186,18 +186,28 @@ function buildPhaseLoads(metrics, circuits) {
 
 const getActivePanelLayout = (project) => {
   const boards = Array.isArray(project?.panel_boards) ? project.panel_boards : [];
-  const activeBoard = boards[0] || null;
+  const activeBoard = boards.find((board) => (
+    !["qgbt", "solar_ac"].includes(String(board?.type || "").toLowerCase())
+  )) || boards[0] || null;
   const layout = activeBoard?.layout || project?.panel_layout || null;
   return {
     board: activeBoard,
     layout: layout && Array.isArray(layout.rails) ? layout : { rails: [], wires: [] },
+    hasExplicitLayout: Boolean(layout && Array.isArray(layout.rails) && layout.rails.length > 0),
   };
 };
 
 const getPanelComponents = (layout) => (
   (layout?.rails || []).flatMap((rail) => rail.components || [])
-    .filter((component) => component && component.type !== "spacer")
+    .filter((component) => component && component.type !== "spacer" && !component.deleted)
 );
+
+export const panelHasGeneralDr = (project = {}) => {
+  const { layout, hasExplicitLayout } = getActivePanelLayout(project);
+  // Projetos legados sem quadro configurado mantêm a indicação de previsão.
+  if (!hasExplicitLayout) return true;
+  return getPanelComponents(layout).some((component) => component.type === "dr");
+};
 
 const componentCircuitIndex = (component) => {
   const idMatch = String(component?.id || "").match(/circuit[_-](\d+)/i);
@@ -321,6 +331,10 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
     ? dpsComponents.reduce((sum, component) => sum + asNumber(component.poles, 1), 0)
     : circuits.length ? Math.max(1, system.phaseCodes.length) : 0;
   const drDeviceCount = drComponents.length;
+  // Projetos antigos sem layout mantêm a indicação de previsão do DR. Quando o
+  // quadro já possui um layout explícito, porém, o unifilar deve refletir
+  // estritamente os dispositivos realmente instalados nele.
+  const showGeneralDr = panelHasGeneralDr(project);
   const drProtectedCount = drDeviceCount ? circuits.length : circuits.filter((circuit) => circuit.needsDr).length;
 
   return {
@@ -354,6 +368,7 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
     reserveModules,
     drCount: drProtectedCount,
     drDeviceCount,
+    showGeneralDr,
     dpsCount: dpsPoleCount,
     dpsDeviceCount: dpsComponents.length,
     warnings,

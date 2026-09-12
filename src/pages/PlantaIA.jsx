@@ -52,6 +52,7 @@ import {
   normalizeRouteSystem,
   pointToTerminal,
   removeCableNode,
+  ROUTE_SYSTEMS,
   syncCableFromPath,
   updateCableNode,
   updateCablesForMovedComponent,
@@ -1746,8 +1747,24 @@ function drawPlantLegend(doc, points, routes, stats = {}) {
     y += rowHeight;
   });
 
-  const usedRoutes = new Set(routes.map((route) => normalizeCableInstallationMode(route.mode, "embutido")));
-  const routeItems = CONDUIT_SYMBOLS.filter((tool) => usedRoutes.has(tool.id));
+  // Eletroduto elétrico (preto) e eletroduto de telecom (azul) usam o mesmo símbolo de traçado —
+  // só a cor muda — então cada combinação modo × sistema realmente usada na planta vira sua
+  // própria linha na legenda, senão a infraestrutura de telecom fica invisível no impresso.
+  const routeSystemOf = (route) => normalizeRouteSystem(
+    route.systemType || route.system_type || route.system || route.type || route.label || route.description
+  );
+  const hasTelecomRoutes = routes.some((route) => routeSystemOf(route) === "telecom");
+  const usedRouteKeys = new Set(routes.map((route) => `${normalizeCableInstallationMode(route.mode, "embutido")}::${routeSystemOf(route)}`));
+  const routeItems = CONDUIT_SYMBOLS.flatMap((tool) => (
+    ["eletrica", "telecom"]
+      .filter((system) => usedRouteKeys.has(`${tool.id}::${system}`))
+      .map((system) => ({
+        ...tool,
+        systemType: system,
+        color: colorForRouteSystem(system),
+        label: hasTelecomRoutes ? `${tool.label} (${ROUTE_SYSTEMS[system]?.label || system})` : tool.label,
+      }))
+  ));
   if (routeItems.length > 0 && y <= bottom - 62) {
     y += 4;
     doc.setFillColor(248, 250, 252);
@@ -1760,10 +1777,12 @@ function drawPlantLegend(doc, points, routes, stats = {}) {
   }
   routeItems.forEach((item) => {
     if (y > bottom - 44) return;
-    const count = routes.filter((route) => normalizeCableInstallationMode(route.mode, "embutido") === item.id).length;
-    doc.setDrawColor(15, 23, 42);
+    const count = routes.filter((route) => (
+      normalizeCableInstallationMode(route.mode, "embutido") === item.id && routeSystemOf(route) === item.systemType
+    )).length;
+    doc.setDrawColor(item.color);
     doc.setLineWidth(0.95);
-    
+
     if (item.id === "sobe" || item.id === "desce") {
       const centerX = rowX + 8;
       const centerY = y - 1;

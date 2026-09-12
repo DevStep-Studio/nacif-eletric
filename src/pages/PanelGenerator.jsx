@@ -6,7 +6,7 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
-import { buildPanelBoardsWithLayout, calcMainProtection, calcProjectMetrics, generateDefaultPanelLayout } from "@/lib/electricalEngine";
+import { buildPanelBoardsWithLayout, calcMainProtection, calcProjectMetrics, generateDefaultPanelLayout, mergeCircuitsIntoPanelLayout } from "@/lib/electricalEngine";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,33 @@ const BRK_H = 110;        // Altura padrão do disjuntor em px
 const ROW_MAX = 18;       // Limite de módulos DIN por trilho
 const RAIL_COMPONENT_START_X = 160;
 const RAIL_COMPONENT_GAP = 2;
+const BOARD_SIZE_PRESETS = [
+  [300, 200, 200],
+  [300, 300, 200],
+  [400, 300, 200],
+  [400, 400, 200],
+  [500, 400, 200],
+  [500, 500, 200],
+  [600, 400, 200],
+  [600, 500, 200],
+  [600, 600, 200],
+  [800, 500, 200],
+  [800, 600, 200],
+  [800, 600, 250],
+  [1000, 600, 200],
+  [1000, 600, 250],
+  [1000, 800, 250],
+  [1200, 600, 200],
+  [1200, 600, 250],
+  [1200, 800, 250],
+].map(([height, width, depth]) => ({
+  id: `${height}x${width}x${depth}`,
+  height,
+  width,
+  depth,
+  label: `${height} × ${width} × ${depth} mm`,
+}));
+const DEFAULT_BOARD_SIZE = BOARD_SIZE_PRESETS.find((size) => size.id === "800x600x200");
 const MIN_PANEL_SCALE = 0.35;
 const MAX_PANEL_SCALE = 1.8;
 const DEFAULT_PANEL_SCALE = 0.85;
@@ -74,6 +101,121 @@ const clampNumber = (value, min, max, fallback) => {
   const numeric = Number(value);
   const safeValue = Number.isFinite(numeric) ? numeric : fallback;
   return Math.max(min, Math.min(max, safeValue));
+};
+
+const getBoardSize = (board = {}) => {
+  const configured = board.enclosure || board.enclosure_dimensions || {};
+  const preset = BOARD_SIZE_PRESETS.find((item) => item.id === configured.presetId);
+  return preset || BOARD_SIZE_PRESETS.find((item) => (
+    item.height === Number(configured.height)
+    && item.width === Number(configured.width)
+    && item.depth === Number(configured.depth)
+  )) || DEFAULT_BOARD_SIZE;
+};
+
+const getRailOrientation = (rail = {}) => rail.orientation === "vertical" ? "vertical" : "horizontal";
+
+const getComponentMountRotation = (component = {}, rail = {}) => {
+  if (component.mountOrientation === "upright") return 0;
+  if (component.mountOrientation === "sideways") return 90;
+  return getRailOrientation(rail) === "vertical" ? 90 : 0;
+};
+
+const rotatePoint = (point, center, degrees = 0) => {
+  if (!degrees) return point;
+  const radians = degrees * Math.PI / 180;
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * Math.cos(radians) - dy * Math.sin(radians),
+    y: center.y + dx * Math.sin(radians) + dy * Math.cos(radians),
+  };
+};
+
+const getRailGeometry = (rails = [], railIndex = 0, panelH = 820) => {
+  const rail = rails[railIndex] || {};
+  const orientation = getRailOrientation(rail);
+  if (orientation === "vertical") {
+    const verticalRails = rails.filter((item) => getRailOrientation(item) === "vertical");
+    const verticalIndex = Math.max(0, verticalRails.findIndex((item) => item.id === rail.id));
+    const usableLeft = 165;
+    const usableRight = PANEL_W - 165;
+    const x = verticalRails.length <= 1
+      ? PANEL_W / 2
+      : usableLeft + verticalIndex * ((usableRight - usableLeft) / (verticalRails.length - 1));
+    return { orientation, x, y1: 132, y2: Math.max(220, panelH - 112) };
+  }
+
+  const horizontalRails = rails.filter((item) => getRailOrientation(item) === "horizontal");
+  const horizontalIndex = Math.max(0, horizontalRails.findIndex((item) => item.id === rail.id));
+  const y = 190 + horizontalIndex * 240;
+  return { orientation, y, x1: 140, x2: PANEL_W - 140 };
+};
+
+const getPanelComponentPlacements = (rails = [], panelH = 820) => {
+  const placements = [];
+  rails.forEach((rail, railIndex) => {
+    const geometry = getRailGeometry(rails, railIndex, panelH);
+    let axisCursor = geometry.orientation === "vertical" ? geometry.y1 + 12 : RAIL_COMPONENT_START_X;
+
+    (rail.components || []).forEach((component, componentIndex) => {
+      const width = Math.max(1, Number(component.poles) || 1) * MOD;
+      const height = BRK_H;
+      const rotation = getComponentMountRotation(component, rail);
+      const sideways = Math.abs(rotation % 180) === 90;
+      const footprintWidth = sideways ? height : width;
+      const footprintHeight = sideways ? width : height;
+      const centerX = geometry.orientation === "vertical"
+        ? geometry.x
+        : axisCursor + footprintWidth / 2;
+      const centerY = geometry.orientation === "vertical"
+        ? axisCursor + footprintHeight / 2
+        : geometry.y + 10;
+
+      placements.push({
+        component,
+        componentIndex,
+        rail,
+        railIndex,
+        geometry,
+        width,
+        height,
+        rotation,
+        centerX,
+        centerY,
+        x: centerX - width / 2,
+        y: centerY - height / 2,
+        footprintWidth,
+        footprintHeight,
+      });
+      axisCursor += (geometry.orientation === "vertical" ? footprintHeight : footprintWidth) + RAIL_COMPONENT_GAP;
+    });
+  });
+  return placements;
+};
+
+const findPanelComponentPlacement = (componentId, rails = [], panelH = 820) => (
+  getPanelComponentPlacements(rails, panelH).find((placement) => (
+    String(placement.component?.id || "") === String(componentId || "")
+  )) || null
+);
+
+const getComponentTerminalPoint = (placement, poleIndex = 0, term = "top") => {
+  if (!placement) return { x: 0, y: 0 };
+  const safePole = Math.max(0, Math.min(
+    Number(poleIndex) || 0,
+    Math.max(0, (Number(placement.component?.poles) || 1) - 1),
+  ));
+  const point = {
+    x: placement.x + safePole * MOD + MOD / 2,
+    y: term === "bottom" ? placement.y + BRK_H - 14 : placement.y + 14,
+  };
+  return rotatePoint(point, { x: placement.centerX, y: placement.centerY }, placement.rotation);
+};
+
+const getRotatedVector = (x, y, degrees = 0) => {
+  const rotated = rotatePoint({ x, y }, { x: 0, y: 0 }, degrees);
+  return { x: rotated.x, y: rotated.y };
 };
 
 const getRotationFromPoint = (point, center, snap = 1) => {
@@ -1117,41 +1259,105 @@ const GROUND_BUS = {
   pinStartX: 262,
 };
 
-const getNeutralBusLayout = (infrastructure = []) => {
+const getNeutralBusLayout = (infrastructure = [], panelH = 820) => {
   const item = (infrastructure || []).find((entry) => entry?.id === "neutral-bus") || {};
-  const width = Math.max(180, Math.min(520, Number(item.width) || NEUTRAL_BUS.width));
+  const orientation = item.orientation === "vertical" ? "vertical" : "horizontal";
+  const maxLength = orientation === "vertical" ? Math.max(180, panelH - 190) : 520;
+  const length = Math.max(180, Math.min(maxLength, Number(item.width) || NEUTRAL_BUS.width));
   const rawX = Number(item.x);
   const rawY = Number(item.y);
-  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : NEUTRAL_BUS.x));
-  const y = Math.max(20, Number.isFinite(rawY) ? rawY : NEUTRAL_BUS.y);
-  const pinGap = Math.max(14, Math.min(32, (width - 40) / Math.max(1, NEUTRAL_BUS.pinCount - 1)));
+  const width = orientation === "vertical" ? NEUTRAL_BUS.height : length;
+  const height = orientation === "vertical" ? length : NEUTRAL_BUS.height;
+  const defaultX = orientation === "vertical" ? PANEL_W - 88 : NEUTRAL_BUS.x;
+  const defaultY = orientation === "vertical" ? 116 : NEUTRAL_BUS.y;
+  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : defaultX));
+  const y = Math.max(20, Math.min(panelH - height - 20, Number.isFinite(rawY) ? rawY : defaultY));
+  const pinGap = Math.max(14, Math.min(38, (length - 40) / Math.max(1, NEUTRAL_BUS.pinCount - 1)));
 
   return {
     x,
     y,
+    orientation,
+    length,
     width,
-    height: NEUTRAL_BUS.height,
-    pinStartX: x + 20,
-    pinY: y + (NEUTRAL_BUS.pinY - NEUTRAL_BUS.y),
+    height,
+    pinStartX: orientation === "vertical" ? x + width / 2 : x + 20,
+    pinStartY: orientation === "vertical" ? y + 20 : y + height / 2,
+    pinY: orientation === "vertical" ? y + 20 : y + (NEUTRAL_BUS.pinY - NEUTRAL_BUS.y),
     pinGap,
   };
 };
 
 const getGroundBusLayout = (infrastructure = [], panelH = 820) => {
   const item = (infrastructure || []).find((entry) => entry?.id === "ground-bus") || {};
-  const width = Math.max(260, Math.min(520, Number(item.width) || GROUND_BUS.width));
+  const orientation = item.orientation === "vertical" ? "vertical" : "horizontal";
+  const maxLength = orientation === "vertical" ? Math.max(260, panelH - 190) : 520;
+  const length = Math.max(260, Math.min(maxLength, Number(item.width) || GROUND_BUS.width));
   const rawX = Number(item.x ?? item.busX);
   const rawY = Number(item.y);
-  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : GROUND_BUS.x));
-  const y = Math.max(20, Math.min(panelH - 44, Number.isFinite(rawY) ? rawY : (panelH - 68)));
-  const pinGap = Math.max(20, Math.min(38, (width - 60) / Math.max(1, GROUND_BUS.pinCount - 1)));
+  const width = orientation === "vertical" ? 15 : length;
+  const height = orientation === "vertical" ? length : 15;
+  const defaultX = orientation === "vertical" ? 72 : GROUND_BUS.x;
+  const defaultY = orientation === "vertical" ? 116 : panelH - 68;
+  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : defaultX));
+  const y = Math.max(20, Math.min(panelH - height - 20, Number.isFinite(rawY) ? rawY : defaultY));
+  const pinGap = Math.max(20, Math.min(42, (length - 44) / Math.max(1, GROUND_BUS.pinCount - 1)));
 
   return {
     x,
     y,
+    orientation,
+    length,
     width,
-    pinStartX: x + 22,
-    pinY: y + 14,
+    height,
+    pinStartX: orientation === "vertical" ? x + width / 2 : x + 22,
+    pinStartY: orientation === "vertical" ? y + 22 : y + height / 2,
+    pinY: orientation === "vertical" ? y + 22 : y + 14,
+    pinGap,
+  };
+};
+
+const getBusPinPoint = (layout, index = 0) => (
+  layout.orientation === "vertical"
+    ? { x: layout.pinStartX, y: layout.pinStartY + index * layout.pinGap }
+    : { x: layout.pinStartX + index * layout.pinGap, y: layout.pinY }
+);
+
+// Pente de neutro LOCAL, perto do trilho de distribuição — mesma ideia do barramento de terra
+// (que já fica pertinho dos disjuntores). Cada circuito monofásico deriva o neutro aqui do lado,
+// em vez de puxar um cabo comprido até o barramento N lá em cima, perto da entrada.
+const DIST_NEUTRAL_BUS = {
+  width: 390,
+  pinCount: 12,
+  pinGap: 30,
+};
+
+const getDistNeutralBusLayout = (infrastructure = [], panelH = 820) => {
+  const item = (infrastructure || []).find((entry) => entry?.id === "neutral-bus-dist") || {};
+  const orientation = item.orientation === "vertical" ? "vertical" : "horizontal";
+  const maxLength = orientation === "vertical" ? Math.max(260, panelH - 190) : 520;
+  const length = Math.max(260, Math.min(maxLength, Number(item.width) || DIST_NEUTRAL_BUS.width));
+  const rawX = Number(item.x);
+  const rawY = Number(item.y);
+  const width = orientation === "vertical" ? 15 : length;
+  const height = orientation === "vertical" ? length : 15;
+  // Por padrão fica logo acima do barramento de terra, perto dos trilhos de distribuição.
+  const defaultX = orientation === "vertical" ? 40 : 240;
+  const defaultY = orientation === "vertical" ? 116 : panelH - 108;
+  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : defaultX));
+  const y = Math.max(20, Math.min(panelH - height - 20, Number.isFinite(rawY) ? rawY : defaultY));
+  const pinGap = Math.max(20, Math.min(42, (length - 44) / Math.max(1, DIST_NEUTRAL_BUS.pinCount - 1)));
+
+  return {
+    x,
+    y,
+    orientation,
+    length,
+    width,
+    height,
+    pinStartX: orientation === "vertical" ? x + width / 2 : x + 22,
+    pinStartY: orientation === "vertical" ? y + 22 : y + height / 2,
+    pinY: orientation === "vertical" ? y + 22 : y + 14,
     pinGap,
   };
 };
@@ -1212,7 +1418,9 @@ const getEffectiveWireThickness = (wire = {}, fallback = 1.4) => {
   return clampWireThickness(Number(fallback) || 1.4);
 };
 
-const isNeutralBusPin = (pinId = "") => String(pinId || "").startsWith("busbar_neutral:");
+const isNeutralBusPin = (pinId = "") => (
+  String(pinId || "").startsWith("busbar_neutral:") || String(pinId || "").startsWith("busbar_neutral_dist:")
+);
 const isGroundBusPin = (pinId = "") => String(pinId || "").startsWith("busbar_ground:");
 
 const getWireKind = (color) => {
@@ -1539,7 +1747,7 @@ const getRailDuctY = (railIndex, side = "top", laneOffset = 0) => {
   return snapWireGrid(railY + baseOffset + laneOffset);
 };
 
-const parsePinMeta = (pinId = "", point = { x: 0, y: 0 }, rails = []) => {
+const parsePinMeta = (pinId = "", point = { x: 0, y: 0 }, rails = [], panelH = 820) => {
   const pin = String(pinId || "");
 
   if (pin.startsWith("terminal_left_top:")) {
@@ -1556,13 +1764,15 @@ const parsePinMeta = (pinId = "", point = { x: 0, y: 0 }, rails = []) => {
 
   if (pin.startsWith("load_out:")) {
     const [, compId, poleToken = "0"] = pin.split(":");
-    const placement = findLoadComponentPlacement(compId, rails);
+    const placement = getPanelComponentPlacements(rails, panelH).find((item) => (
+      componentMatchesLoadTarget(compId, item.component)
+    ));
     if (placement) {
       return {
         type: "load",
         term: poleToken === "neutral" ? "neutral" : poleToken === "ground" ? "ground" : "bottom",
         railIndex: placement.railIndex,
-        railY: placement.railY,
+        railY: placement.geometry.orientation === "horizontal" ? placement.geometry.y : null,
         point,
       };
     }
@@ -1577,19 +1787,16 @@ const parsePinMeta = (pinId = "", point = { x: 0, y: 0 }, rails = []) => {
 
   if (pin.startsWith("comp:")) {
     const [, compId, term = "top", poleToken = "0"] = pin.split(":");
-    for (let railIndex = 0; railIndex < rails.length; railIndex += 1) {
-      const rail = rails[railIndex];
-      const found = (rail.components || []).some((component) => component.id === compId);
-      if (found) {
-        return {
-          type: "component",
-          term,
-          poleIndex: Number(poleToken) || 0,
-          railIndex,
-          railY: 190 + railIndex * 240,
-          point,
-        };
-      }
+    const placement = findPanelComponentPlacement(compId, rails, panelH);
+    if (placement) {
+      return {
+        type: "component",
+        term,
+        poleIndex: Number(poleToken) || 0,
+        railIndex: placement.railIndex,
+        railY: placement.geometry.orientation === "horizontal" ? placement.geometry.y : null,
+        point,
+      };
     }
   }
 
@@ -1631,31 +1838,34 @@ const getNeutralBackboneRoute = (panelH, bottomY = panelH - 120) => {
   ]);
 };
 
-const getNeutralBusTieRoute = (infrastructure = []) => {
-  const neutralBus = getNeutralBusLayout(infrastructure);
-  const tieX = neutralBus.pinStartX;
+const getNeutralBusTieRoute = (infrastructure = [], panelH = 820) => {
+  const neutralBus = getNeutralBusLayout(infrastructure, panelH);
+  const busPin = getBusPinPoint(neutralBus, 0);
+  const tieX = busPin.x;
   return cleanRoutePoints([
     { x: tieX, y: getNeutralBackboneTopY() },
-    { x: tieX, y: neutralBus.pinY },
+    busPin,
   ]);
 };
 
 const getGroundBackboneRoute = (panelH, infrastructure = []) => {
   const groundBus = getGroundBusLayout(infrastructure, panelH);
+  const busPin = getBusPinPoint(groundBus, GROUND_BUS.pinCount - 1);
   return cleanRoutePoints([
     { x: 73, y: 78 },
     { x: getGroundBackboneLeftX(), y: 78 },
     { x: getGroundBackboneLeftX(), y: getGroundBackboneY(panelH) },
-    { x: groundBus.x + groundBus.width - 18, y: getGroundBackboneY(panelH) },
+    { x: busPin.x, y: getGroundBackboneY(panelH) },
   ]);
 };
 
 const getGroundBusTieRoute = (panelH, infrastructure = []) => {
   const groundBus = getGroundBusLayout(infrastructure, panelH);
-  const tieX = groundBus.x + groundBus.width - 18;
+  const busPin = getBusPinPoint(groundBus, GROUND_BUS.pinCount - 1);
+  const tieX = busPin.x;
   return cleanRoutePoints([
     { x: tieX, y: getGroundBackboneY(panelH) },
-    { x: tieX, y: groundBus.pinY },
+    busPin,
   ]);
 };
 
@@ -1755,28 +1965,28 @@ const getPinCoords = (pinId, rails, panelH, infrastructure = []) => {
     };
   }
   
+  if (pinId.startsWith("busbar_neutral_dist:")) {
+    const idx = parseInt(pinId.split(":")[1], 10);
+    const distNeutralBus = getDistNeutralBusLayout(infrastructure, panelH);
+    return getBusPinPoint(distNeutralBus, Math.abs(Number(idx) || 0) % DIST_NEUTRAL_BUS.pinCount);
+  }
+
   if (pinId.startsWith("busbar_neutral:")) {
     const idx = parseInt(pinId.split(":")[1], 10);
-    const neutralBus = getNeutralBusLayout(infrastructure);
-    return {
-      x: neutralBus.pinStartX + (Math.abs(Number(idx) || 0) % NEUTRAL_BUS.pinCount) * neutralBus.pinGap,
-      y: neutralBus.pinY,
-    };
+    const neutralBus = getNeutralBusLayout(infrastructure, panelH);
+    return getBusPinPoint(neutralBus, Math.abs(Number(idx) || 0) % NEUTRAL_BUS.pinCount);
   }
   
   if (pinId === "backbone_ground:start") return { x: getGroundBackboneLeftX(), y: 78 };
   if (pinId === "backbone_ground:end") {
     const groundBus = getGroundBusLayout(infrastructure, panelH);
-    return { x: groundBus.x + groundBus.width - 18, y: groundBus.pinY };
+    return getBusPinPoint(groundBus, GROUND_BUS.pinCount - 1);
   }
 
   if (pinId.startsWith("busbar_ground:")) {
     const idx = parseInt(pinId.split(":")[1], 10);
     const groundBus = getGroundBusLayout(infrastructure, panelH);
-    return {
-      x: groundBus.pinStartX + (Math.abs(Number(idx) || 0) % GROUND_BUS.pinCount) * groundBus.pinGap,
-      y: groundBus.pinY,
-    };
+    return getBusPinPoint(groundBus, Math.abs(Number(idx) || 0) % GROUND_BUS.pinCount);
   }
   
   if (pinId.startsWith("terminal_left_top:")) {
@@ -1788,43 +1998,19 @@ const getPinCoords = (pinId, rails, panelH, infrastructure = []) => {
     const compId = parts[1];
     const poleToken = parts[2] || "0";
     const poleIdx = poleToken === "neutral" ? 3 : poleToken === "ground" ? 4 : parseInt(poleToken || "0", 10);
-    const circuitMatch = String(compId || "").match(/circuit_(\d+)/i);
-    const outputIndex = circuitMatch ? Number(circuitMatch[1]) : 0;
-
-    for (let rIdx = 0; rIdx < rails.length; rIdx++) {
-      const rail = rails[rIdx];
-      const railY = 190 + rIdx * 240;
-      let currentX = 160;
-
-      for (const comp of rail.components || []) {
-        const compW = comp.poles * MOD;
-        if (componentMatchesLoadTarget(compId, comp)) {
-          const terminalPole = Number.isFinite(poleIdx) ? Math.max(0, Math.min(Number(poleIdx) || 0, comp.poles - 1)) : 0;
-          const terminalX = currentX + terminalPole * MOD + MOD / 2;
-
-          if (poleToken === "neutral") {
-            return {
-              x: terminalX,
-              y: snapWireGrid(railY + 136 + (outputIndex % 4) * 6),
-            };
-          }
-
-          if (poleToken === "ground") {
-            const baseX = PANEL_W - 140; // Direita do barramento (combed layout default invertido)
-            const baseY = panelH - 240; // Inicia mais alto para empilhar para baixo
-            return {
-              x: baseX,
-              y: snapWireGrid(baseY + outputIndex * 16),
-            };
-          }
-
-          return {
-            x: terminalX,
-            y: snapWireGrid(railY + 132 + (terminalPole % 2) * 8),
-          };
-        }
-        currentX += compW + 2;
-      }
+    const placement = getPanelComponentPlacements(rails, panelH).find((item) => (
+      componentMatchesLoadTarget(compId, item.component)
+    ));
+    if (placement) {
+      const terminalPole = Number.isFinite(poleIdx)
+        ? Math.max(0, Math.min(Number(poleIdx) || 0, placement.component.poles - 1))
+        : 0;
+      const terminal = getComponentTerminalPoint(placement, terminalPole, "bottom");
+      const offset = getRotatedVector(0, poleToken === "ground" ? 58 : 48, placement.rotation);
+      return {
+        x: snapWireGrid(terminal.x + offset.x),
+        y: snapWireGrid(terminal.y + offset.y),
+      };
     }
 
     return getFallbackLoadPoint(poleToken, rails, panelH);
@@ -1836,21 +2022,8 @@ const getPinCoords = (pinId, rails, panelH, infrastructure = []) => {
     const termType = parts[2]; // "top" | "bottom"
     const poleIdx = parseInt(parts[3] || "0", 10);
     
-    for (let rIdx = 0; rIdx < rails.length; rIdx++) {
-      const rail = rails[rIdx];
-      const railY = 190 + rIdx * 240;
-      let currentX = 160;
-      
-      for (const comp of rail.components) {
-        const compW = comp.poles * MOD;
-        if (comp.id === compId) {
-          const x = currentX + poleIdx * MOD + MOD / 2;
-          const y = termType === "top" ? railY - 37 : railY + 57;
-          return { x, y };
-        }
-        currentX += compW + 2;
-      }
-    }
+    const placement = findPanelComponentPlacement(compId, rails, panelH);
+    if (placement) return getComponentTerminalPoint(placement, poleIdx, termType);
   }
   
   return { x: 0, y: 0 };
@@ -2154,7 +2327,13 @@ export default function PanelGenerator() {
       let shouldPersistPanelSync = false;
 
       if (panelLayoutNeedsCircuitSync(projectForPanel, boards, calculatedMetrics.circuits)) {
-        const syncedLayout = generateDefaultPanelLayout({ ...projectForPanel, circuits: distributionCircuits }, { forceDistribution: true });
+        const existingSyncLayout = getPrimaryCircuitBoard(boards)?.layout || projectForPanel?.panel_layout || null;
+        const syncedLayout = mergeCircuitsIntoPanelLayout(
+          { ...projectForPanel, circuits: distributionCircuits },
+          existingSyncLayout,
+          distributionCircuits,
+          { forceDistribution: true },
+        );
         boards = buildPanelBoardsWithLayout({ ...projectForPanel, circuits: distributionCircuits, panel_boards: boards }, syncedLayout);
         projectForPanel = {
           ...projectForPanel,
@@ -2582,6 +2761,84 @@ export default function PanelGenerator() {
     persistPanelBoards(nextBoards, activeBoardId);
   };
 
+  const handleUpdateEnclosure = (updates) => {
+    const currentSize = getBoardSize(activeBoard);
+    handleUpdateActiveBoard("enclosure", {
+      presetId: currentSize.id,
+      height: currentSize.height,
+      width: currentSize.width,
+      depth: currentSize.depth,
+      sideDucts: activeBoard?.enclosure?.sideDucts !== false,
+      ...activeBoard?.enclosure,
+      ...updates,
+    });
+  };
+
+  const handleSelectBoardSize = (presetId) => {
+    const size = BOARD_SIZE_PRESETS.find((item) => item.id === presetId) || DEFAULT_BOARD_SIZE;
+    handleUpdateEnclosure({
+      presetId: size.id,
+      height: size.height,
+      width: size.width,
+      depth: size.depth,
+    });
+    setScale(null);
+  };
+
+  const resetAutomaticWireRoutes = (sourceWires = wires) => sourceWires.map((wire) => {
+    if (!wire || wire.deleted) return wire;
+    const { points, route_points, routePoints, customRoute, ...rest } = wire;
+    void points;
+    void route_points;
+    void routePoints;
+    void customRoute;
+    return { ...rest, routeMode: "automatic", routingMode: "automatic" };
+  });
+
+  const handleSetRailOrientation = (orientation) => {
+    const nextOrientation = orientation === "vertical" ? "vertical" : "horizontal";
+    const nextRails = rails.map((rail) => ({ ...rail, orientation: nextOrientation }));
+    const nextWires = resetAutomaticWireRoutes();
+    wirePathsRef.current = {};
+    wireRouteMetaRef.current = {};
+    setRails(nextRails);
+    setWires(nextWires);
+    saveLayoutToDb(nextRails, nextWires, infrastructure);
+    setScale(null);
+  };
+
+  const handleSetBusOrientation = (orientation) => {
+    const nextOrientation = orientation === "vertical" ? "vertical" : "horizontal";
+    const defaults = nextOrientation === "vertical"
+      ? {
+          "neutral-bus": { x: PANEL_W - 88, y: 116, width: Math.min(520, Math.max(180, panelHeight - 210)) },
+          "neutral-bus-dist": { x: 40, y: 116, width: Math.min(520, Math.max(260, panelHeight - 210)) },
+          "ground-bus": { x: 72, y: 116, width: Math.min(520, Math.max(260, panelHeight - 210)) },
+        }
+      : {
+          "neutral-bus": { x: NEUTRAL_BUS.x, y: NEUTRAL_BUS.y, width: NEUTRAL_BUS.width },
+          "neutral-bus-dist": { x: 240, y: panelHeight - 108, width: DIST_NEUTRAL_BUS.width },
+          "ground-bus": { x: GROUND_BUS.x, y: panelHeight - 68, width: GROUND_BUS.width },
+        };
+    const ids = ["neutral-bus", "neutral-bus-dist", "ground-bus"];
+    const nextInfrastructure = infrastructure.filter((item) => !ids.includes(item.id));
+    ids.forEach((id) => {
+      const current = infrastructure.find((item) => item.id === id) || { id };
+      nextInfrastructure.push({
+        ...current,
+        ...defaults[id],
+        id,
+        orientation: nextOrientation,
+      });
+    });
+    const nextWires = resetAutomaticWireRoutes();
+    wirePathsRef.current = {};
+    wireRouteMetaRef.current = {};
+    setInfrastructure(nextInfrastructure);
+    setWires(nextWires);
+    saveLayoutToDb(rails, nextWires, nextInfrastructure);
+  };
+
   const handleUpdateBoardSupply = (value) => {
     if (!project || !activeBoard) return;
     const nextSupply = activeBoard.type === "solar_ac" ? SOLAR_REFERENCE_SUPPLY : value;
@@ -2610,16 +2867,28 @@ export default function PanelGenerator() {
     persistPanelBoards(nextBoards, activeBoardId);
   };
 
-  // Redimensionamento do canvas
-  const panelHeight = 180 + rails.length * 240 + 100;
+  // Redimensionamento do canvas conforme o gabinete comercial selecionado.
+  const boardSize = getBoardSize(activeBoard);
+  const railOrientation = rails.some((rail) => getRailOrientation(rail) === "vertical") ? "vertical" : "horizontal";
+  const minimumLayoutHeight = railOrientation === "vertical" ? 760 : 180 + rails.length * 240 + 100;
+  const enclosureAspectHeight = Math.round(PANEL_W * boardSize.height / boardSize.width);
+  const panelHeight = Math.max(minimumLayoutHeight, enclosureAspectHeight);
+  const busOrientation = ["neutral-bus", "ground-bus"].some((id) => (
+    infrastructure.find((item) => item.id === id)?.orientation === "vertical"
+  )) ? "vertical" : "horizontal";
+  const showSideDucts = activeBoard?.enclosure?.sideDucts !== false;
+  const componentPlacements = useMemo(
+    () => getPanelComponentPlacements(rails, panelHeight),
+    [panelHeight, rails],
+  );
   const routedWires = useMemo(() => {
     const descriptors = visibleWires.map((wire, originalIndex) => {
       const p1 = getPinCoords(wire.source, rails, panelHeight, infrastructure);
       const p2 = getPinCoords(wire.target, rails, panelHeight, infrastructure);
       const color = normalizedWireColor(wire);
       const kind = getWireKind(color);
-      const sourceMeta = parsePinMeta(wire.source, p1, rails);
-      const targetMeta = parsePinMeta(wire.target, p2, rails);
+      const sourceMeta = parsePinMeta(wire.source, p1, rails, panelHeight);
+      const targetMeta = parsePinMeta(wire.target, p2, rails, panelHeight);
       return {
         wire,
         originalIndex,
@@ -2656,6 +2925,12 @@ export default function PanelGenerator() {
       addPin({ id, ...point, label: `N${index + 1}`, kind: "neutral", group: "Barramento N" });
     });
 
+    Array.from({ length: DIST_NEUTRAL_BUS.pinCount }).forEach((_, index) => {
+      const id = `busbar_neutral_dist:${index}`;
+      const point = getPinCoords(id, rails, panelHeight, infrastructure);
+      addPin({ id, ...point, label: `ND${index + 1}`, kind: "neutral", group: "Barramento N (distribuição)" });
+    });
+
     Array.from({ length: GROUND_BUS.pinCount }).forEach((_, index) => {
       const id = `busbar_ground:${index}`;
       const point = getPinCoords(id, rails, panelHeight, infrastructure);
@@ -2682,29 +2957,25 @@ export default function PanelGenerator() {
       });
     });
 
-    rails.forEach((rail, railIndex) => {
-      const railY = 190 + railIndex * 240;
-      let currentX = 160;
-      (rail.components || []).forEach((component) => {
+    componentPlacements.forEach((placement) => {
+      const { component } = placement;
         const poles = Number(component.poles || 1);
-        const width = poles * MOD;
         if (component.type !== "spacer") {
           Array.from({ length: poles }).forEach((_, poleIndex) => {
-            const x = currentX + poleIndex * MOD + MOD / 2;
             const topId = `comp:${component.id}:top:${poleIndex}`;
             const bottomId = `comp:${component.id}:bottom:${poleIndex}`;
             const displayLabel = getComponentDisplayLabel(component);
             const labelBase = `${displayLabel} P${poleIndex + 1}`;
-            addPin({ id: topId, x, y: railY - 37, label: `${labelBase} sup.`, kind: normalizedWireColor({ id: topId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
-            addPin({ id: bottomId, x, y: railY + 57, label: `${labelBase} inf.`, kind: normalizedWireColor({ id: bottomId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
+            const topPoint = getComponentTerminalPoint(placement, poleIndex, "top");
+            const bottomPoint = getComponentTerminalPoint(placement, poleIndex, "bottom");
+            addPin({ id: topId, ...topPoint, label: `${labelBase} sup.`, kind: normalizedWireColor({ id: topId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
+            addPin({ id: bottomId, ...bottomPoint, label: `${labelBase} inf.`, kind: normalizedWireColor({ id: bottomId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
           });
         }
-        currentX += width + 2;
-      });
     });
 
     return pins;
-  }, [getComponentDisplayLabel, infrastructure, panelHeight, rails, visibleWires]);
+  }, [componentPlacements, getComponentDisplayLabel, infrastructure, panelHeight, rails, visibleWires]);
 
   const selectedWireDescriptor = useMemo(
     () => routedWires.find((descriptor) => descriptor.wire?.id === selectedWireId) || null,
@@ -3122,26 +3393,30 @@ export default function PanelGenerator() {
 
   const normalizeInfrastructureItem = (infraId, item = {}) => {
     if (infraId === "neutral-bus") {
-      const width = Math.max(180, Math.min(520, Number(item.width) || NEUTRAL_BUS.width));
+      const orientation = item.orientation === "vertical" ? "vertical" : "horizontal";
+      const width = Math.max(180, Math.min(orientation === "vertical" ? panelHeight - 190 : 520, Number(item.width) || NEUTRAL_BUS.width));
       const rawX = Number(item.x);
       const rawY = Number(item.y);
       return {
         ...item,
+        orientation,
         width,
-        x: Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : NEUTRAL_BUS.x)),
-        y: Math.max(20, Math.min(panelHeight - 44, Number.isFinite(rawY) ? rawY : NEUTRAL_BUS.y)),
+        x: Math.max(20, Math.min(PANEL_W - (orientation === "vertical" ? NEUTRAL_BUS.height : width) - 20, Number.isFinite(rawX) ? rawX : NEUTRAL_BUS.x)),
+        y: Math.max(20, Math.min(panelHeight - (orientation === "vertical" ? width : NEUTRAL_BUS.height) - 20, Number.isFinite(rawY) ? rawY : NEUTRAL_BUS.y)),
       };
     }
 
     if (infraId === "ground-bus") {
-      const width = Math.max(260, Math.min(520, Number(item.width) || GROUND_BUS.width));
+      const orientation = item.orientation === "vertical" ? "vertical" : "horizontal";
+      const width = Math.max(260, Math.min(orientation === "vertical" ? panelHeight - 190 : 520, Number(item.width) || GROUND_BUS.width));
       const rawX = Number(item.x ?? item.busX);
       const rawY = Number(item.y);
       return {
         ...item,
+        orientation,
         width,
-        x: Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : GROUND_BUS.x)),
-        y: Math.max(20, Math.min(panelHeight - 44, Number.isFinite(rawY) ? rawY : (panelHeight - 68))),
+        x: Math.max(20, Math.min(PANEL_W - (orientation === "vertical" ? 15 : width) - 20, Number.isFinite(rawX) ? rawX : GROUND_BUS.x)),
+        y: Math.max(20, Math.min(panelHeight - (orientation === "vertical" ? width : 15) - 20, Number.isFinite(rawY) ? rawY : (panelHeight - 68))),
       };
     }
 
@@ -3893,12 +4168,25 @@ export default function PanelGenerator() {
 
     if (!movedComponent || movedComponent.type === "spacer") return;
 
-    const targetRailIndex = Math.max(0, Math.min(rails.length - 1, Math.round((point.y - 190) / 240)));
+    const targetRailIndex = rails.reduce((bestIndex, rail, index) => {
+      const geometry = getRailGeometry(rails, index, panelHeight);
+      const distance = geometry.orientation === "vertical"
+        ? Math.abs(point.x - geometry.x)
+        : Math.abs(point.y - geometry.y);
+      const bestGeometry = getRailGeometry(rails, bestIndex, panelHeight);
+      const bestDistance = bestGeometry.orientation === "vertical"
+        ? Math.abs(point.x - bestGeometry.x)
+        : Math.abs(point.y - bestGeometry.y);
+      return distance < bestDistance ? index : bestIndex;
+    }, 0);
     const targetRail = withoutComponent[targetRailIndex];
+    const targetGeometry = getRailGeometry(rails, targetRailIndex, panelHeight);
     const activeComponents = (targetRail.components || []).filter((component) => component.type !== "spacer");
     const movedWidth = Math.max(1, Number(movedComponent.poles) || 1);
+    const axisStart = targetGeometry.orientation === "vertical" ? targetGeometry.y1 + 12 : RAIL_COMPONENT_START_X;
+    const axisPoint = targetGeometry.orientation === "vertical" ? point.y : point.x;
     const targetSlot = clampNumber(
-      Math.round((point.x - RAIL_COMPONENT_START_X) / (MOD + RAIL_COMPONENT_GAP)) + 1,
+      Math.round((axisPoint - axisStart) / (MOD + RAIL_COMPONENT_GAP)) + 1,
       1,
       ROW_MAX - movedWidth + 1,
       1
@@ -4608,6 +4896,21 @@ export default function PanelGenerator() {
           },
         ];
       });
+      // Cada circuito precisa do seu próprio pino no barramento (terra: todos · neutro: só monofásicos).
+      // Reaproveitar um pino fixo faz vários cabos convergirem no mesmo ponto físico e bagunça o
+      // desenho ao mexer em qualquer um deles.
+      const parseBusPinIndex = (pinId = "", prefix) => {
+        const match = String(pinId || "").match(new RegExp(`^${prefix}:(-?\\d+)$`));
+        return match ? Number(match[1]) : null;
+      };
+      const busPinIndexOfWire = (wire = {}, prefix) => (
+        parseBusPinIndex(wire.source, prefix) ?? parseBusPinIndex(wire.target, prefix)
+      );
+      const usedGroundIndices = wires.map((wire) => busPinIndexOfWire(wire, "busbar_ground")).filter((value) => value !== null);
+      const usedNeutralIndices = wires.map((wire) => busPinIndexOfWire(wire, "busbar_neutral_dist")).filter((value) => value !== null);
+      const nextGroundIndex = (usedGroundIndices.length ? Math.max(...usedGroundIndices) : 3) + 1;
+      const nextNeutralIndex = (usedNeutralIndices.length ? Math.max(...usedNeutralIndices) : -1) + 1;
+
       const neutralWire = newCompSupplyType === "Monofásico"
         ? [{
             id: `wire_${newId}_neutral`,
@@ -4618,7 +4921,7 @@ export default function PanelGenerator() {
             circuitName: normalizedLabel,
             circuitLabel: normalizedLabel,
             conductorType: "neutral",
-            source: "busbar_neutral:1",
+            source: `busbar_neutral_dist:${nextNeutralIndex}`,
             target: `load_out:${newId}:neutral`,
             label: "2.5 mm²",
           }]
@@ -4632,7 +4935,7 @@ export default function PanelGenerator() {
         circuitName: normalizedLabel,
         circuitLabel: normalizedLabel,
         conductorType: "ground",
-        source: "busbar_ground:1",
+        source: `busbar_ground:${nextGroundIndex}`,
         target: `load_out:${newId}:ground`,
         label: "2.5 mm²",
       }];
@@ -4933,6 +5236,7 @@ export default function PanelGenerator() {
     return (
       <g id="comb-busbars">
         {rails.map((r, rIdx) => {
+      if (getRailOrientation(r) === "vertical") return null;
       const railY = 190 + rIdx * 240;
       const y = railY - 45;
       const groups = getCombBusbarGroups(r);
@@ -6688,9 +6992,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
   if (isNaN(pinIdx)) return null;
   
   const groundBus = getGroundBusLayout(infrastructure, panelHeight);
-  const x = groundBus.pinStartX + (Math.abs(Number(pinIdx) || 0) % GROUND_BUS.pinCount) * groundBus.pinGap;
-  const y = groundBus.pinY;
-  return { x, y };
+  return getBusPinPoint(groundBus, Math.abs(Number(pinIdx) || 0) % GROUND_BUS.pinCount);
 };
 
   const routeGroundDescriptorBranches = (descriptor) => {
@@ -6699,7 +7001,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     const endpoints = getBusbarBranchEndpoints(descriptor);
     
     const groundLayout = getGroundBusLayout(infrastructure, panelHeight);
-    const bottomY = groundLayout.pinY;
+    const bottomY = getBusPinPoint(groundLayout, GROUND_BUS.pinCount - 1).y;
 
     const busPoint = getGroundBusPoint(descriptor, infrastructure, panelHeight) || { x: PROFESSIONAL_BUS.groundLeftX, y: bottomY };
 
@@ -7202,18 +7504,45 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     );
   };
 
-  const renderDuctedWiringPlan = () => (
-    <g id="ducted-wiring-plan">
-      {ductedWiringPlan.solarIncomingPhaseGroups.map(renderSolarIncomingPhaseGroup)}
-      {ductedWiringPlan.servicePower.map(renderPowerServiceWire)}
-      {ductedWiringPlan.solarProtectionPhaseGroups.map(renderSolarProtectionPhaseGroup)}
-      {ductedWiringPlan.solarServiceToInverterGroups.map(renderSolarServiceToInverterGroup)}
-      {ductedWiringPlan.phaseDistributionGroups.map(renderPhaseDistributionGroup)}
-      {ductedWiringPlan.phaseOutputs.map(renderPhaseOutputWire)}
-      {ductedWiringPlan.neutralBranches.map(renderNeutralBranchWire)}
-      {ductedWiringPlan.groundBranches.map(renderGroundBranchWire)}
-    </g>
-  );
+  const renderDuctedWiringPlan = () => {
+    if (railOrientation === "vertical") {
+      return (
+        <g id="vertical-ducted-wiring-plan">
+          {routedWires.map((descriptor) => {
+            const bends = getWireRouteBends(descriptor.wire);
+            const midX = snapWireGrid((descriptor.p1.x + descriptor.p2.x) / 2);
+            const route = bends.length
+              ? [descriptor.p1, ...bends, descriptor.p2]
+              : [
+                  descriptor.p1,
+                  { x: midX, y: descriptor.p1.y },
+                  { x: midX, y: descriptor.p2.y },
+                  descriptor.p2,
+                ];
+            return renderDescriptorPath(descriptor, route, `${descriptor.wire.id}-vertical`, {
+              radius: 5,
+              showLabel: hasLoadEndpoint(descriptor),
+              startTerminal: true,
+              endTerminal: true,
+            });
+          })}
+        </g>
+      );
+    }
+
+    return (
+      <g id="ducted-wiring-plan">
+        {ductedWiringPlan.solarIncomingPhaseGroups.map(renderSolarIncomingPhaseGroup)}
+        {ductedWiringPlan.servicePower.map(renderPowerServiceWire)}
+        {ductedWiringPlan.solarProtectionPhaseGroups.map(renderSolarProtectionPhaseGroup)}
+        {ductedWiringPlan.solarServiceToInverterGroups.map(renderSolarServiceToInverterGroup)}
+        {ductedWiringPlan.phaseDistributionGroups.map(renderPhaseDistributionGroup)}
+        {ductedWiringPlan.phaseOutputs.map(renderPhaseOutputWire)}
+        {ductedWiringPlan.neutralBranches.map(renderNeutralBranchWire)}
+        {ductedWiringPlan.groundBranches.map(renderGroundBranchWire)}
+      </g>
+    );
+  };
 
   const connectionPinColor = (pin = {}) => {
     if (pin.kind === "neutral" || pin.kind === "blue") return COLORS.neutral;
@@ -7439,7 +7768,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       if (selectedWireId === "ground-main") defaultRoute = getGroundBackboneRoute(panelHeight, infrastructure);
       else if (selectedWireId === "neutral-main") defaultRoute = getNeutralBackboneRoute(panelHeight, neutralBackboneEndY);
       else if (selectedWireId === "ground-bus-tie") defaultRoute = getGroundBusTieRoute(panelHeight, infrastructure);
-      else if (selectedWireId === "neutral-bus-tie") defaultRoute = getNeutralBusTieRoute(infrastructure);
+      else if (selectedWireId === "neutral-bus-tie") defaultRoute = getNeutralBusTieRoute(infrastructure, panelHeight);
 
       if (!defaultRoute.length) return null;
       allPoints = cleanRoutePoints([defaultRoute[0], ...bends, defaultRoute[defaultRoute.length - 1]]);
@@ -7591,16 +7920,47 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
   const renderComponentDragPreview = () => {
     if (!componentDrag?.active) return null;
-    const targetRailIndex = Math.max(0, Math.min(rails.length - 1, Math.round((componentDrag.y - 190) / 240)));
-    const railY = 190 + targetRailIndex * 240;
+    const targetRailIndex = rails.reduce((bestIndex, rail, index) => {
+      const geometry = getRailGeometry(rails, index, panelHeight);
+      const distance = geometry.orientation === "vertical"
+        ? Math.abs(componentDrag.x - geometry.x)
+        : Math.abs(componentDrag.y - geometry.y);
+      const bestGeometry = getRailGeometry(rails, bestIndex, panelHeight);
+      const bestDistance = bestGeometry.orientation === "vertical"
+        ? Math.abs(componentDrag.x - bestGeometry.x)
+        : Math.abs(componentDrag.y - bestGeometry.y);
+      return distance < bestDistance ? index : bestIndex;
+    }, 0);
+    const geometry = getRailGeometry(rails, targetRailIndex, panelHeight);
+    const isVertical = geometry.orientation === "vertical";
     const dropX = Math.max(148, Math.min(PANEL_W - 148, componentDrag.x));
+    const dropY = Math.max(120, Math.min(panelHeight - 120, componentDrag.y));
 
     return (
       <g id="component-drag-preview" pointerEvents="none">
-        <rect x="132" y={railY - 66} width={PANEL_W - 264} height="132" rx="10" fill="#00d8b8" fillOpacity="0.08" stroke="#00d8b8" strokeWidth="1.4" strokeDasharray="7,5" />
-        <line x1={dropX} y1={railY - 62} x2={dropX} y2={railY + 62} stroke="#00d8b8" strokeWidth="2.2" strokeDasharray="5,4" />
-        <rect x={dropX - 58} y={railY - 84} width="116" height="19" rx="6" fill="#00d8b8" />
-        <text x={dropX} y={railY - 71} fill="#ffffff" fontSize="7.2" fontWeight="950" textAnchor="middle">
+        <rect
+          x={isVertical ? geometry.x - 66 : 132}
+          y={isVertical ? geometry.y1 : geometry.y - 66}
+          width={isVertical ? 132 : PANEL_W - 264}
+          height={isVertical ? geometry.y2 - geometry.y1 : 132}
+          rx="10"
+          fill="#00d8b8"
+          fillOpacity="0.08"
+          stroke="#00d8b8"
+          strokeWidth="1.4"
+          strokeDasharray="7,5"
+        />
+        <line
+          x1={isVertical ? geometry.x - 62 : dropX}
+          y1={isVertical ? dropY : geometry.y - 62}
+          x2={isVertical ? geometry.x + 62 : dropX}
+          y2={isVertical ? dropY : geometry.y + 62}
+          stroke="#00d8b8"
+          strokeWidth="2.2"
+          strokeDasharray="5,4"
+        />
+        <rect x={dropX - 58} y={dropY - 84} width="116" height="19" rx="6" fill="#00d8b8" />
+        <text x={dropX} y={dropY - 71} fill="#ffffff" fontSize="7.2" fontWeight="950" textAnchor="middle">
           Solte para mover aqui
         </text>
       </g>
@@ -7932,16 +8292,34 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     <rect x="15" y="15" width={PANEL_W-30} height={panelHeight-30} rx="12" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2.5" filter="url(#shadow)" />
                     {/* Quadro Interno */}
                     <rect x="25" y="25" width={PANEL_W-50} height={panelHeight-50} rx="10" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1.5" />
+                    <g id="enclosure-dimensions" pointerEvents="none">
+                      <rect x={PANEL_W - 190} y={panelHeight - 50} width="155" height="22" rx="5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.7" />
+                      <text x={PANEL_W - 112.5} y={panelHeight - 35.5} fill="#475569" fontSize="7.2" fontWeight="900" textAnchor="middle">
+                        {boardSize.height} × {boardSize.width} × {boardSize.depth} mm · A×L×P
+                      </text>
+                    </g>
                     
-                    {/* Canaletas Passa-fios Laterais (Pentes organizadores amarelos na borda) */}
-                    {/* Canaleta Direita */}
-                    {Array.from({ length: Math.ceil(panelHeight / 40) }).map((_, i) => (
-                      <rect key={`y-r-${i}`} x={PANEL_W - 40} y={40 + i * 40} width="12" height="15" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.5" />
-                    ))}
-                    {/* Canaleta Esquerda */}
-                    {Array.from({ length: Math.ceil(panelHeight / 40) }).map((_, i) => (
-                      <rect key={`y-l-${i}`} x={28} y={40 + i * 40} width="12" height="15" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.5" />
-                    ))}
+                    {/* Canaletas Passa-fios Laterais */}
+                    {showSideDucts && (
+                      <g id="side-wire-ducts">
+                        <rect x="27" y="104" width="30" height={panelHeight - 174} rx="4" fill="#fef3c7" stroke="#d97706" strokeWidth="1" />
+                        <rect x={PANEL_W - 57} y="104" width="30" height={panelHeight - 174} rx="4" fill="#fef3c7" stroke="#d97706" strokeWidth="1" />
+                        {Array.from({ length: Math.max(1, Math.floor((panelHeight - 190) / 32)) }).map((_, i) => (
+                          <g key={`duct-slots-${i}`}>
+                            <rect x="29" y={112 + i * 32} width="12" height="18" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.45" />
+                            <rect x="43" y={112 + i * 32} width="12" height="18" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.45" />
+                            <rect x={PANEL_W - 55} y={112 + i * 32} width="12" height="18" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.45" />
+                            <rect x={PANEL_W - 41} y={112 + i * 32} width="12" height="18" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.45" />
+                          </g>
+                        ))}
+                        <text x="42" y={panelHeight - 48} fill="#92400e" fontSize="6.5" fontWeight="900" textAnchor="middle" transform={`rotate(-90 42 ${panelHeight - 48})`}>
+                          CANALETA LATERAL
+                        </text>
+                        <text x={PANEL_W - 42} y={panelHeight - 48} fill="#92400e" fontSize="6.5" fontWeight="900" textAnchor="middle" transform={`rotate(90 ${PANEL_W - 42} ${panelHeight - 48})`}>
+                          CANALETA LATERAL
+                        </text>
+                      </g>
+                    )}
                     
                     {/* Pinos amarelos de teto e chão */}
                     <rect x={60} y={26} width={15} height="12" rx="1" fill={COLORS.yellowComb} />
@@ -8004,7 +8382,8 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     {/* 2. BARRAMENTO NEUTRO SUPERIOR (EDITÁVEL) */}
                     {(() => {
                       const neutralBus = infrastructure.find(i => i.id === "neutral-bus") || {};
-                      const neutralLayout = getNeutralBusLayout(infrastructure);
+                      const neutralLayout = getNeutralBusLayout(infrastructure, panelHeight);
+                      const neutralVertical = neutralLayout.orientation === "vertical";
                       const isSelected = selectedInfrastructureId === "neutral-bus";
                       return (
                         <g
@@ -8022,10 +8401,10 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                         >
                           {isSelected && (
                             <rect
-                              x={neutralLayout.x - 20}
+                              x={neutralLayout.x - 10}
                               y={neutralLayout.y - 10}
-                              width={neutralLayout.width + 40}
-                              height="38"
+                              width={neutralLayout.width + 20}
+                              height={neutralLayout.height + 20}
                               rx="6"
                               fill="none"
                               stroke="#00d8b8"
@@ -8036,10 +8415,10 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                           )}
                           {/* Suportes plásticos azuis */}
                           <rect
-                            x={neutralLayout.x - 13}
-                            y={neutralLayout.y - 4}
-                            width="18"
-                            height="28"
+                            x={neutralVertical ? neutralLayout.x - 5 : neutralLayout.x - 13}
+                            y={neutralVertical ? neutralLayout.y - 13 : neutralLayout.y - 4}
+                            width={neutralVertical ? 28 : 18}
+                            height={neutralVertical ? 18 : 28}
                             rx="2"
                             fill="#00d8b8"
                             stroke={isSelected ? "#00d8b8" : "#00d8b8"}
@@ -8047,17 +8426,17 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           />
                           <rect
-                            x={neutralLayout.x + neutralLayout.width - 5}
-                            y={neutralLayout.y - 4}
-                            width="18"
-                            height="28"
+                            x={neutralVertical ? neutralLayout.x - 5 : neutralLayout.x + neutralLayout.width - 5}
+                            y={neutralVertical ? neutralLayout.y + neutralLayout.height - 5 : neutralLayout.y - 4}
+                            width={neutralVertical ? 28 : 18}
+                            height={neutralVertical ? 18 : 28}
                             rx="2"
                             fill="#00d8b8"
                             stroke={isSelected ? "#00d8b8" : "#00d8b8"}
                             strokeWidth={isSelected ? 1.5 : 0.8}
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           />
-                          {/* Barra azul superior */}
+                          {/* Barra azul N */}
                           <rect
                             x={neutralLayout.x}
                             y={neutralLayout.y}
@@ -8069,19 +8448,27 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             strokeWidth={isSelected ? 1.35 : 0.8}
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           />
-                          <rect x={neutralLayout.x + 4} y={neutralLayout.y + 3} width={neutralLayout.width - 8} height="3" fill="#e0f2fe" fillOpacity="0.5" pointerEvents="none" />
+                          <rect
+                            x={neutralLayout.x + (neutralVertical ? 3 : 4)}
+                            y={neutralLayout.y + (neutralVertical ? 4 : 3)}
+                            width={neutralVertical ? 3 : neutralLayout.width - 8}
+                            height={neutralVertical ? neutralLayout.height - 8 : 3}
+                            fill="#e0f2fe"
+                            fillOpacity="0.5"
+                            pointerEvents="none"
+                          />
                           {/* Parafusos */}
                           {Array.from({ length: NEUTRAL_BUS.pinCount }).map((_, i) => {
-                            const sx = neutralLayout.pinStartX + i * neutralLayout.pinGap;
+                            const point = getBusPinPoint(neutralLayout, i);
                             const pinId = `busbar_neutral:${i}`;
                             return (
                               <g key={i}>
-                                <circle cx={sx} cy={neutralLayout.pinY} r="4.2" fill="#e0f2fe" stroke="#075985" strokeWidth="0.8" />
-                                <line x1={sx-2} y1={neutralLayout.pinY} x2={sx+2} y2={neutralLayout.pinY} stroke="#075985" strokeWidth="0.9" />
+                                <circle cx={point.x} cy={point.y} r="4.2" fill="#e0f2fe" stroke="#075985" strokeWidth="0.8" />
+                                <line x1={point.x-2} y1={point.y} x2={point.x+2} y2={point.y} stroke="#075985" strokeWidth="0.9" />
                                 {(wiringMode || !!wireMoveMode) && (
                                   <circle
-                                    cx={sx}
-                                    cy={neutralLayout.pinY}
+                                    cx={point.x}
+                                    cy={point.y}
                                     r="8"
                                     fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"}
                                     fillOpacity="0.8"
@@ -8096,12 +8483,13 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             );
                           })}
                           <text
-                            x={neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 14)}
-                            y={neutralBus.labelY ?? (neutralLayout.y + 12)}
+                            x={neutralBus.labelX ?? (neutralVertical ? neutralLayout.x + 9 : neutralLayout.x + neutralLayout.width + 14)}
+                            y={neutralBus.labelY ?? (neutralVertical ? neutralLayout.y - 20 : neutralLayout.y + 12)}
                             fill={neutralBus.color || "#0f172a"}
                             fontSize={neutralBus.fontSize || 8}
                             fontWeight="900"
-                            textAnchor="start"
+                            textAnchor={neutralVertical ? "middle" : "start"}
+                            transform={neutralVertical ? `rotate(-90 ${neutralBus.labelX ?? neutralLayout.x + 9} ${neutralBus.labelY ?? neutralLayout.y - 20})` : undefined}
                             className="cursor-move"
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           >
@@ -8116,6 +8504,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       const groundBus = infrastructure.find(i => i.id === "ground-bus") || {};
                       const groundLayout = getGroundBusLayout(infrastructure, panelHeight);
                       const groundY = groundLayout.y;
+                      const groundVertical = groundLayout.orientation === "vertical";
                       const isSelected = selectedInfrastructureId === "ground-bus";
                       return (
                         <g 
@@ -8133,10 +8522,10 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                         >
                           {isSelected && (
                             <rect
-                              x={groundLayout.x - 24}
+                              x={groundLayout.x - 10}
                               y={groundLayout.y - 8}
-                              width={groundLayout.width + 48}
-                              height="42"
+                              width={groundLayout.width + 20}
+                              height={groundLayout.height + 16}
                               rx="6"
                               fill="none"
                               stroke="#00d8b8"
@@ -8146,31 +8535,32 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             />
                           )}
                           {/* Suportes plásticos verdes */}
-                          <rect x={groundLayout.x - 16} y={groundY} width="22" height="28" rx="2" fill="#16a34a" stroke={isSelected ? "#00d8b8" : "#15803d"} strokeWidth={isSelected ? 2 : 0.8} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
-                          <rect x={groundLayout.x + groundLayout.width - 6} y={groundY} width="22" height="28" rx="2" fill="#16a34a" stroke={isSelected ? "#00d8b8" : "#15803d"} strokeWidth={isSelected ? 2 : 0.8} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
+                          <rect x={groundVertical ? groundLayout.x - 6 : groundLayout.x - 16} y={groundVertical ? groundY - 14 : groundY} width={groundVertical ? 28 : 22} height={groundVertical ? 22 : 28} rx="2" fill="#16a34a" stroke={isSelected ? "#00d8b8" : "#15803d"} strokeWidth={isSelected ? 2 : 0.8} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
+                          <rect x={groundVertical ? groundLayout.x - 6 : groundLayout.x + groundLayout.width - 6} y={groundVertical ? groundY + groundLayout.height - 8 : groundY} width={groundVertical ? 28 : 22} height={groundVertical ? 22 : 28} rx="2" fill="#16a34a" stroke={isSelected ? "#00d8b8" : "#15803d"} strokeWidth={isSelected ? 2 : 0.8} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
                           {/* Barra de latão */}
-                          <rect x={groundLayout.x} y={groundY + 6} width={groundLayout.width} height="15" rx="1.5" fill="url(#brassGrad)" stroke={isSelected ? "#00d8b8" : "#d97706"} strokeWidth={isSelected ? 1.3 : 0.6} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
+                          <rect x={groundLayout.x} y={groundY} width={groundLayout.width} height={groundLayout.height} rx="1.5" fill="url(#brassGrad)" stroke={isSelected ? "#00d8b8" : "#d97706"} strokeWidth={isSelected ? 1.3 : 0.6} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
                           {/* Parafusos */}
                           {Array.from({ length: GROUND_BUS.pinCount }).map((_, i) => {
-                            const sx = groundLayout.pinStartX + i * groundLayout.pinGap;
+                            const point = getBusPinPoint(groundLayout, i);
                             const pinId = `busbar_ground:${i}`;
                             return (
                               <g key={i}>
-                                <circle cx={sx} cy={groundLayout.pinY} r="4.5" fill="#334155" stroke="#cbd5e1" strokeWidth="0.5" />
-                                <line x1={sx-2} y1={groundLayout.pinY} x2={sx+2} y2={groundLayout.pinY} stroke="#cbd5e1" strokeWidth="0.8" />
+                                <circle cx={point.x} cy={point.y} r="4.5" fill="#334155" stroke="#cbd5e1" strokeWidth="0.5" />
+                                <line x1={point.x-2} y1={point.y} x2={point.x+2} y2={point.y} stroke="#cbd5e1" strokeWidth="0.8" />
                                 {(wiringMode || !!wireMoveMode) && (
-                                  <circle cx={sx} cy={groundLayout.pinY} r="8" fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePinClick(pinId); }} />
+                                  <circle cx={point.x} cy={point.y} r="8" fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePinClick(pinId); }} />
                                 )}
                               </g>
                             );
                           })}
                           <text 
-                            x={groundBus.labelX ?? (groundLayout.x + groundLayout.width / 2)} 
-                            y={groundBus.labelY ?? (groundY - 6)} 
+                            x={groundBus.labelX ?? (groundVertical ? groundLayout.x + groundLayout.width / 2 : groundLayout.x + groundLayout.width / 2)}
+                            y={groundBus.labelY ?? (groundVertical ? groundY - 20 : groundY - 6)}
                             fill={groundBus.color || "#16a34a"} 
                             fontSize={groundBus.fontSize || 7} 
                             fontWeight="bold" 
                             textAnchor="middle"
+                            transform={groundVertical ? `rotate(-90 ${groundBus.labelX ?? groundLayout.x + groundLayout.width / 2} ${groundBus.labelY ?? groundY - 20})` : undefined}
                             className={`cursor-move ${selectedTextWireId === "ground-bus" ? "stroke-emerald-500 stroke-[0.3]" : ""}`}
                             onPointerDown={(e) => startInfraTextDrag(e, "ground-bus", groundLayout.x, groundLayout.y)}
                           >
@@ -8180,20 +8570,143 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       );
                     })()}
 
+                    {/* 3b. BARRAMENTO NEUTRO DE DISTRIBUIÇÃO (PENTE LOCAL, PERTO DOS CIRCUITOS) */}
+                    {(() => {
+                      const distNeutralLayout = getDistNeutralBusLayout(infrastructure, panelHeight);
+                      const distVertical = distNeutralLayout.orientation === "vertical";
+                      const mainNeutralLayout = getNeutralBusLayout(infrastructure, panelHeight);
+                      const tieStart = getBusPinPoint(mainNeutralLayout, 1);
+                      const tieEnd = getBusPinPoint(distNeutralLayout, 0);
+                      const tieMidX = distVertical ? tieStart.x : tieEnd.x;
+                      return (
+                        <g id="neutral-bus-dist">
+                          {/* Jumper de continuidade: mesmo neutro, só dividido em dois pentes por conveniência de layout */}
+                          <path
+                            d={`M ${tieStart.x} ${tieStart.y} L ${tieMidX} ${tieStart.y} L ${tieMidX} ${tieEnd.y} L ${tieEnd.x} ${tieEnd.y}`}
+                            fill="none"
+                            stroke="#0ea5e9"
+                            strokeWidth="1.6"
+                            strokeDasharray="5,3"
+                            opacity="0.75"
+                          />
+                          <rect
+                            x={distVertical ? distNeutralLayout.x - 5 : distNeutralLayout.x - 13}
+                            y={distVertical ? distNeutralLayout.y - 13 : distNeutralLayout.y - 4}
+                            width={distVertical ? 28 : 18}
+                            height={distVertical ? 18 : 28}
+                            rx="2"
+                            fill="#00d8b8"
+                            stroke="#00d8b8"
+                            strokeWidth="0.8"
+                          />
+                          <rect
+                            x={distVertical ? distNeutralLayout.x - 5 : distNeutralLayout.x + distNeutralLayout.width - 5}
+                            y={distVertical ? distNeutralLayout.y + distNeutralLayout.height - 5 : distNeutralLayout.y - 4}
+                            width={distVertical ? 28 : 18}
+                            height={distVertical ? 18 : 28}
+                            rx="2"
+                            fill="#00d8b8"
+                            stroke="#00d8b8"
+                            strokeWidth="0.8"
+                          />
+                          <rect
+                            x={distNeutralLayout.x}
+                            y={distNeutralLayout.y}
+                            width={distNeutralLayout.width}
+                            height={distNeutralLayout.height}
+                            rx="1.5"
+                            fill="#0ea5e9"
+                            stroke="#0369a1"
+                            strokeWidth="0.8"
+                          />
+                          <rect
+                            x={distNeutralLayout.x + (distVertical ? 3 : 4)}
+                            y={distNeutralLayout.y + (distVertical ? 4 : 3)}
+                            width={distVertical ? 3 : distNeutralLayout.width - 8}
+                            height={distVertical ? distNeutralLayout.height - 8 : 3}
+                            fill="#e0f2fe"
+                            fillOpacity="0.5"
+                            pointerEvents="none"
+                          />
+                          {Array.from({ length: DIST_NEUTRAL_BUS.pinCount }).map((_, i) => {
+                            const point = getBusPinPoint(distNeutralLayout, i);
+                            const pinId = `busbar_neutral_dist:${i}`;
+                            return (
+                              <g key={i}>
+                                <circle cx={point.x} cy={point.y} r="4.2" fill="#e0f2fe" stroke="#075985" strokeWidth="0.8" />
+                                <line x1={point.x - 2} y1={point.y} x2={point.x + 2} y2={point.y} stroke="#075985" strokeWidth="0.9" />
+                                {(wiringMode || !!wireMoveMode) && (
+                                  <circle
+                                    cx={point.x}
+                                    cy={point.y}
+                                    r="8"
+                                    fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"}
+                                    fillOpacity="0.8"
+                                    className="animate-pulse cursor-pointer"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handlePinClick(pinId);
+                                    }}
+                                  />
+                                )}
+                              </g>
+                            );
+                          })}
+                          <text
+                            x={distVertical ? distNeutralLayout.x + 9 : distNeutralLayout.x + distNeutralLayout.width + 14}
+                            y={distVertical ? distNeutralLayout.y - 20 : distNeutralLayout.y + 12}
+                            fill="#0f172a"
+                            fontSize="7"
+                            fontWeight="900"
+                            textAnchor={distVertical ? "middle" : "start"}
+                            transform={distVertical ? `rotate(-90 ${distNeutralLayout.x + 9} ${distNeutralLayout.y - 20})` : undefined}
+                          >
+                            BARRAMENTO NEUTRO (DISTRIBUIÇÃO)
+                          </text>
+                        </g>
+                      );
+                    })()}
+
                     {/* 4. RENDERIZAÇÃO DOS TRILHOS DIN */}
                     {rails.map((r, rIdx) => {
-                      const railY = 190 + rIdx * 240;
+                      const geometry = getRailGeometry(rails, rIdx, panelHeight);
+                      const isVertical = geometry.orientation === "vertical";
                       return (
                         <g key={r.id}>
                           {/* Nome do Trilho */}
-                          <text x={160} y={railY - 60} fill="#64748b" fontSize="8.5" fontWeight="950">{r.name.toUpperCase()}</text>
+                          <text
+                            x={isVertical ? geometry.x - 66 : 160}
+                            y={isVertical ? geometry.y1 + 6 : geometry.y - 60}
+                            fill="#64748b"
+                            fontSize="8.5"
+                            fontWeight="950"
+                            transform={isVertical ? `rotate(-90 ${geometry.x - 66} ${geometry.y1 + 6})` : undefined}
+                          >
+                            {r.name.toUpperCase()}
+                          </text>
                           {/* Trilho DIN Metálico */}
-                          <rect x="140" y={railY - 12} width={PANEL_W - 280} height="24" rx="2" fill="url(#railGrad)" stroke="#475569" strokeWidth="0.8" />
-                          <rect x="142" y={railY - 10} width={PANEL_W - 284} height="4" fill="#ffffff" fillOpacity="0.25" />
+                          <rect
+                            x={isVertical ? geometry.x - 12 : geometry.x1}
+                            y={isVertical ? geometry.y1 : geometry.y - 12}
+                            width={isVertical ? 24 : geometry.x2 - geometry.x1}
+                            height={isVertical ? geometry.y2 - geometry.y1 : 24}
+                            rx="2"
+                            fill="url(#railGrad)"
+                            stroke="#475569"
+                            strokeWidth="0.8"
+                          />
+                          <rect
+                            x={isVertical ? geometry.x - 10 : geometry.x1 + 2}
+                            y={isVertical ? geometry.y1 + 2 : geometry.y - 10}
+                            width={isVertical ? 4 : geometry.x2 - geometry.x1 - 4}
+                            height={isVertical ? geometry.y2 - geometry.y1 - 4 : 4}
+                            fill="#ffffff"
+                            fillOpacity="0.25"
+                          />
                           
                           {/* Parafusos de fixação do trilho */}
-                          <circle cx="150" cy={railY} r="3" fill="#334155" />
-                          <circle cx={PANEL_W - 150} cy={railY} r="3" fill="#334155" />
+                          <circle cx={isVertical ? geometry.x : geometry.x1 + 10} cy={isVertical ? geometry.y1 + 10 : geometry.y} r="3" fill="#334155" />
+                          <circle cx={isVertical ? geometry.x : geometry.x2 - 10} cy={isVertical ? geometry.y2 - 10 : geometry.y} r="3" fill="#334155" />
                         </g>
                       );
                     })}
@@ -8201,37 +8714,31 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     {/* 5. CABEAMENTO PROFISSIONAL ATRÁS DOS DISJUNTORES */}
                     <g id="professional-wiring-under-devices">
                       {showNeutralBackbone && renderBackbonePath("neutral-main", getNeutralBackboneRoute(panelHeight, neutralBackboneEndY), COLORS.neutral, 5.6)}
-                      {showNeutralBackbone && renderBackbonePath("neutral-bus-tie", getNeutralBusTieRoute(infrastructure), COLORS.neutral, 4.8)}
+                      {showNeutralBackbone && renderBackbonePath("neutral-bus-tie", getNeutralBusTieRoute(infrastructure, panelHeight), COLORS.neutral, 4.8)}
                       {renderBackbonePath("ground-main", getGroundBackboneRoute(panelHeight, infrastructure), COLORS.ground, 5.8)}
                       {renderBackbonePath("ground-bus-tie", getGroundBusTieRoute(panelHeight, infrastructure), COLORS.ground, 4.8)}
                       {isSolarReferenceBoard ? renderSolarReferenceWiring() : renderDuctedWiringPlan()}
                     </g>
 
                     {/* 6. RENDERIZAÇÃO DOS COMPONENTES ELÉTRICOS NOS TRILHOS */}
-                    {rails.map((r, rIdx) => {
-                      const railY = 190 + rIdx * 240;
-                      let currentX = 160;
-                      
-                      return (
-                        <g key={`comp-list-${r.id}`}>
-                          {r.components.map(c => {
-                            const compW = c.poles * MOD;
-                            const isSelected = selectedComponentId === c.id;
-                            const x = currentX;
-                            currentX += compW + 2;
-                            
-                            const y = railY - 45;
-                            
-                            if (c.type === "breaker") return renderBreaker(c, x, y, isSelected);
-                            if (c.type === "dps") return renderDPS(c, x, y, isSelected);
-                            if (c.type === "dr") return renderDR(c, x, y, isSelected);
-                            if (c.type === "spacer") return renderSpacer(c, x, y);
-                            if (c.type === "borne") return renderBorne(c, x, y, isSelected);
-                            return null;
-                          })}
-                        </g>
-                      );
-                    })}
+                    <g id="panel-components">
+                      {componentPlacements.map((placement) => {
+                        const { component: c, x, y, rotation, centerX, centerY } = placement;
+                        const isSelected = selectedComponentId === c.id;
+                        let rendered = null;
+                        if (c.type === "breaker") rendered = renderBreaker(c, x, y, isSelected);
+                        if (c.type === "dps") rendered = renderDPS(c, x, y, isSelected);
+                        if (c.type === "dr") rendered = renderDR(c, x, y, isSelected);
+                        if (c.type === "spacer") rendered = renderSpacer(c, x, y);
+                        if (c.type === "borne") rendered = renderBorne(c, x, y, isSelected);
+                        if (!rendered) return null;
+                        return rotation ? (
+                          <g key={`oriented-${c.id}`} transform={`rotate(${rotation} ${centerX} ${centerY})`}>
+                            {rendered}
+                          </g>
+                        ) : rendered;
+                      })}
+                    </g>
 
                     {/* 7. BARRAMENTOS PENTE VETORIAIS REALISTAS E ACESSÓRIOS LIVRES */}
                     {renderCombBusbars()}
@@ -8481,30 +8988,58 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                           )}
                           
                           {component.type !== "spacer" && (
-                            <div className="space-y-1 col-span-2">
-                              <Label className="text-[10px] font-bold text-slate-500">Pólos DIN (Largura)</Label>
-                              <Select value={String(component.poles)} onValueChange={(val) => {
-                                const poles = parseInt(val, 10);
-                                if (component.type === "breaker") {
-                                  const supplyType = poles >= 3 ? "Trifásico" : poles === 2 ? "Bifásico" : "Monofásico";
-                                  const config = phaseTypeConfig[supplyType] || phaseTypeConfig.Monofásico;
-                                  handleUpdateComponentFields({
-                                    poles,
-                                    supply_type: supplyType,
-                                    phase: config.phase,
-                                  });
-                                } else {
-                                  handleUpdateComponent("poles", poles);
-                                }
-                              }}>
-                                <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {(component.type === "breaker" ? [1, 2, 3] : [1, 2, 3, 4]).map(val => (
-                                    <SelectItem key={val} value={String(val)}>{val} DIN ({val * 18}mm)</SelectItem>
+                            <>
+                              <div className="space-y-1 col-span-2">
+                                <Label className="text-[10px] font-bold text-slate-500">Pólos DIN (Largura)</Label>
+                                <Select value={String(component.poles)} onValueChange={(val) => {
+                                  const poles = parseInt(val, 10);
+                                  if (component.type === "breaker") {
+                                    const supplyType = poles >= 3 ? "Trifásico" : poles === 2 ? "Bifásico" : "Monofásico";
+                                    const config = phaseTypeConfig[supplyType] || phaseTypeConfig.Monofásico;
+                                    handleUpdateComponentFields({
+                                      poles,
+                                      supply_type: supplyType,
+                                      phase: config.phase,
+                                    });
+                                  } else {
+                                    handleUpdateComponent("poles", poles);
+                                  }
+                                }}>
+                                  <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {(component.type === "breaker" ? [1, 2, 3] : [1, 2, 3, 4]).map(val => (
+                                      <SelectItem key={val} value={String(val)}>{val} DIN ({val * 18}mm)</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="col-span-2 space-y-2">
+                                <div>
+                                  <Label className="text-[10px] font-bold text-slate-500">Orientação física</Label>
+                                  <p className="mt-0.5 text-[9px] font-medium text-slate-400">Automática acompanha o sentido do trilho.</p>
+                                </div>
+                                <div className="grid grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
+                                  {[
+                                    { value: "auto", label: "Automática" },
+                                    { value: "upright", label: "Em pé" },
+                                    { value: "sideways", label: "Lateral 90°" },
+                                  ].map((option) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() => handleUpdateComponent("mountOrientation", option.value)}
+                                      className={`h-8 rounded-md px-1 text-[9px] font-extrabold transition ${
+                                        (component.mountOrientation || "auto") === option.value
+                                          ? "bg-white text-primary shadow-sm ring-1 ring-primary/20"
+                                          : "text-slate-500 hover:text-slate-800"
+                                      }`}
+                                    >
+                                      {option.label}
+                                    </button>
                                   ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
+                                </div>
+                              </div>
+                            </>
                           )}
                         </div>
 
@@ -9633,7 +10168,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 		                };
 	              })();
 	              const busLayout = isNeutralBus
-	                ? getNeutralBusLayout(infrastructure)
+	                ? getNeutralBusLayout(infrastructure, panelHeight)
 	                : isGroundBus
 	                  ? getGroundBusLayout(infrastructure, panelHeight)
 	                  : null;
@@ -9940,6 +10475,92 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
                 <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
                   <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Dimensões do Quadro</h3>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold text-slate-500">Gabinete comercial — A × L × P</Label>
+                    <Select value={boardSize.id} onValueChange={handleSelectBoardSize}>
+                      <SelectTrigger className="h-10 rounded-lg bg-white font-bold">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BOARD_SIZE_PRESETS.map((size) => (
+                          <SelectItem key={size.id} value={size.id}>{size.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[9px] font-medium leading-normal text-slate-400">
+                      Altura {boardSize.height} mm · largura {boardSize.width} mm · profundidade {boardSize.depth} mm.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-[10px] font-bold text-slate-500">Orientação dos trilhos</Label>
+                      <p className="mt-0.5 text-[9px] font-medium text-slate-400">Aplica o padrão a todos os trilhos montados.</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
+                      {[
+                        { value: "horizontal", label: "Horizontal" },
+                        { value: "vertical", label: "Vertical" },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => handleSetRailOrientation(option.value)}
+                          className={`h-9 rounded-md text-[10px] font-extrabold transition ${
+                            railOrientation === option.value
+                              ? "bg-white text-primary shadow-sm ring-1 ring-primary/20"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-[10px] font-bold text-slate-500">Barramentos N e PE</Label>
+                      <p className="mt-0.5 text-[9px] font-medium text-slate-400">Posicionamento horizontal ou nas laterais do gabinete.</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
+                      {[
+                        { value: "horizontal", label: "Horizontal" },
+                        { value: "vertical", label: "Vertical lateral" },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => handleSetBusOrientation(option.value)}
+                          className={`h-9 rounded-md text-[10px] font-extrabold transition ${
+                            busOrientation === option.value
+                              ? "bg-white text-primary shadow-sm ring-1 ring-primary/20"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div>
+                      <p className="text-[10px] font-extrabold text-slate-700">Canaletas laterais</p>
+                      <p className="mt-0.5 text-[9px] font-medium text-slate-400">Reserva corredores técnicos nos dois lados.</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={showSideDucts}
+                      onClick={() => handleUpdateEnclosure({ sideDucts: !showSideDucts })}
+                      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${showSideDucts ? "bg-primary" : "bg-slate-300"}`}
+                    >
+                      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${showSideDucts ? "translate-x-5" : "translate-x-0.5"}`} />
+                      <span className="sr-only">Alternar canaletas laterais</span>
+                    </button>
+                  </div>
                   
                   <div className="space-y-1">
                     <Label className="text-[10px] font-bold text-slate-500">Quantidade de Trilhos DIN</Label>
@@ -9952,6 +10573,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                           nextRails.push({
                             id: `rail_${i+1}`,
                             name: `Trilho DIN T${i+1} (Expansão)`,
+                            orientation: railOrientation,
                             components: [{ id: `spacer_${Date.now()}_${i}`, type: "spacer", poles: 18, label: "RESERVA" }]
                           });
                         }
