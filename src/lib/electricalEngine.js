@@ -716,6 +716,9 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   }
   
   // 4. Alimentação superior por fase conforme o tipo do quadro.
+  // Passa por um barramento principal antes do DJ GERAL (em vez de ligar direto no terminal
+  // de entrada), para que outros dispositivos que também precisem da fase de entrada possam
+  // derivar dali, do mesmo jeito que o barramento de terra e o de neutro já funcionam.
   const feedCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
   for (let i = 0; i < feedCount; i++) {
     wires.push({
@@ -723,6 +726,14 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       color: phaseWireColor(i),
       gauge: "10mm²",
       source: `terminal_left_top:${i + 1}`,
+      target: `busbar_main:${i}`,
+      label: "10 mm²"
+    });
+    wires.push({
+      id: `w_phase_main_to_brk_${i}`,
+      color: phaseWireColor(i),
+      gauge: "10mm²",
+      source: `busbar_main:${i}`,
       target: `comp:gen_brk:top:${i}`,
       label: "10 mm²"
     });
@@ -821,7 +832,11 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     });
   });
 
-  return { rails, wires, infrastructure: [] };
+  const infrastructure = [
+    { id: "busbar_main", type: "main-busbar", label: "BARRAMENTO PRINCIPAL" },
+  ];
+
+  return { rails, wires, infrastructure };
 }
 
 // ─── Sincronização incremental do quadro ──────────────────────────────────────────────────────

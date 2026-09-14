@@ -38,7 +38,15 @@ import PageHeader from "@/components/PageHeader";
 const PANEL_W = 850;
 const MOD = 26;          // 1 Módulo DIN = 26px
 const BRK_H = 110;        // Altura padrão do disjuntor em px
-const ROW_MAX = 18;       // Limite de módulos DIN por trilho
+const ROW_MAX = 18;       // Limite padrão de módulos DIN por trilho (editável por projeto)
+// Limitado a até 20 módulos: acima disso os disjuntores ultrapassam a extensão desenhada do
+// trilho DIN (calibrada para o desenho do gabinete) e passam por cima das canaletas laterais.
+const RAIL_CAPACITY_OPTIONS = [
+  { value: 10, label: "10 módulos (trilho curto)" },
+  { value: 14, label: "14 módulos" },
+  { value: 18, label: "18 módulos (padrão)" },
+  { value: 20, label: "20 módulos (trilho longo)" },
+];
 const RAIL_COMPONENT_START_X = 160;
 const RAIL_COMPONENT_GAP = 2;
 const BOARD_SIZE_PRESETS = [
@@ -1362,6 +1370,47 @@ const getDistNeutralBusLayout = (infrastructure = [], panelH = 820) => {
   };
 };
 
+const MAIN_BUSBAR = {
+  x: 96,
+  y: 96,
+  width: 110,
+  height: 14,
+  pinCount: 3,
+  pinGap: 34,
+};
+
+// Barramento principal: consolida a alimentação de entrada (L1/L2/L3) antes do disjuntor geral,
+// no mesmo padrão elétrico dos barramentos de neutro/terra — para que outros dispositivos que
+// compartilham a mesma fase de entrada possam derivar dela, em vez de puxar fio direto do
+// terminal de entrada para cada equipamento.
+const getMainBusbarLayout = (infrastructure = [], panelH = 820) => {
+  const item = (infrastructure || []).find((entry) => entry?.id === "busbar_main") || {};
+  const orientation = item.orientation === "vertical" ? "vertical" : "horizontal";
+  const length = Math.max(60, Math.min(200, Number(item.width) || (MAIN_BUSBAR.pinGap * (MAIN_BUSBAR.pinCount - 1) + 26)));
+  const rawX = Number(item.x);
+  const rawY = Number(item.y);
+  const width = orientation === "vertical" ? MAIN_BUSBAR.height : length;
+  const height = orientation === "vertical" ? length : MAIN_BUSBAR.height;
+  const defaultX = orientation === "vertical" ? 96 : MAIN_BUSBAR.x;
+  const defaultY = orientation === "vertical" ? 132 : MAIN_BUSBAR.y;
+  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : defaultX));
+  const y = Math.max(20, Math.min(panelH - height - 20, Number.isFinite(rawY) ? rawY : defaultY));
+  const pinGap = Math.max(18, Math.min(40, (length - 20) / Math.max(1, MAIN_BUSBAR.pinCount - 1)));
+
+  return {
+    x,
+    y,
+    orientation,
+    length,
+    width,
+    height,
+    pinStartX: orientation === "vertical" ? x + width / 2 : x + 13,
+    pinStartY: orientation === "vertical" ? y + 13 : y + height / 2,
+    pinY: orientation === "vertical" ? y + 13 : y + height / 2,
+    pinGap,
+  };
+};
+
 const getThreePhaseOutputPin = (terminalIndex = 0) => {
   const index = Number(terminalIndex);
   const terminalSlot = index === 4
@@ -1422,6 +1471,7 @@ const isNeutralBusPin = (pinId = "") => (
   String(pinId || "").startsWith("busbar_neutral:") || String(pinId || "").startsWith("busbar_neutral_dist:")
 );
 const isGroundBusPin = (pinId = "") => String(pinId || "").startsWith("busbar_ground:");
+const isMainBusPin = (pinId = "") => String(pinId || "").startsWith("busbar_main:");
 
 const getWireKind = (color) => {
   if (color === "blue") return "neutral";
@@ -1762,6 +1812,10 @@ const parsePinMeta = (pinId = "", point = { x: 0, y: 0 }, rails = [], panelH = 8
     return { type: "ground-bus", term: "bus", railIndex: rails.length, railY: null, point };
   }
 
+  if (isMainBusPin(pin)) {
+    return { type: "main-bus", term: "bus", railIndex: -1, railY: null, point };
+  }
+
   if (pin.startsWith("load_out:")) {
     const [, compId, poleToken = "0"] = pin.split(":");
     const placement = getPanelComponentPlacements(rails, panelH).find((item) => (
@@ -1988,7 +2042,13 @@ const getPinCoords = (pinId, rails, panelH, infrastructure = []) => {
     const groundBus = getGroundBusLayout(infrastructure, panelH);
     return getBusPinPoint(groundBus, Math.abs(Number(idx) || 0) % GROUND_BUS.pinCount);
   }
-  
+
+  if (pinId.startsWith("busbar_main:")) {
+    const idx = parseInt(pinId.split(":")[1], 10);
+    const mainBus = getMainBusbarLayout(infrastructure, panelH);
+    return getBusPinPoint(mainBus, Math.abs(Number(idx) || 0) % MAIN_BUSBAR.pinCount);
+  }
+
   if (pinId.startsWith("terminal_left_top:")) {
     return getThreePhaseOutputPin(parseInt(pinId.split(":")[1], 10), infrastructure);
   }
@@ -2549,7 +2609,8 @@ export default function PanelGenerator() {
     return true;
   };
 
-  const normalizeRailsLayout = (currentRails) => {
+  const normalizeRailsLayout = (currentRails, capacityOverride) => {
+    const railCapacity = clampNumber(capacityOverride, 6, 22, activeRailCapacity);
     let normalized = currentRails.map(r => ({
       ...r,
       // Remove spacers so we can redistribute active components cleanly
@@ -2563,7 +2624,7 @@ export default function PanelGenerator() {
       const overflowComponents = [];
 
       for (const comp of rail.components) {
-        if (currentPoles + comp.poles <= ROW_MAX) {
+        if (currentPoles + comp.poles <= railCapacity) {
           fitComponents.push(comp);
           currentPoles += comp.poles;
         } else {
@@ -2625,7 +2686,7 @@ export default function PanelGenerator() {
         const remainingDinSize = activeComponents
           .slice(index)
           .reduce((sum, item) => sum + Math.max(1, Number(item.poles) || 1), 0);
-        const maxStartForRemaining = Math.max(nextDinPosition, ROW_MAX - remainingDinSize + 1);
+        const maxStartForRemaining = Math.max(nextDinPosition, railCapacity - remainingDinSize + 1);
         const rawPosition = Number(component.dinPosition ?? component.startDin ?? component.slot);
         const wantedPosition = Number.isFinite(rawPosition)
           ? clampNumber(Math.round(rawPosition), 1, maxStartForRemaining, nextDinPosition)
@@ -2648,7 +2709,7 @@ export default function PanelGenerator() {
         nextDinPosition = startPosition + dinSize;
       });
 
-      addSpacer(nextDinPosition, ROW_MAX - nextDinPosition + 1);
+      addSpacer(nextDinPosition, railCapacity - nextDinPosition + 1);
       return { ...r, components: positionedComponents };
     });
 
@@ -2785,6 +2846,14 @@ export default function PanelGenerator() {
     setScale(null);
   };
 
+  const handleSetRailCapacity = (value) => {
+    const nextCapacity = clampNumber(parseInt(value, 10), 6, 22, ROW_MAX);
+    handleUpdateEnclosure({ railCapacity: nextCapacity });
+    const normalized = normalizeRailsLayout(rails, nextCapacity);
+    setRails(normalized);
+    saveLayoutToDb(normalized, wires, infrastructure);
+  };
+
   const resetAutomaticWireRoutes = (sourceWires = wires) => sourceWires.map((wire) => {
     if (!wire || wire.deleted) return wire;
     const { points, route_points, routePoints, customRoute, ...rest } = wire;
@@ -2879,6 +2948,10 @@ export default function PanelGenerator() {
   // tamanho — sem alterar o sistema de coordenadas interno (viewBox), evitando reabrir toda a
   // matemática de fiação/hit-testing que já depende de PANEL_W/panelHeight fixos.
   const boardScaleFactor = clampNumber(boardSize.width / DEFAULT_BOARD_SIZE.width, 0.65, 1.35, 1);
+  // Capacidade de módulos DIN por trilho: editável por projeto (em vez do limite fixo de 18),
+  // para caber trilhos mais curtos ou mais longos conforme o gabinete. Muda a redistribuição em
+  // normalizeRailsLayout, que já é chamada em toda ação que mexe nos trilhos.
+  const activeRailCapacity = clampNumber(activeBoard?.enclosure?.railCapacity, 6, 22, ROW_MAX);
   const busOrientation = ["neutral-bus", "ground-bus"].some((id) => (
     infrastructure.find((item) => item.id === id)?.orientation === "vertical"
   )) ? "vertical" : "horizontal";
@@ -4194,7 +4267,7 @@ export default function PanelGenerator() {
     const targetSlot = clampNumber(
       Math.round((axisPoint - axisStart) / (MOD + RAIL_COMPONENT_GAP)) + 1,
       1,
-      ROW_MAX - movedWidth + 1,
+      activeRailCapacity - movedWidth + 1,
       1
     );
     let insertIndex = activeComponents.length;
@@ -8425,6 +8498,127 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       })}
                     </g>
 
+                    {/* 1b. BARRAMENTO PRINCIPAL (ENTRADA -> DJ GERAL) */}
+                    {(() => {
+                      const mainBus = infrastructure.find(i => i.id === "busbar_main") || {};
+                      const mainLayout = getMainBusbarLayout(infrastructure, panelHeight);
+                      const mainVertical = mainLayout.orientation === "vertical";
+                      const isSelected = selectedInfrastructureId === "busbar_main";
+                      const pinColors = ["#111827", "#dc2626", "#7c2d12"];
+                      return (
+                        <g
+                          id="main-busbar"
+                          className="cursor-pointer"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedInfrastructureId("busbar_main");
+                            setSelectedComponentId("");
+                            setSelectedWireId("");
+                            setSelectedTextWireId("");
+                            setSelectedAnnotationId("");
+                            setActiveTab("infra");
+                          }}
+                        >
+                          {isSelected && (
+                            <rect
+                              x={mainLayout.x - 8}
+                              y={mainLayout.y - 8}
+                              width={mainLayout.width + 16}
+                              height={mainLayout.height + 16}
+                              rx="5"
+                              fill="none"
+                              stroke="#00d8b8"
+                              strokeWidth="1.25"
+                              strokeDasharray="4,3"
+                              pointerEvents="none"
+                            />
+                          )}
+                          {/* Suportes plásticos */}
+                          <rect
+                            x={mainVertical ? mainLayout.x - 4 : mainLayout.x - 10}
+                            y={mainVertical ? mainLayout.y - 10 : mainLayout.y - 3}
+                            width={mainVertical ? 22 : 14}
+                            height={mainVertical ? 14 : 22}
+                            rx="2"
+                            fill="#92400e"
+                            stroke={isSelected ? "#00d8b8" : "#78350f"}
+                            strokeWidth={isSelected ? 1.4 : 0.7}
+                            onPointerDown={(event) => startInfraTextDrag(event, "busbar_main", mainLayout.x, mainLayout.y)}
+                          />
+                          <rect
+                            x={mainVertical ? mainLayout.x - 4 : mainLayout.x + mainLayout.width - 4}
+                            y={mainVertical ? mainLayout.y + mainLayout.height - 4 : mainLayout.y - 3}
+                            width={mainVertical ? 22 : 14}
+                            height={mainVertical ? 14 : 22}
+                            rx="2"
+                            fill="#92400e"
+                            stroke={isSelected ? "#00d8b8" : "#78350f"}
+                            strokeWidth={isSelected ? 1.4 : 0.7}
+                            onPointerDown={(event) => startInfraTextDrag(event, "busbar_main", mainLayout.x, mainLayout.y)}
+                          />
+                          {/* Barra de cobre */}
+                          <rect
+                            x={mainLayout.x}
+                            y={mainLayout.y}
+                            width={mainLayout.width}
+                            height={mainLayout.height}
+                            rx="1.5"
+                            fill="#b87333"
+                            stroke={isSelected ? "#00d8b8" : "#854d0e"}
+                            strokeWidth={isSelected ? 1.35 : 0.7}
+                            onPointerDown={(event) => startInfraTextDrag(event, "busbar_main", mainLayout.x, mainLayout.y)}
+                          />
+                          <rect
+                            x={mainLayout.x + 3}
+                            y={mainLayout.y + 3}
+                            width={mainVertical ? 3 : mainLayout.width - 6}
+                            height={mainVertical ? mainLayout.height - 6 : 3}
+                            fill="#fde68a"
+                            fillOpacity="0.45"
+                            pointerEvents="none"
+                          />
+                          {/* Parafusos L1/L2/L3 */}
+                          {Array.from({ length: MAIN_BUSBAR.pinCount }).map((_, i) => {
+                            const point = getBusPinPoint(mainLayout, i);
+                            const pinId = `busbar_main:${i}`;
+                            return (
+                              <g key={i}>
+                                <circle cx={point.x} cy={point.y} r="4" fill="#e2e8f0" stroke={pinColors[i]} strokeWidth="1" />
+                                <line x1={point.x - 2} y1={point.y} x2={point.x + 2} y2={point.y} stroke={pinColors[i]} strokeWidth="0.9" />
+                                {(wiringMode || !!wireMoveMode) && (
+                                  <circle
+                                    cx={point.x}
+                                    cy={point.y}
+                                    r="8"
+                                    fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"}
+                                    fillOpacity="0.8"
+                                    className="animate-pulse cursor-pointer"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handlePinClick(pinId);
+                                    }}
+                                  />
+                                )}
+                              </g>
+                            );
+                          })}
+                          <text
+                            x={mainBus.labelX ?? (mainVertical ? mainLayout.x + mainLayout.width / 2 : mainLayout.x + mainLayout.width + 10)}
+                            y={mainBus.labelY ?? (mainVertical ? mainLayout.y - 12 : mainLayout.y + mainLayout.height / 2 + 3)}
+                            fill={mainBus.color || "#0f172a"}
+                            fontSize={mainBus.fontSize || 6.6}
+                            fontWeight="900"
+                            textAnchor={mainVertical ? "middle" : "start"}
+                            transform={mainVertical ? `rotate(-90 ${mainBus.labelX ?? mainLayout.x + mainLayout.width / 2} ${mainBus.labelY ?? mainLayout.y - 12})` : undefined}
+                            className="cursor-move"
+                            onPointerDown={(event) => startInfraTextDrag(event, "busbar_main", mainLayout.x, mainLayout.y)}
+                          >
+                            {mainBus.label || "BARRAMENTO PRINCIPAL"}
+                          </text>
+                        </g>
+                      );
+                    })()}
+
                     {/* 2. BARRAMENTO NEUTRO SUPERIOR (EDITÁVEL) */}
                     {(() => {
                       const neutralBus = infrastructure.find(i => i.id === "neutral-bus") || {};
@@ -10645,7 +10839,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             id: `rail_${i+1}`,
                             name: `Trilho DIN T${i+1} (Expansão)`,
                             orientation: railOrientation,
-                            components: [{ id: `spacer_${Date.now()}_${i}`, type: "spacer", poles: 18, label: "RESERVA" }]
+                            components: [{ id: `spacer_${Date.now()}_${i}`, type: "spacer", poles: activeRailCapacity, label: "RESERVA" }]
                           });
                         }
                       } else if (size < rails.length) {
@@ -10655,10 +10849,24 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     }}>
                       <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">1 Trilho DIN (Até 18 Módulos)</SelectItem>
-                        <SelectItem value="2">2 Trilhos DIN (Até 36 Módulos)</SelectItem>
-                        <SelectItem value="3">3 Trilhos DIN (Até 54 Módulos)</SelectItem>
-                        <SelectItem value="4">4 Trilhos DIN (Até 72 Módulos)</SelectItem>
+                        {[1, 2, 3, 4].map((count) => (
+                          <SelectItem key={count} value={String(count)}>
+                            {count} {count === 1 ? "Trilho DIN" : "Trilhos DIN"} (Até {count * activeRailCapacity} Módulos)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold text-slate-500">Tamanho do Trilho DIN</Label>
+                    <p className="text-[9px] font-medium text-slate-400">Módulos disponíveis em cada trilho — os disjuntores se reorganizam automaticamente.</p>
+                    <Select value={String(activeRailCapacity)} onValueChange={handleSetRailCapacity}>
+                      <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {RAIL_CAPACITY_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
