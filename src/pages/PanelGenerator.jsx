@@ -2873,6 +2873,12 @@ export default function PanelGenerator() {
   const minimumLayoutHeight = railOrientation === "vertical" ? 760 : 180 + rails.length * 240 + 100;
   const enclosureAspectHeight = Math.round(PANEL_W * boardSize.height / boardSize.width);
   const panelHeight = Math.max(minimumLayoutHeight, enclosureAspectHeight);
+  // Fator de escala visual: gabinetes maiores/menores que a referência (largura do
+  // DEFAULT_BOARD_SIZE) renderizam o quadro proporcionalmente maior/menor na tela, para que
+  // trocar o gabinete comercial ou a quantidade de trilhos DIN dê feedback visual real de
+  // tamanho — sem alterar o sistema de coordenadas interno (viewBox), evitando reabrir toda a
+  // matemática de fiação/hit-testing que já depende de PANEL_W/panelHeight fixos.
+  const boardScaleFactor = clampNumber(boardSize.width / DEFAULT_BOARD_SIZE.width, 0.65, 1.35, 1);
   const busOrientation = ["neutral-bus", "ground-bus"].some((id) => (
     infrastructure.find((item) => item.id === id)?.orientation === "vertical"
   )) ? "vertical" : "horizontal";
@@ -4589,14 +4595,14 @@ export default function PanelGenerator() {
 
     const updateFitScale = () => {
       const availableWidth = Math.max(300, node.clientWidth - 32);
-      setFitScale(clampPanelScale(availableWidth / PANEL_W));
+      setFitScale(clampPanelScale(availableWidth / (PANEL_W * boardScaleFactor)));
     };
 
     updateFitScale();
     const observer = new ResizeObserver(updateFitScale);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [project, rails.length]);
+  }, [project, rails.length, boardScaleFactor]);
 
   const handleFitViewport = () => {
     setScale(null);
@@ -6853,17 +6859,57 @@ export default function PanelGenerator() {
         data-wire-bundle="phase-distribution"
       >
         {descriptors.map((descriptor) => {
+          const sameRail = descriptor.sourceMeta?.railIndex === descriptor.targetMeta?.railIndex;
+
+          if (sameRail) {
+            const routePoints = cleanRoutePoints([descriptor.p1, descriptor.p2]);
+            return renderDescriptorPath(descriptor, routePoints, `${descriptor.wire.id}-distribution-independent`, {
+              color,
+              thickness: descriptor.thickness,
+              radius: 1,
+              startTerminal: true,
+              endTerminal: true,
+            });
+          }
+
+          // Circuito acabou num trilho diferente do disjuntor geral (ex.: transbordou para um
+          // trilho de expansão porque o trilho principal já estava cheio). Uma reta direta entre
+          // os dois pinos vira uma diagonal cruzando o quadro inteiro — desce até a altura do
+          // trilho de destino, atravessa na horizontal e só depois sobe no pino, como o resto da
+          // fiação ortogonal do desenho. Desenhado direto (sem passar pelo cache de rota
+          // "automática") porque esse cabo nunca foi editado manualmente e por isso perderia os
+          // pontos intermediários se fosse renderizado por renderDescriptorPath.
+          const railIndex = descriptor.targetMeta?.railIndex ?? descriptor.sourceMeta?.railIndex ?? 0;
+          const ductY = getRailDuctY(railIndex, "top", phaseLaneOffset(descriptor.color));
           const routePoints = cleanRoutePoints([
             descriptor.p1,
+            { x: descriptor.p1.x, y: ductY },
+            { x: descriptor.p2.x, y: ductY },
             descriptor.p2,
           ]);
-          return renderDescriptorPath(descriptor, routePoints, `${descriptor.wire.id}-distribution-independent`, {
-            color,
-            thickness: descriptor.thickness,
-            radius: 1,
-            startTerminal: true,
-            endTerminal: true,
-          });
+          const thickness = descriptor.thickness;
+          const pathStr = getRoundedPath(routePoints, DEFAULT_CABLE_CORNER_RADIUS);
+          const isHighlighted = selectedWireId === descriptor.wire.id || hoveredWireId === descriptor.wire.id;
+          const key = `${descriptor.wire.id}-distribution-crossrail`;
+
+          return (
+            <g
+              key={key}
+              className="cursor-pointer group"
+              data-wire-id={descriptor.wire.id}
+              onPointerEnter={() => setHoveredWireId(descriptor.wire.id)}
+              onPointerLeave={() => setHoveredWireId("")}
+              onClick={(event) => {
+                event.stopPropagation();
+                selectEditableWire(descriptor.wire.id);
+              }}
+            >
+              {renderCablePath(pathStr, color, thickness, `${key}-path`, isHighlighted)}
+              {renderCableGaugeTag(routePoints, descriptor.wire.label || descriptor.wire.gauge, color, `${key}-gauge`)}
+              {renderCableTerminal(routePoints[0], routePoints[1], color, thickness, `${key}-terminal-start`, descriptor.wire?.source)}
+              {renderCableTerminal(routePoints[routePoints.length - 1], routePoints[routePoints.length - 2], color, thickness, `${key}-terminal-end`, descriptor.wire?.target)}
+            </g>
+          );
         })}
       </g>
     );
@@ -8189,13 +8235,13 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
             <div ref={panelViewportRef} className="overflow-auto rounded-2xl border border-slate-200 bg-[#eef2f6] p-6 shadow-lg min-h-[600px] flex items-center justify-center">
               <div
                 style={{
-                  width: PANEL_W * activeScale,
-                  height: panelHeight * activeScale,
+                  width: PANEL_W * activeScale * boardScaleFactor,
+                  height: panelHeight * activeScale * boardScaleFactor,
                   position: "relative",
                   transition: "width 0.2s, height 0.2s",
                 }}
               >
-                <div style={{ transformOrigin: "top left", transform: `scale(${activeScale})`, transition: "transform 0.2s" }}>
+                <div style={{ transformOrigin: "top left", transform: `scale(${activeScale * boardScaleFactor})`, transition: "transform 0.2s" }}>
                   <svg
                     width={PANEL_W}
                     height={panelHeight}
@@ -8578,6 +8624,29 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       const tieStart = getBusPinPoint(mainNeutralLayout, 1);
                       const tieEnd = getBusPinPoint(distNeutralLayout, 0);
                       const tieMidX = distVertical ? tieStart.x : tieEnd.x;
+                      const tieJumperSegments = [
+                        { from: tieStart, to: { x: tieMidX, y: tieStart.y } },
+                        { from: { x: tieMidX, y: tieStart.y }, to: { x: tieMidX, y: tieEnd.y } },
+                        { from: { x: tieMidX, y: tieEnd.y }, to: tieEnd },
+                      ];
+                      const tieSegmentLengths = tieJumperSegments.map((seg) => Math.hypot(seg.to.x - seg.from.x, seg.to.y - seg.from.y));
+                      const tieTotalLength = tieSegmentLengths.reduce((sum, len) => sum + len, 0);
+                      const pointAlongTieJumper = (distance) => {
+                        let remaining = distance;
+                        for (let i = 0; i < tieJumperSegments.length; i += 1) {
+                          const segLen = tieSegmentLengths[i];
+                          if (remaining <= segLen || i === tieJumperSegments.length - 1) {
+                            const ratio = segLen > 0 ? Math.min(1, Math.max(0, remaining / segLen)) : 0;
+                            const seg = tieJumperSegments[i];
+                            return { x: seg.from.x + (seg.to.x - seg.from.x) * ratio, y: seg.from.y + (seg.to.y - seg.from.y) * ratio };
+                          }
+                          remaining -= segLen;
+                        }
+                        return tieEnd;
+                      };
+                      const tieDerivationTaps = tieTotalLength > 0
+                        ? [0.25, 0.5, 0.75].map((ratio) => pointAlongTieJumper(tieTotalLength * ratio))
+                        : [];
                       return (
                         <g id="neutral-bus-dist">
                           {/* Jumper de continuidade: mesmo neutro, só dividido em dois pentes por conveniência de layout */}
@@ -8589,6 +8658,8 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             strokeDasharray="5,3"
                             opacity="0.75"
                           />
+                          {/* Pontos de derivação: sinalizam ao projetista onde o neutro pode ser ramificado para outros circuitos */}
+                          {tieDerivationTaps.map((point, index) => renderWireTap(point, "#0ea5e9", `neutral-bus-tie-derivation-${index}`))}
                           <rect
                             x={distVertical ? distNeutralLayout.x - 5 : distNeutralLayout.x - 13}
                             y={distVertical ? distNeutralLayout.y - 13 : distNeutralLayout.y - 4}
