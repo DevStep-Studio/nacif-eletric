@@ -674,7 +674,8 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     });
   }
   
-  // 3. Neutro geral e barramento superior.
+  // 3. Neutro geral — chega direto no pino 0 do barramento de distribuição (único barramento
+  // de neutro do quadro; ver comentário na seção de circuitos, mais abaixo).
   if (hasNeutralConductor) {
     const neutralPoleIndex = supply === "Trifásico" ? 3 : 1;
     if (hasDR) {
@@ -691,7 +692,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
         color: "blue",
         gauge: "10mm²",
         source: `comp:gen_dr:bottom:${neutralPoleIndex}`,
-        target: "busbar_neutral:0",
+        target: "busbar_neutral_dist:0",
         label: "10 mm²"
       });
     } else if (isMonophase) {
@@ -700,7 +701,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
         color: "blue",
         gauge: "10mm²",
         source: "comp:gen_brk:bottom:1",
-        target: "busbar_neutral:0",
+        target: "busbar_neutral_dist:0",
         label: "10 mm²"
       });
     } else {
@@ -709,16 +710,13 @@ export function generateDefaultPanelLayout(proj, options = {}) {
         color: "blue",
         gauge: "10mm²",
         source: "terminal_left_top:4",
-        target: "busbar_neutral:0",
+        target: "busbar_neutral_dist:0",
         label: "10 mm²"
       });
     }
   }
   
   // 4. Alimentação superior por fase conforme o tipo do quadro.
-  // Passa por um barramento principal antes do DJ GERAL (em vez de ligar direto no terminal
-  // de entrada), para que outros dispositivos que também precisem da fase de entrada possam
-  // derivar dali, do mesmo jeito que o barramento de terra e o de neutro já funcionam.
   const feedCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
   for (let i = 0; i < feedCount; i++) {
     wires.push({
@@ -726,14 +724,6 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       color: phaseWireColor(i),
       gauge: "10mm²",
       source: `terminal_left_top:${i + 1}`,
-      target: `busbar_main:${i}`,
-      label: "10 mm²"
-    });
-    wires.push({
-      id: `w_phase_main_to_brk_${i}`,
-      color: phaseWireColor(i),
-      gauge: "10mm²",
-      source: `busbar_main:${i}`,
       target: `comp:gen_brk:top:${i}`,
       label: "10 mm²"
     });
@@ -793,9 +783,10 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   });
 
   // Conexões de circuitos individuais.
-  // O neutro de cada circuito deriva do pente LOCAL de distribuição (busbar_neutral_dist),
-  // perto dos disjuntores — igual ao terra — em vez do barramento N lá em cima, na entrada.
-  let neutralDistPinIdx = 0;
+  // O neutro de cada circuito deriva do pente de distribuição (busbar_neutral_dist), perto dos
+  // disjuntores — igual ao terra. É o único barramento de neutro do quadro: o pino 0 fica
+  // reservado para a alimentação geral (ver seção 3 acima), os circuitos começam do pino 1.
+  let neutralDistPinIdx = 1;
   distributionBreakers.forEach((b, idx) => {
     if (breakerNeedsNeutral(b)) {
       const circuitGauge = b.wire_gauge || "2.5mm²";
@@ -832,11 +823,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     });
   });
 
-  const infrastructure = [
-    { id: "busbar_main", type: "main-busbar", label: "BARRAMENTO PRINCIPAL" },
-  ];
-
-  return { rails, wires, infrastructure };
+  return { rails, wires, infrastructure: [] };
 }
 
 // ─── Sincronização incremental do quadro ──────────────────────────────────────────────────────
@@ -989,7 +976,9 @@ export function mergeCircuitsIntoPanelLayout(proj, existingLayout, circuits = []
   const usedGroundIndices = wires.map((wire) => busPinIndexOfWire(wire, "busbar_ground")).filter((value) => value !== null);
   const usedNeutralIndices = wires.map((wire) => busPinIndexOfWire(wire, "busbar_neutral_dist")).filter((value) => value !== null);
   let nextGroundIndex = (usedGroundIndices.length ? Math.max(...usedGroundIndices) : 3) + 1;
-  let nextNeutralIndex = (usedNeutralIndices.length ? Math.max(...usedNeutralIndices) : -1) + 1;
+  // Pino 0 do barramento de distribuição é reservado pra alimentação geral (ver
+  // generateDefaultPanelLayout) — os circuitos começam do pino 1.
+  let nextNeutralIndex = (usedNeutralIndices.length ? Math.max(...usedNeutralIndices) : 0) + 1;
 
   const breakers = getDistributionBreakers();
   const matchedBreakerIds = new Set();

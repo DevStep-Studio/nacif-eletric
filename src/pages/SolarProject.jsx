@@ -18,6 +18,8 @@ import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
 import {
   DEFAULT_SOLAR_MAP_CENTER,
   DEFAULT_SOLAR_MAP_ZOOM,
+  DEFAULT_SOLAR_MODULE_COLOR,
+  SOLAR_MODULE_COLOR_PRESETS,
   SOLAR_MODULE_HEIGHT_M,
   SOLAR_MODULE_WIDTH_M,
   buildRoofPolygon,
@@ -25,6 +27,7 @@ import {
   getPolygonAreaSquareMeters,
   getRoofCenterFromConfig,
   getRoofMetricsFromPolygon,
+  getRoofPolygonFromConfig,
   normalizeRoofPolygon,
   serializeRoofPolygon,
 } from "@/lib/solarDesignerGeometry";
@@ -49,6 +52,7 @@ import {
   MousePointer2,
   Move3D,
   Pencil,
+  Plus,
   Redo2,
   RotateCw,
   Save,
@@ -81,6 +85,10 @@ const defaultSolarConfig = {
   roof_polygon: [],
   roof_defined: false,
   module_orientation: "auto",
+  module_color: DEFAULT_SOLAR_MODULE_COLOR,
+  roof_sections: [],
+  active_section_id: "section_1",
+  active_section_name: "Telhado 1",
   ac_voltage: 220,
   ac_supply_type: "Trifásico",
   layout_note: "",
@@ -105,6 +113,52 @@ const breakerForCurrent = (current) => {
 const phaseCountForSupply = (supply) => (supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1);
 const polesForSupply = (supply) => (supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 2);
 const phaseForSupply = (supply) => (supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A");
+
+// Telhados salvos que não são o ativo no momento — guardam só os campos específicos daquele
+// telhado (contorno, orientação, quantidade de módulos). Os campos compartilhados do sistema
+// (inversor, tensão, cor do módulo etc.) ficam só no config principal.
+function normalizeRoofSection(section = {}, index = 0) {
+  const polygon = serializeRoofPolygon(normalizeRoofPolygon(section.roof_polygon));
+  return {
+    id: String(section.id || `section_${Date.now()}_${index}`),
+    name: String(section.name || `Telhado ${index + 2}`),
+    roof_polygon: polygon,
+    roof_defined: Boolean(section.roof_defined) && polygon.length >= 3,
+    roof_width_m: asNumber(section.roof_width_m, defaultSolarConfig.roof_width_m),
+    roof_height_m: asNumber(section.roof_height_m, defaultSolarConfig.roof_height_m),
+    roof_area_m2: asNumber(section.roof_area_m2, defaultSolarConfig.roof_area_m2),
+    roof_rotation_deg: asNumber(section.roof_rotation_deg, 0),
+    roof_overlay_x_pct: asNumber(section.roof_overlay_x_pct, defaultSolarConfig.roof_overlay_x_pct),
+    roof_overlay_y_pct: asNumber(section.roof_overlay_y_pct, defaultSolarConfig.roof_overlay_y_pct),
+    roof_overlay_w_pct: asNumber(section.roof_overlay_w_pct, defaultSolarConfig.roof_overlay_w_pct),
+    roof_overlay_h_pct: asNumber(section.roof_overlay_h_pct, defaultSolarConfig.roof_overlay_h_pct),
+    module_orientation: ["auto", "vertical", "horizontal"].includes(section.module_orientation)
+      ? section.module_orientation
+      : "auto",
+    requested_panel_count: clamp(Math.round(asNumber(section.requested_panel_count, defaultSolarConfig.requested_panel_count)), 1, 1200),
+  };
+}
+
+// Tira uma "foto" dos campos específicos do telhado atualmente ativo, no mesmo formato de
+// normalizeRoofSection, para guardar na lista de telhados quando trocar de telhado ativo.
+function buildActiveSectionSnapshot(config) {
+  return normalizeRoofSection({
+    id: config.active_section_id,
+    name: config.active_section_name,
+    roof_polygon: config.roof_polygon,
+    roof_defined: config.roof_defined,
+    roof_width_m: config.roof_width_m,
+    roof_height_m: config.roof_height_m,
+    roof_area_m2: config.roof_area_m2,
+    roof_rotation_deg: config.roof_rotation_deg,
+    roof_overlay_x_pct: config.roof_overlay_x_pct,
+    roof_overlay_y_pct: config.roof_overlay_y_pct,
+    roof_overlay_w_pct: config.roof_overlay_w_pct,
+    roof_overlay_h_pct: config.roof_overlay_h_pct,
+    module_orientation: config.module_orientation,
+    requested_panel_count: config.requested_panel_count,
+  });
+}
 
 function normalizeSolarConfig(config = {}) {
   const merged = { ...defaultSolarConfig, ...(config || {}) };
@@ -149,6 +203,14 @@ function normalizeSolarConfig(config = {}) {
     module_orientation: ["auto", "vertical", "horizontal"].includes(merged.module_orientation)
       ? merged.module_orientation
       : "auto",
+    module_color: SOLAR_MODULE_COLOR_PRESETS.some((preset) => preset.value === merged.module_color)
+      ? merged.module_color
+      : DEFAULT_SOLAR_MODULE_COLOR,
+    roof_sections: Array.isArray(merged.roof_sections)
+      ? merged.roof_sections.map((section, index) => normalizeRoofSection(section, index))
+      : [],
+    active_section_id: String(merged.active_section_id || defaultSolarConfig.active_section_id),
+    active_section_name: String(merged.active_section_name || defaultSolarConfig.active_section_name),
     ac_voltage: asNumber(merged.ac_voltage, defaultSolarConfig.ac_voltage),
     ac_supply_type: merged.ac_supply_type || defaultSolarConfig.ac_supply_type,
     layout_note: merged.layout_note || "",
@@ -524,6 +586,62 @@ export default function SolarProject() {
       dcAcRatio: dcPowerKw / Math.max(0.1, asNumber(config.inverter_kw, defaultSolarConfig.inverter_kw)),
     };
   }, [config.inverter_kw, config.module_wp, roofLayout.orientation, roofLayout.panelCount, sizing, visiblePanelPolygons.length]);
+  // Telhados salvos (não-ativos) só para leitura/soma — o telhado ativo já está achatado no
+  // config e é contado via visualSizing acima.
+  const otherSectionConfigs = useMemo(
+    () => (config.roof_sections || []).map((section) => ({ ...config, ...section })),
+    [config]
+  );
+  const aggregateSizing = useMemo(() => {
+    let panelCount = visualSizing.panelCount;
+    let dcPowerKw = visualSizing.dcPowerKw;
+    let requestedPanelCount = visualSizing.requestedPanelCount;
+    let physicalLimit = visualSizing.physicalLimit;
+    let allFit = visualSizing.fitsArea;
+
+    otherSectionConfigs.forEach((sectionConfig) => {
+      const layout = getBestPanelLayout(sectionConfig, 1200);
+      const sectionSizing = calculateSolar(sectionConfig, layout.panelCount);
+      panelCount += sectionSizing.panelCount;
+      dcPowerKw += sectionSizing.dcPowerKw;
+      requestedPanelCount += sectionSizing.requestedPanelCount;
+      physicalLimit += sectionSizing.physicalLimit;
+      if (!sectionSizing.fitsArea) allFit = false;
+    });
+
+    const inverterKw = Math.max(0.1, asNumber(config.inverter_kw, defaultSolarConfig.inverter_kw));
+    const voltage = Math.max(1, asNumber(config.ac_voltage, defaultSolarConfig.ac_voltage));
+    const acCurrent = config.ac_supply_type === "Trifásico"
+      ? (inverterKw * 1000) / (Math.sqrt(3) * voltage)
+      : (inverterKw * 1000) / voltage;
+
+    return {
+      panelCount,
+      dcPowerKw,
+      dcAcRatio: dcPowerKw / inverterKw,
+      requestedPanelCount,
+      physicalLimit,
+      fitsArea: allFit,
+      missingPanelCount: Math.max(0, requestedPanelCount - physicalLimit),
+      acCurrent,
+      breaker: breakerForCurrent(acCurrent),
+      sectionCount: otherSectionConfigs.length + 1,
+    };
+  }, [config.ac_supply_type, config.ac_voltage, config.inverter_kw, otherSectionConfigs, visualSizing]);
+  // Contorno + painéis já calculados dos outros telhados, só para desenhar no mapa (somente
+  // leitura) ao lado do telhado ativo, que continua editável normalmente.
+  const otherSectionRenderData = useMemo(() => (
+    otherSectionConfigs.map((sectionConfig) => {
+      const layout = getBestPanelLayout(sectionConfig, 1200);
+      const sectionSizing = calculateSolar(sectionConfig, layout.panelCount);
+      return {
+        id: sectionConfig.id,
+        name: sectionConfig.name,
+        roofPolygon: getRoofPolygonFromConfig(sectionConfig),
+        panelPolygons: layout.panels.slice(0, sectionSizing.panelCount),
+      };
+    })
+  ), [otherSectionConfigs]);
   const externalMapUrl = project?.address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.address)}`
     : "";
@@ -627,6 +745,116 @@ export default function SolarProject() {
     toast({ title: "Orientação atualizada", description: `Distribuição ${label}.` });
   }, [config.module_orientation, toast]);
 
+  const handleModuleColorChange = useCallback((value) => {
+    const preset = SOLAR_MODULE_COLOR_PRESETS.find((item) => item.value === value);
+    if (!preset) return;
+    setConfig((current) => normalizeSolarConfig({ ...current, module_color: value }));
+    toast({ title: "Cor dos módulos atualizada", description: preset.label });
+  }, [toast]);
+
+  // Telhados (seções): o config "achatado" (roof_polygon, roof_width_m etc.) sempre representa
+  // o telhado ATIVO — os demais telhados ficam guardados em config.roof_sections. Trocar de
+  // telhado ativo é "salvar o atual na lista, carregar o outro para o topo". Isso evita reescrever
+  // getBestPanelLayout/calculateSolar/geração do quadro CA, que continuam operando só sobre o
+  // telhado ativo, exatamente como hoje.
+  const addRoofSection = () => {
+    const savedActive = buildActiveSectionSnapshot(config);
+    const others = (config.roof_sections || []).filter((section) => section.id !== savedActive.id);
+    const next = normalizeSolarConfig({
+      ...config,
+      roof_sections: [...others, savedActive],
+      active_section_id: `section_${Date.now()}`,
+      active_section_name: `Telhado ${others.length + 2}`,
+      roof_polygon: [],
+      roof_defined: false,
+      roof_width_m: defaultSolarConfig.roof_width_m,
+      roof_height_m: defaultSolarConfig.roof_height_m,
+      roof_rotation_deg: 0,
+      requested_panel_count: defaultSolarConfig.requested_panel_count,
+      module_orientation: "auto",
+    });
+    setConfig(next);
+    roofHistoryRef.current = [[]];
+    roofHistoryIndexRef.current = 0;
+    setRoofHistoryState({ canUndo: false, canRedo: false });
+    setEditorMode("draw-polygon");
+    toast({ title: "Novo telhado criado", description: "Desenhe o contorno do próximo telhado no mapa." });
+  };
+
+  const selectRoofSection = (sectionId) => {
+    if (sectionId === config.active_section_id) return;
+    const target = (config.roof_sections || []).find((section) => section.id === sectionId);
+    if (!target) return;
+    const savedActive = buildActiveSectionSnapshot(config);
+    const others = (config.roof_sections || []).filter((section) => section.id !== sectionId && section.id !== savedActive.id);
+    const next = normalizeSolarConfig({
+      ...config,
+      roof_sections: [...others, savedActive],
+      active_section_id: target.id,
+      active_section_name: target.name,
+      roof_polygon: target.roof_polygon,
+      roof_defined: target.roof_defined,
+      roof_width_m: target.roof_width_m,
+      roof_height_m: target.roof_height_m,
+      roof_area_m2: target.roof_area_m2,
+      roof_rotation_deg: target.roof_rotation_deg,
+      roof_overlay_x_pct: target.roof_overlay_x_pct,
+      roof_overlay_y_pct: target.roof_overlay_y_pct,
+      roof_overlay_w_pct: target.roof_overlay_w_pct,
+      roof_overlay_h_pct: target.roof_overlay_h_pct,
+      module_orientation: target.module_orientation,
+      requested_panel_count: target.requested_panel_count,
+    });
+    setConfig(next);
+    roofHistoryRef.current = [next.roof_polygon];
+    roofHistoryIndexRef.current = 0;
+    setRoofHistoryState({ canUndo: false, canRedo: false });
+    setEditorMode("select");
+    toast({ title: `${target.name} selecionado`, description: "Continue editando este telhado." });
+  };
+
+  const removeRoofSection = (sectionId) => {
+    if (sectionId !== config.active_section_id) {
+      setConfig(normalizeSolarConfig({
+        ...config,
+        roof_sections: (config.roof_sections || []).filter((section) => section.id !== sectionId),
+      }));
+      toast({ title: "Telhado removido" });
+      return;
+    }
+
+    const remaining = config.roof_sections || [];
+    if (remaining.length === 0) {
+      clearRoof();
+      return;
+    }
+
+    const [promoted, ...others] = remaining;
+    const next = normalizeSolarConfig({
+      ...config,
+      roof_sections: others,
+      active_section_id: promoted.id,
+      active_section_name: promoted.name,
+      roof_polygon: promoted.roof_polygon,
+      roof_defined: promoted.roof_defined,
+      roof_width_m: promoted.roof_width_m,
+      roof_height_m: promoted.roof_height_m,
+      roof_area_m2: promoted.roof_area_m2,
+      roof_rotation_deg: promoted.roof_rotation_deg,
+      roof_overlay_x_pct: promoted.roof_overlay_x_pct,
+      roof_overlay_y_pct: promoted.roof_overlay_y_pct,
+      roof_overlay_w_pct: promoted.roof_overlay_w_pct,
+      roof_overlay_h_pct: promoted.roof_overlay_h_pct,
+      module_orientation: promoted.module_orientation,
+      requested_panel_count: promoted.requested_panel_count,
+    });
+    setConfig(next);
+    roofHistoryRef.current = [next.roof_polygon];
+    roofHistoryIndexRef.current = 0;
+    setRoofHistoryState({ canUndo: false, canRedo: false });
+    toast({ title: "Telhado removido", description: `${promoted.name} agora está ativo.` });
+  };
+
   const handleMapViewportChange = useCallback(({ center, zoom }) => {
     setConfig((current) => normalizeSolarConfig({
       ...current,
@@ -723,9 +951,9 @@ export default function SolarProject() {
       <DesignerTopBar
         hasRoof={hasRoof}
         isLocked={roofLocked}
-        panelCount={visualSizing.panelCount}
+        panelCount={aggregateSizing.panelCount}
         saving={saving}
-        sizing={visualSizing}
+        sizing={aggregateSizing}
         onClear={clearRoof}
         onFitRoof={fitRoofInView}
         onSave={saveConfig}
@@ -738,8 +966,10 @@ export default function SolarProject() {
         editorMode={editorMode}
         hasRoof={hasRoof}
         editingLocked={roofLocked}
+        moduleColor={config.module_color}
         orientation={config.module_orientation}
         onClear={clearRoof}
+        onColorChange={handleModuleColorChange}
         onFitRoof={fitRoofInView}
         onModeChange={setEditorMode}
         onOrientationChange={cycleModuleOrientation}
@@ -771,6 +1001,7 @@ export default function SolarProject() {
               designerMode
               editorMode={editorMode}
               fitRoofRequest={fitRoofRequest}
+              otherSections={otherSectionRenderData}
               panelPolygons={visiblePanelPolygons}
               showBadges={false}
               showMeasurements={editorMode === "edit"}
@@ -786,7 +1017,17 @@ export default function SolarProject() {
               sizing={visualSizing}
               onQuantityChange={(value) => updateConfig("requested_panel_count", value)}
             />
-            <DesignerStatsHud sizing={visualSizing} />
+            <RoofSectionsCard
+              activeSectionId={config.active_section_id}
+              activeSectionName={config.active_section_name}
+              disabled={roofLocked}
+              hasRoof={hasRoof}
+              sections={config.roof_sections || []}
+              onAdd={addRoofSection}
+              onRemove={removeRoofSection}
+              onSelect={selectRoofSection}
+            />
+            <DesignerStatsHud sizing={aggregateSizing} />
           </section>
           <aside className="solar-edge-workspace hidden w-[188px] shrink-0 border-l border-white/5 xl:block" />
         </main>
@@ -904,14 +1145,17 @@ function DesignerToolRibbon({
   editingLocked,
   editorMode,
   hasRoof,
+  moduleColor,
   orientation,
   onClear,
+  onColorChange,
   onFitRoof,
   onModeChange,
   onOrientationChange,
   onRedo,
   onUndo,
 }) {
+  const activeColorPreset = SOLAR_MODULE_COLOR_PRESETS.find((preset) => preset.value === moduleColor) || SOLAR_MODULE_COLOR_PRESETS[0];
   const tools = [
     { mode: "select", icon: MousePointer2, label: "Navegar no mapa" },
     { mode: "draw-polygon", icon: Home, label: "Desenhar contorno do telhado" },
@@ -965,6 +1209,37 @@ function DesignerToolRibbon({
           >
             <Layers className="h-5 w-5" />
           </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={`Cor dos módulos: ${activeColorPreset.label}`}
+                title={`Cor dos módulos: ${activeColorPreset.label}`}
+                disabled={editingLocked}
+                className="flex h-10 w-10 items-center justify-center rounded-[4px] text-[#5b6576] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <span
+                  className="h-5 w-5 rounded-full border border-black/10 shadow-inner"
+                  style={{ backgroundColor: activeColorPreset.fill }}
+                />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="z-[140] min-w-[190px] rounded-[6px] border-[#d8e0ea] bg-white p-1.5 text-[#334155] shadow-xl">
+              <DropdownMenuLabel>Cor dos módulos</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {SOLAR_MODULE_COLOR_PRESETS.map((preset) => (
+                <DropdownMenuItem
+                  key={preset.value}
+                  onSelect={() => onColorChange?.(preset.value)}
+                  className="flex items-center gap-2"
+                >
+                  <span className="h-4 w-4 shrink-0 rounded-full border border-black/10" style={{ backgroundColor: preset.fill }} />
+                  <span className="flex-1">{preset.label}</span>
+                  {preset.value === activeColorPreset.value && <Check className="h-3.5 w-3.5 text-[#268ff5]" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button
             type="button"
             aria-label="Enquadrar telhado"
@@ -1227,6 +1502,58 @@ function PanelQuantityCard({ disabled = false, hasRoof, sizing, onQuantityChange
           Área delimitada: {sizing.roofArea.toFixed(1).replace(".", ",")} m² · orientação {sizing.orientation === "horizontal" ? "deitada" : "em pé"}
         </p>
       )}
+    </div>
+  );
+}
+
+function RoofSectionsCard({ activeSectionId, activeSectionName, disabled = false, hasRoof, sections, onAdd, onRemove, onSelect }) {
+  const allSections = [
+    { id: activeSectionId, name: activeSectionName, active: true },
+    ...sections.map((section) => ({ id: section.id, name: section.name, active: false })),
+  ];
+
+  return (
+    <div className="absolute right-3 top-20 z-[520] w-[min(230px,calc(100%-1.5rem))] rounded-[6px] border border-slate-200 bg-white/95 p-3 shadow-[0_14px_38px_rgba(15,23,42,0.22)] backdrop-blur sm:right-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#66758a]">Telhados do sistema</p>
+        <button
+          type="button"
+          aria-label="Adicionar novo telhado"
+          title={hasRoof ? "Salvar este telhado e desenhar outro" : "Desenhe o telhado atual antes de adicionar outro"}
+          disabled={disabled || !hasRoof}
+          onClick={onAdd}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] bg-[#268ff5] text-white transition hover:bg-[#1c7ee0] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <ul className="mt-2 space-y-1">
+        {allSections.map((section) => (
+          <li key={section.id} className={`flex items-center gap-1.5 rounded-[4px] border px-2 py-1.5 ${section.active ? "border-[#268ff5] bg-[#eaf4ff]" : "border-transparent hover:bg-slate-50"}`}>
+            <button
+              type="button"
+              onClick={() => onSelect(section.id)}
+              disabled={section.active}
+              title={section.name}
+              className="min-w-0 flex-1 truncate text-left text-xs font-bold text-[#334155] disabled:cursor-default"
+            >
+              {section.name}
+            </button>
+            {allSections.length > 1 && (
+              <button
+                type="button"
+                aria-label={`Remover ${section.name}`}
+                title={`Remover ${section.name}`}
+                onClick={() => onRemove(section.id)}
+                disabled={disabled}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

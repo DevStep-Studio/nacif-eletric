@@ -395,13 +395,64 @@ const reconcileMainProtection = (parsed, project, options = {}) => {
   };
 };
 
+// Migração: remove o "barramento principal" de camadas salvas antes da funcionalidade ser
+// revertida, reconectando a fase de entrada direto no DJ GERAL (como sempre foi antes e depois
+// dela) em vez de deixar a fiação apontando para um barramento que não existe mais.
+const removeLegacyMainBusbar = (parsed) => {
+  const wires = Array.isArray(parsed.wires) ? parsed.wires : [];
+  const infrastructure = Array.isArray(parsed.infrastructure) ? parsed.infrastructure : [];
+  const hasLegacyBusbar = infrastructure.some((item) => item?.id === "busbar_main")
+    || wires.some((wire) => String(wire?.id || "").startsWith("w_phase_main_to_brk_"));
+  if (!hasLegacyBusbar) return parsed;
+
+  const nextWires = wires
+    .filter((wire) => !String(wire?.id || "").startsWith("w_phase_main_to_brk_"))
+    .map((wire) => {
+      const match = String(wire?.id || "").match(/^w_phase_feed_(\d+)$/);
+      if (!match || !String(wire.target || "").startsWith("busbar_main:")) return wire;
+      return { ...wire, target: `comp:gen_brk:top:${match[1]}` };
+    });
+
+  return {
+    ...parsed,
+    wires: nextWires,
+    infrastructure: infrastructure.filter((item) => item?.id !== "busbar_main"),
+  };
+};
+
+// Migração: o quadro tinha dois barramentos de neutro (um de entrada, "busbar_neutral", ligado
+// por um jumper a outro perto da distribuição, "busbar_neutral_dist") — unificado num só. Reaponta
+// a fiação salva antes dessa mudança que ainda alimentava o barramento de entrada, escolhendo um
+// pino do barramento de distribuição que nenhum circuito já esteja usando.
+const consolidateLegacyNeutralBus = (parsed) => {
+  const wires = Array.isArray(parsed.wires) ? parsed.wires : [];
+  const legacyFeedWire = wires.find((wire) => String(wire?.target || "") === "busbar_neutral:0");
+  if (!legacyFeedWire) return parsed;
+
+  const usedDistIndices = [];
+  wires.forEach((wire) => {
+    [wire?.source, wire?.target].forEach((pin) => {
+      const match = String(pin || "").match(/^busbar_neutral_dist:(\d+)$/);
+      if (match) usedDistIndices.push(Number(match[1]));
+    });
+  });
+  const freeIndex = usedDistIndices.length ? Math.max(...usedDistIndices) + 1 : 0;
+
+  return {
+    ...parsed,
+    wires: wires.map((wire) => (
+      wire === legacyFeedWire ? { ...wire, target: `busbar_neutral_dist:${freeIndex}` } : wire
+    )),
+  };
+};
+
 const parsePanelLayout = (layout, project = null, options = {}) => {
   if (layout && typeof layout === "object") {
-    return reconcileMainProtection({
+    return reconcileMainProtection(consolidateLegacyNeutralBus(removeLegacyMainBusbar({
       rails: Array.isArray(layout.rails) ? layout.rails : [],
       wires: Array.isArray(layout.wires) ? layout.wires : [],
       infrastructure: Array.isArray(layout.infrastructure) ? layout.infrastructure : [],
-    }, project, options);
+    })), project, options);
   }
 
   if (layout && typeof layout === "string") {
@@ -1370,47 +1421,6 @@ const getDistNeutralBusLayout = (infrastructure = [], panelH = 820) => {
   };
 };
 
-const MAIN_BUSBAR = {
-  x: 96,
-  y: 96,
-  width: 110,
-  height: 14,
-  pinCount: 3,
-  pinGap: 34,
-};
-
-// Barramento principal: consolida a alimentação de entrada (L1/L2/L3) antes do disjuntor geral,
-// no mesmo padrão elétrico dos barramentos de neutro/terra — para que outros dispositivos que
-// compartilham a mesma fase de entrada possam derivar dela, em vez de puxar fio direto do
-// terminal de entrada para cada equipamento.
-const getMainBusbarLayout = (infrastructure = [], panelH = 820) => {
-  const item = (infrastructure || []).find((entry) => entry?.id === "busbar_main") || {};
-  const orientation = item.orientation === "vertical" ? "vertical" : "horizontal";
-  const length = Math.max(60, Math.min(200, Number(item.width) || (MAIN_BUSBAR.pinGap * (MAIN_BUSBAR.pinCount - 1) + 26)));
-  const rawX = Number(item.x);
-  const rawY = Number(item.y);
-  const width = orientation === "vertical" ? MAIN_BUSBAR.height : length;
-  const height = orientation === "vertical" ? length : MAIN_BUSBAR.height;
-  const defaultX = orientation === "vertical" ? 96 : MAIN_BUSBAR.x;
-  const defaultY = orientation === "vertical" ? 132 : MAIN_BUSBAR.y;
-  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : defaultX));
-  const y = Math.max(20, Math.min(panelH - height - 20, Number.isFinite(rawY) ? rawY : defaultY));
-  const pinGap = Math.max(18, Math.min(40, (length - 20) / Math.max(1, MAIN_BUSBAR.pinCount - 1)));
-
-  return {
-    x,
-    y,
-    orientation,
-    length,
-    width,
-    height,
-    pinStartX: orientation === "vertical" ? x + width / 2 : x + 13,
-    pinStartY: orientation === "vertical" ? y + 13 : y + height / 2,
-    pinY: orientation === "vertical" ? y + 13 : y + height / 2,
-    pinGap,
-  };
-};
-
 const getThreePhaseOutputPin = (terminalIndex = 0) => {
   const index = Number(terminalIndex);
   const terminalSlot = index === 4
@@ -1471,7 +1481,6 @@ const isNeutralBusPin = (pinId = "") => (
   String(pinId || "").startsWith("busbar_neutral:") || String(pinId || "").startsWith("busbar_neutral_dist:")
 );
 const isGroundBusPin = (pinId = "") => String(pinId || "").startsWith("busbar_ground:");
-const isMainBusPin = (pinId = "") => String(pinId || "").startsWith("busbar_main:");
 
 const getWireKind = (color) => {
   if (color === "blue") return "neutral";
@@ -1812,10 +1821,6 @@ const parsePinMeta = (pinId = "", point = { x: 0, y: 0 }, rails = [], panelH = 8
     return { type: "ground-bus", term: "bus", railIndex: rails.length, railY: null, point };
   }
 
-  if (isMainBusPin(pin)) {
-    return { type: "main-bus", term: "bus", railIndex: -1, railY: null, point };
-  }
-
   if (pin.startsWith("load_out:")) {
     const [, compId, poleToken = "0"] = pin.split(":");
     const placement = getPanelComponentPlacements(rails, panelH).find((item) => (
@@ -2041,12 +2046,6 @@ const getPinCoords = (pinId, rails, panelH, infrastructure = []) => {
     const idx = parseInt(pinId.split(":")[1], 10);
     const groundBus = getGroundBusLayout(infrastructure, panelH);
     return getBusPinPoint(groundBus, Math.abs(Number(idx) || 0) % GROUND_BUS.pinCount);
-  }
-
-  if (pinId.startsWith("busbar_main:")) {
-    const idx = parseInt(pinId.split(":")[1], 10);
-    const mainBus = getMainBusbarLayout(infrastructure, panelH);
-    return getBusPinPoint(mainBus, Math.abs(Number(idx) || 0) % MAIN_BUSBAR.pinCount);
   }
 
   if (pinId.startsWith("terminal_left_top:")) {
@@ -2880,16 +2879,14 @@ export default function PanelGenerator() {
     const nextOrientation = orientation === "vertical" ? "vertical" : "horizontal";
     const defaults = nextOrientation === "vertical"
       ? {
-          "neutral-bus": { x: PANEL_W - 88, y: 116, width: Math.min(520, Math.max(180, panelHeight - 210)) },
           "neutral-bus-dist": { x: 40, y: 116, width: Math.min(520, Math.max(260, panelHeight - 210)) },
           "ground-bus": { x: 72, y: 116, width: Math.min(520, Math.max(260, panelHeight - 210)) },
         }
       : {
-          "neutral-bus": { x: NEUTRAL_BUS.x, y: NEUTRAL_BUS.y, width: NEUTRAL_BUS.width },
           "neutral-bus-dist": { x: 240, y: panelHeight - 108, width: DIST_NEUTRAL_BUS.width },
           "ground-bus": { x: GROUND_BUS.x, y: panelHeight - 68, width: GROUND_BUS.width },
         };
-    const ids = ["neutral-bus", "neutral-bus-dist", "ground-bus"];
+    const ids = ["neutral-bus-dist", "ground-bus"];
     const nextInfrastructure = infrastructure.filter((item) => !ids.includes(item.id));
     ids.forEach((id) => {
       const current = infrastructure.find((item) => item.id === id) || { id };
@@ -2952,7 +2949,7 @@ export default function PanelGenerator() {
   // para caber trilhos mais curtos ou mais longos conforme o gabinete. Muda a redistribuição em
   // normalizeRailsLayout, que já é chamada em toda ação que mexe nos trilhos.
   const activeRailCapacity = clampNumber(activeBoard?.enclosure?.railCapacity, 6, 22, ROW_MAX);
-  const busOrientation = ["neutral-bus", "ground-bus"].some((id) => (
+  const busOrientation = ["neutral-bus-dist", "ground-bus"].some((id) => (
     infrastructure.find((item) => item.id === id)?.orientation === "vertical"
   )) ? "vertical" : "horizontal";
   const showSideDucts = activeBoard?.enclosure?.sideDucts !== false;
@@ -4666,16 +4663,20 @@ export default function PanelGenerator() {
     const node = containerRef.current;
     if (!node || !project) return;
 
+    // Importante: NÃO dividir por boardScaleFactor aqui. O fitScale só cuida de encaixar o
+    // desenho de referência (tamanho PANEL_W) na largura disponível da tela — se também
+    // compensasse o boardScaleFactor, o resultado final (activeScale * boardScaleFactor, lá no
+    // render) cancelava o fator matematicamente e o gabinete nunca mudava de tamanho na tela.
     const updateFitScale = () => {
       const availableWidth = Math.max(300, node.clientWidth - 32);
-      setFitScale(clampPanelScale(availableWidth / (PANEL_W * boardScaleFactor)));
+      setFitScale(clampPanelScale(availableWidth / PANEL_W));
     };
 
     updateFitScale();
     const observer = new ResizeObserver(updateFitScale);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [project, rails.length, boardScaleFactor]);
+  }, [project, rails.length]);
 
   const handleFitViewport = () => {
     setScale(null);
@@ -4988,7 +4989,8 @@ export default function PanelGenerator() {
       const usedGroundIndices = wires.map((wire) => busPinIndexOfWire(wire, "busbar_ground")).filter((value) => value !== null);
       const usedNeutralIndices = wires.map((wire) => busPinIndexOfWire(wire, "busbar_neutral_dist")).filter((value) => value !== null);
       const nextGroundIndex = (usedGroundIndices.length ? Math.max(...usedGroundIndices) : 3) + 1;
-      const nextNeutralIndex = (usedNeutralIndices.length ? Math.max(...usedNeutralIndices) : -1) + 1;
+      // Pino 0 do barramento de distribuição é reservado pra alimentação geral.
+      const nextNeutralIndex = (usedNeutralIndices.length ? Math.max(...usedNeutralIndices) : 0) + 1;
 
       const neutralWire = newCompSupplyType === "Monofásico"
         ? [{
@@ -8498,247 +8500,6 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       })}
                     </g>
 
-                    {/* 1b. BARRAMENTO PRINCIPAL (ENTRADA -> DJ GERAL) */}
-                    {(() => {
-                      const mainBus = infrastructure.find(i => i.id === "busbar_main") || {};
-                      const mainLayout = getMainBusbarLayout(infrastructure, panelHeight);
-                      const mainVertical = mainLayout.orientation === "vertical";
-                      const isSelected = selectedInfrastructureId === "busbar_main";
-                      const pinColors = ["#111827", "#dc2626", "#7c2d12"];
-                      return (
-                        <g
-                          id="main-busbar"
-                          className="cursor-pointer"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedInfrastructureId("busbar_main");
-                            setSelectedComponentId("");
-                            setSelectedWireId("");
-                            setSelectedTextWireId("");
-                            setSelectedAnnotationId("");
-                            setActiveTab("infra");
-                          }}
-                        >
-                          {isSelected && (
-                            <rect
-                              x={mainLayout.x - 8}
-                              y={mainLayout.y - 8}
-                              width={mainLayout.width + 16}
-                              height={mainLayout.height + 16}
-                              rx="5"
-                              fill="none"
-                              stroke="#00d8b8"
-                              strokeWidth="1.25"
-                              strokeDasharray="4,3"
-                              pointerEvents="none"
-                            />
-                          )}
-                          {/* Suportes plásticos */}
-                          <rect
-                            x={mainVertical ? mainLayout.x - 4 : mainLayout.x - 10}
-                            y={mainVertical ? mainLayout.y - 10 : mainLayout.y - 3}
-                            width={mainVertical ? 22 : 14}
-                            height={mainVertical ? 14 : 22}
-                            rx="2"
-                            fill="#92400e"
-                            stroke={isSelected ? "#00d8b8" : "#78350f"}
-                            strokeWidth={isSelected ? 1.4 : 0.7}
-                            onPointerDown={(event) => startInfraTextDrag(event, "busbar_main", mainLayout.x, mainLayout.y)}
-                          />
-                          <rect
-                            x={mainVertical ? mainLayout.x - 4 : mainLayout.x + mainLayout.width - 4}
-                            y={mainVertical ? mainLayout.y + mainLayout.height - 4 : mainLayout.y - 3}
-                            width={mainVertical ? 22 : 14}
-                            height={mainVertical ? 14 : 22}
-                            rx="2"
-                            fill="#92400e"
-                            stroke={isSelected ? "#00d8b8" : "#78350f"}
-                            strokeWidth={isSelected ? 1.4 : 0.7}
-                            onPointerDown={(event) => startInfraTextDrag(event, "busbar_main", mainLayout.x, mainLayout.y)}
-                          />
-                          {/* Barra de cobre */}
-                          <rect
-                            x={mainLayout.x}
-                            y={mainLayout.y}
-                            width={mainLayout.width}
-                            height={mainLayout.height}
-                            rx="1.5"
-                            fill="#b87333"
-                            stroke={isSelected ? "#00d8b8" : "#854d0e"}
-                            strokeWidth={isSelected ? 1.35 : 0.7}
-                            onPointerDown={(event) => startInfraTextDrag(event, "busbar_main", mainLayout.x, mainLayout.y)}
-                          />
-                          <rect
-                            x={mainLayout.x + 3}
-                            y={mainLayout.y + 3}
-                            width={mainVertical ? 3 : mainLayout.width - 6}
-                            height={mainVertical ? mainLayout.height - 6 : 3}
-                            fill="#fde68a"
-                            fillOpacity="0.45"
-                            pointerEvents="none"
-                          />
-                          {/* Parafusos L1/L2/L3 */}
-                          {Array.from({ length: MAIN_BUSBAR.pinCount }).map((_, i) => {
-                            const point = getBusPinPoint(mainLayout, i);
-                            const pinId = `busbar_main:${i}`;
-                            return (
-                              <g key={i}>
-                                <circle cx={point.x} cy={point.y} r="4" fill="#e2e8f0" stroke={pinColors[i]} strokeWidth="1" />
-                                <line x1={point.x - 2} y1={point.y} x2={point.x + 2} y2={point.y} stroke={pinColors[i]} strokeWidth="0.9" />
-                                {(wiringMode || !!wireMoveMode) && (
-                                  <circle
-                                    cx={point.x}
-                                    cy={point.y}
-                                    r="8"
-                                    fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"}
-                                    fillOpacity="0.8"
-                                    className="animate-pulse cursor-pointer"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handlePinClick(pinId);
-                                    }}
-                                  />
-                                )}
-                              </g>
-                            );
-                          })}
-                          <text
-                            x={mainBus.labelX ?? (mainVertical ? mainLayout.x + mainLayout.width / 2 : mainLayout.x + mainLayout.width + 10)}
-                            y={mainBus.labelY ?? (mainVertical ? mainLayout.y - 12 : mainLayout.y + mainLayout.height / 2 + 3)}
-                            fill={mainBus.color || "#0f172a"}
-                            fontSize={mainBus.fontSize || 6.6}
-                            fontWeight="900"
-                            textAnchor={mainVertical ? "middle" : "start"}
-                            transform={mainVertical ? `rotate(-90 ${mainBus.labelX ?? mainLayout.x + mainLayout.width / 2} ${mainBus.labelY ?? mainLayout.y - 12})` : undefined}
-                            className="cursor-move"
-                            onPointerDown={(event) => startInfraTextDrag(event, "busbar_main", mainLayout.x, mainLayout.y)}
-                          >
-                            {mainBus.label || "BARRAMENTO PRINCIPAL"}
-                          </text>
-                        </g>
-                      );
-                    })()}
-
-                    {/* 2. BARRAMENTO NEUTRO SUPERIOR (EDITÁVEL) */}
-                    {(() => {
-                      const neutralBus = infrastructure.find(i => i.id === "neutral-bus") || {};
-                      const neutralLayout = getNeutralBusLayout(infrastructure, panelHeight);
-                      const neutralVertical = neutralLayout.orientation === "vertical";
-                      const isSelected = selectedInfrastructureId === "neutral-bus";
-                      return (
-                        <g
-                          id="neutral-busbar"
-                          className="cursor-pointer"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedInfrastructureId("neutral-bus");
-                            setSelectedComponentId("");
-                            setSelectedWireId("");
-                            setSelectedTextWireId("");
-                            setSelectedAnnotationId("");
-                            setActiveTab("infra");
-                          }}
-                        >
-                          {isSelected && (
-                            <rect
-                              x={neutralLayout.x - 10}
-                              y={neutralLayout.y - 10}
-                              width={neutralLayout.width + 20}
-                              height={neutralLayout.height + 20}
-                              rx="6"
-                              fill="none"
-                              stroke="#00d8b8"
-                              strokeWidth="1.25"
-                              strokeDasharray="4,3"
-                              pointerEvents="none"
-                            />
-                          )}
-                          {/* Suportes plásticos azuis */}
-                          <rect
-                            x={neutralVertical ? neutralLayout.x - 5 : neutralLayout.x - 13}
-                            y={neutralVertical ? neutralLayout.y - 13 : neutralLayout.y - 4}
-                            width={neutralVertical ? 28 : 18}
-                            height={neutralVertical ? 18 : 28}
-                            rx="2"
-                            fill="#00d8b8"
-                            stroke={isSelected ? "#00d8b8" : "#00d8b8"}
-                            strokeWidth={isSelected ? 1.5 : 0.8}
-                            onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
-                          />
-                          <rect
-                            x={neutralVertical ? neutralLayout.x - 5 : neutralLayout.x + neutralLayout.width - 5}
-                            y={neutralVertical ? neutralLayout.y + neutralLayout.height - 5 : neutralLayout.y - 4}
-                            width={neutralVertical ? 28 : 18}
-                            height={neutralVertical ? 18 : 28}
-                            rx="2"
-                            fill="#00d8b8"
-                            stroke={isSelected ? "#00d8b8" : "#00d8b8"}
-                            strokeWidth={isSelected ? 1.5 : 0.8}
-                            onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
-                          />
-                          {/* Barra azul N */}
-                          <rect
-                            x={neutralLayout.x}
-                            y={neutralLayout.y}
-                            width={neutralLayout.width}
-                            height={neutralLayout.height}
-                            rx="1.5"
-                            fill="#0ea5e9"
-                            stroke={isSelected ? "#00d8b8" : "#0369a1"}
-                            strokeWidth={isSelected ? 1.35 : 0.8}
-                            onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
-                          />
-                          <rect
-                            x={neutralLayout.x + (neutralVertical ? 3 : 4)}
-                            y={neutralLayout.y + (neutralVertical ? 4 : 3)}
-                            width={neutralVertical ? 3 : neutralLayout.width - 8}
-                            height={neutralVertical ? neutralLayout.height - 8 : 3}
-                            fill="#e0f2fe"
-                            fillOpacity="0.5"
-                            pointerEvents="none"
-                          />
-                          {/* Parafusos */}
-                          {Array.from({ length: NEUTRAL_BUS.pinCount }).map((_, i) => {
-                            const point = getBusPinPoint(neutralLayout, i);
-                            const pinId = `busbar_neutral:${i}`;
-                            return (
-                              <g key={i}>
-                                <circle cx={point.x} cy={point.y} r="4.2" fill="#e0f2fe" stroke="#075985" strokeWidth="0.8" />
-                                <line x1={point.x-2} y1={point.y} x2={point.x+2} y2={point.y} stroke="#075985" strokeWidth="0.9" />
-                                {(wiringMode || !!wireMoveMode) && (
-                                  <circle
-                                    cx={point.x}
-                                    cy={point.y}
-                                    r="8"
-                                    fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"}
-                                    fillOpacity="0.8"
-                                    className="animate-pulse cursor-pointer"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handlePinClick(pinId);
-                                    }}
-                                  />
-                                )}
-                              </g>
-                            );
-                          })}
-                          <text
-                            x={neutralBus.labelX ?? (neutralVertical ? neutralLayout.x + 9 : neutralLayout.x + neutralLayout.width + 14)}
-                            y={neutralBus.labelY ?? (neutralVertical ? neutralLayout.y - 20 : neutralLayout.y + 12)}
-                            fill={neutralBus.color || "#0f172a"}
-                            fontSize={neutralBus.fontSize || 8}
-                            fontWeight="900"
-                            textAnchor={neutralVertical ? "middle" : "start"}
-                            transform={neutralVertical ? `rotate(-90 ${neutralBus.labelX ?? neutralLayout.x + 9} ${neutralBus.labelY ?? neutralLayout.y - 20})` : undefined}
-                            className="cursor-move"
-                            onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
-                          >
-                            {neutralBus.label || "N"}
-                          </text>
-                        </g>
-                      );
-                    })()}
-
                     {/* 3. BARRAMENTO TERRA (BASE VERDE) */}
                     {(() => {
                       const groundBus = infrastructure.find(i => i.id === "ground-bus") || {};
@@ -8810,50 +8571,12 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       );
                     })()}
 
-                    {/* 3b. BARRAMENTO NEUTRO DE DISTRIBUIÇÃO (PENTE LOCAL, PERTO DOS CIRCUITOS) */}
+                    {/* 3b. BARRAMENTO NEUTRO (ÚNICO, PERTO DOS CIRCUITOS DE DISTRIBUIÇÃO) */}
                     {(() => {
                       const distNeutralLayout = getDistNeutralBusLayout(infrastructure, panelHeight);
                       const distVertical = distNeutralLayout.orientation === "vertical";
-                      const mainNeutralLayout = getNeutralBusLayout(infrastructure, panelHeight);
-                      const tieStart = getBusPinPoint(mainNeutralLayout, 1);
-                      const tieEnd = getBusPinPoint(distNeutralLayout, 0);
-                      const tieMidX = distVertical ? tieStart.x : tieEnd.x;
-                      const tieJumperSegments = [
-                        { from: tieStart, to: { x: tieMidX, y: tieStart.y } },
-                        { from: { x: tieMidX, y: tieStart.y }, to: { x: tieMidX, y: tieEnd.y } },
-                        { from: { x: tieMidX, y: tieEnd.y }, to: tieEnd },
-                      ];
-                      const tieSegmentLengths = tieJumperSegments.map((seg) => Math.hypot(seg.to.x - seg.from.x, seg.to.y - seg.from.y));
-                      const tieTotalLength = tieSegmentLengths.reduce((sum, len) => sum + len, 0);
-                      const pointAlongTieJumper = (distance) => {
-                        let remaining = distance;
-                        for (let i = 0; i < tieJumperSegments.length; i += 1) {
-                          const segLen = tieSegmentLengths[i];
-                          if (remaining <= segLen || i === tieJumperSegments.length - 1) {
-                            const ratio = segLen > 0 ? Math.min(1, Math.max(0, remaining / segLen)) : 0;
-                            const seg = tieJumperSegments[i];
-                            return { x: seg.from.x + (seg.to.x - seg.from.x) * ratio, y: seg.from.y + (seg.to.y - seg.from.y) * ratio };
-                          }
-                          remaining -= segLen;
-                        }
-                        return tieEnd;
-                      };
-                      const tieDerivationTaps = tieTotalLength > 0
-                        ? [0.25, 0.5, 0.75].map((ratio) => pointAlongTieJumper(tieTotalLength * ratio))
-                        : [];
                       return (
                         <g id="neutral-bus-dist">
-                          {/* Jumper de continuidade: mesmo neutro, só dividido em dois pentes por conveniência de layout */}
-                          <path
-                            d={`M ${tieStart.x} ${tieStart.y} L ${tieMidX} ${tieStart.y} L ${tieMidX} ${tieEnd.y} L ${tieEnd.x} ${tieEnd.y}`}
-                            fill="none"
-                            stroke="#0ea5e9"
-                            strokeWidth="1.6"
-                            strokeDasharray="5,3"
-                            opacity="0.75"
-                          />
-                          {/* Pontos de derivação: sinalizam ao projetista onde o neutro pode ser ramificado para outros circuitos */}
-                          {tieDerivationTaps.map((point, index) => renderWireTap(point, "#0ea5e9", `neutral-bus-tie-derivation-${index}`))}
                           <rect
                             x={distVertical ? distNeutralLayout.x - 5 : distNeutralLayout.x - 13}
                             y={distVertical ? distNeutralLayout.y - 13 : distNeutralLayout.y - 4}
@@ -8926,7 +8649,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             textAnchor={distVertical ? "middle" : "start"}
                             transform={distVertical ? `rotate(-90 ${distNeutralLayout.x + 9} ${distNeutralLayout.y - 20})` : undefined}
                           >
-                            BARRAMENTO NEUTRO (DISTRIBUIÇÃO)
+                            BARRAMENTO NEUTRO (N)
                           </text>
                         </g>
                       );
