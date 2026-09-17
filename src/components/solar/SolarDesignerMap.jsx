@@ -13,9 +13,7 @@ import {
   distanceMeters,
   edgeRotationDegrees,
   getMapCenterFromConfig,
-  getPolygonCentroid,
   getRoofPolygonFromConfig,
-  getSolarModuleColorPreset,
   normalizeRoofPolygon,
 } from "@/lib/solarDesignerGeometry";
 
@@ -125,73 +123,6 @@ function MeasurementLabels({ roofPolygon }) {
       })}
     />
   ));
-}
-
-const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => (
-  { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]
-));
-
-// Outros telhados do mesmo sistema (não o que está sendo editado agora). Só leitura: contorno
-// esmaecido + os painéis já calculados, para o projetista ver o conjunto todo enquanto desenha
-// um telhado de cada vez.
-function OtherRoofSections({ sections, moduleColorPreset }) {
-  if (!sections?.length) return null;
-
-  return sections.flatMap((section) => {
-    const positions = toLeafletPositions(section.roofPolygon);
-    if (positions.length < 3) return [];
-
-    const elements = [
-      <Polygon
-        key={`other-outline-${section.id}`}
-        positions={positions}
-        interactive={false}
-        pmIgnore
-        pathOptions={{
-          color: "#e2e8f0",
-          fillColor: "#0f172a",
-          fillOpacity: 0.1,
-          opacity: 0.55,
-          weight: 1.4,
-          dashArray: "5,4",
-        }}
-      />,
-      ...section.panelPolygons.map((panel, index) => (
-        <Polygon
-          key={`other-panel-${section.id}-${index}`}
-          positions={toLeafletPositions(panel)}
-          interactive={false}
-          pmIgnore
-          pathOptions={{
-            color: moduleColorPreset.edge,
-            fillColor: moduleColorPreset.fill,
-            fillOpacity: 0.55,
-            opacity: 0.5,
-            weight: 0.4,
-          }}
-        />
-      )),
-    ];
-
-    const centroid = getPolygonCentroid(section.roofPolygon);
-    if (centroid) {
-      elements.push(
-        <Marker
-          key={`other-label-${section.id}`}
-          position={[centroid.lat, centroid.lng]}
-          interactive={false}
-          icon={L.divIcon({
-            className: "solar-other-section-label",
-            html: `<span>${escapeHtml(section.name)}</span>`,
-            iconSize: [120, 18],
-            iconAnchor: [60, 9],
-          })}
-        />
-      );
-    }
-
-    return elements;
-  });
 }
 
 function MapViewportEvents({ onViewportChange }) {
@@ -380,7 +311,6 @@ export default function SolarDesignerMap({
   designerMode = false,
   editorMode = "select",
   fitRoofRequest = 0,
-  otherSections = [],
   panelPolygons: controlledPanelPolygons,
   onEditorModeChange,
   onRoofChange,
@@ -397,7 +327,6 @@ export default function SolarDesignerMap({
     () => panelPolygons.flatMap(buildPanelCellLines).map(toLeafletPositions),
     [panelPolygons]
   );
-  const moduleColorPreset = useMemo(() => getSolarModuleColorPreset(config.module_color), [config.module_color]);
   const mapCenter = useMemo(() => getMapCenterFromConfig(config), [config]);
   const mapZoom = Math.max(16, Math.min(22, Math.round(Number(config.map_zoom) || DEFAULT_SOLAR_MAP_ZOOM)));
   const initialCenter = useMemo(
@@ -429,10 +358,6 @@ export default function SolarDesignerMap({
         />
         {showMeasurements && <MeasurementLabels roofPolygon={roofPolygon} />}
 
-        <Pane name="other-roof-sections-pane" style={{ zIndex: 430, pointerEvents: "none" }}>
-          <OtherRoofSections sections={otherSections} moduleColorPreset={moduleColorPreset} />
-        </Pane>
-
         <Pane name="solar-panels-pane" style={{ zIndex: 440, pointerEvents: "none" }}>
           {panelPolygons.map((panel, index) => (
             <Polygon
@@ -441,9 +366,9 @@ export default function SolarDesignerMap({
               interactive={false}
               pmIgnore
               pathOptions={{
-                color: moduleColorPreset.edge,
+                color: "#a8c5ed",
                 className: "solar-panel-shape",
-                fillColor: moduleColorPreset.fill,
+                fillColor: "#16458f",
                 fillOpacity: 0.97,
                 opacity: 0.82,
                 weight: 0.5,
@@ -456,7 +381,7 @@ export default function SolarDesignerMap({
               interactive={false}
               pmIgnore
               pathOptions={{
-                color: moduleColorPreset.cell,
+                color: "#93b9eb",
                 className: "solar-panel-cell-lines",
                 opacity: 0.28,
                 weight: 0.3,

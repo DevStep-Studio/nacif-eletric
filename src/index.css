@@ -214,14 +214,8 @@ label.rounded-full,
   display: none;
 }
 
-.solar-designer-map .leaflet-tile {
-  /* Realce de nitidez/contraste do satélite (processamento local, sem IA) para o imóvel ficar
-     mais legível na hora de desenhar o telhado. */
-  filter: contrast(1.12) saturate(1.06) brightness(1.01);
-}
-
 .solar-designer-map--edge .leaflet-tile {
-  filter: contrast(1.16) saturate(1.05) brightness(0.98);
+  filter: saturate(0.82) contrast(1.03) brightness(0.93);
 }
 
 .solar-designer-map--edge .leaflet-control-attribution {
@@ -283,34 +277,12 @@ label.rounded-full,
   transform-origin: center;
 }
 
-.solar-other-section-label {
-  background: transparent;
-  border: 0;
-  pointer-events: none;
-}
-
-.solar-other-section-label span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
-  height: 18px;
-  border-radius: 3px;
-  background: rgba(15, 23, 42, 0.68);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
-
 .solar-designer-mini-map.leaflet-container {
   background: #111827;
 }
 
 .solar-designer-mini-map .leaflet-tile {
-  filter: contrast(1.1) saturate(1.0) brightness(0.97);
+  filter: saturate(0.76) contrast(1.02) brightness(0.9);
 }
 
 .solar-designer-map--edge .marker-icon {

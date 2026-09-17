@@ -146,7 +146,7 @@ export default function NewProject() {
           ...prev,
           latitude: coords.lat,
           longitude: coords.lng,
-          solar_config: { ...prev.solar_config, map_center_lat: coords.lat, map_center_lng: coords.lng, map_zoom: 19 },
+          solar_config: { ...prev.solar_config, map_center_lat: coords.lat, map_center_lng: coords.lng, map_zoom: 20 },
         }));
         setGeoStatus("success");
       }).catch(() => {

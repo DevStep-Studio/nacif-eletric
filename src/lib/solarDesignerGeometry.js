@@ -1,27 +1,7 @@
 export const DEFAULT_SOLAR_MAP_CENTER = { lat: -23.55052, lng: -46.63331 };
-// Igual ao maxNativeZoom do satélite (Esri) em SolarDesignerMap — acima disso o provedor não
-// tem imagem própria e o Leaflet amplia a última tile disponível, o que aparece como um
-// quadriculado/borrão na tela. Preferimos abrir já na resolução real.
-export const DEFAULT_SOLAR_MAP_ZOOM = 19;
+export const DEFAULT_SOLAR_MAP_ZOOM = 20;
 export const SOLAR_MODULE_WIDTH_M = 1.14;
 export const SOLAR_MODULE_HEIGHT_M = 2.4;
-
-// Aparência dos módulos no desenho do telhado. Azul/preto/prata cobrem os acabamentos reais
-// de mercado (policristalino, full black, moldura prata); as demais são só para diferenciar
-// visualmente string/telhados distintos numa proposta.
-export const SOLAR_MODULE_COLOR_PRESETS = [
-  { value: "blue", label: "Azul (policristalino)", fill: "#16458f", edge: "#a8c5ed", cell: "#93b9eb" },
-  { value: "black", label: "Preto (full black)", fill: "#111827", edge: "#4b5563", cell: "#6b7280" },
-  { value: "silver", label: "Prata (moldura)", fill: "#334155", edge: "#94a3b8", cell: "#cbd5e1" },
-  { value: "red", label: "Vermelho", fill: "#7f1d1d", edge: "#f87171", cell: "#fca5a5" },
-  { value: "green", label: "Verde", fill: "#14532d", edge: "#4ade80", cell: "#86efac" },
-];
-
-export const DEFAULT_SOLAR_MODULE_COLOR = "blue";
-
-export const getSolarModuleColorPreset = (value) => (
-  SOLAR_MODULE_COLOR_PRESETS.find((preset) => preset.value === value) || SOLAR_MODULE_COLOR_PRESETS[0]
-);
 
 const METERS_PER_DEGREE_LAT = 111_320;
 const COORD_PRECISION = 10_000_000;
