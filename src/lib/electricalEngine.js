@@ -716,9 +716,6 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   }
   
   // 4. Alimentação superior por fase conforme o tipo do quadro.
-  // Passa por um barramento principal antes do DJ GERAL (em vez de ligar direto no terminal
-  // de entrada), para que outros dispositivos que também precisem da fase de entrada possam
-  // derivar dali, do mesmo jeito que o barramento de terra e o de neutro já funcionam.
   const feedCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
   for (let i = 0; i < feedCount; i++) {
     wires.push({
@@ -726,14 +723,6 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       color: phaseWireColor(i),
       gauge: "10mm²",
       source: `terminal_left_top:${i + 1}`,
-      target: `busbar_main:${i}`,
-      label: "10 mm²"
-    });
-    wires.push({
-      id: `w_phase_main_to_brk_${i}`,
-      color: phaseWireColor(i),
-      gauge: "10mm²",
-      source: `busbar_main:${i}`,
       target: `comp:gen_brk:top:${i}`,
       label: "10 mm²"
     });
@@ -792,10 +781,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     }
   });
 
-  // Conexões de circuitos individuais.
-  // O neutro de cada circuito deriva do pente LOCAL de distribuição (busbar_neutral_dist),
-  // perto dos disjuntores — igual ao terra — em vez do barramento N lá em cima, na entrada.
-  let neutralDistPinIdx = 0;
+  // Conexões de circuitos individuais
   distributionBreakers.forEach((b, idx) => {
     if (breakerNeedsNeutral(b)) {
       const circuitGauge = b.wire_gauge || "2.5mm²";
@@ -809,11 +795,10 @@ export function generateDefaultPanelLayout(proj, options = {}) {
         circuitName: b.name,
         circuitLabel: b.circuitLabel || b.label,
         conductorType: "neutral",
-        source: `busbar_neutral_dist:${neutralDistPinIdx}`,
+        source: `busbar_neutral:${3 + idx}`,
         target: `load_out:${b.id}:neutral`,
         label: formatWireLabel(circuitGauge)
       });
-      neutralDistPinIdx += 1;
     }
     const circuitGauge = b.wire_gauge || "2.5mm²";
     wires.push({
@@ -832,350 +817,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     });
   });
 
-  const infrastructure = [
-    { id: "busbar_main", type: "main-busbar", label: "BARRAMENTO PRINCIPAL" },
-  ];
-
-  return { rails, wires, infrastructure };
-}
-
-// ─── Sincronização incremental do quadro ──────────────────────────────────────────────────────
-// Ao adicionar/remover um circuito (ex.: pela planta), NÃO recria o quadro do zero — isso jogava
-// fora toda a fiação já organizada manualmente. Aqui só adiciona/remove o que realmente mudou,
-// preservando disjuntores, posições e cabos (inclusive rotas customizadas) dos demais circuitos.
-export function mergeCircuitsIntoPanelLayout(proj, existingLayout, circuits = [], options = {}) {
-  const ROW_MAX = 18;
-  const project = proj || {};
-  const hasExistingLayout = Array.isArray(existingLayout?.rails)
-    && existingLayout.rails.some((rail) => (rail.components || []).some((comp) => comp.type !== "spacer"));
-
-  if (!hasExistingLayout) {
-    return generateDefaultPanelLayout({ ...project, circuits }, options);
-  }
-
-  const supply = project.supply_type || "Monofásico";
-  const phaseWireColor = (poleIndex = 0) => ["black", "red", "brown"][poleIndex] || "black";
-  const formatWireLabel = (gauge = "") => String(gauge || "").replace("mm²", " mm²");
-  const cleanDisplayText = (value = "") => String(value ?? "").replace(/\s+/g, " ").trim();
-  const isTechnicalDisplayText = (value = "") => {
-    const text = cleanDisplayText(value);
-    if (!text) return true;
-    return /^(retorno|conex[aã]o|fase|sa[ií]da)$/i.test(text)
-      || /^(circuit|circuit_group|breaker|busbar|load_out|comp|wire)[_: -]?\w*$/i.test(text);
-  };
-  const getCircuitNumber = (circuit = {}, index = null) => {
-    const explicit = cleanDisplayText(
-      circuit.circuitNumber ?? circuit.circuit_number ?? circuit.number ?? circuit.circuit_no ?? circuit.ref ?? "",
-    );
-    if (explicit) return explicit;
-    return Number.isFinite(Number(index)) ? `C${Number(index) + 1}` : "";
-  };
-  const getCircuitLabel = (circuit = {}, index = null) => {
-    const label = cleanDisplayText(circuit.label ?? circuit.circuit_label ?? "");
-    if (label && !isTechnicalDisplayText(label)) return label;
-    const number = getCircuitNumber(circuit, index);
-    const name = cleanDisplayText(circuit.name ?? circuit.circuit_name ?? "");
-    if (number && name && !isTechnicalDisplayText(name)) return `${number} - ${name}`;
-    if (name && !isTechnicalDisplayText(name)) return name;
-    return number || "Circuito sem identificação";
-  };
-  const circuitRef = (circuit = {}, index = null) => String(
-    circuit.id || circuit.circuit_id || circuit.source_point_id
-    || (Number.isFinite(Number(index)) ? `circuit_${index}` : ""),
-  );
-  const componentRefs = (component = {}) => [component.circuit_id, component.source_point_id, component.source, component.id]
-    .filter(Boolean).map(String);
-  const pinReferencesComponent = (pinId = "", componentId = "") => {
-    const pin = String(pinId || "");
-    const id = String(componentId || "");
-    return Boolean(pin && id) && (pin.startsWith(`comp:${id}:`) || pin.startsWith(`load_out:${id}:`));
-  };
-  const wireReferencesComponent = (wire = {}, componentId = "") => (
-    pinReferencesComponent(wire.source, componentId)
-    || pinReferencesComponent(wire.target, componentId)
-    || String(wire.componentId || wire.component_id || "") === String(componentId)
-  );
-  const phaseCountFor = (supplyType) => (supplyType === "Trifásico" ? 3 : supplyType === "Bifásico" ? 2 : 1);
-  const parseBusPinIndex = (pinId = "", prefix) => {
-    const match = String(pinId || "").match(new RegExp(`^${prefix}:(-?\\d+)$`));
-    return match ? Number(match[1]) : null;
-  };
-  const busPinIndexOfWire = (wire = {}, prefix) => {
-    const value = parseBusPinIndex(wire.source, prefix);
-    return value !== null ? value : parseBusPinIndex(wire.target, prefix);
-  };
-  const buildCircuitWires = (comp, sourceCompId, groundIndex, neutralIndex) => {
-    const gauge = comp.wire_gauge || "2.5mm²";
-    const label = formatWireLabel(gauge);
-    const poles = phaseCountFor(comp.supply_type);
-    const result = [];
-    for (let poleIndex = 0; poleIndex < poles; poleIndex += 1) {
-      const color = phaseWireColor(poleIndex);
-      result.push({
-        id: `w_r2_dist_out_${comp.id}_${poleIndex}`,
-        color,
-        gauge,
-        name: `Fase L${poleIndex + 1} - ${comp.circuitLabel || comp.label}`,
-        circuit_id: comp.circuit_id,
-        circuitNumber: comp.circuitNumber,
-        circuitName: comp.name,
-        circuitLabel: comp.circuitLabel || comp.label,
-        conductorType: "phase",
-        phase: `L${poleIndex + 1}`,
-        source: `comp:${sourceCompId}:bottom:${poleIndex}`,
-        target: `comp:${comp.id}:top:${poleIndex}`,
-        label,
-      });
-      result.push({
-        id: `w_circ_out_${comp.id}_${poleIndex}`,
-        color,
-        gauge,
-        name: `Fase L${poleIndex + 1} - ${comp.circuitLabel || comp.label}`,
-        circuit_id: comp.circuit_id,
-        circuitNumber: comp.circuitNumber,
-        circuitName: comp.name,
-        circuitLabel: comp.circuitLabel || comp.label,
-        conductorType: "phase",
-        phase: `L${poleIndex + 1}`,
-        source: `comp:${comp.id}:bottom:${poleIndex}`,
-        target: `load_out:${comp.id}:${poleIndex}`,
-        label,
-      });
-    }
-    if (comp.supply_type === "Monofásico") {
-      result.push({
-        id: `w_circ_n_${comp.id}`,
-        color: "blue",
-        gauge,
-        name: `Neutro - ${comp.circuitLabel || comp.label}`,
-        circuit_id: comp.circuit_id,
-        circuitNumber: comp.circuitNumber,
-        circuitName: comp.name,
-        circuitLabel: comp.circuitLabel || comp.label,
-        conductorType: "neutral",
-        source: `busbar_neutral_dist:${neutralIndex}`,
-        target: `load_out:${comp.id}:neutral`,
-        label,
-      });
-    }
-    result.push({
-      id: `w_circ_g_${comp.id}`,
-      color: "green",
-      gauge,
-      name: `Terra - ${comp.circuitLabel || comp.label}`,
-      circuit_id: comp.circuit_id,
-      circuitNumber: comp.circuitNumber,
-      circuitName: comp.name,
-      circuitLabel: comp.circuitLabel || comp.label,
-      conductorType: "ground",
-      source: `busbar_ground:${groundIndex}`,
-      target: `load_out:${comp.id}:ground`,
-      label,
-    });
-    return result;
-  };
-
-  const rails = existingLayout.rails.map((rail) => ({ ...rail, components: [...(rail.components || [])] }));
-  let wires = [...(existingLayout.wires || [])];
-  const infrastructure = Array.isArray(existingLayout.infrastructure) ? [...existingLayout.infrastructure] : [];
-
-  const getDistributionBreakers = () => rails.flatMap((rail) => rail.components || []).filter((comp) => (
-    comp.type === "breaker" && !comp.isGeneral && !comp.isQgbtFeeder && !String(comp.id || "").startsWith("qgbt_feed")
-  ));
-
-  // Cada circuito precisa do seu próprio pino no barramento de terra (todos) e de neutro
-  // (só monofásicos) — reaproveitar um pino fixo faz vários cabos convergirem no mesmo ponto
-  // físico e desorganiza o desenho ao mexer em qualquer um deles.
-  const usedGroundIndices = wires.map((wire) => busPinIndexOfWire(wire, "busbar_ground")).filter((value) => value !== null);
-  const usedNeutralIndices = wires.map((wire) => busPinIndexOfWire(wire, "busbar_neutral_dist")).filter((value) => value !== null);
-  let nextGroundIndex = (usedGroundIndices.length ? Math.max(...usedGroundIndices) : 3) + 1;
-  let nextNeutralIndex = (usedNeutralIndices.length ? Math.max(...usedNeutralIndices) : -1) + 1;
-
-  const breakers = getDistributionBreakers();
-  const matchedBreakerIds = new Set();
-  const newCircuitEntries = [];
-
-  circuits.forEach((circuit, index) => {
-    const ref = circuitRef(circuit, index);
-    const breaker = breakers.find((comp) => !matchedBreakerIds.has(comp.id) && componentRefs(comp).includes(ref));
-    if (!breaker) {
-      newCircuitEntries.push({ circuit, index });
-      return;
-    }
-    matchedBreakerIds.add(breaker.id);
-
-    const circuitNumber = getCircuitNumber(circuit, index);
-    const circuitLabel = getCircuitLabel(circuit, index);
-    const circuitName = cleanDisplayText(circuit.name ?? circuit.circuit_name ?? "");
-    const nextSupplyType = circuit.supply_type || "Monofásico";
-    const topologyChanged = (
-      phaseCountFor(nextSupplyType) !== phaseCountFor(breaker.supply_type || "Monofásico")
-      || nextSupplyType !== (breaker.supply_type || "Monofásico")
-    );
-
-    const updatedBreaker = {
-      ...breaker,
-      label: circuitLabel,
-      name: circuitName && !isTechnicalDisplayText(circuitName) ? circuitName : circuitLabel,
-      circuitNumber,
-      circuitLabel,
-      description: circuit.description || circuit.short_description || "",
-      circuit_id: circuit.id || circuit.circuit_id || circuit.source_point_id || breaker.circuit_id,
-      source: circuit.source ?? breaker.source,
-      source_point_id: circuit.source_point_id ?? breaker.source_point_id,
-      circuit_type: circuit.type ?? breaker.circuit_type,
-      conductorSection: circuit.conductorSection || circuit.wire_gauge || breaker.conductorSection,
-      current: circuit.breaker_a || 16,
-      curve: circuit.breaker_curve || "B",
-      poles: circuit.breaker_poles || 1,
-      phase: circuit.phase || "A",
-      supply_type: nextSupplyType,
-      wire_gauge: circuit.wire_gauge || breaker.wire_gauge,
-      conduit_diameter: circuit.conduit_diameter || breaker.conduit_diameter,
-    };
-
-    for (const rail of rails) {
-      const idx = rail.components.findIndex((comp) => comp.id === breaker.id);
-      if (idx === -1) continue;
-      rail.components[idx] = updatedBreaker;
-      break;
-    }
-
-    if (topologyChanged) {
-      // Mudança estrutural (ex.: monofásico → trifásico): só essa fiação precisa ser refeita.
-      // Mantém o mesmo pino de terra/neutro que o circuito já tinha (se tinha) em vez de
-      // sortear um novo, para não deslocar a ligação sem necessidade.
-      const priorGroundWire = wires.find((wire) => wireReferencesComponent(wire, breaker.id) && busPinIndexOfWire(wire, "busbar_ground") !== null);
-      const priorNeutralWire = wires.find((wire) => wireReferencesComponent(wire, breaker.id) && busPinIndexOfWire(wire, "busbar_neutral_dist") !== null);
-      const groundIndex = priorGroundWire ? busPinIndexOfWire(priorGroundWire, "busbar_ground") : nextGroundIndex++;
-      const neutralIndex = nextSupplyType === "Monofásico"
-        ? (priorNeutralWire ? busPinIndexOfWire(priorNeutralWire, "busbar_neutral_dist") : nextNeutralIndex++)
-        : null;
-      wires = wires.filter((wire) => !wireReferencesComponent(wire, breaker.id));
-      const hasDR = rails.some((rail) => rail.components.some((comp) => comp.id === "gen_dr"));
-      wires.push(...buildCircuitWires(updatedBreaker, hasDR ? "gen_dr" : "gen_brk", groundIndex, neutralIndex));
-    } else {
-      const gauge = updatedBreaker.wire_gauge || "2.5mm²";
-      const label = formatWireLabel(gauge);
-      wires = wires.map((wire) => (
-        wireReferencesComponent(wire, breaker.id) && wire.gauge !== gauge
-          ? { ...wire, gauge, label }
-          : wire
-      ));
-    }
-  });
-
-  const staleBreakers = breakers.filter((comp) => !matchedBreakerIds.has(comp.id));
-  if (staleBreakers.length > 0) {
-    const staleIds = new Set(staleBreakers.map((comp) => String(comp.id)));
-    for (const rail of rails) {
-      rail.components = rail.components.filter((comp) => !staleIds.has(String(comp.id)));
-    }
-    wires = wires.filter((wire) => !staleBreakers.some((comp) => wireReferencesComponent(wire, comp.id)));
-  }
-
-  // Disjuntor/IDR geral: sempre recalculado a partir de calcMainProtection (fonte única de verdade),
-  // para bater com o editor de circuitos, balanceamento e orçamento mesmo após a sincronização incremental.
-  const mainProtection = calcMainProtection({ ...project, circuits, supply_type: supply, voltage: project.voltage || 220 });
-  for (const rail of rails) {
-    rail.components = rail.components.map((comp) => {
-      if (comp.id === "gen_brk") return { ...comp, current: mainProtection.breaker.current, poles: mainProtection.breaker.poles };
-      if (comp.id === "gen_dr") return { ...comp, current: mainProtection.dr.current, poles: mainProtection.dr.poles };
-      return comp;
-    });
-  }
-
-  if (newCircuitEntries.length > 0) {
-    const hasDR = rails.some((rail) => rail.components.some((comp) => comp.id === "gen_dr"));
-    const sourceCompId = hasDR ? "gen_dr" : "gen_brk";
-    let targetRailIndex = -1;
-    for (let i = rails.length - 1; i >= 0; i -= 1) {
-      if (rails[i].id !== "rail_1") { targetRailIndex = i; break; }
-    }
-    if (targetRailIndex === -1) {
-      rails.push({ id: `rail_${rails.length + 1}`, name: "Trilho DIN Central (Distribuição)", components: [] });
-      targetRailIndex = rails.length - 1;
-    }
-
-    newCircuitEntries.forEach(({ circuit, index }) => {
-      const rawId = circuit.id || circuit.circuit_id || circuit.source_point_id || `circuit_${index}`;
-      const safeId = `circuit_${String(rawId).replace(/[^a-zA-Z0-9_-]/g, "_")}`;
-      const circuitNumber = getCircuitNumber(circuit, index);
-      const circuitLabel = getCircuitLabel(circuit, index);
-      const circuitName = cleanDisplayText(circuit.name ?? circuit.circuit_name ?? "");
-      const supplyType = circuit.supply_type || "Monofásico";
-      const comp = {
-        id: safeId,
-        type: "breaker",
-        label: circuitLabel,
-        name: circuitName && !isTechnicalDisplayText(circuitName) ? circuitName : circuitLabel,
-        circuitNumber,
-        circuitLabel,
-        description: circuit.description || circuit.short_description || "",
-        circuit_id: circuit.id || circuit.circuit_id || circuit.source_point_id || safeId,
-        source: circuit.source,
-        source_point_id: circuit.source_point_id,
-        circuit_type: circuit.type,
-        conductorSection: circuit.conductorSection || circuit.wire_gauge,
-        current: circuit.breaker_a || 16,
-        curve: circuit.breaker_curve || "B",
-        poles: circuit.breaker_poles || 1,
-        phase: circuit.phase || "A",
-        supply_type: supplyType,
-        wire_gauge: circuit.wire_gauge,
-        conduit_diameter: circuit.conduit_diameter,
-        status: "ON",
-      };
-      rails[targetRailIndex].components.push(comp);
-      const groundIndex = nextGroundIndex++;
-      const neutralIndex = supplyType === "Monofásico" ? nextNeutralIndex++ : null;
-      wires.push(...buildCircuitWires(comp, sourceCompId, groundIndex, neutralIndex));
-    });
-  }
-
-  // Redistribui módulos que excederam o limite do trilho (ROW_MAX) e repõe a reserva técnica,
-  // sem mexer nos componentes/cabos que não foram tocados acima.
-  let normalizedRails = rails.map((rail) => ({
-    ...rail,
-    components: (rail.components || []).filter((comp) => comp.type !== "spacer"),
-  }));
-  for (let i = 0; i < normalizedRails.length; i += 1) {
-    const rail = normalizedRails[i];
-    let used = 0;
-    const fit = [];
-    const overflow = [];
-    rail.components.forEach((comp) => {
-      if (used + (Number(comp.poles) || 0) <= ROW_MAX) {
-        fit.push(comp);
-        used += Number(comp.poles) || 0;
-      } else {
-        overflow.push(comp);
-      }
-    });
-    normalizedRails[i] = { ...rail, components: fit };
-    if (overflow.length > 0) {
-      if (i + 1 < normalizedRails.length) {
-        normalizedRails[i + 1] = { ...normalizedRails[i + 1], components: [...overflow, ...normalizedRails[i + 1].components] };
-      } else {
-        normalizedRails.push({ id: `rail_${normalizedRails.length + 1}`, name: `Trilho DIN T${normalizedRails.length + 1} (Expansão)`, components: overflow });
-      }
-    }
-  }
-  normalizedRails = normalizedRails.map((rail) => {
-    const used = rail.components.reduce((sum, comp) => sum + (Number(comp.poles) || 0), 0);
-    if (used >= ROW_MAX) return rail;
-    return {
-      ...rail,
-      components: [...rail.components, {
-        id: `spacer_${rail.id}`,
-        type: "spacer",
-        poles: ROW_MAX - used,
-        label: "RESERVA TÉCNICA",
-      }],
-    };
-  });
-
-  return { rails: normalizedRails, wires, infrastructure };
+  return { rails, wires, infrastructure: [] };
 }
 
 export function buildPanelBoardsWithLayout(project, panelLayout = generateDefaultPanelLayout(project, { forceDistribution: true })) {
@@ -1227,12 +869,7 @@ export function buildProjectElectricalSyncPayload(project, circuits = []) {
   const syncedCircuits = Array.isArray(circuits) ? circuits : [];
   const totalDemand = calculateProjectDemand(syncedCircuits);
   const projectForPanel = { ...(project || {}), circuits: syncedCircuits, total_demand_w: totalDemand };
-  const existingBoards = Array.isArray(project?.panel_boards) ? project.panel_boards : [];
-  const existingPrimaryBoard = existingBoards.find((board) => (
-    !["qgbt", "solar_ac"].includes(String(board?.type || "").toLowerCase())
-  ));
-  const existingLayout = existingPrimaryBoard?.layout || project?.panel_layout || null;
-  const panelLayout = mergeCircuitsIntoPanelLayout(projectForPanel, existingLayout, syncedCircuits, { forceDistribution: true });
+  const panelLayout = generateDefaultPanelLayout(projectForPanel, { forceDistribution: true });
   const panelBoards = buildPanelBoardsWithLayout(projectForPanel, panelLayout);
 
   return {

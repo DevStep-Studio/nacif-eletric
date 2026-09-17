@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
 import ProfessionalBoardSheetSVG from "@/components/ProfessionalBoardSheetSVG";
-import { panelHasGeneralDr } from "@/lib/professionalPanelBoardLibrary";
 import QgbtDiagramSheetSVG from "@/components/QgbtDiagramSheetSVG";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
@@ -763,35 +762,6 @@ const drawPath = (fromNode, toNode) => {
 };
 
 // Gerador Automático de Nós e Conexões (NBR 5410)
-const removeDefaultDrFromDiagram = (layout = {}) => {
-  const nodes = Array.isArray(layout.nodes) ? layout.nodes : [];
-  const connections = Array.isArray(layout.connections) ? layout.connections : [];
-  if (!nodes.some((node) => node.id === "node-dr")) return { nodes, connections };
-
-  const nextNodes = nodes.filter((node) => node.id !== "node-dr");
-  const nextConnections = connections.filter((connection) => (
-    connection.from !== "node-dr" && connection.to !== "node-dr"
-  ));
-  const hasMainToBusbar = nextConnections.some((connection) => (
-    connection.from === "node-general-breaker" && connection.to === "node-busbar"
-  ));
-
-  if (
-    !hasMainToBusbar
-    && nextNodes.some((node) => node.id === "node-general-breaker")
-    && nextNodes.some((node) => node.id === "node-busbar")
-  ) {
-    nextConnections.push({
-      id: "c-breaker-to-busbar",
-      from: "node-general-breaker",
-      to: "node-busbar",
-      type: "fase",
-    });
-  }
-
-  return { nodes: nextNodes, connections: nextConnections };
-};
-
 function generateDefaultNodesAndConnections(proj, projMetrics) {
   const initialNodes = [];
   const initialConnections = [];
@@ -855,29 +825,26 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
     type: "fase"
   });
 
-  // 4. DR Geral — só integra o unifilar quando existe no layout do quadro.
-  const hasGeneralDr = panelHasGeneralDr(proj);
-  if (hasGeneralDr) {
-    const drAmps = projMetrics?.generalDr || selectDrRating(mainBreakerAmps);
-    initialNodes.push({
-      id: "node-dr",
-      type: "dr",
-      x: 80,
-      y: 320,
-      title: "DR GERAL",
-      subtitle: "Diferencial 30mA",
-      value: `${drAmps}A`,
-      phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
-      accentColor: "#005188",
-      active: true
-    });
-    initialConnections.push({
-      id: "c-breaker-to-dr",
-      from: "node-general-breaker",
-      to: "node-dr",
-      type: "fase"
-    });
-  }
+  // 4. DR Geral — In do IDR ≥ In do disjuntor geral (mesmo dimensionamento das demais telas)
+  const drAmps = projMetrics?.generalDr || selectDrRating(mainBreakerAmps);
+  initialNodes.push({
+    id: "node-dr",
+    type: "dr",
+    x: 80,
+    y: 320,
+    title: "DR GERAL",
+    subtitle: "Diferencial 30mA",
+    value: `${drAmps}A`,
+    phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
+    accentColor: "#005188",
+    active: true
+  });
+  initialConnections.push({
+    id: "c-breaker-to-dr",
+    from: "node-general-breaker",
+    to: "node-dr",
+    type: "fase"
+  });
 
   // 5. Barramento Principal
   initialNodes.push({
@@ -893,8 +860,8 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
     active: true
   });
   initialConnections.push({
-    id: hasGeneralDr ? "c-dr-to-busbar" : "c-breaker-to-busbar",
-    from: hasGeneralDr ? "node-dr" : "node-general-breaker",
+    id: "c-dr-to-busbar",
+    from: "node-dr",
     to: "node-busbar",
     type: "fase"
   });
@@ -1029,11 +996,8 @@ export default function UnifilarDiagram() {
         try {
           const layout = typeof p.diagram_layout === "string" ? JSON.parse(p.diagram_layout) : p.diagram_layout;
           if (layout && Array.isArray(layout.nodes) && layout.nodes.length > 0) {
-            const reconciledLayout = panelHasGeneralDr(p)
-              ? { nodes: layout.nodes, connections: layout.connections || [] }
-              : removeDefaultDrFromDiagram(layout);
-            setNodes(reconciledLayout.nodes);
-            setConnections(reconciledLayout.connections);
+            setNodes(layout.nodes);
+            setConnections(layout.connections || []);
             clearHistory();
             return;
           }

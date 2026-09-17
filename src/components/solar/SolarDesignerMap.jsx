@@ -146,25 +146,6 @@ function MapViewportEvents({ onViewportChange }) {
   return null;
 }
 
-function CompassBadge() {
-  return (
-    <div
-      className="pointer-events-none absolute right-4 top-4 z-[500] flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-[#101823]/90 shadow-[0_10px_28px_rgba(0,0,0,0.45)] backdrop-blur-sm"
-      title="Norte geográfico (o mapa não está rotacionado: norte é sempre para cima)"
-    >
-      <svg viewBox="0 0 100 100" className="h-11 w-11" aria-hidden="true">
-        <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" />
-        <polygon points="50,9 59,50 50,43 41,50" fill="#ff4d4f" />
-        <polygon points="50,91 59,50 50,57 41,50" fill="#cbd5e1" />
-        <text x="50" y="24" textAnchor="middle" fontSize="16" fontWeight="700" fill="#ffffff">N</text>
-        <text x="50" y="84" textAnchor="middle" fontSize="11" fontWeight="600" fill="#9aa7ba">S</text>
-        <text x="16" y="54" textAnchor="middle" fontSize="11" fontWeight="600" fill="#9aa7ba">O</text>
-        <text x="84" y="54" textAnchor="middle" fontSize="11" fontWeight="600" fill="#9aa7ba">L</text>
-      </svg>
-    </div>
-  );
-}
-
 function MapFitController({ roofPolygon, request }) {
   const map = useMap();
   const lastRequestRef = useRef(0);
@@ -316,7 +297,6 @@ export default function SolarDesignerMap({
   onRoofChange,
   onViewportChange,
   showBadges = true,
-  showCompass = true,
   showMeasurements = true,
   showMiniMap = false,
 }) {
@@ -394,8 +374,6 @@ export default function SolarDesignerMap({
       <div className="pointer-events-none absolute bottom-0 right-4 z-[500] rounded-t-[2px] bg-white/75 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-[#334155]">
         Leaflet · Imagens © Esri
       </div>
-
-      {showCompass && <CompassBadge />}
 
       {showBadges && (
         <div className="pointer-events-none absolute left-4 top-4 z-[500] flex max-w-[calc(100%-2rem)] flex-wrap gap-2">

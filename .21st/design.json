@@ -232,18 +232,7 @@
     "must": [],
     "avoid": []
   },
-  "decisions": [
-    {
-      "id": "panel-industrial-layout",
-      "decision": "O editor de quadros oferece gabinetes comerciais A×L×P, trilhos horizontais ou verticais, canaletas laterais e barramentos N/PE orientáveis, mantendo o visual técnico industrial existente.",
-      "source": "Solicitação do usuário em 2026-09-11"
-    },
-    {
-      "id": "panel-device-orientation",
-      "decision": "Dispositivos DIN podem acompanhar automaticamente o trilho ou receber orientação individual em pé/lateral a 90 graus.",
-      "source": "Solicitação do usuário em 2026-09-11"
-    }
-  ],
+  "decisions": [],
   "evidence": [
     {
       "fact": "components.installed",
