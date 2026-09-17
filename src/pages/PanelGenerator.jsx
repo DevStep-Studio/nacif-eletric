@@ -30,7 +30,9 @@ import {
   ChevronRight,
   Save,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles,
+  Edit3
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 
@@ -2003,7 +2005,7 @@ const getNeutralBusTieRoute = (infrastructure = [], panelH = 820) => {
   ]);
 };
 
-const getGroundBackboneRoute = (panelH, infrastructure = []) => {
+const getGroundBackboneRoute = (panelH, infrastructure = [], panelW = PANEL_W) => {
   const groundBus = getGroundBusLayout(infrastructure, panelH, panelW);
   const busPin = getBusPinPoint(groundBus, GROUND_BUS.pinCount - 1);
   return cleanRoutePoints([
@@ -2014,7 +2016,7 @@ const getGroundBackboneRoute = (panelH, infrastructure = []) => {
   ]);
 };
 
-const getGroundBusTieRoute = (panelH, infrastructure = []) => {
+const getGroundBusTieRoute = (panelH, infrastructure = [], panelW = PANEL_W) => {
   const groundBus = getGroundBusLayout(infrastructure, panelH, panelW);
   const busPin = getBusPinPoint(groundBus, GROUND_BUS.pinCount - 1);
   const tieX = busPin.x;
@@ -2324,6 +2326,7 @@ export default function PanelGenerator() {
     }
   }; // { infraId, edge, startPoint, startItem }
   const [selectedTextWireId, setSelectedTextWireId] = useState("");
+  const [textVisibility, setTextVisibility] = useState({});
   const [selectedAnnotationId, setSelectedAnnotationId] = useState("");
   const [selectedRoutePoint, setSelectedRoutePoint] = useState(null);
   const [annotationPreset, setAnnotationPreset] = useState("observacao");
@@ -3179,6 +3182,7 @@ export default function PanelGenerator() {
     36,
     Math.max(6, Math.min(36, Math.floor((boardSize.width - 80) / 20)))
   );
+  const railOrientation = rails.some((rail) => getRailOrientation(rail) === "vertical") ? "vertical" : "horizontal";
   const busOrientation = ["neutral-bus-dist", "ground-bus"].some((id) => (
     infrastructure.find((item) => item.id === id)?.orientation === "vertical"
   )) ? "vertical" : "horizontal";
@@ -8760,7 +8764,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       const groundY = groundLayout.y;
                       const groundVertical = groundLayout.orientation === "vertical";
                       const isSelected = selectedInfrastructureId === "ground-bus";
-                      const isTextHidden = (textVisibility["ground-bus"] === false) || (textVisibility.all === false) || groundBus.hideLabel;
+                      const isTextHidden = (textVisibility?.["ground-bus"] === false) || (textVisibility?.all === false) || groundBus.hideLabel;
                       const isTextSelected = selectedTextWireId === "ground-bus";
                       return (
                         <g 
@@ -8873,7 +8877,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       const distNeutralLayout = getDistNeutralBusLayout(infrastructure, panelHeight, panelWidth);
                       const distVertical = distNeutralLayout.orientation === "vertical";
                       const isSelected = selectedInfrastructureId === "neutral-bus-dist" || selectedInfrastructureId === "neutral-bus";
-                      const isTextHidden = (textVisibility["neutral-bus"] === false) || (textVisibility["neutral-bus-dist"] === false) || (textVisibility.all === false) || distNeutralBus.hideLabel;
+                      const isTextHidden = (textVisibility?.["neutral-bus"] === false) || (textVisibility?.["neutral-bus-dist"] === false) || (textVisibility?.all === false) || distNeutralBus.hideLabel;
                       const isTextSelected = selectedTextWireId === "neutral-bus-dist" || selectedTextWireId === "neutral-bus";
                       return (
                         <g 
@@ -9052,7 +9056,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
                           {/* Nome do Trilho */}
                           {(() => {
-                            const isRailHidden = r.hideLabel || (textVisibility.rails === false) || (textVisibility.all === false);
+                            const isRailHidden = r.hideLabel || (textVisibility?.rails === false) || (textVisibility?.all === false);
                             const railName = (r.name || "").trim();
                             if (isRailHidden || !railName) return null;
                             const railLabelId = `rail-label:${r.id || rIdx}`;
