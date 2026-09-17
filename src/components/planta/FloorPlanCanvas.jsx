@@ -2255,16 +2255,16 @@ function ImportedPlanLayer({ elements }) {
   if (lines.length === 0 && texts.length === 0) return null;
 
   return (
-    <Group listening={false} opacity={0.42}>
+    <Group listening={false} opacity={0.88}>
       {lines.map((line) => (
         <Line
           key={line.id}
           points={[line.x1, line.y1, line.x2, line.y2]}
           stroke={TECH_BLACK}
-          strokeWidth={line.strokeWidth || 1}
-          lineCap="square"
-          lineJoin="miter"
-          opacity={0.98}
+          strokeWidth={line.strokeWidth || 1.2}
+          lineCap="round"
+          lineJoin="round"
+          opacity={1.0}
         />
       ))}
       {texts.map((item) => (
@@ -2275,7 +2275,8 @@ function ImportedPlanLayer({ elements }) {
           width={item.width || 120}
           text={item.text}
           fontFamily="Arial"
-          fontSize={item.fontSize || 8}
+          fontSize={item.fontSize || 9}
+          fontStyle="bold"
           fill={TECH_BLACK}
         />
       ))}
@@ -3227,7 +3228,7 @@ export default function FloorPlanCanvas({
                 y={planImageRect.y}
                 width={planImageRect.w}
                 height={planImageRect.h}
-                opacity={hasImportedPlanElements ? 0.9 : 0.97}
+                opacity={1.0}
               />
             )}
             <Group x={contentOffset.x} y={contentOffset.y}>

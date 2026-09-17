@@ -681,11 +681,11 @@ const renderPdfFirstPage = async (file) => {
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const page = await pdf.getPage(1);
   const baseViewport = page.getViewport({ scale: 1 });
-  // Rasteriza a página vetorial em alta resolução: plantas são desenho de linha,
-  // então quanto mais pixels, mais nítido o zoom no editor e na prancha final.
-  const targetWidth = 3800;
-  const maxRasterSide = 5200;
-  let scale = Math.min(4.5, Math.max(2, targetWidth / Math.max(1, baseViewport.width)));
+  // Rasteriza a página vetorial em altíssima resolução para plantas arquitetônicas e CAD:
+  // linhas ultra nítidas, textos perfeitamente legíveis mesmo com zoom elevado no editor.
+  const targetWidth = 4800;
+  const maxRasterSide = 7200;
+  let scale = Math.min(6, Math.max(2.5, targetWidth / Math.max(1, baseViewport.width)));
   const longestBaseSide = Math.max(baseViewport.width, baseViewport.height);
   if (longestBaseSide * scale > maxRasterSide) {
     scale = maxRasterSide / longestBaseSide;
@@ -699,7 +699,11 @@ const renderPdfFirstPage = async (file) => {
   context.imageSmoothingQuality = "high";
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, canvas.width, canvas.height);
-  await page.render({ canvasContext: context, viewport }).promise;
+  await page.render({
+    canvasContext: context,
+    viewport,
+    intent: "print",
+  }).promise;
   const textContent = await page.getTextContent();
   const texts = textContent.items
     .map((item, index) => {
@@ -720,7 +724,7 @@ const renderPdfFirstPage = async (file) => {
     })
     .filter(Boolean);
   return {
-    // PNG (sem perdas) evita o serrilhado/"chuvisco" do JPEG em volta de cada linha e texto.
+    // PNG sem compressão destrutiva evita borrões em volta de linhas e cotas
     dataUrl: canvas.toDataURL("image/png"),
     width: canvas.width,
     height: canvas.height,
@@ -730,9 +734,9 @@ const renderPdfFirstPage = async (file) => {
 
 const enhancePlanImage = async (src, options = {}) => {
   const image = await loadImage(src);
-  // Preserva a resolução da planta importada (o dobro do que era antes) para o zoom
-  // no editor não ficar borrado. Só reduz plantas realmente gigantes.
-  const maxSide = 3600;
+  // Preserva a resolução máxima original da planta importada (até 5400px),
+  // garantindo detalhes finos de paredes, portas e símbolos elétricos.
+  const maxSide = 5400;
   const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
   let width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
   let height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
@@ -799,29 +803,67 @@ const enhancePlanImage = async (src, options = {}) => {
 
   const lines = extractPlanLineSegments(imageData, width, height);
   const data = imageData.data;
-  // Realce suave: aumenta o contraste em torno de um pivô, limpa o fundo de papel
-  // para branco puro e mantém a suavização (anti-aliasing) das linhas e as linhas
-  // finas de construção — sem o "corte" duro que deixava tudo serrilhado e lavado.
-  const contrast = 1.32;
-  const pivot = 140;
-  for (let index = 0; index < data.length; index += 4) {
-    const luminance = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
-    let value = (luminance - pivot) * contrast + pivot;
-    if (value >= 250) {
-      value = 255;
-    } else if (value > 216) {
-      value += (value - 216) * 0.4;
+
+  // Analisa presença de cores na planta (ex: circuitos coloridos, zonas de ambientes ou anotações)
+  let colorSamples = 0;
+  let colorScore = 0;
+  const sampleStep = Math.max(1, Math.floor(data.length / 40000));
+  for (let i = 0; i < data.length; i += sampleStep * 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    if (max - min > 28 && max < 240) {
+      colorScore += 1;
     }
-    value = value < 0 ? 0 : value > 255 ? 255 : value;
-    data[index] = value;
-    data[index + 1] = value;
-    data[index + 2] = value;
+    colorSamples += 1;
+  }
+  const hasChroma = colorSamples > 0 && (colorScore / colorSamples) > 0.015;
+
+  const contrast = 1.28;
+  const pivot = 138;
+
+  for (let index = 0; index < data.length; index += 4) {
+    const r = data[index];
+    const g = data[index + 1];
+    const b = data[index + 2];
+    const luminance = r * 0.299 + g * 0.587 + b * 0.114;
+
+    if (hasChroma) {
+      // Preserva elementos coloridos clareando o fundo de papel para branco puro
+      if (luminance >= 242 && (Math.max(r, g, b) - Math.min(r, g, b) < 18)) {
+        data[index] = 255;
+        data[index + 1] = 255;
+        data[index + 2] = 255;
+      } else {
+        const factor = luminance < pivot ? 0.92 : 1.04;
+        data[index] = Math.min(255, Math.max(0, Math.round(r * factor)));
+        data[index + 1] = Math.min(255, Math.max(0, Math.round(g * factor)));
+        data[index + 2] = Math.min(255, Math.max(0, Math.round(b * factor)));
+      }
+    } else {
+      // Monocromático: Realce suave com anti-aliasing preservado e pretos profundos
+      let value = (luminance - pivot) * contrast + pivot;
+      if (value >= 248) {
+        value = 255;
+      } else if (value > 218) {
+        value += (value - 218) * 0.45;
+      } else if (value < 45) {
+        value = Math.max(0, value * 0.85);
+      }
+      value = value < 0 ? 0 : value > 255 ? 255 : Math.round(value);
+      data[index] = value;
+      data[index + 1] = value;
+      data[index + 2] = value;
+    }
     data[index + 3] = 255;
   }
   ctx.putImageData(imageData, 0, 0);
-  // PNG mantém as linhas nítidas; cai para JPEG de alta qualidade só se o PNG ficar pesado demais.
+
   const pngUrl = canvas.toDataURL("image/png");
-  const dataUrl = pngUrl.length > 5500000 ? canvas.toDataURL("image/jpeg", 0.95) : pngUrl;
+  // Mantém PNG de máxima nitidez sem perdas
+  const dataUrl = pngUrl.length > 20000000 ? canvas.toDataURL("image/jpeg", 0.98) : pngUrl;
   return {
     dataUrl,
     cropped,
@@ -832,13 +874,12 @@ const enhancePlanImage = async (src, options = {}) => {
   };
 };
 
-// Converte um SVG (vetor, sem resolução fixa) em bitmap de alta resolução antes do
-// realce, para não cair no palpite de 1200x800 nem depender do redimensionamento do canvas.
+// Converte SVG em bitmap de altíssima definição (até 5400px) garantindo que vetores fiquem super nítidos
 const rasterizeVectorImage = async (dataUrl) => {
   const image = await loadImage(dataUrl);
   const baseW = image.naturalWidth || image.width || 1400;
   const baseH = image.naturalHeight || image.height || 990;
-  const rasterScale = Math.min(4, Math.max(2, 3000 / Math.max(baseW, baseH)));
+  const rasterScale = Math.min(5, Math.max(2.5, 4800 / Math.max(baseW, baseH)));
   const targetW = Math.max(1, Math.round(baseW * rasterScale));
   const targetH = Math.max(1, Math.round(baseH * rasterScale));
   const canvas = document.createElement("canvas");
@@ -2939,8 +2980,11 @@ export default function PlantaIA() {
     try {
       const canvas = await html2canvas(canvasExportRef.current, {
         backgroundColor: "#ffffff",
-        scale: 3,
+        scale: 4,
         useCORS: true,
+        allowTaint: true,
+        imageTimeout: 0,
+        logging: false,
       });
       const cropPadding = Math.max(160, Math.round(Math.max(canvas.width, canvas.height) * 0.07));
       const exportCanvas = cropCanvasToContent(canvas, cropPadding);
