@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/components/ui/use-toast";
 import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
 import Solar3DView from "@/components/solar/Solar3DView";
@@ -25,7 +24,6 @@ import {
   buildRoofPolygon,
   calculateStringGrouping,
   computeRoofFaceTechnicalAnalysis,
-  getAzimuthWithCardinal,
   getBestPanelLayout,
   getPolygonAreaSquareMeters,
   getRoofCenterFromConfig,
@@ -34,33 +32,24 @@ import {
   serializeRoofPolygon,
 } from "@/lib/solarDesignerGeometry";
 import { estimateAnnualGenerationKwh, estimateAnnualSavingsBrl, estimateSimplePaybackYears } from "@/lib/solarSizing";
-import { generateDefaultPanelLayout, getPrimaryPanelBoard, mergeSolarLayoutIntoPrincipal } from "@/lib/electricalEngine";
 import { geocodeAddress, suggestRoofContour } from "@/lib/solarAiServices";
 import { printExecutiveSolarReport } from "@/lib/solarReportGenerator";
 import {
   ArrowLeft,
   AlertTriangle,
-  BarChart3,
   Box,
   Check,
-  CheckCircle2,
   ChevronDown,
   Compass,
   Download,
   Flame,
   Grid2X2,
-  HelpCircle,
   Home,
-  Info,
   Layers,
   Loader2,
-  Lock,
   Map as MapIcon,
   MapPin,
-  Maximize2,
-  Minus,
   MousePointer2,
-  Move3D,
   Pencil,
   PiggyBank,
   Plus,
@@ -70,9 +59,7 @@ import {
   RotateCw,
   Save,
   Search,
-  Settings,
   ShieldAlert,
-  ShieldCheck,
   Sliders,
   Sparkles,
   Square,
@@ -117,6 +104,8 @@ const OBSTACLE_PRESETS = [
   { type: "arvore", name: "Árvore / Sombra", icon: Sun, radius: 1.8 },
   { type: "custom", name: "Obstáculo Personalizado", icon: ShieldAlert, radius: 1.0 },
 ];
+
+const DEFAULT_OBSTACLE_PRESET = OBSTACLE_PRESETS[0];
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -701,44 +690,22 @@ export default function SolarProject() {
 
           <span className="mx-1 h-5 w-px bg-white/10" />
 
-          {/* Ferramenta de Obstáculos (Menu Dropdown → clique no mapa para posicionar) */}
+          {/* Ferramenta de Obstáculos: botão direto (sem menu flutuante) — um clique arma
+              o modo de desenho e o clique seguinte no telhado posiciona o obstáculo.
+              O tipo é escolhido nas fichas da aba "Obstáculos" da barra lateral. */}
           <div className="flex items-center gap-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={`flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition ${
-                    pendingObstaclePreset
-                      ? "border-rose-400 bg-rose-500/20 text-rose-200 animate-pulse"
-                      : "border-white/10 bg-slate-950/60 text-rose-300 hover:bg-slate-900"
-                  }`}
-                >
-                  <Plus className="h-3.5 w-3.5 text-rose-400" />
-                  <span>Obstáculo</span>
-                  <ChevronDown className="h-3 w-3 opacity-60" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56 bg-slate-900 border-white/15 text-white">
-                <DropdownMenuLabel className="text-[11px] font-bold text-white/50 uppercase">
-                  Desenhar Obstáculo no Telhado
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-white/10" />
-                {OBSTACLE_PRESETS.map((preset) => {
-                  const Icon = preset.icon;
-                  return (
-                    <DropdownMenuItem
-                      key={preset.type}
-                      onClick={() => handleStartPlaceObstacle(preset)}
-                      className="flex items-center gap-2 p-2 text-xs font-semibold focus:bg-white/10 focus:text-white cursor-pointer"
-                    >
-                      <Icon className="h-4 w-4 text-rose-400" />
-                      <span>{preset.name}</span>
-                      <span className="ml-auto text-[10px] text-white/40">+{preset.radius}m</span>
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button
+              type="button"
+              onClick={() => handleStartPlaceObstacle(pendingObstaclePreset || DEFAULT_OBSTACLE_PRESET)}
+              className={`flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition ${
+                pendingObstaclePreset
+                  ? "border-rose-400 bg-rose-500/20 text-rose-200 animate-pulse"
+                  : "border-white/10 bg-slate-950/60 text-rose-300 hover:bg-slate-900"
+              }`}
+            >
+              <Plus className="h-3.5 w-3.5 text-rose-400" />
+              <span>{pendingObstaclePreset ? "Clique no telhado" : "Obstáculo"}</span>
+            </button>
 
             {pendingObstaclePreset && (
               <button
@@ -1008,33 +975,48 @@ export default function SolarProject() {
           {/* Conteúdo da Aba 2: Obstáculos no Telhado (Adicionar, Arrastar, Ajustar Raio) */}
           {activeSidebarTab === "obstacles" && (
             <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="border-b border-white/10 pb-3 space-y-3">
                 <div>
                   <h3 className="text-sm font-black text-white">Obstáculos no Telhado</h3>
-                  <p className="text-[11px] text-white/50">Escolha um tipo e clique no telhado para desenhar. Depois arraste o marcador e ajuste o raio.</p>
+                  <p className="text-[11px] text-white/50">
+                    {pendingObstaclePreset
+                      ? `Clique no telhado para desenhar "${pendingObstaclePreset.name}".`
+                      : "Escolha um tipo abaixo e clique no telhado para desenhar. Depois arraste o marcador e ajuste o raio."}
+                  </p>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" className="h-7 px-2.5 bg-rose-500 hover:bg-rose-600 text-slate-950 font-bold text-xs rounded-lg">
-                      <Plus className="mr-1 h-3.5 w-3.5" /> Adicionar
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52 bg-slate-900 border-white/15 text-white">
-                    {OBSTACLE_PRESETS.map((preset) => {
-                      const Icon = preset.icon;
-                      return (
-                        <DropdownMenuItem
-                          key={preset.type}
-                          onClick={() => handleStartPlaceObstacle(preset)}
-                          className="flex items-center gap-2 p-2 text-xs font-semibold focus:bg-white/10 cursor-pointer"
-                        >
-                          <Icon className="h-4 w-4 text-rose-400" />
-                          <span>{preset.name}</span>
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+
+                {/* Fichas inline (sem menu flutuante): clicar arma o modo de desenho */}
+                <div className="grid grid-cols-2 gap-1.5">
+                  {OBSTACLE_PRESETS.map((preset) => {
+                    const Icon = preset.icon;
+                    const isArmed = pendingObstaclePreset?.type === preset.type;
+                    return (
+                      <button
+                        key={preset.type}
+                        type="button"
+                        onClick={() => handleStartPlaceObstacle(preset)}
+                        className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[11px] font-bold transition ${
+                          isArmed
+                            ? "border-rose-400 bg-rose-500/20 text-rose-200"
+                            : "border-white/10 bg-slate-950/60 text-white/70 hover:border-rose-400/50 hover:text-white"
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+                        <span className="truncate">{preset.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {pendingObstaclePreset && (
+                  <button
+                    type="button"
+                    onClick={handleCancelPlaceObstacle}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/60 py-1.5 text-[11px] font-bold text-white/60 hover:text-white transition"
+                  >
+                    <X className="h-3.5 w-3.5" /> Cancelar desenho
+                  </button>
+                )}
               </div>
 
               {obstacles.length === 0 ? (
@@ -1118,7 +1100,7 @@ export default function SolarProject() {
                   <select
                     value={config.module_wp}
                     onChange={(e) => updateConfig("module_wp", Number(e.target.value))}
-                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus:outline-none"
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/60"
                   >
                     {[450, 500, 550, 580, 600, 670, 700].map((wp) => (
                       <option key={wp} value={wp}>{wp} Wp (Half-Cell Monocristalino)</option>
@@ -1131,7 +1113,7 @@ export default function SolarProject() {
                   <select
                     value={config.module_orientation}
                     onChange={(e) => updateConfig("module_orientation", e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus:outline-none"
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/60"
                   >
                     <option value="auto">Automático (Melhor encaixe)</option>
                     <option value="vertical">Retrato (Em pé)</option>
@@ -1158,7 +1140,7 @@ export default function SolarProject() {
                     <select
                       value={config.ac_supply_type}
                       onChange={(e) => updateConfig("ac_supply_type", e.target.value)}
-                      className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus:outline-none"
+                      className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/60"
                     >
                       <option value="Monofásico">Monofásico</option>
                       <option value="Bifásico">Bifásico</option>
@@ -1167,7 +1149,7 @@ export default function SolarProject() {
                     <select
                       value={config.ac_voltage}
                       onChange={(e) => updateConfig("ac_voltage", Number(e.target.value))}
-                      className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus:outline-none"
+                      className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/60"
                     >
                       <option value={127}>127 V</option>
                       <option value={220}>220 V</option>
