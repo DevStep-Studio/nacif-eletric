@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { BarChart3, CheckCircle2, Info, TrendingUp, Calendar } from "lucide-react";
+import { BarChart3, CheckCircle2, Info, TrendingUp } from "lucide-react";
 import PtBrNumericInput from "./PtBrNumericInput";
 import SolarConsumptionHistoryModal from "./SolarConsumptionHistoryModal";
 import { computeConsumptionMetrics } from "@/lib/solarConsumptionEngine";
@@ -130,15 +130,26 @@ export default function StepConsumo({ state, onChange }) {
         </div>
       </div>
 
-      {/* 4. Distribuidora de Energia */}
-      <div className="space-y-1.5">
-        <Label className="text-xs font-bold text-slate-700">Distribuidora de energia</Label>
-        <Input
-          placeholder="Ex: Enel SP, CPFL, Cemig, Light, Copel, Equatorial, Neoenergia..."
-          value={state.distributor || ""}
-          onChange={(e) => setField("distributor", e.target.value)}
-          className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
-        />
+      {/* 4. Identificação da Unidade Consumidora */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700">Distribuidora de energia</Label>
+          <Input
+            placeholder="Ex: Enel SP, CPFL, Cemig..."
+            value={state.distributor || ""}
+            onChange={(e) => setField("distributor", e.target.value)}
+            className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700">Unidade Consumidora (UC)</Label>
+          <Input
+            placeholder="Número da UC ou instalação"
+            value={state.consumer_unit || ""}
+            onChange={(e) => setField("consumer_unit", e.target.value)}
+            className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
+          />
+        </div>
       </div>
 
       {/* 5. Mini Gráfico Resumo de Histórico quando disponível */}

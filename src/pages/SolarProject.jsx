@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/lib/AuthContext";
 import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
 import Solar3DView from "@/components/solar/Solar3DView";
 import SolarReportsDialog from "@/components/solar/SolarReportsDialog";
@@ -92,6 +93,16 @@ const defaultSolarConfig = {
   layout_strategy: "max_generation",
   ac_voltage: 220,
   ac_supply_type: "Bifásico",
+  consumer_unit: "",
+  distributor: "",
+  inverter_quantity: 1,
+  inverter_manufacturer: "",
+  inverter_model: "",
+  module_manufacturer: "",
+  module_model: "",
+  connection_point: "Quadro de distribuição principal da unidade consumidora",
+  connection_location: "Quadro elétrico principal da unidade consumidora",
+  entry_standard_location: "Padrão de entrada da unidade consumidora",
   layout_note: "",
 };
 
@@ -236,6 +247,7 @@ const STRATEGIES = [
 
 export default function SolarProject() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("project");
   const [project, setProject] = useState(null);
@@ -252,6 +264,20 @@ export default function SolarProject() {
   const [searchingAddress, setSearchingAddress] = useState(false);
   const [pendingObstaclePreset, setPendingObstaclePreset] = useState(null);
 
+  const reportProject = useMemo(() => {
+    if (!project) return project;
+    const currentResponsible = project.technical_responsible || {};
+    return {
+      ...project,
+      technical_responsible: {
+        ...currentResponsible,
+        name: currentResponsible.name || currentResponsible.full_name || user?.full_name || user?.name || "",
+        crea: currentResponsible.crea || user?.crea || "",
+        company: currentResponsible.company || user?.company || "",
+      },
+    };
+  }, [project, user]);
+
   const [roofHistoryState, setRoofHistoryState] = useState({ canUndo: false, canRedo: false });
   const roofHistoryRef = useRef([[]]);
   const roofHistoryIndexRef = useRef(0);
@@ -259,7 +285,14 @@ export default function SolarProject() {
   useEffect(() => {
     if (!projectId) return;
     backend.entities.Project.get(projectId).then((item) => {
-      const normalizedConfig = normalizeSolarConfig(item?.solar_config);
+      const normalizedConfig = normalizeSolarConfig({
+        ...(item?.solar_config || {}),
+        consumer_unit: item?.solar_config?.consumer_unit
+          || item?.consumption?.consumer_unit
+          || item?.energy_bill?.installation_code
+          || "",
+        distributor: item?.solar_config?.distributor || item?.consumption?.distributor || item?.distributor || "",
+      });
       const initialRoof = serializeRoofPolygon(normalizeRoofPolygon(normalizedConfig.roof_polygon));
       setProject(item);
       setConfig(normalizedConfig);
@@ -520,7 +553,7 @@ export default function SolarProject() {
 
   const handlePrint = () => {
     try {
-      printExecutiveSolarReport(project, config, visualSizing);
+      printExecutiveSolarReport(reportProject, config, visualSizing);
       toast({ title: "Impressão iniciada", description: "Relatório executivo enviado para impressão." });
     } catch (err) {
       toast({ title: "Erro ao imprimir", description: err.message, variant: "destructive" });
@@ -537,6 +570,11 @@ export default function SolarProject() {
         solar_config: normalizedConfig,
         voltage: normalizedConfig.ac_voltage,
         supply_type: normalizedConfig.ac_supply_type,
+        consumption: {
+          ...(project?.consumption || {}),
+          consumer_unit: normalizedConfig.consumer_unit || project?.consumption?.consumer_unit || "",
+          distributor: normalizedConfig.distributor || project?.consumption?.distributor || "",
+        },
       };
       await backend.entities.Project.update(projectId, payload);
       setConfig(normalizedConfig);
@@ -1170,6 +1208,57 @@ export default function SolarProject() {
                     className="mt-1.5 h-9 rounded-xl border-white/10 bg-slate-950 text-xs font-bold text-white"
                   />
                 </div>
+
+                <div className="space-y-3 border-t border-white/10 pt-4">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-wider text-cyan-300">Dados do memorial</p>
+                    <p className="mt-1 text-[10px] text-white/45">Campos salvos no projeto e preenchidos automaticamente no PDF.</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[11px] font-bold text-white/70">Unidade Consumidora</Label>
+                      <Input value={config.consumer_unit || ""} onChange={(e) => updateConfig("consumer_unit", e.target.value)} placeholder="Número da UC" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-bold text-white/70">Distribuidora</Label>
+                      <Input value={config.distributor || ""} onChange={(e) => updateConfig("distributor", e.target.value)} placeholder="Ex: Enel SP" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-bold text-white/70">Fabricante do módulo</Label>
+                      <Input value={config.module_manufacturer || ""} onChange={(e) => updateConfig("module_manufacturer", e.target.value)} placeholder="Ex: Jinko Solar" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-bold text-white/70">Modelo do módulo</Label>
+                      <Input value={config.module_model || ""} onChange={(e) => updateConfig("module_model", e.target.value)} placeholder="Modelo" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-bold text-white/70">Fabricante do inversor</Label>
+                      <Input value={config.inverter_manufacturer || ""} onChange={(e) => updateConfig("inverter_manufacturer", e.target.value)} placeholder="Ex: Growatt" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-bold text-white/70">Modelo do inversor</Label>
+                      <Input value={config.inverter_model || ""} onChange={(e) => updateConfig("inverter_model", e.target.value)} placeholder="Modelo" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] font-bold text-white/70">Qtd. inversores</Label>
+                      <Input type="number" min="1" value={config.inverter_quantity || 1} onChange={(e) => updateConfig("inverter_quantity", Math.max(1, Number(e.target.value) || 1))} className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] font-bold text-white/70">Ponto de conexão</Label>
+                    <Input value={config.connection_point || ""} onChange={(e) => updateConfig("connection_point", e.target.value)} placeholder="Ex: QDG principal" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] font-bold text-white/70">Localização da conexão</Label>
+                    <Input value={config.connection_location || ""} onChange={(e) => updateConfig("connection_location", e.target.value)} placeholder="Ex: Abrigo do quadro principal" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] font-bold text-white/70">Local do padrão de entrada</Label>
+                    <Input value={config.entry_standard_location || ""} onChange={(e) => updateConfig("entry_standard_location", e.target.value)} placeholder="Ex: Muro frontal do imóvel" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1258,7 +1347,7 @@ export default function SolarProject() {
       <SolarReportsDialog
         open={reportsOpen}
         onOpenChange={setReportsOpen}
-        project={project}
+        project={reportProject}
         config={config}
         sizing={visualSizing}
       />

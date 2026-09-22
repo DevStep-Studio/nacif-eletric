@@ -2,7 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, BatteryCharging, CheckCircle2, Info, Plus, ShieldCheck, Trash2, Zap } from "lucide-react";
+import { AlertTriangle, BatteryCharging, Plus, ShieldCheck, Trash2, Zap } from "lucide-react";
 import { getBatteryAutonomyHours, getEffectivePanelCount, getRoofPhysicalLayout } from "@/lib/solarWizardState";
 import PtBrNumericInput from "./PtBrNumericInput";
 
@@ -110,6 +110,49 @@ export default function StepEquipamentos({ state, onChange }) {
                 <SelectItem value="Trifásico">Trifásico (3F+N)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+        </div>
+
+        <div className="space-y-3 border-t border-slate-200 pt-4">
+          <div>
+            <p className="text-xs font-black text-slate-800">Dados automáticos do memorial descritivo</p>
+            <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
+              Estes campos serão levados diretamente para o PDF técnico.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Fabricante dos módulos</Label>
+              <Input value={state.module_manufacturer || ""} onChange={(e) => setField("module_manufacturer", e.target.value)} placeholder="Ex: Jinko Solar" className="h-11 font-medium" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Modelo dos módulos</Label>
+              <Input value={state.module_model || ""} onChange={(e) => setField("module_model", e.target.value)} placeholder="Ex: JKM550M-72HL4" className="h-11 font-medium" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Fabricante do inversor</Label>
+              <Input value={state.inverter_manufacturer || ""} onChange={(e) => setField("inverter_manufacturer", e.target.value)} placeholder="Ex: Growatt" className="h-11 font-medium" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Modelo do inversor</Label>
+              <Input value={state.inverter_model || ""} onChange={(e) => setField("inverter_model", e.target.value)} placeholder="Ex: MIN 5000TL-X" className="h-11 font-medium" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Quantidade de inversores</Label>
+              <PtBrNumericInput value={state.inverter_quantity} onChange={(v) => setField("inverter_quantity", v)} placeholder="Ex: 1" suffix="unidade(s)" min={1} />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label className="text-xs font-black text-foreground">Ponto de conexão à rede</Label>
+              <Input value={state.connection_point || ""} onChange={(e) => setField("connection_point", e.target.value)} placeholder="Ex: QDG principal" className="h-11 font-medium" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Localização da conexão</Label>
+              <Input value={state.connection_location || ""} onChange={(e) => setField("connection_location", e.target.value)} placeholder="Ex: Abrigo do quadro principal" className="h-11 font-medium" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Local do padrão de entrada</Label>
+              <Input value={state.entry_standard_location || ""} onChange={(e) => setField("entry_standard_location", e.target.value)} placeholder="Ex: Muro frontal do imóvel" className="h-11 font-medium" />
+            </div>
           </div>
         </div>
 

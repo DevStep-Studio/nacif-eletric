@@ -112,6 +112,7 @@ export async function analyzeEnergyBillFile(file, { onProgress } = {}) {
 Analise a fatura de energia e extraia APENAS os dados reais encontrados:
 - holder_name: Nome do cliente ou titular
 - address: Endereço completo da instalação
+- installation_code: Número da unidade consumidora, instalação, matrícula ou código da UC
 - distributor: Nome da distribuidora (ex: Enel SP, CPFL Paulista, Cemig, Light, Neoenergia Coelba, Equatorial, etc.)
 - tariff_class: Modalidade e classe (ex: "B1 - Residencial", "B2 - Rural", "B3 - Comercial", "A4 - Verde", "A4 - Azul")
 - monthly_consumption_kwh: Consumo médio mensal em kWh
@@ -132,6 +133,7 @@ Regra crítica: NUNCA invente números. Extraia apenas períodos existentes.`;
           properties: {
             holder_name: { type: "string" },
             address: { type: "string" },
+            installation_code: { type: "string" },
             distributor: { type: "string" },
             tariff_class: { type: "string" },
             monthly_consumption_kwh: { type: "number" },

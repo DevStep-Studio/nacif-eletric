@@ -19,7 +19,7 @@ const initialsFromUser = (user) => {
 };
 
 export default function SettingsPage() {
-  const { logout } = useAuth();
+  const { logout, checkUserAuth } = useAuth();
   const [user, setUser] = useState(null);
   const [form, setForm] = useState({ full_name: "", profession: "", company: "", crea: "", phone: "", avatar_url: "" });
   const [saving, setSaving] = useState(false);
@@ -51,6 +51,7 @@ export default function SettingsPage() {
       avatar_url: updated.avatar_url || "",
     });
     window.dispatchEvent(new CustomEvent("voltai:user-updated"));
+    await checkUserAuth();
     setSaving(false);
   };
 

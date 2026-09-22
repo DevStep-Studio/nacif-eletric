@@ -63,6 +63,150 @@ function normalizeParams(project = {}, config = {}, sizing = {}) {
   };
 }
 
+const firstFilled = (...values) => values.find((value) => (
+  value !== undefined && value !== null && String(value).trim() !== ""
+));
+
+const asDisplayText = (value, fallback = "Não informado") => {
+  const resolved = firstFilled(value);
+  return resolved === undefined ? fallback : String(resolved).trim();
+};
+
+const formatDecimalBR = (value, digits = 2) => Number(value || 0).toLocaleString("pt-BR", {
+  minimumFractionDigits: digits,
+  maximumFractionDigits: digits,
+});
+
+const buildCompleteAddress = (project = {}) => {
+  const cityState = [project.city, project.state].filter(Boolean).join(" / ");
+  return [
+    project.address || project.project_address,
+    project.complement,
+    project.neighborhood,
+    cityState,
+    project.zip_code ? `CEP ${project.zip_code}` : "",
+  ].filter((part, index, parts) => part && parts.indexOf(part) === index).join(" · ") || "Não informado";
+};
+
+const systemModeLabel = (mode) => {
+  const normalized = String(mode || "").toLowerCase();
+  if (normalized.includes("micro")) return "Microinversor";
+  if (normalized.includes("hibr")) return "Híbrido";
+  if (normalized.includes("off")) return "Off-grid";
+  return "On-grid";
+};
+
+const phaseCountForSupply = (supplyType) => {
+  const normalized = String(supplyType || "").toLowerCase();
+  if (normalized.includes("tri")) return 3;
+  if (normalized.includes("bi")) return 2;
+  return 1;
+};
+
+export function buildTechnicalMemorialData(project = {}, config = {}, sizing = {}) {
+  const normalized = normalizeParams(project, config, sizing);
+  const consumption = project?.consumption || {};
+  const technicalResponsible = project?.technical_responsible || project?.technicalResponsible || {};
+  const supplyType = asDisplayText(firstFilled(config?.ac_supply_type, project?.supply_type), "Não informado");
+  const voltage = Number(firstFilled(config?.ac_voltage, project?.voltage, 220));
+  const connectionBreaker = Number(firstFilled(
+    sizing?.breaker,
+    config?.connection_breaker_a,
+    project?.connection_breaker_a,
+    project?.general_breaker_a,
+  ));
+  const generalBreaker = Number(firstFilled(
+    project?.general_breaker_a,
+    project?.main_breaker_a,
+    sizing?.generalBreaker,
+    connectionBreaker,
+  ));
+  const contractedDemand = Number(firstFilled(
+    consumption?.contracted_demand_kw,
+    project?.contracted_demand_kw,
+  ));
+  const inverterCount = Math.max(1, Number(firstFilled(config?.inverter_quantity, project?.inverter_quantity, 1)) || 1);
+
+  return {
+    projectName: asDisplayText(project?.name, "Projeto solar fotovoltaico"),
+    clientName: asDisplayText(firstFilled(project?.client_name, project?.customer_name, project?.owner_name)),
+    address: buildCompleteAddress(project),
+    consumerUnit: asDisplayText(firstFilled(
+      config?.consumer_unit,
+      consumption?.consumer_unit,
+      consumption?.installation_code,
+      project?.consumer_unit,
+      project?.consumer_unit_number,
+      project?.uc_number,
+      project?.energy_bill?.installation_code,
+    )),
+    distributor: asDisplayText(firstFilled(config?.distributor, consumption?.distributor, project?.distributor)),
+    technicalResponsibleName: asDisplayText(firstFilled(
+      technicalResponsible?.name,
+      technicalResponsible?.full_name,
+      project?.technical_responsible_name,
+      project?.responsible_technical,
+    )),
+    crea: asDisplayText(firstFilled(
+      technicalResponsible?.crea,
+      technicalResponsible?.registration,
+      project?.crea,
+      project?.technical_responsible_crea,
+    )),
+    systemPowerKwp: normalized.dcPowerKw,
+    supplyVoltage: voltage,
+    supplyType,
+    frequencyHz: 60,
+    generalBreakerA: Number.isFinite(generalBreaker) && generalBreaker > 0 ? generalBreaker : null,
+    availableDemandKw: Number.isFinite(contractedDemand) && contractedDemand > 0 ? contractedDemand : null,
+    entryStandardLocation: asDisplayText(firstFilled(
+      config?.entry_standard_location,
+      project?.entry_standard_location,
+      project?.service_entrance_location,
+    )),
+    modulePowerKwp: normalized.dcPowerKw,
+    inverterPowerKw: normalized.inverterKw * inverterCount,
+    panelCount: normalized.panelCount,
+    inverterCount,
+    systemType: systemModeLabel(firstFilled(project?.system_mode, config?.system_mode)),
+    connectionVoltage: voltage,
+    phaseCount: phaseCountForSupply(supplyType),
+    moduleManufacturer: asDisplayText(firstFilled(
+      config?.module_manufacturer,
+      project?.module_manufacturer,
+      project?.solar_equipment?.module_manufacturer,
+    )),
+    moduleModel: asDisplayText(firstFilled(
+      config?.module_model,
+      project?.module_model,
+      project?.solar_equipment?.module_model,
+    )),
+    moduleWp: normalized.moduleWp,
+    inverterManufacturer: asDisplayText(firstFilled(
+      config?.inverter_manufacturer,
+      project?.inverter_manufacturer,
+      project?.solar_equipment?.inverter_manufacturer,
+    )),
+    inverterModel: asDisplayText(firstFilled(
+      config?.inverter_model,
+      project?.inverter_model,
+      project?.solar_equipment?.inverter_model,
+    )),
+    connectionPoint: asDisplayText(firstFilled(
+      config?.connection_point,
+      project?.connection_point,
+      project?.solar_connection_point,
+    ), "Quadro de distribuição principal da unidade consumidora"),
+    connectionBreakerA: Number.isFinite(connectionBreaker) && connectionBreaker > 0 ? connectionBreaker : null,
+    connectionLocation: asDisplayText(firstFilled(
+      config?.connection_location,
+      project?.connection_location,
+      project?.solar_connection_location,
+    )),
+    date: new Date().toLocaleDateString("pt-BR"),
+  };
+}
+
 function addHeader(doc, title, project) {
   doc.setFillColor(...BRAND_DARK);
   doc.rect(0, 0, 210, 22, "F");
@@ -272,58 +416,162 @@ export function generateElectricalDiagramReport(project = {}, config = {}, sizin
  * 3. Memorial Descritivo
  */
 export function generateTechnicalMemorialReport(project = {}, config = {}, sizing = {}) {
-  const { dcPowerKw, annualKwh, inverterKw } = normalizeParams(project, config, sizing);
+  const data = buildTechnicalMemorialData(project, config, sizing);
   const doc = new jsPDF("p", "mm", "a4");
+  const pageBottom = 278;
+  let y = 30;
+
+  const startPage = () => {
+    doc.addPage();
+    addHeader(doc, "MEMORIAL DESCRITIVO FOTOVOLTAICO", project);
+    y = 30;
+  };
+
+  const ensureSpace = (height) => {
+    if (y + height > pageBottom) startPage();
+  };
+
+  const sectionTitle = (title) => {
+    ensureSpace(14);
+    doc.setFillColor(239, 250, 248);
+    doc.roundedRect(14, y - 5, 182, 10, 1.5, 1.5, "F");
+    doc.setFillColor(...BRAND_TEAL);
+    doc.rect(14, y - 5, 2, 10, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...BRAND_DARK);
+    doc.text(title, 19, y + 1.5);
+    y += 11;
+  };
+
+  const paragraph = (text) => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(45, 55, 70);
+    const lines = doc.splitTextToSize(text, 182);
+    ensureSpace(lines.length * 4.5 + 5);
+    doc.text(lines, 14, y);
+    y += lines.length * 4.5 + 5;
+  };
+
+  const keyValueRows = (rows) => {
+    const labelWidth = 64;
+    const valueWidth = 118;
+    rows.forEach(([label, value], index) => {
+      const valueLines = doc.splitTextToSize(String(value ?? "Não informado"), valueWidth - 6);
+      const rowHeight = Math.max(8, valueLines.length * 4 + 4);
+      ensureSpace(rowHeight);
+      doc.setFillColor(index % 2 === 0 ? 248 : 255, index % 2 === 0 ? 250 : 255, index % 2 === 0 ? 252 : 255);
+      doc.rect(14, y, 182, rowHeight, "F");
+      doc.setDrawColor(225, 231, 239);
+      doc.rect(14, y, 182, rowHeight, "S");
+      doc.line(14 + labelWidth, y, 14 + labelWidth, y + rowHeight);
+      doc.setFontSize(8.5);
+      doc.setTextColor(45, 55, 70);
+      doc.setFont("helvetica", "bold");
+      doc.text(String(label), 17, y + 5.4);
+      doc.setFont("helvetica", "normal");
+      doc.text(valueLines, 14 + labelWidth + 3, y + 5.4);
+      y += rowHeight;
+    });
+    y += 7;
+  };
+
   addHeader(doc, "MEMORIAL DESCRITIVO FOTOVOLTAICO", project);
 
-  let y = 30;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("1. Objetivo do Projeto", 14, y);
-  y += 5;
+  doc.setFontSize(18);
+  doc.setTextColor(...BRAND_BLUE);
+  doc.text("MEMORIAL DESCRITIVO", 14, y);
+  y += 7;
+  doc.setFontSize(12);
+  doc.setTextColor(...BRAND_TEAL);
+  doc.text("SISTEMA FOTOVOLTAICO", 14, y);
+  y += 12;
 
+  sectionTitle("1. IDENTIFICAÇÃO DO PROJETO");
+  keyValueRows([
+    ["Cliente", data.clientName],
+    ["Endereço da instalação", data.address],
+    ["Unidade Consumidora – UC", data.consumerUnit],
+    ["Distribuidora", data.distributor],
+    ["Responsável Técnico", data.technicalResponsibleName],
+    ["CREA", data.crea],
+    ["Potência do Sistema", `${formatDecimalBR(data.systemPowerKwp)} kWp`],
+  ]);
+
+  sectionTitle("2. OBJETIVO");
+  paragraph("O presente Memorial Descritivo tem por objetivo apresentar as principais características técnicas do sistema de geração de energia elétrica por fonte solar fotovoltaica a ser instalado na unidade consumidora identificada neste documento.");
+  paragraph("O sistema fotovoltaico será conectado à instalação elétrica da unidade consumidora, permitindo a geração de energia elétrica a partir da conversão da energia solar em energia elétrica.");
+
+  sectionTitle("3. CARACTERÍSTICAS DA UNIDADE CONSUMIDORA");
+  keyValueRows([
+    ["Número da UC", data.consumerUnit],
+    ["Distribuidora", data.distributor],
+    ["Tensão de fornecimento", `${data.supplyVoltage} V`],
+    ["Tipo de fornecimento", data.supplyType],
+    ["Frequência", `${data.frequencyHz} Hz`],
+    ["Disjuntor geral", data.generalBreakerA ? `${data.generalBreakerA} A` : "Não informado"],
+    ["Potência disponibilizada/demanda", data.availableDemandKw ? `${formatDecimalBR(data.availableDemandKw)} kW` : "Não informado"],
+    ["Local do padrão de entrada", data.entryStandardLocation],
+  ]);
+
+  ensureSpace(105);
+  sectionTitle("4. CARACTERÍSTICAS DO SISTEMA FOTOVOLTAICO");
+  paragraph("O sistema fotovoltaico será constituído por módulos fotovoltaicos responsáveis pela conversão da radiação solar em energia elétrica em corrente contínua (CC), sendo posteriormente convertida em corrente alternada (CA) através do(s) inversor(es).");
+  keyValueRows([
+    ["Potência total dos módulos", `${formatDecimalBR(data.modulePowerKwp)} kWp`],
+    ["Potência total dos inversores", `${formatDecimalBR(data.inverterPowerKw)} kW`],
+    ["Quantidade de módulos", `${data.panelCount} unidades`],
+    ["Quantidade de inversores", `${data.inverterCount} unidades`],
+    ["Inversor – fabricante/modelo", [data.inverterManufacturer, data.inverterModel].filter((value) => value !== "Não informado").join(" · ") || "Não informado"],
+    ["Tipo do sistema", data.systemType],
+    ["Tensão de conexão", `${data.connectionVoltage} V`],
+    ["Número de fases", `${data.phaseCount} (${data.supplyType})`],
+  ]);
+
+  ensureSpace(82);
+  sectionTitle("5. MÓDULOS FOTOVOLTAICOS E FABRICANTE");
+  keyValueRows([
+    ["Fabricante", data.moduleManufacturer],
+    ["Modelo", data.moduleModel],
+    ["Potência unitária", `${data.moduleWp} Wp`],
+    ["Quantidade", `${data.panelCount} módulos`],
+    ["Potência total instalada", `${formatDecimalBR(data.modulePowerKwp)} kWp`],
+  ]);
+  paragraph("Os módulos fotovoltaicos serão instalados em estrutura apropriada, observando as condições do local, orientação, inclinação e condições necessárias para operação segura do sistema.");
+
+  ensureSpace(160);
+  sectionTitle("6. PONTO DE CONEXÃO À REDE");
+  paragraph("A conexão do sistema fotovoltaico será realizada na instalação elétrica da unidade consumidora, através do quadro elétrico indicado no projeto.");
+  paragraph(`O ponto de conexão será realizado no ${data.connectionPoint}, em tensão de ${data.connectionVoltage} V, sistema ${data.supplyType.toLowerCase()}, interligando a saída em corrente alternada do(s) inversor(es) ao sistema elétrico da unidade consumidora.`);
+  keyValueRows([
+    ["Ponto de conexão", data.connectionPoint],
+    ["Tensão", `${data.connectionVoltage} V`],
+    ["Número de fases", `${data.phaseCount}`],
+    ["Disjuntor de conexão", data.connectionBreakerA ? `${data.connectionBreakerA} A` : "Não informado"],
+    ["Localização", data.connectionLocation],
+  ]);
+  paragraph("O sistema será conectado de forma a operar em paralelo com a rede elétrica da distribuidora, conforme as características técnicas estabelecidas no projeto elétrico.");
+
+  ensureSpace(44);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(60, 75, 95);
-  const textObj = `O presente Memorial Descritivo tem por objetivo dimensionar e especificar a instalação de um Sistema de Geração Distribuída Solar Fotovoltaica conectado à rede da concessionária (${project?.consumption?.distributor || project?.distributor || "Distribuidora Local"}), para a unidade consumidora sob titularidade de ${project?.client_name || "Cliente Solar"}, localizada em ${project?.address || "Endereço do Projeto"}.`;
-  doc.text(doc.splitTextToSize(textObj, 182), 14, y);
-  y += 14;
+  doc.setFontSize(9);
+  doc.setTextColor(45, 55, 70);
+  doc.text(`Responsável Técnico: ${data.technicalResponsibleName}`, 14, y);
+  y += 12;
+  doc.line(14, y, 112, y);
+  doc.text(`CREA: ${data.crea}`, 122, y);
+  y += 13;
+  doc.text(`Data: ${data.date}`, 14, y);
+  y += 10;
+  doc.text("Assinatura do Responsável Técnico", 14, y);
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("2. Normas Técnicas Aplicáveis", 14, y);
-  y += 5;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text([
-    "• ABNT NBR 16690: Instalações elétricas de arranjos fotovoltaicos — Requisitos de projeto.",
-    "• ABNT NBR 5410: Instalações elétricas de baixa tensão.",
-    "• ABNT NBR 5419: Proteção contra descargas atmosféricas.",
-    "• Resolução Normativa ANEEL nº 1.000/2021 e nº 1.059/2023 (Marco Legal da Microgeração).",
-  ], 14, y);
-  y += 22;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("3. Resumo dos Parâmetros de Dimensionamento", 14, y);
-  y += 4;
-
-  const summaryRows = [
-    ["Potência de Pico CC Instalada", `${dcPowerKw.toFixed(2)}`, "kWp"],
-    ["Potência Nominal do Inversor CA", `${inverterKw.toFixed(2)}`, "kW"],
-    ["Fator de Dimensionamento do Inversor (FDI)", `${(dcPowerKw / Math.max(1, inverterKw)).toFixed(2)}`, "x"],
-    ["Geração Média Mensal Estimada", `${(annualKwh / 12).toFixed(1)}`, "kWh/mês"],
-    ["Geração Anual Total Estimada", `${(annualKwh / 1000).toFixed(2)}`, "MWh/ano"],
-    ["Performance Ratio (PR)", "80,0", "%"],
-    ["Irradiação Solar Média Considerada", "4,80", "kWh/m².dia (HSP)"],
-  ];
-  y = drawSimpleTable(doc, y, ["Parâmetro de Engenharia", "Valor Dimensionado", "Unidade"], summaryRows, [80, 52, 50]);
-
-  addFooter(doc, 1, 1);
+  const totalPages = doc.getNumberOfPages();
+  for (let page = 1; page <= totalPages; page += 1) {
+    doc.setPage(page);
+    addFooter(doc, page, totalPages);
+  }
   return doc;
 }
 

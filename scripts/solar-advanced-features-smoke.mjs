@@ -7,6 +7,7 @@ import {
   getBestPanelLayout,
 } from "../src/lib/solarDesignerGeometry.js";
 import {
+  buildTechnicalMemorialData,
   generateBillOfMaterialsReport,
   generateCommercialProposalReport,
   generateElectricalDiagramReport,
@@ -97,6 +98,11 @@ const mockProject = {
     monthly_consumption_kwh: 842,
     tariff_brl_kwh: 0.95,
     distributor: "Enel SP",
+    consumer_unit: "123456789",
+  },
+  technical_responsible: {
+    name: "Eng. Maria Souza",
+    crea: "SP 123456/D",
   },
 };
 
@@ -116,6 +122,15 @@ const r3 = generateTechnicalMemorialReport(mockProject, testConfigWithoutObstacl
 const r4 = generateBillOfMaterialsReport(mockProject, testConfigWithoutObstacles, mockSizing);
 const r5 = generateGenerationSimulationReport(mockProject, testConfigWithoutObstacles, mockSizing);
 const r6 = generateCommercialProposalReport(mockProject, testConfigWithoutObstacles, mockSizing);
+const memorialData = buildTechnicalMemorialData(mockProject, {
+  ...testConfigWithoutObstacles,
+  module_wp: 550,
+  inverter_kw: 5,
+  ac_voltage: 220,
+  ac_supply_type: "Bifásico",
+  module_manufacturer: "Fabricante Solar",
+  module_model: "MOD-550",
+}, mockSizing);
 
 assert.ok(r1 && typeof r1.output === "function", "Planta de implantação deve gerar PDF");
 assert.ok(r2 && typeof r2.output === "function", "Diagrama elétrico deve gerar PDF");
@@ -123,6 +138,13 @@ assert.ok(r3 && typeof r3.output === "function", "Memorial descritivo deve gerar
 assert.ok(r4 && typeof r4.output === "function", "BOM deve gerar PDF");
 assert.ok(r5 && typeof r5.output === "function", "Simulação de geração deve gerar PDF");
 assert.ok(r6 && typeof r6.output === "function", "Proposta comercial deve gerar PDF");
+assert.equal(memorialData.clientName, "João Silva", "Memorial deve preencher o cliente automaticamente");
+assert.equal(memorialData.consumerUnit, "123456789", "Memorial deve preencher a UC extraída da conta");
+assert.equal(memorialData.distributor, "Enel SP", "Memorial deve preencher a distribuidora");
+assert.equal(memorialData.technicalResponsibleName, "Eng. Maria Souza", "Memorial deve preencher o responsável técnico");
+assert.equal(memorialData.crea, "SP 123456/D", "Memorial deve preencher o CREA");
+assert.equal(memorialData.moduleManufacturer, "Fabricante Solar", "Memorial deve preencher o fabricante do módulo");
+assert.equal(memorialData.connectionBreakerA, 32, "Memorial deve preencher o disjuntor calculado");
 console.log("✅ 5. Geração dos 6 relatórios em PDF OK");
 
 console.log("🎉 Todos os testes de fumaça solares passaram com sucesso!");

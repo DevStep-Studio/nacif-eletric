@@ -47,6 +47,7 @@ export function defaultWizardState() {
     contracted_demand_kw: "",
     tariff_class: "B1 - Residencial",
     distributor: "",
+    consumer_unit: "",
 
     // 3. Localização
     address: "",
@@ -78,9 +79,17 @@ export function defaultWizardState() {
 
     // 5. Equipamentos
     inverter_kw: 5,
+    inverter_quantity: 1,
+    inverter_manufacturer: "",
+    inverter_model: "",
     module_wp: 550,
+    module_manufacturer: "",
+    module_model: "",
     ac_voltage: 220,
     ac_supply_type: "Bifásico",
+    connection_point: "Quadro de distribuição principal da unidade consumidora",
+    connection_location: "Quadro elétrico principal da unidade consumidora",
+    entry_standard_location: "Padrão de entrada da unidade consumidora",
     requested_panel_count: 21,
     battery_config: {
       capacity_kwh: "10",

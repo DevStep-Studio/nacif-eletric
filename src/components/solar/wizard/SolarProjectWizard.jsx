@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { backend } from "@/api/backendClient";
+import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, Sparkles, Sun, X, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
 import {
   DRAFT_STORAGE_KEY,
   WIZARD_STEPS,
@@ -37,6 +38,7 @@ function loadDraft() {
 export default function SolarProjectWizard() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [state, setState] = useState(() => loadDraft() || defaultWizardState());
   const [stepIndex, setStepIndex] = useState(0);
   const [maxVisited, setMaxVisited] = useState(0);
@@ -128,7 +130,12 @@ export default function SolarProjectWizard() {
     try {
       const solar_config = {
         inverter_kw: state.inverter_kw,
+        inverter_quantity: state.inverter_quantity,
+        inverter_manufacturer: state.inverter_manufacturer,
+        inverter_model: state.inverter_model,
         module_wp: state.module_wp,
+        module_manufacturer: state.module_manufacturer,
+        module_model: state.module_model,
         requested_panel_count: state.requested_panel_count,
         roof_area_m2: state.roof_area_m2,
         roof_utilization_pct: state.roof_utilization_pct,
@@ -148,6 +155,9 @@ export default function SolarProjectWizard() {
         layout_strategy: state.layout_strategy || "max_generation",
         ac_voltage: state.ac_voltage,
         ac_supply_type: state.ac_supply_type,
+        connection_point: state.connection_point,
+        connection_location: state.connection_location,
+        entry_standard_location: state.entry_standard_location,
       };
 
       const payload = {
@@ -173,12 +183,19 @@ export default function SolarProjectWizard() {
           contracted_demand_kw: Number(state.contracted_demand_kw) || null,
           tariff_class: state.tariff_class,
           distributor: state.distributor,
+          consumer_unit: state.consumer_unit,
         },
         energy_bill: {
           file_name: state.bill_file_name,
           file_url: state.bill_file_url,
           reading_status: state.bill_reading_status,
           history_12_months: state.bill_history_12_months,
+          installation_code: state.consumer_unit,
+        },
+        technical_responsible: {
+          name: user?.full_name || user?.name || "",
+          crea: user?.crea || "",
+          company: user?.company || "",
         },
         investment_brl: Number(state.investment_brl) || null,
         sizing_results_snapshot: results,

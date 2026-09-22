@@ -18,7 +18,6 @@ import {
   Sparkles,
   Sun,
   UploadCloud,
-  X,
   Zap,
 } from "lucide-react";
 import { analyzeEnergyBillFile } from "@/lib/solarAiServices";
@@ -123,6 +122,7 @@ export default function StepDadosProjeto({ state, onChange }) {
           contracted_demand_kw: ext.contracted_demand_kw || null,
           tariff_class: ext.tariff_class || state.tariff_class || "B1 - Residencial",
           distributor: ext.distributor || state.distributor || "",
+          consumer_unit: ext.installation_code || state.consumer_unit || "",
           name: state.name || (ext.holder_name ? `Projeto ${ext.holder_name}` : "Projeto Solar"),
           client_name: state.client_name || ext.holder_name || "",
           address: state.address || ext.address || "",
