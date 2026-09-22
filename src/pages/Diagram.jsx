@@ -11,6 +11,19 @@ function DiagramSVG({ project }) {
   const voltage = project?.voltage || 220;
   const supply = project?.supply_type || "Monofásico";
   const mainProtection = calcMainProtection(project);
+  const boards = Array.isArray(project?.panel_boards) ? project.panel_boards : [];
+  const activeBoard = boards[0] || null;
+  const layout = activeBoard?.layout || project?.panel_layout || null;
+  const layoutComps = (layout?.rails || []).flatMap((r) => r.components || []).filter((c) => c && c.type !== "spacer");
+  const hasLayout = layoutComps.length > 0;
+  const hasDrInLayout = layoutComps.some((c) => (
+    c.type === "dr"
+    || c.type === "idr"
+    || c.id === "gen_dr"
+    || /^(idr|dr)(\s|$)/i.test(String(c.label || c.name || ""))
+  ));
+  const hasDrInCircuits = circuits.some((c) => c.needs_dr || c.wet_area);
+  const showDR = hasLayout ? hasDrInLayout : (project?.has_dr !== false && hasDrInCircuits);
   const svgRef = useRef(null);
 
   const PHASES = supply === "Trifásico" ? ["A", "B", "C"] : supply === "Bifásico" ? ["A", "B"] : ["A"];
@@ -59,13 +72,19 @@ function DiagramSVG({ project }) {
           <rect x="140" y="82" width="50" height="36" rx="4" fill="none" stroke="#00d8b8" strokeWidth="1.5" />
           <text x="165" y="96" fill="#00d8b8" fontSize="8" textAnchor="middle">DPS</text>
           <text x="165" y="109" fill="#00d8b8" fontSize="8" textAnchor="middle">Cl.II</text>
-          <line x1="190" y1="100" x2="220" y2="100" stroke="#00d8b8" strokeWidth="2" />
 
-          {/* DR Geral */}
-          <rect x="220" y="82" width="50" height="36" rx="4" fill="none" stroke="#004E82" strokeWidth="1.5" />
-          <text x="245" y="95" fill="#004E82" fontSize="8" textAnchor="middle">IDR {mainProtection.dr.current}A</text>
-          <text x="245" y="109" fill="#004E82" fontSize="8" textAnchor="middle">{mainProtection.dr.sensitivity_ma}mA</text>
-          <line x1="270" y1="100" x2="310" y2="100" stroke="#00d8b8" strokeWidth="2" />
+          {showDR ? (
+            <>
+              {/* DR Geral */}
+              <line x1="190" y1="100" x2="220" y2="100" stroke="#00d8b8" strokeWidth="2" />
+              <rect x="220" y="82" width="50" height="36" rx="4" fill="none" stroke="#004E82" strokeWidth="1.5" />
+              <text x="245" y="95" fill="#004E82" fontSize="8" textAnchor="middle">IDR {mainProtection.dr.current}A</text>
+              <text x="245" y="109" fill="#004E82" fontSize="8" textAnchor="middle">{mainProtection.dr.sensitivity_ma}mA</text>
+              <line x1="270" y1="100" x2="310" y2="100" stroke="#00d8b8" strokeWidth="2" />
+            </>
+          ) : (
+            <line x1="190" y1="100" x2="310" y2="100" stroke="#00d8b8" strokeWidth="2" />
+          )}
 
           {/* Disjuntor Geral */}
           <rect x="310" y="82" width="55" height="36" rx="4" fill="none" stroke="#123D5C" strokeWidth="1.5" />

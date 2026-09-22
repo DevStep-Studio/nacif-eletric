@@ -4,6 +4,7 @@ import {
   buildSolarAcCircuitLayout,
   generateDefaultPanelLayout,
   getPrimaryPanelBoard,
+  isDedicatedSolarBoard,
   isSolarProject,
   mergeSolarLayoutIntoPrincipal,
   nextBusbarIndex,
@@ -23,10 +24,17 @@ const solarProject = {
   ],
 };
 
-// ── isSolarProject / getPrimaryPanelBoard ─────────────────────────────────────
+// ── isSolarProject / isDedicatedSolarBoard / getPrimaryPanelBoard ─────────────
 assert.ok(isSolarProject(solarProject), "projeto com solar_config é solar");
 assert.ok(!isSolarProject({ project_type: "Instalações Elétricas" }), "projeto sem solar_config não é solar");
+assert.ok(isDedicatedSolarBoard({ name: "QD Solar CA" }), "detecta QD Solar CA por nome");
+assert.ok(isDedicatedSolarBoard({ name: "QD Solar" }), "detecta QD Solar por nome");
+assert.ok(isDedicatedSolarBoard({ type: "solar_ac" }), "detecta solar_ac por type");
+assert.ok(isDedicatedSolarBoard({ type: "solar" }), "detecta solar por type");
+assert.ok(!isDedicatedSolarBoard({ name: "QD-01 Principal", type: "principal" }), "QD-01 Principal não é solar dedicado");
+
 assert.equal(getPrimaryPanelBoard([{ type: "qgbt" }, { type: "solar_ac" }, { id: "p1", type: "principal" }]).id, "p1", "quadro principal é o único não qgbt/solar_ac");
+assert.equal(getPrimaryPanelBoard([{ name: "QD Solar CA" }, { id: "p1", name: "QD-01 Principal" }]).id, "p1", "ignora QD Solar CA pelo nome ao buscar principal");
 assert.equal(getPrimaryPanelBoard([{ type: "qgbt" }]), null, "sem quadro principal retorna null");
 
 // ── nextBusbarIndex / remapBusbarIndices ──────────────────────────────────────

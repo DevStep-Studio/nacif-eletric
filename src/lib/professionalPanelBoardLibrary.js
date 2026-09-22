@@ -1,4 +1,4 @@
-import { getPrimaryPanelBoard } from "@/lib/electricalEngine";
+import { getPrimaryPanelBoard } from "./electricalEngine.js";
 
 export const PANEL_SHEET = {
   width: 1189,
@@ -266,7 +266,12 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
   const layoutComponents = getPanelComponents(activeLayout);
   const mainBreakerComponent = layoutComponents.find((component) => component.type === "breaker" && component.isGeneral);
   const dpsComponents = layoutComponents.filter((component) => component.type === "dps");
-  const drComponents = layoutComponents.filter((component) => component.type === "dr");
+  const drComponents = layoutComponents.filter((component) => (
+    component.type === "dr"
+    || component.type === "idr"
+    || component.id === "gen_dr"
+    || /^(idr|dr)(\s|$)/i.test(String(component.label || component.name || ""))
+  ));
   const layoutModules = layoutComponents.reduce((sum, component) => sum + asNumber(component.poles, 1), 0);
   const totalDin = layoutModules || circuits.reduce((sum, circuit) => sum + circuit.dinModules, 0) + system.generalPoles + 2;
   const panelSize = asNumber(metrics?.panelSize, Math.ceil(totalDin * 1.2 / 6) * 6 || 12);
@@ -324,8 +329,13 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
   const dpsPoleCount = dpsComponents.length
     ? dpsComponents.reduce((sum, component) => sum + asNumber(component.poles, 1), 0)
     : circuits.length ? Math.max(1, system.phaseCodes.length) : 0;
-  const drDeviceCount = drComponents.length;
-  const drProtectedCount = drDeviceCount ? circuits.length : circuits.filter((circuit) => circuit.needsDr).length;
+  const hasCustomLayout = layoutComponents.length > 0;
+  const drDeviceCount = hasCustomLayout
+    ? drComponents.length
+    : (project?.has_dr !== false && circuits.some((circuit) => circuit.needsDr) ? 1 : 0);
+  const drProtectedCount = drDeviceCount > 0
+    ? (circuits.filter((circuit) => circuit.needsDr).length || circuits.length)
+    : 0;
 
   return {
     sheet: PANEL_SHEET,
@@ -376,7 +386,7 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
       ["Barramento", `${system.busbar} · ${Math.max(80, generalBreakerFromLayout)}A`],
       ["Proteção geral", `Disjuntor termomagnético ${generalPolesFromLayout}P ${generalBreakerFromLayout}A`],
       ["DPS", dpsPoleCount ? `Classe II · ${dpsPoleCount} polo(s) no quadro` : "Prever DPS classe II"],
-      ["DR", drDeviceCount ? `${drDeviceCount} dispositivo(s) 30mA · ${drProtectedCount} circuito(s)` : "Prever conforme ambiente e uso"],
+      ["DR", drDeviceCount ? `${drDeviceCount} dispositivo(s) 30mA · ${drProtectedCount} circuito(s)` : "Não instalado no QD"],
       ["Condutores", `Fase/Neutro ${feederGauge}mm² · PE ${Math.max(6, Math.round(feederGauge / 2))}mm²`],
     ],
     notes: [

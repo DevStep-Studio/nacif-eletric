@@ -638,7 +638,13 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   });
   
   // DR Geral
-  const hasDR = circuits.some(c => c.needs_dr || c.wet_area) || true;
+  const hasDR = Boolean(
+    proj?.has_dr !== false && (
+      circuits.length === 0
+      || circuits.some(c => c.needs_dr || c.wet_area || NEEDS_DR(c.type || c.circuit_type))
+      || proj?.has_dr === true
+    )
+  );
   if (hasDR) {
     rail1Components.push({
       id: "gen_dr",
@@ -911,10 +917,30 @@ export function isSolarProject(project) {
   return project?.project_type === "Solar" || Boolean(project?.solar_config);
 }
 
-const NON_PRIMARY_BOARD_TYPES = ["qgbt", "solar_ac"];
+const NON_PRIMARY_BOARD_TYPES = ["qgbt", "solar_ac", "solar", "solar_board"];
+
+export function isDedicatedSolarBoard(board = {}) {
+  const type = String(board?.type || "").toLowerCase();
+  const id = String(board?.id || "").toLowerCase();
+  const name = String(board?.name || "").trim();
+  return (
+    type === "solar_ac"
+    || type === "solar"
+    || type === "solar_board"
+    || Boolean(board?.is_solar_board)
+    || id === "solar_board"
+    || id.includes("solar_board")
+    || id.includes("solar_ac")
+    || /^(qd[-\s]*)?solar(\s*ca)?$/i.test(name)
+    || /qd\s*solar|solar\s*ca/i.test(name)
+  );
+}
 
 export function getPrimaryPanelBoard(boards = []) {
-  return (boards || []).find((board) => !NON_PRIMARY_BOARD_TYPES.includes(String(board?.type || "").toLowerCase())) || null;
+  return (boards || []).find((board) => (
+    !NON_PRIMARY_BOARD_TYPES.includes(String(board?.type || "").toLowerCase())
+    && !isDedicatedSolarBoard(board)
+  )) || null;
 }
 
 export function findSolarInverterCircuit(circuits = []) {
@@ -1050,10 +1076,10 @@ export function mergeSolarLayoutIntoPrincipal(project, layout, { forceRegenerate
 }
 
 export function buildPanelBoardsWithLayout(project, panelLayout = generateDefaultPanelLayout(project, { forceDistribution: true })) {
-  // Quadros "QD Solar CA" (type: solar_ac) legados nunca voltam a ser criados aqui —
+  // Quadros "QD Solar CA" (type: solar_ac / solar) legados nunca voltam a ser criados aqui —
   // a proteção CA do inversor é mesclada diretamente no quadro principal.
   const existingBoards = (Array.isArray(project?.panel_boards) ? project.panel_boards : [])
-    .filter((board) => String(board?.type || "").toLowerCase() !== "solar_ac");
+    .filter((board) => !isDedicatedSolarBoard(board));
   const distributionType = "principal";
   const mergedLayout = mergeSolarLayoutIntoPrincipal(project, panelLayout, { forceRegenerate: true });
   const makeDistributionBoard = () => ({
@@ -1071,6 +1097,7 @@ export function buildPanelBoardsWithLayout(project, panelLayout = generateDefaul
 
   const primaryIndex = existingBoards.findIndex((board) => (
     !NON_PRIMARY_BOARD_TYPES.includes(String(board?.type || "").toLowerCase())
+    && !isDedicatedSolarBoard(board)
   ));
 
   if (primaryIndex < 0) {

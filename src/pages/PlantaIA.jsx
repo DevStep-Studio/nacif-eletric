@@ -1210,7 +1210,9 @@ const normalizePanelBoards = (project) => {
 };
 
 const isDistributionPanelBoard = (board = {}) => (
-  !["qgbt", "solar_ac"].includes(String(board.type || "").toLowerCase())
+  !["qgbt", "solar_ac", "solar", "solar_board"].includes(String(board?.type || "").toLowerCase())
+  && !/^(qd[-\s]*)?solar(\s*ca)?$/i.test(String(board?.name || "").trim())
+  && !/qd\s*solar|solar\s*ca/i.test(String(board?.name || "").trim())
 );
 
 const applyPlantBoardMetadata = (boards = [], {

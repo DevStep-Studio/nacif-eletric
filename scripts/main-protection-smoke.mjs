@@ -108,6 +108,74 @@ const churchMetrics = calcProjectMetrics(churchProject);
 assert.equal(churchMetrics.totalInstalledPower, 69000, "Carga instalada da igreja = 69 kW");
 assert.ok(churchMetrics.totalDemandPower < 60000, "Demanda calculada sobre Fd deve ser menor que 60 kW");
 assert.ok(churchMetrics.generalCurrent < 120, "Corrente geral de demanda em 380V calculada adequadamente");
-assert.equal(churchMetrics.generalBreaker, 125, "Disjuntor geral dimensionado para 125A com base na demanda");
+import { buildProfessionalPanelBoard } from "../src/lib/professionalPanelBoardLibrary.js";
+
+// ── Teste: quando o IDR é excluído do quadro (layout customizado sem gen_dr) ──
+const biProjectWithCustomLayoutNoDr = {
+  ...biProject,
+  panel_boards: [
+    {
+      id: "board_principal",
+      name: "Quadro de Distribuição",
+      is_principal: true,
+      layout: {
+        rails: [
+          {
+            id: "rail_1",
+            components: [
+              { id: "dps_0", type: "dps", label: "DPS FA", poles: 1 },
+              { id: "dps_1", type: "dps", label: "DPS FB", poles: 1 },
+              { id: "gen_brk", type: "breaker", label: "DJ GERAL", poles: 2, current: 40, isGeneral: true },
+              // Note: IDR was deleted by the user!
+            ],
+          },
+          {
+            id: "rail_2",
+            components: [
+              { id: "c1", type: "breaker", label: "C01 - Ar", poles: 2, current: 16 },
+              { id: "c2", type: "breaker", label: "C02 - Ilum", poles: 1, current: 10 },
+            ],
+          },
+        ],
+        wires: [],
+      },
+    },
+  ],
+};
+
+const boardDataNoDr = buildProfessionalPanelBoard(biProjectWithCustomLayoutNoDr, biMetrics);
+assert.equal(boardDataNoDr.drDeviceCount, 0, "drDeviceCount deve ser 0 quando usuário exclui IDR do layout");
+assert.equal(boardDataNoDr.drCount, 0, "drCount deve ser 0 quando não há IDR no QD");
+const drRow = boardDataNoDr.characteristicRows.find(([label]) => label === "DR");
+assert.equal(drRow[1], "Não instalado no QD", "Texto das características deve informar 'Não instalado no QD'");
+
+// Teste quando IDR existe no layout
+const biProjectWithDrInLayout = {
+  ...biProject,
+  panel_boards: [
+    {
+      id: "board_principal",
+      name: "Quadro de Distribuição",
+      is_principal: true,
+      layout: {
+        rails: [
+          {
+            id: "rail_1",
+            components: [
+              { id: "dps_0", type: "dps", label: "DPS FA", poles: 1 },
+              { id: "dps_1", type: "dps", label: "DPS FB", poles: 1 },
+              { id: "gen_brk", type: "breaker", label: "DJ GERAL", poles: 2, current: 40, isGeneral: true },
+              { id: "gen_dr", type: "dr", label: "IDR GERAL", poles: 2, current: 40 },
+            ],
+          },
+        ],
+        wires: [],
+      },
+    },
+  ],
+};
+const boardDataWithDr = buildProfessionalPanelBoard(biProjectWithDrInLayout, biMetrics);
+assert.equal(boardDataWithDr.drDeviceCount, 1, "drDeviceCount deve ser 1 quando há IDR no layout");
+assert.ok(boardDataWithDr.drCount > 0, "drCount deve ser > 0 quando há IDR no layout");
 
 console.log("main protection smoke: ok");

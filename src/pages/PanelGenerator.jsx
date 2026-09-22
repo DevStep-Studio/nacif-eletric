@@ -12,6 +12,7 @@ import {
   calcProjectMetrics,
   generateDefaultPanelLayout,
   getPrimaryPanelBoard,
+  isDedicatedSolarBoard,
   isSolarProject,
   mergeSolarLayoutIntoPrincipal,
   nextBusbarIndex,
@@ -297,13 +298,13 @@ const normalizePanelBoards = (project) => {
     return [createPanelBoard(project, 1, project?.panel_layout)];
   }
 
-  // Migração: quadros "QD Solar CA" (type: solar_ac) salvos por versões antigas são
+  // Migração: quadros "QD Solar CA" (type: solar_ac / solar / nome similar) são
   // incorporados ao quadro principal — suas trilhas viram rail_solar_1/rail_solar_2
   // dentro dele, e o quadro separado deixa de existir na lista.
-  const legacySolarBoard = rawBoards.find((board) => String(board?.type || "").toLowerCase() === "solar_ac");
-  const otherBoards = rawBoards.filter((board) => String(board?.type || "").toLowerCase() !== "solar_ac");
+  const legacySolarBoard = rawBoards.find(isDedicatedSolarBoard);
+  const otherBoards = rawBoards.filter((board) => !isDedicatedSolarBoard(board));
   const boardsToNormalize = otherBoards.length > 0 ? otherBoards : [{
-    id: legacySolarBoard?.id,
+    id: legacySolarBoard?.id || "board_distribution_1",
     name: "QD-01 Principal",
     location: "Entrada / Distribuição",
     type: "principal",
@@ -339,9 +340,9 @@ const normalizePanelBoards = (project) => {
 
     return {
       id: board.id || `board_${index + 1}`,
-      name: board.name || (index === 0 ? "QD-01 Principal" : `QD-${String(index + 1).padStart(2, "0")}`),
+      name: (board.name && !isDedicatedSolarBoard(board)) ? board.name : (index === 0 ? "QD-01 Principal" : `QD-${String(index + 1).padStart(2, "0")}`),
       location: board.location || (index === 0 ? "Entrada / Distribuição" : "Distribuição"),
-      type,
+      type: isDedicatedSolarBoard(board) ? "principal" : type,
       supply_type: supply,
       layout,
     };
@@ -1945,13 +1946,14 @@ export default function PanelGenerator() {
 
       setMetrics(calculatedMetrics);
 
-      const preferredDistributionBoard = distributionCircuits.length > 0 ? getPrimaryCircuitBoard(boards) : null;
+      const preferredDistributionBoard = getPrimaryCircuitBoard(boards) || boards[0];
+      const hasValidActiveBoard = boards.some((board) => board.id === activeBoardId);
       const nextActiveId = shouldPersistPanelSync && preferredDistributionBoard
         ? preferredDistributionBoard.id
-        : boards.some((board) => board.id === activeBoardId)
+        : hasValidActiveBoard
           ? activeBoardId
           : preferredDistributionBoard?.id || boards[0]?.id;
-      const activeBoard = boards.find((board) => board.id === nextActiveId) || boards[0];
+      const activeBoard = boards.find((board) => board.id === nextActiveId) || preferredDistributionBoard || boards[0];
       const primaryLayout = getPrimaryCircuitBoard(boards)?.layout || activeBoard?.layout || { rails: [], wires: [], infrastructure: [] };
       const normalizedProject = isSolarProject(projectForPanel)
         ? { ...projectForPanel, panel_boards: boards, panel_layout: activeBoard?.layout || { rails: [], wires: [], infrastructure: [] } }

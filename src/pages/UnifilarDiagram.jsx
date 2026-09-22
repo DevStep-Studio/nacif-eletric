@@ -4,7 +4,7 @@ import ProfessionalBoardSheetSVG from "@/components/ProfessionalBoardSheetSVG";
 import QgbtDiagramSheetSVG from "@/components/QgbtDiagramSheetSVG";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
-import { calcProjectMetrics, autoBalancePhases, selectDrRating } from "@/lib/electricalEngine";
+import { calcProjectMetrics, autoBalancePhases, selectDrRating, getPrimaryPanelBoard } from "@/lib/electricalEngine";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
@@ -828,32 +828,49 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
   });
 
   // 4. DR Geral — In do IDR ≥ In do disjuntor geral (mesmo dimensionamento das demais telas)
-  const drAmps = projMetrics?.generalDr || selectDrRating(mainBreakerAmps);
-  initialNodes.push({
-    id: "node-dr",
-    type: "dr",
-    x: 80,
-    y: 320,
-    title: "DR GERAL",
-    subtitle: "Diferencial 30mA",
-    value: `${drAmps}A`,
-    phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
-    accentColor: "#005188",
-    active: true
-  });
-  initialConnections.push({
-    id: "c-breaker-to-dr",
-    from: "node-general-breaker",
-    to: "node-dr",
-    type: "fase"
-  });
+  const boards = Array.isArray(proj?.panel_boards) ? proj.panel_boards : [];
+  const activeBoard = getPrimaryPanelBoard(boards) || boards[0] || null;
+  const layout = activeBoard?.layout || proj?.panel_layout || null;
+  const layoutComps = (layout?.rails || []).flatMap((r) => r.components || []).filter((c) => c && c.type !== "spacer");
+  const hasLayout = layoutComps.length > 0;
+  const hasDrInLayout = layoutComps.some((c) => (
+    c.type === "dr"
+    || c.type === "idr"
+    || c.id === "gen_dr"
+    || /^(idr|dr)(\s|$)/i.test(String(c.label || c.name || ""))
+  ));
+  const circuitsList = projMetrics?.circuits || proj?.circuits || [];
+  const hasDrInCircuits = circuitsList.some((c) => c.needs_dr || c.wet_area);
+  const showGeneralDr = hasLayout ? hasDrInLayout : (proj?.has_dr !== false && hasDrInCircuits);
+
+  if (showGeneralDr) {
+    const drAmps = projMetrics?.generalDr || selectDrRating(mainBreakerAmps);
+    initialNodes.push({
+      id: "node-dr",
+      type: "dr",
+      x: 80,
+      y: 320,
+      title: "DR GERAL",
+      subtitle: "Diferencial 30mA",
+      value: `${drAmps}A`,
+      phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
+      accentColor: "#005188",
+      active: true
+    });
+    initialConnections.push({
+      id: "c-breaker-to-dr",
+      from: "node-general-breaker",
+      to: "node-dr",
+      type: "fase"
+    });
+  }
 
   // 5. Barramento Principal
   initialNodes.push({
     id: "node-busbar",
     type: "busbar",
     x: 80,
-    y: 440,
+    y: showGeneralDr ? 440 : 320,
     title: "BARRAMENTO PRINCIPAL",
     subtitle: `Distribuição ${supply === "Trifásico" ? "A/B/C" : supply === "Bifásico" ? "A/B" : "A"}`,
     value: "Cobre 80A",
@@ -862,14 +879,13 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
     active: true
   });
   initialConnections.push({
-    id: "c-dr-to-busbar",
-    from: "node-dr",
+    id: showGeneralDr ? "c-dr-to-busbar" : "c-breaker-to-busbar",
+    from: showGeneralDr ? "node-dr" : "node-general-breaker",
     to: "node-busbar",
     type: "fase"
   });
 
   // 6. Circuitos Finais do Projeto
-  const circuitsList = projMetrics?.circuits || proj?.circuits || [];
   circuitsList.forEach((c, idx) => {
     const cId = `node-circuit-${idx}`;
     const gridCol = idx % 3;
