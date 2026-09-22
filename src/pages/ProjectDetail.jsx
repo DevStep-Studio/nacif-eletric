@@ -409,8 +409,8 @@ export default function ProjectDetail() {
         </div>
 
         <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-4">
-          <ProjectStat icon={Zap} label="Potência" value={formatPower(metrics?.totalPower)} tone="primary" />
-          <ProjectStat icon={Calculator} label="Corrente geral" value={formatNumber(metrics?.generalCurrent, " A")} />
+          <ProjectStat icon={Zap} label="Demanda / Carga" value={formatPower(metrics?.totalDemandPower ?? metrics?.totalPower)} tone="primary" />
+          <ProjectStat icon={Calculator} label="Corrente geral (Ib)" value={formatNumber(metrics?.generalCurrent, " A")} />
           <ProjectStat icon={CheckCircle2} label="Circuitos" value={circuits.length} tone={circuits.length > 0 ? "success" : "default"} />
           <ProjectStat
             icon={errorCount > 0 ? AlertTriangle : ShieldCheck}

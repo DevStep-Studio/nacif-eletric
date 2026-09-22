@@ -25,7 +25,7 @@ import { createDefaultLayerState, layerVisibilityForLegacyCanvas, normalizeLayer
 import { normalizePlantDocument } from "@/editor/schemas/plantDocument";
 import { normalizeSnapSettings } from "@/editor/snapping/snapEngine";
 import { normalizeUnitSettings } from "@/editor/units/unitSystem";
-import { autoBalancePhases, buildProjectElectricalSyncPayload, calcCircuit } from "@/lib/electricalEngine";
+import { autoBalancePhases, buildProjectElectricalSyncPayload, calcCircuit, getDefaultDemandFactor } from "@/lib/electricalEngine";
 import {
   BUDGET_MATERIAL_PRICES,
   buildConduitBudgetItems,
@@ -999,6 +999,7 @@ const POINT_CIRCUIT_DEFAULTS = {
     voltage: 127,
     supply_type: "Monofásico",
     power_factor: 0.92,
+    demand_factor: 1.0,
   },
   arandela: {
     type: "Iluminação",
@@ -1007,6 +1008,7 @@ const POINT_CIRCUIT_DEFAULTS = {
     voltage: 127,
     supply_type: "Monofásico",
     power_factor: 0.92,
+    demand_factor: 1.0,
   },
   tug: {
     type: "Tomadas de Uso Geral",
@@ -1015,6 +1017,7 @@ const POINT_CIRCUIT_DEFAULTS = {
     voltage: 127,
     supply_type: "Monofásico",
     power_factor: 1,
+    demand_factor: 0.70,
   },
   tue: {
     type: "Tomadas de Uso Específico",
@@ -1023,6 +1026,7 @@ const POINT_CIRCUIT_DEFAULTS = {
     voltage: 220,
     supply_type: "Monofásico",
     power_factor: 1,
+    demand_factor: 0.80,
   },
   arcond: {
     type: "Ar Condicionado",
@@ -1031,6 +1035,7 @@ const POINT_CIRCUIT_DEFAULTS = {
     voltage: 220,
     supply_type: "Bifásico",
     power_factor: 0.92,
+    demand_factor: 0.85,
   },
   chuveiro: {
     type: "Chuveiro",
@@ -1039,6 +1044,7 @@ const POINT_CIRCUIT_DEFAULTS = {
     voltage: 220,
     supply_type: "Monofásico",
     power_factor: 1,
+    demand_factor: 1.0,
   },
   motor: {
     type: "Motor",
@@ -1047,6 +1053,7 @@ const POINT_CIRCUIT_DEFAULTS = {
     voltage: 220,
     supply_type: "Trifásico",
     power_factor: 0.85,
+    demand_factor: 0.80,
   },
 };
 
@@ -1064,7 +1071,7 @@ const CIRCUIT_FORM_EMPTY = {
   temp_ambient: "30",
   group_count: "1",
   point_count: "1",
-  demand_factor: "1",
+  demand_factor: "0.70",
 };
 
 const CIRCUIT_SUPPLY_TYPES = ["Monofásico", "Bifásico", "Trifásico"];
@@ -4066,7 +4073,7 @@ export default function PlantaIA() {
       temp_ambient: String(point.temp_ambient || 30),
       group_count: String(point.group_count || 1),
       point_count: String(point.point_count || 1),
-      demand_factor: String(point.demand_factor || 1),
+      demand_factor: String(point.demand_factor || defaults.demand_factor || getDefaultDemandFactor(point.circuit_type || defaults.type, point.circuit || defaults.name)),
     });
     setCircuitModalPointId(String(point.id));
   }, [circuitOptions, selectedProjectData]);

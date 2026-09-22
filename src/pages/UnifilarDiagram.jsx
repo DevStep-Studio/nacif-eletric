@@ -534,9 +534,9 @@ function UnifilarSVG({ project, metrics }) {
 
       <rect x={TABLE_X + 348} y="388" width="210" height="62" fill="white" stroke="#000" strokeWidth="0.35" />
       {[
-        ["Cálculo por demanda", "Total", `${Math.round(metrics?.totalPower || 0)} W`],
-        ["Demanda ajustada", "Painel", `${totalKva} kVA`],
-        ["Corrente geral", "Projeto", `${mainCurrent} A`],
+        ["Potência instalada", "Total", `${Math.round(metrics?.totalPower || 0)} W`],
+        ["Demanda calculada", "Painel", `${metrics?.totalDemandKva || ((metrics?.totalDemandPower || metrics?.totalPower || 0) / 1000).toFixed(2)} kVA`],
+        ["Corrente geral (Ib)", "Projeto", `${mainCurrent} A`],
         ["Cabo de alimentação", "Quadro", `${feeder}mm²`],
       ].map((row, i) => (
         <g key={row[0]}>
@@ -553,11 +553,13 @@ function UnifilarSVG({ project, metrics }) {
 
   const Characteristics = () => {
     const conductorPe = Math.max(10, Math.round(feeder / 2));
+    const demandKvaVal = metrics?.totalDemandKva || Number(((metrics?.totalDemandPower || metrics?.totalPower || 0) / 1000).toFixed(2));
     const rows = [
       ["ORIGEM:", panelName],
       ["CARGA INSTALADA:", `${totalKva} kVA`],
+      ["DEMANDA DE PROJETO:", `${demandKvaVal} kVA (Fd ${metrics?.averageDemandFactor || 1})`],
       ["TENSÃO NOMINAL:", `${supply.toUpperCase()} ${voltage}V`],
-      ["CORRENTE NOMINAL:", `${mainCurrent}A`],
+      ["CORRENTE DE DEMANDA:", `${mainCurrent}A`],
       ["PROTEÇÃO GERAL:", `DISJUNTOR TERMOMAG. ${supply === "Trifásico" ? "TRIPOLAR" : "BIPOLAR"} DE ${generalBreaker}A`],
       ["BARRAMENTO:", `${supply === "Trifásico" ? "3F+N+T" : supply === "Bifásico" ? "2F+N+T" : "F+N+T"} DE ${Math.max(80, generalBreaker)}A`],
       ["CONDUTORES:", `FASES - #${feeder}mm2 XLPE OU HPE`],

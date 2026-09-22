@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { backend } from "@/api/backendClient";
-import { calcCircuit } from "@/lib/electricalEngine";
+import { calcCircuit, getDefaultDemandFactor } from "@/lib/electricalEngine";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -24,33 +24,48 @@ const METHODS = [
 ];
 const TEMPS = [25, 30, 35, 40, 45, 50];
 
+const DEMAND_PRESETS = [
+  { label: "1.00 (Chuveiro / Luz / Contínuo)", value: 1.0 },
+  { label: "0.85 (Ar Cond. / Servidor)", value: 0.85 },
+  { label: "0.80 (TUE / Forno / Motor)", value: 0.80 },
+  { label: "0.70 (TUG Geral / Micro-ondas)", value: 0.70 },
+  { label: "0.60 (Uso Intermitente)", value: 0.60 },
+];
+
 const EMPTY_CIRCUIT = {
   name: "", description: "", type: "Tomadas de Uso Geral",
   supply_type: "", voltage: "",
   power_w: "", power_factor: "", length_m: "",
   install_method: "Eletroduto Embutido em Parede",
   temp_ambient: 30, group_count: 1,
-  point_count: 1, demand_factor: 1,
+  point_count: 1, demand_factor: 0.70,
   wet_area: false,
 };
 
 const EQUIPMENT_KNOWLEDGE = [
-  { keywords: ["ar condicionado", "split", "inverter"], btuMap: { "9000": 900, "12000": 1300, "18000": 1800, "24000": 2400, "30000": 3000, "36000": 3500 }, defaultPower: 1300, voltage: 220, supply: "Bifásico", fp: 0.92 },
-  { keywords: ["chuveiro"], defaultPower: 5500, voltage: 220, supply: "Monofásico", fp: 1.0 },
-  { keywords: ["microondas"], defaultPower: 1200, voltage: 220, supply: "Monofásico", fp: 0.95 },
-  { keywords: ["forno", "forno elétrico"], defaultPower: 3000, voltage: 220, supply: "Monofásico", fp: 1.0 },
-  { keywords: ["motor", "motor trifásico", "motor elétrico"], defaultPower: 2200, voltage: 380, supply: "Trifásico", fp: 0.85 },
-  { keywords: ["bomba", "bomba hidráulica"], defaultPower: 1500, voltage: 220, supply: "Trifásico", fp: 0.85 },
-  { keywords: ["servidor", "rack", "data center"], defaultPower: 2000, voltage: 220, supply: "Monofásico", fp: 0.95 },
-  { keywords: ["nobreak", "ups"], defaultPower: 1500, voltage: 220, supply: "Monofásico", fp: 0.95 },
-  { keywords: ["carregador veicular", "ev", "carro elétrico", "eletroposto"], defaultPower: 7400, voltage: 220, supply: "Bifásico", fp: 0.98 },
-  { keywords: ["iluminação", "lâmpadas", "luminárias"], defaultPower: 1000, voltage: 127, supply: "Monofásico", fp: 0.92 },
-  { keywords: ["tomada", "tug", "tue"], defaultPower: 3000, voltage: 127, supply: "Monofásico", fp: 1.0 },
-  { keywords: ["cftv", "câmera", "câmeras", "nvr"], defaultPower: 400, voltage: 127, supply: "Monofásico", fp: 0.90 },
+  { keywords: ["ar condicionado", "split", "inverter"], btuMap: { "9000": 900, "12000": 1300, "18000": 1800, "24000": 2400, "30000": 3000, "36000": 3500 }, defaultPower: 1300, voltage: 220, supply: "Bifásico", fp: 0.92, demand_factor: 0.85 },
+  { keywords: ["chuveiro"], defaultPower: 5500, voltage: 220, supply: "Monofásico", fp: 1.0, demand_factor: 1.0 },
+  { keywords: ["microondas", "micro-ondas"], defaultPower: 1200, voltage: 220, supply: "Monofásico", fp: 0.95, demand_factor: 0.70 },
+  { keywords: ["forno", "forno elétrico", "cooktop", "fogão"], defaultPower: 3000, voltage: 220, supply: "Monofásico", fp: 1.0, demand_factor: 0.80 },
+  { keywords: ["motor", "motor trifásico", "motor elétrico"], defaultPower: 2200, voltage: 380, supply: "Trifásico", fp: 0.85, demand_factor: 0.80 },
+  { keywords: ["bomba", "bomba hidráulica"], defaultPower: 1500, voltage: 220, supply: "Trifásico", fp: 0.85, demand_factor: 0.80 },
+  { keywords: ["servidor", "rack", "data center"], defaultPower: 2000, voltage: 220, supply: "Monofásico", fp: 0.95, demand_factor: 0.85 },
+  { keywords: ["nobreak", "ups"], defaultPower: 1500, voltage: 220, supply: "Monofásico", fp: 0.95, demand_factor: 0.85 },
+  { keywords: ["carregador veicular", "ev", "carro elétrico", "eletroposto"], defaultPower: 7400, voltage: 220, supply: "Bifásico", fp: 0.98, demand_factor: 1.0 },
+  { keywords: ["iluminação", "lâmpadas", "luminárias"], defaultPower: 1000, voltage: 127, supply: "Monofásico", fp: 0.92, demand_factor: 1.0 },
+  { keywords: ["tomada", "tug"], defaultPower: 3000, voltage: 127, supply: "Monofásico", fp: 1.0, demand_factor: 0.70 },
+  { keywords: ["tue"], defaultPower: 3000, voltage: 220, supply: "Monofásico", fp: 1.0, demand_factor: 0.80 },
+  { keywords: ["cftv", "câmera", "câmeras", "nvr"], defaultPower: 400, voltage: 127, supply: "Monofásico", fp: 0.90, demand_factor: 0.80 },
 ];
 
 function getInitialForm(initialData) {
-  return initialData ? { ...EMPTY_CIRCUIT, ...initialData } : { ...EMPTY_CIRCUIT };
+  if (initialData) {
+    const df = initialData.demand_factor !== undefined && initialData.demand_factor !== null
+      ? initialData.demand_factor
+      : getDefaultDemandFactor(initialData.type, initialData.name);
+    return { ...EMPTY_CIRCUIT, ...initialData, demand_factor: df };
+  }
+  return { ...EMPTY_CIRCUIT };
 }
 
 function suggestFromKnowledge(name) {
@@ -64,7 +79,13 @@ function suggestFromKnowledge(name) {
     if (btuMatch && found.btuMap[btuMatch[1]]) power = found.btuMap[btuMatch[1]];
   }
 
-  return { power_w: power, voltage: found.voltage, supply_type: found.supply, power_factor: found.fp };
+  return {
+    power_w: power,
+    voltage: found.voltage,
+    supply_type: found.supply,
+    power_factor: found.fp,
+    demand_factor: found.demand_factor || getDefaultDemandFactor("", name),
+  };
 }
 
 function PreviewItem({ icon: Icon, label, value, detail, tone = "text-slate-950" }) {
@@ -89,13 +110,27 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
+  const handleCategoryChange = (newType) => {
+    const suggestedDf = getDefaultDemandFactor(newType, form.name);
+    setForm(f => ({
+      ...f,
+      type: newType,
+      demand_factor: suggestedDf,
+    }));
+  };
+
   useEffect(() => {
     if (form.power_w && form.voltage && form.supply_type) {
-      setPreview(calcCircuit({ ...form, power_w: Number(form.power_w), voltage: Number(form.voltage) }));
+      setPreview(calcCircuit({
+        ...form,
+        power_w: Number(form.power_w),
+        voltage: Number(form.voltage),
+        demand_factor: Number(form.demand_factor) || getDefaultDemandFactor(form.type, form.name),
+      }));
     } else {
       setPreview(null);
     }
-  }, [form.power_w, form.voltage, form.supply_type, form.power_factor, form.length_m, form.temp_ambient, form.group_count, form.install_method, form.demand_factor]);
+  }, [form.power_w, form.voltage, form.supply_type, form.power_factor, form.length_m, form.temp_ambient, form.group_count, form.install_method, form.demand_factor, form.type]);
 
   useEffect(() => {
     if (!open) return;
@@ -109,14 +144,21 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
     const local = suggestFromKnowledge(form.name);
     if (local) {
       setAiSuggestion(local);
-      setForm(f => ({ ...f, power_w: String(local.power_w), voltage: String(local.voltage), supply_type: local.supply_type, power_factor: String(local.power_factor) }));
+      setForm(f => ({
+        ...f,
+        power_w: String(local.power_w),
+        voltage: String(local.voltage),
+        supply_type: local.supply_type,
+        power_factor: String(local.power_factor),
+        demand_factor: local.demand_factor ?? f.demand_factor,
+      }));
       return;
     }
 
     setAiLoading(true);
     try {
       const res = await backend.integrations.Core.InvokeLLM({
-        prompt: `Você é um engenheiro eletricista especialista em NBR 5410. Para o equipamento "${form.name}" da categoria "${form.type}", forneça a sugestão técnica elétrica.`,
+        prompt: `Você é um engenheiro eletricista especialista em NBR 5410. Para o equipamento "${form.name}" da categoria "${form.type}", forneça a sugestão técnica elétrica incluindo fator de demanda.`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -124,6 +166,7 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
             voltage: { type: "number", enum: [127, 220, 380, 440, 480] },
             supply_type: { type: "string", enum: ["Monofásico", "Bifásico", "Trifásico"] },
             power_factor: { type: "number" },
+            demand_factor: { type: "number" },
             justification: { type: "string" },
           }
         }
@@ -131,7 +174,14 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
 
       if (res?.power_w) {
         setAiSuggestion(res);
-        setForm(f => ({ ...f, power_w: String(res.power_w), voltage: String(res.voltage), supply_type: res.supply_type, power_factor: String(res.power_factor) }));
+        setForm(f => ({
+          ...f,
+          power_w: String(res.power_w),
+          voltage: String(res.voltage),
+          supply_type: res.supply_type,
+          power_factor: String(res.power_factor),
+          demand_factor: res.demand_factor || getDefaultDemandFactor(f.type, f.name),
+        }));
       }
     } catch {
       setAiSuggestion({ justification: "Sugestão automática indisponível no momento." });
@@ -149,7 +199,7 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
       voltage: Number(form.voltage),
       power_factor: Number(form.power_factor) || undefined,
       length_m: Number(form.length_m) || 15,
-      demand_factor: Number(form.demand_factor) || 1,
+      demand_factor: Number(form.demand_factor) || getDefaultDemandFactor(form.type, form.name),
       group_count: Number(form.group_count) || 1,
       point_count: Number(form.point_count) || 1,
       temp_ambient: Number(form.temp_ambient) || 30,
@@ -159,6 +209,8 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
     setForm(getInitialForm(null));
     setOpen(false);
   };
+
+  const currentEffectivePower = Math.round((Number(form.power_w) || 0) * (Number(form.demand_factor) || 1));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -175,10 +227,10 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
           <div className="flex items-center gap-3 rounded-xl border border-[#CDEFE8] bg-[#F8FBFD] p-3">
             <Sparkles className="w-4 h-4 text-primary shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-extrabold text-[#0f1728]">Sugestão técnica</p>
+              <p className="text-xs font-extrabold text-[#0f1728]">Sugestão técnica automática</p>
               {aiSuggestion
-                ? <p className="text-[11px] font-medium text-[#687386]">{aiSuggestion.justification || `${aiSuggestion.power_w}W · ${aiSuggestion.voltage}V · ${aiSuggestion.supply_type} - parâmetros aplicados`}</p>
-                : <p className="text-[11px] font-medium text-[#687386]">Use o nome do equipamento para preencher potência, tensão, alimentação e fp.</p>}
+                ? <p className="text-[11px] font-medium text-[#687386]">{aiSuggestion.justification || `${aiSuggestion.power_w}W · ${aiSuggestion.voltage}V · ${aiSuggestion.supply_type} (Fd: ${aiSuggestion.demand_factor || form.demand_factor}) - parâmetros aplicados`}</p>
+                : <p className="text-[11px] font-medium text-[#687386]">Digite o nome do circuito/equipamento e clique em sugerir para preencher potência, tensão, fp e demanda.</p>}
             </div>
             <button
               type="button"
@@ -204,7 +256,7 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
               </div>
               <div className="space-y-1">
                 <Label>Categoria</Label>
-                <Select value={form.type} onValueChange={v => set("type", v)}>
+                <Select value={form.type} onValueChange={handleCategoryChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{CIRCUIT_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
@@ -258,7 +310,14 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
           </section>
 
           <section>
-            <h3 className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Carga e demanda</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Carga e demanda (NBR 5410)</h3>
+              {currentEffectivePower > 0 && (
+                <span className="text-xs font-bold text-primary">
+                  Demanda: {currentEffectivePower} W ({form.demand_factor || 1}x)
+                </span>
+              )}
+            </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-1">
                 <Label>Potência Instalada (W)</Label>
@@ -269,9 +328,30 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
                 <Input type="number" step="0.01" min="0.5" max="1" placeholder="Ex: 0.92" value={form.power_factor} onChange={e => set("power_factor", e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label>Fator de Demanda</Label>
-                <Input type="number" step="0.1" min="0.1" max="1" placeholder="Ex: 1.0" value={form.demand_factor} onChange={e => set("demand_factor", e.target.value)} />
+                <div className="flex items-center justify-between">
+                  <Label>Fator de Demanda (Fd)</Label>
+                  <span className="text-[10px] font-bold text-slate-500">Padrão: {getDefaultDemandFactor(form.type, form.name)}</span>
+                </div>
+                <Input type="number" step="0.05" min="0.1" max="1" placeholder="Ex: 0.70" value={form.demand_factor} onChange={e => set("demand_factor", e.target.value)} />
               </div>
+            </div>
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-medium text-slate-500 mr-1">Atalhos Fd:</span>
+              {DEMAND_PRESETS.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => set("demand_factor", preset.value)}
+                  className={`rounded-md border px-2 py-1 text-[10px] font-bold transition-colors ${
+                    Number(form.demand_factor) === preset.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {preset.value}
+                </button>
+              ))}
             </div>
           </section>
 
@@ -306,8 +386,11 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
           {preview && (
             <section className="space-y-3 rounded-xl border border-[#CDEFE8] bg-[#F8FBFD] p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-extrabold text-[#0f1728]">Prévia NBR 5410</h3>
+                <h3 className="text-sm font-extrabold text-[#0f1728]">Dimensionamento NBR 5410</h3>
                 <div className="flex flex-wrap gap-2">
+                  <Badge className="bg-emerald-50 text-emerald-700 text-[10px]">
+                    Demanda: {preview.demand_power_w} W (Fd {preview.demand_factor})
+                  </Badge>
                   {preview.needs_dr && <Badge className="bg-emerald-50 text-emerald-700 text-[10px]">DR 30mA</Badge>}
                   <Badge className="bg-blue-50 text-blue-700 text-[10px]">DPS previsto</Badge>
                   <Badge className={preview.voltage_drop_ok ? "bg-emerald-50 text-emerald-700 text-[10px]" : "bg-red-50 text-red-700 text-[10px]"}>
@@ -316,7 +399,13 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
                 </div>
               </div>
               <div className="grid gap-3 text-xs md:grid-cols-4">
-                <PreviewItem icon={CircleGauge} label="Corrente" value={`${preview.project_current_a} A`} detail={`${preview.corrected_current_a} A corrigida`} />
+                <PreviewItem
+                  icon={CircleGauge}
+                  label="Corrente de Projeto (Ib)"
+                  value={`${preview.project_current_a} A`}
+                  detail={`${preview.nominal_current_a} A nominal (${preview.corrected_current_a} A corrigida)`}
+                  tone="text-primary"
+                />
                 <PreviewItem icon={Cable} label="Condutor" value={preview.wire_gauge} detail={`mín. ${preview.minimum_wire_area}mm²`} />
                 <PreviewItem icon={ShieldCheck} label="Proteção" value={`${preview.breaker_a}A ${preview.breaker_poles}P/${preview.breaker_curve}`} detail={`${preview.breaking_capacity_ka} kA`} />
                 <PreviewItem

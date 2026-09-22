@@ -107,6 +107,51 @@ export function selectWireGauge(corrected_a, install_method = "Eletroduto Embuti
 }
 
 // ─── Seleção do disjuntor (NBR 5410) ──────────────────────────────────────────────────────────
+// ─── Fatores de demanda padrão (NBR 5410 / Concessionárias brasileiras) ──────────────────────
+export const DEFAULT_DEMAND_FACTORS = {
+  "Iluminação": 1.0,
+  "Tomadas de Uso Geral": 0.70,
+  "Tomadas de Uso Específico": 0.80,
+  "Chuveiro": 1.0,
+  "Forno": 0.80,
+  "Ar Condicionado": 0.85,
+  "Motor": 0.80,
+  "Bomba Hidráulica": 0.80,
+  "Servidor": 0.85,
+  "CFTV": 0.80,
+  "Nobreak": 0.85,
+  "Carregador Veicular": 1.0,
+};
+
+export function getDefaultDemandFactor(type = "", name = "") {
+  const normType = String(type || "").trim();
+  const normName = String(name || "").toLowerCase();
+
+  if (normName.includes("chuveiro") || normName.includes("ducha")) return 1.0;
+  if (normName.includes("ar condicionado") || normName.includes("split") || normName.includes("inverter")) return 0.85;
+  if (normName.includes("forno") || normName.includes("cooktop") || normName.includes("fogão")) return 0.80;
+  if (normName.includes("microondas") || normName.includes("micro-ondas")) return 0.70;
+  if (normName.includes("motor") || normName.includes("bomba")) return 0.80;
+  if (normName.includes("carregador") || normName.includes("veicular") || normName.includes("ev")) return 1.0;
+  if (normName.includes("ilumin") || normName.includes("luz") || normName.includes("lustre")) return 1.0;
+  if (normName.includes("tomada") || normName.includes("tug")) return 0.70;
+
+  if (DEFAULT_DEMAND_FACTORS[normType] !== undefined) {
+    return DEFAULT_DEMAND_FACTORS[normType];
+  }
+
+  const lower = normType.toLowerCase();
+  if (lower.includes("ilumina")) return 1.0;
+  if (lower.includes("geral") || lower.includes("tug")) return 0.70;
+  if (lower.includes("chuveiro")) return 1.0;
+  if (lower.includes("ar condicionado")) return 0.85;
+  if (lower.includes("motor") || lower.includes("bomba")) return 0.80;
+  if (lower.includes("específico") || lower.includes("tue")) return 0.80;
+
+  return 0.80;
+}
+
+// ─── Seleção do disjuntor (NBR 5410) ──────────────────────────────────────────────────────────
 export function selectBreaker(nominal_a) {
   const SIZES = [6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400];
   return SIZES.find(s => s >= nominal_a) || 400;
@@ -114,7 +159,7 @@ export function selectBreaker(nominal_a) {
 
 // ─── Seleção do IDR de entrada (In ≥ In do disjuntor geral) ───────────────────────────────────
 // Piso de 40 A: alinha com a base de materiais/orçamento, que cota IDR a partir de 40 A.
-export const DR_RATINGS = [40, 63, 80, 100, 125];
+export const DR_RATINGS = [40, 63, 80, 100, 125, 160, 200, 250, 315, 400];
 
 export function selectDrRating(breaker_a) {
   const n = Number(breaker_a) || 0;
@@ -172,30 +217,41 @@ export function calcCircuit(circuit) {
     group_count = 1,
     length_m = 15,
     power_factor,
-    demand_factor = 1,
+    demand_factor,
     point_count = 1,
   } = circuit;
 
-  const fp = power_factor || (type === "Motor" || type === "Ar Condicionado" ? 0.85 : type === "Iluminação" ? 0.92 : 1.0);
-  const effectivePower = power_w * demand_factor;
+  const rawDemand = (demand_factor !== undefined && demand_factor !== null && demand_factor !== "")
+    ? Number(demand_factor)
+    : getDefaultDemandFactor(type, circuit?.name);
+  const resolvedDemandFactor = Number.isFinite(rawDemand) && rawDemand > 0 ? rawDemand : 1.0;
 
-  const nominal_a      = calcNominalCurrent(effectivePower, voltage, supply_type, fp);
-  const corrected_a    = calcCorrectedCurrent(nominal_a, temp_ambient, group_count);
+  const fp = Number(power_factor) || (type === "Motor" || type === "Ar Condicionado" ? 0.85 : type === "Iluminação" ? 0.92 : 1.0);
+  const installedPowerW = Number(power_w) || 0;
+  const effectivePowerW = Math.round(installedPowerW * resolvedDemandFactor * 100) / 100;
+  const installedPowerVa = fp > 0 ? Math.round((installedPowerW / fp) * 100) / 100 : installedPowerW;
+  const effectivePowerVa = fp > 0 ? Math.round((effectivePowerW / fp) * 100) / 100 : effectivePowerW;
+
+  const nominal_a      = calcNominalCurrent(installedPowerW, voltage, supply_type, fp);
+  const demand_a       = calcNominalCurrent(effectivePowerW, voltage, supply_type, fp);
+  const project_current_a = demand_a;
+  const corrected_a    = calcCorrectedCurrent(project_current_a, temp_ambient, group_count);
   const minWireArea    = minimumWireAreaForCircuit(type);
   let wireData         = selectWireGauge(corrected_a, install_method, minWireArea);
-  const breaker_a      = selectBreaker(nominal_a * 1.25);
-  let vd               = calcVoltageDrop(effectivePower, voltage, supply_type, length_m, wireData.gauge, fp);
+  // Dimensionamento do disjuntor do circuito: In >= Ib (corrente de projeto de demanda conforme NBR 5410)
+  const breaker_a      = selectBreaker(project_current_a);
+  let vd               = calcVoltageDrop(effectivePowerW, voltage, supply_type, length_m, wireData.gauge, fp);
   if (!vd.ok) {
     const methodCol = METHOD_COL[install_method] || "B2";
     const voltageDropWire = WIRE_TABLE.find((wire) => (
       wire.area >= wireData.area &&
       wire.area >= minWireArea &&
       wire[methodCol] >= corrected_a &&
-      calcVoltageDrop(effectivePower, voltage, supply_type, length_m, wire.gauge, fp).ok
+      calcVoltageDrop(effectivePowerW, voltage, supply_type, length_m, wire.gauge, fp).ok
     ));
     if (voltageDropWire) {
       wireData = voltageDropWire;
-      vd = calcVoltageDrop(effectivePower, voltage, supply_type, length_m, wireData.gauge, fp);
+      vd = calcVoltageDrop(effectivePowerW, voltage, supply_type, length_m, wireData.gauge, fp);
     }
   }
   const temp_factor    = TEMP_FACTORS[temp_ambient] || 1.0;
@@ -206,7 +262,14 @@ export function calcCircuit(circuit) {
 
   return {
     ...circuit,
-    project_current_a:    nominal_a,
+    power_w:              installedPowerW,
+    demand_factor:        resolvedDemandFactor,
+    demand_power_w:       effectivePowerW,
+    power_va:             installedPowerVa,
+    demand_power_va:      effectivePowerVa,
+    nominal_current_a:    nominal_a,
+    demand_current_a:     demand_a,
+    project_current_a:    project_current_a,
     corrected_current_a:  corrected_a,
     wire_gauge:           wireData.gauge,
     wire_area:            wireData.area,
@@ -215,7 +278,7 @@ export function calcCircuit(circuit) {
     breaker_curve:        curve,
     breaker_poles:        poles,
     breaking_capacity_ka: breaking_ka,
-    needs_dr:             NEEDS_DR(type),
+    needs_dr:             NEEDS_DR(type) || Boolean(circuit.wet_area),
     needs_dps:            true,
     voltage_drop_v:       vd.drop_v,
     voltage_drop_pct:     vd.drop_pct,
@@ -350,18 +413,36 @@ export function calcProjectMetrics(project) {
   const rawCircuits = (project?.circuits || []).map(calcCircuit);
   const phaseLoad = { A: 0, B: 0, C: 0 };
   let totalPower = 0;
+  let totalDemandPower = 0;
+  let totalDemandVa = 0;
 
   circuits.forEach(c => {
-    totalPower += c.power_w || 0;
+    const pInst = Number(c.power_w) || 0;
+    const pDem = Number(c.demand_power_w) !== undefined && !Number.isNaN(Number(c.demand_power_w))
+      ? Number(c.demand_power_w)
+      : (pInst * (Number(c.demand_factor) || 1));
+    const sDem = Number(c.demand_power_va) || pDem;
+
+    totalPower += pInst;
+    totalDemandPower += pDem;
+    totalDemandVa += sDem;
+
     const ph = c.phase || "A";
-    if (ph === "ABC") { phaseLoad.A += c.project_current_a; phaseLoad.B += c.project_current_a; phaseLoad.C += c.project_current_a; }
-    else if (ph.length === 2) { phaseLoad[ph[0]] += c.project_current_a; phaseLoad[ph[1]] += c.project_current_a; }
-    else { phaseLoad[ph] += c.project_current_a; }
+    const I = Number(c.project_current_a) || 0;
+    if (ph === "ABC") { phaseLoad.A += I; phaseLoad.B += I; phaseLoad.C += I; }
+    else if (ph.length === 2) {
+      if (phaseLoad[ph[0]] != null) phaseLoad[ph[0]] += I;
+      if (phaseLoad[ph[1]] != null) phaseLoad[ph[1]] += I;
+    }
+    else {
+      if (phaseLoad[ph] != null) phaseLoad[ph] += I;
+      else phaseLoad.A += I;
+    }
   });
 
-  const maxI = Math.max(phaseLoad.A, phaseLoad.B, phaseLoad.C) || 1;
+  const maxI = Math.max(phaseLoad.A, phaseLoad.B, phaseLoad.C) || 0;
   const minI = Math.min(phaseLoad.A, phaseLoad.B, phaseLoad.C);
-  const imbalance_pct = Math.round(((maxI - minI) / maxI) * 100);
+  const imbalance_pct = maxI > 0 ? Math.round(((maxI - minI) / maxI) * 100) : 0;
   const neutral_a = Math.round((phaseLoad.A + phaseLoad.B + phaseLoad.C) * 0.1 * 10) / 10;
 
   // Desequilíbrio "como está" (fases informadas nos circuitos), para comparar antes/depois do ajuste.
@@ -376,22 +457,26 @@ export function calcProjectMetrics(project) {
     } else if (storedPhaseLoad[ph] != null) { storedPhaseLoad[ph] += I; }
     else { storedPhaseLoad.A += I; }
   });
-  const storedMax = Math.max(storedPhaseLoad.A, storedPhaseLoad.B, storedPhaseLoad.C) || 1;
+  const storedMax = Math.max(storedPhaseLoad.A, storedPhaseLoad.B, storedPhaseLoad.C) || 0;
   const storedMin = Math.min(storedPhaseLoad.A, storedPhaseLoad.B, storedPhaseLoad.C);
-  const storedImbalance_pct = Math.round(((storedMax - storedMin) / storedMax) * 100);
+  const storedImbalance_pct = storedMax > 0 ? Math.round(((storedMax - storedMin) / storedMax) * 100) : 0;
 
   const totalDins = circuits.reduce((s, c) => s + (c.din_modules || 1), 0) + 4 + 2; // + geral + DPS
   const drCircuits = circuits.filter(c => c.needs_dr).length;
   const drDins = Math.ceil(drCircuits / 2) * 2; // DRs 2P agrupam 2 circuitos
   const panelSize = Math.ceil((totalDins + drDins) * 1.2 / 6) * 6; // +20% reserva, multiplo de 6
 
-  // Corrente geral = fase mais carregada (NBR 5410 — proteção geral)
+  // Corrente geral = fase mais carregada (NBR 5410 — proteção geral com base na demanda)
   const generalCurrent = Math.round(maxI * 10) / 10;
-  const generalBreaker = selectBreaker(maxI * 1.25);
+  // Dimensionamento do disjuntor geral: In >= Ib (corrente de projeto de demanda)
+  const generalBreaker = selectBreaker(generalCurrent > 0 ? generalCurrent : 40);
   const generalPolesSet = mainProtectionPoles(project?.supply_type || "Monofásico");
   const generalBreakerPoles = generalPolesSet.breaker;
   const generalDr = selectDrRating(generalBreaker);
   const generalDrPoles = generalPolesSet.dr;
+
+  const averageDemandFactor = totalPower > 0 ? Math.round((totalDemandPower / totalPower) * 100) / 100 : 1.0;
+  const totalDemandKva = Math.round((totalDemandVa / 1000) * 100) / 100;
 
   // Validações NBR 5410
   const validations = [];
@@ -455,7 +540,9 @@ export function calcProjectMetrics(project) {
   }
 
   return {
-    circuits, phaseLoad, imbalance_pct, storedImbalance_pct, imbalanceBlocker, neutral_a, totalPower,
+    circuits, phaseLoad, imbalance_pct, storedImbalance_pct, imbalanceBlocker, neutral_a,
+    totalPower, totalInstalledPower: totalPower, totalDemandPower: Math.round(totalDemandPower * 100) / 100,
+    totalDemandKva, averageDemandFactor,
     totalDins, panelSize, generalBreaker, generalCurrent: Math.round(generalCurrent * 10) / 10,
     generalBreakerPoles, generalDr, generalDrPoles,
     validations, nbrScore,
@@ -1006,9 +1093,16 @@ export function buildPanelBoardsWithLayout(project, panelLayout = generateDefaul
 }
 
 export function calculateProjectDemand(circuits = []) {
-  return (Array.isArray(circuits) ? circuits : []).reduce((sum, circuit) => (
-    sum + (Number(circuit?.power_w) || 0) * (Number(circuit?.demand_factor) || 1)
-  ), 0);
+  return (Array.isArray(circuits) ? circuits : []).reduce((sum, circuit) => {
+    if (circuit?.demand_power_w !== undefined && !Number.isNaN(Number(circuit.demand_power_w))) {
+      return sum + Number(circuit.demand_power_w);
+    }
+    const pInst = Number(circuit?.power_w) || 0;
+    const df = (circuit?.demand_factor !== undefined && circuit?.demand_factor !== null && circuit?.demand_factor !== "")
+      ? Number(circuit.demand_factor)
+      : getDefaultDemandFactor(circuit?.type, circuit?.name);
+    return sum + pInst * (Number.isFinite(df) && df > 0 ? df : 1);
+  }, 0);
 }
 
 export function buildProjectElectricalSyncPayload(project, circuits = []) {

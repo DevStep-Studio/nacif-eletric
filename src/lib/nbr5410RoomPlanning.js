@@ -287,7 +287,7 @@ export function buildNBRCircuitDrafts(analysis = [], project = {}) {
       power_factor: 0.92,
       length_m: 15,
       point_count: totals.lighting,
-      demand_factor: 1,
+      demand_factor: 1.0,
     });
   }
 
@@ -313,7 +313,7 @@ export function buildNBRCircuitDrafts(analysis = [], project = {}) {
       power_factor: 1,
       length_m: 20,
       point_count: generalTugCount,
-      demand_factor: 1,
+      demand_factor: 0.70,
     });
   }
 
@@ -339,7 +339,7 @@ export function buildNBRCircuitDrafts(analysis = [], project = {}) {
       power_factor: 1,
       length_m: 20,
       point_count: wetTugCount,
-      demand_factor: 1,
+      demand_factor: 0.70,
       wet_area: true,
     });
   }

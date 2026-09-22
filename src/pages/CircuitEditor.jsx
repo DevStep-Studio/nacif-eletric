@@ -199,7 +199,13 @@ function CircuitCard({ circuit, index, onEdit, onRemove, saving }) {
     : circuit.phase?.length === 2
       ? `Fases ${circuit.phase.split("").join("/")}`
       : `Fase ${circuit.phase || "A"}`;
-  const effectivePower = (Number(circuit.power_w) || 0) * (Number(circuit.demand_factor) || 1);
+  const installedPower = Number(circuit.power_w) || 0;
+  const demandFactor = Number(circuit.demand_factor) !== undefined && !Number.isNaN(Number(circuit.demand_factor))
+    ? Number(circuit.demand_factor)
+    : 1;
+  const effectivePower = Number(circuit.demand_power_w) !== undefined && !Number.isNaN(Number(circuit.demand_power_w))
+    ? Number(circuit.demand_power_w)
+    : Math.round(installedPower * demandFactor);
 
   return (
     <article className="relative overflow-hidden rounded-[18px] border border-[#CDEFE8] bg-white shadow-[0_16px_40px_rgba(0,100,166,0.05)] transition hover:-translate-y-0.5 hover:border-[#BCEEE5] hover:shadow-[0_20px_48px_rgba(0,100,166,0.085)]">
@@ -257,10 +263,30 @@ function CircuitCard({ circuit, index, onEdit, onRemove, saving }) {
 
         <div className="mt-5 grid gap-4 border-t border-[#CDEFE8] pt-4">
           <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
-            <CompactStat label="Carga" value={formatPower(effectivePower)} className="border-[#BCEEE5] bg-[#F2FFFC]" tone="text-[#101828]" />
-            <CompactStat label="Corrente" value={formatNumber(circuit.project_current_a, " A")} className="border-cyan-100 bg-cyan-50/70" tone="text-cyan-950" />
-            <CompactStat label="Proteção" value={`${circuit.breaker_a}A ${circuit.breaker_poles}P/${circuit.breaker_curve}`} className="border-emerald-100 bg-emerald-50/70" tone="text-emerald-950" />
-            <CompactStat label="Condutor" value={circuit.wire_gauge} className="border-[#D8C8FF] bg-[#F6F2FF]" tone="text-[#43268B]" />
+            <CompactStat
+              label="Demanda / Carga"
+              value={formatPower(effectivePower)}
+              className="border-[#BCEEE5] bg-[#F2FFFC]"
+              tone="text-[#101828]"
+            />
+            <CompactStat
+              label="Corrente (Ib)"
+              value={formatNumber(circuit.project_current_a, " A")}
+              className="border-cyan-100 bg-cyan-50/70"
+              tone="text-cyan-950"
+            />
+            <CompactStat
+              label="Proteção"
+              value={`${circuit.breaker_a}A ${circuit.breaker_poles}P/${circuit.breaker_curve}`}
+              className="border-emerald-100 bg-emerald-50/70"
+              tone="text-emerald-950"
+            />
+            <CompactStat
+              label="Condutor"
+              value={circuit.wire_gauge}
+              className="border-[#D8C8FF] bg-[#F6F2FF]"
+              tone="text-[#43268B]"
+            />
           </div>
 
           <div className="flex justify-end">
@@ -276,7 +302,9 @@ function CircuitCard({ circuit, index, onEdit, onRemove, saving }) {
 
           {expanded && (
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              <DetailLine label="Queda" value={`${formatNumber(circuit.voltage_drop_pct, "%")} · ${formatNumber(circuit.voltage_drop_v, " V")}`} tone={circuit.voltage_drop_ok ? "text-slate-950" : "text-red-600"} />
+              <DetailLine label="Potência instalada" value={`${installedPower} W (Fd ${demandFactor})`} />
+              <DetailLine label="Corrente nominal" value={`${formatNumber(circuit.nominal_current_a, " A")} (${formatNumber(circuit.corrected_current_a, " A")} corrigida)`} />
+              <DetailLine label="Queda ΔU" value={`${formatNumber(circuit.voltage_drop_pct, "%")} · ${formatNumber(circuit.voltage_drop_v, " V")}`} tone={circuit.voltage_drop_ok ? "text-slate-950" : "text-red-600"} />
               <DetailLine label="Instalação" value={circuit.install_method || "A definir"} />
               <DetailLine label="DR / DPS" value={`${circuit.needs_dr ? "DR 30mA" : "Sem DR"} · ${circuit.needs_dps ? "DPS previsto" : "Sem DPS"}`} />
               <DetailLine label="Ambiente" value={`${circuit.temp_ambient || 30}°C · Ft ${formatNumber(circuit.temp_factor || 1)} · Fg ${formatNumber(circuit.group_factor || 1)}`} />
@@ -321,7 +349,7 @@ function PhaseReviewPanel({ metrics }) {
             <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-white text-[#00d8b8] ring-1 ring-[#D6E8F3]">
               <Activity className="h-4 w-4" />
             </span>
-            Distribuição de fases
+            Distribuição de fases (Demanda NBR)
           </h3>
         </div>
         <span className={`rounded-[10px] px-3 py-2 text-xs font-extrabold ${metrics.imbalance_pct > 10 ? "bg-red-50 text-red-600 ring-1 ring-red-100" : "bg-white text-[#00d8b8] ring-1 ring-[#D6E8F3]"}`}>
@@ -608,8 +636,18 @@ export default function CircuitEditor() {
           {m && (
             <>
               <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <ExecutiveMetric icon={Zap} label="Carga total" value={formatNumber(m.totalPower / 1000, " kW")} sub={`${formatNumber(m.generalCurrent, " A")} corrente geral`} />
-                <ExecutiveMetric icon={ShieldCheck} label="Geral" value={`${m.generalBreakerPoles || 2}P ${m.generalBreaker}A`} sub={`IDR ${m.generalDrPoles || 2}P ${m.generalDr}A 30mA · ${project.supply_type || "Alimentação"}`} />
+                <ExecutiveMetric
+                  icon={Zap}
+                  label="Carga & Demanda"
+                  value={formatNumber((m.totalDemandPower ?? m.totalPower) / 1000, " kW")}
+                  sub={`${formatNumber(m.totalPower / 1000, " kW")} inst · ${formatNumber(m.generalCurrent, " A")} dem. geral`}
+                />
+                <ExecutiveMetric
+                  icon={ShieldCheck}
+                  label="Proteção Geral"
+                  value={`${m.generalBreakerPoles || 2}P ${m.generalBreaker}A`}
+                  sub={`IDR ${m.generalDrPoles || 2}P ${m.generalDr}A 30mA · ${project.supply_type || "Alimentação"}`}
+                />
                 <ExecutiveMetric icon={Layers} label="Quadro" value={`${m.panelSize} DIN`} sub={`${m.totalDins} módulos + reserva`} />
                 <ExecutiveMetric icon={CircleGauge} label="DR / críticos" value={`${drCount} / ${criticalCount}`} sub="circuitos com atenção" tone={criticalCount ? "warning" : "default"} />
                 <ExecutiveMetric
