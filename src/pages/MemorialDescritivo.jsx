@@ -153,9 +153,9 @@ function generatePDF(project, metrics, { brandName = "NACIF Solutions Eletric", 
     ["Alimentação:", `${project.supply_type || "—"} · ${project.voltage || "—"}V`],
     ["Potência Total:", `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW`],
     ["Nº de Circuitos:", `${circuits.length}`],
-    ["Disjuntor Geral:", `${metrics.generalBreaker}A`],
+    ["Disjuntor Geral:", metrics.generalBreaker ? `${metrics.generalBreaker}A` : "—"],
     ["Tamanho do Quadro:", `${metrics.panelSize} DINs`],
-    ["NBR Score:", `${metrics.nbrScore}/100`],
+    ["NBR Score:", metrics.nbrScore ? `${metrics.nbrScore}/100` : "Pendente"],
     ["Data:", new Date().toLocaleDateString("pt-BR")],
     ["Responsável:", "Engenheiro Eletricista"],
   ];
@@ -281,8 +281,8 @@ function generatePDF(project, metrics, { brandName = "NACIF Solutions Eletric", 
     ["Potência total instalada", `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW`, "Soma da carga instalada nominal"],
     ["Demanda total calculada", `${(Number(metrics?.totalDemandPower ?? metrics?.totalPower ?? 0) / 1000).toFixed(2)} kW (${metrics?.totalDemandKva || (Number(metrics?.totalDemandPower ?? metrics?.totalPower ?? 0) / 1000).toFixed(2)} kVA)`, `Fator de demanda médio: ${metrics?.averageDemandFactor || 1}`],
     ["Corrente de demanda geral (Ib)", `${metrics?.generalCurrent || 0} A`, "Corrente de projeto na fase mais carregada"],
-    ["Disjuntor geral", `${metrics.generalBreaker} A / ${metrics.generalBreakerPoles || 2}P`, "Proteção geral da instalação"],
-    ["IDR geral", `${metrics.generalDr} A / ${metrics.generalDrPoles || 2}P · 30 mA`, "Diferencial residual da entrada"],
+    ["Disjuntor geral", metrics.generalBreaker ? `${metrics.generalBreaker} A / ${metrics.generalBreakerPoles || 2}P` : "—", "Proteção geral da instalação"],
+    ["IDR geral", metrics.generalDr ? `${metrics.generalDr} A / ${metrics.generalDrPoles || 2}P · 30 mA` : "—", "Diferencial residual da entrada"],
     ["Número de circuitos", `${circuits.length}`, "Circuitos finais dimensionados"],
     ["Tamanho do quadro", `${metrics.panelSize} módulos DIN`, "Com reserva de 20%"],
     ["Desequilíbrio de fases", `${metrics.imbalance_pct}%`, metrics.imbalance_pct <= 5 ? "✓ Aceitável (< 5%)" : "⚠ Revisar balanceamento"],
@@ -381,9 +381,9 @@ function generatePDF(project, metrics, { brandName = "NACIF Solutions Eletric", 
   const phLoad = metrics?.phaseLoad || {};
   const phRows = [
     ["Fase", "Circuitos", "Corrente Total (A)", "% Carregamento", "Status"],
-    ["A (R)", circuits.filter(c => (c.phase||"").includes("A")).length, `${Number(phLoad?.A || 0).toFixed(1)} A`, `${((Number(phLoad?.A || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, Number(phLoad?.A || 0) > (metrics?.generalBreaker || 40) * 0.9 ? "⚠ Atenção" : "✓ OK"],
-    ["B (S)", circuits.filter(c => (c.phase||"").includes("B")).length, `${Number(phLoad?.B || 0).toFixed(1)} A`, `${((Number(phLoad?.B || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, Number(phLoad?.B || 0) > (metrics?.generalBreaker || 40) * 0.9 ? "⚠ Atenção" : "✓ OK"],
-    ["C (T)", circuits.filter(c => (c.phase||"").includes("C")).length, `${Number(phLoad?.C || 0).toFixed(1)} A`, `${((Number(phLoad?.C || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, Number(phLoad?.C || 0) > (metrics?.generalBreaker || 40) * 0.9 ? "⚠ Atenção" : "✓ OK"],
+    ["A (R)", circuits.filter(c => (c.phase||"").includes("A")).length, `${Number(phLoad?.A || 0).toFixed(1)} A`, `${((Number(phLoad?.A || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, (metrics?.generalBreaker && Number(phLoad?.A || 0) > metrics.generalBreaker * 0.9) ? "⚠ Atenção" : "✓ OK"],
+    ["B (S)", circuits.filter(c => (c.phase||"").includes("B")).length, `${Number(phLoad?.B || 0).toFixed(1)} A`, `${((Number(phLoad?.B || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, (metrics?.generalBreaker && Number(phLoad?.B || 0) > metrics.generalBreaker * 0.9) ? "⚠ Atenção" : "✓ OK"],
+    ["C (T)", circuits.filter(c => (c.phase||"").includes("C")).length, `${Number(phLoad?.C || 0).toFixed(1)} A`, `${((Number(phLoad?.C || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, (metrics?.generalBreaker && Number(phLoad?.C || 0) > metrics.generalBreaker * 0.9) ? "⚠ Atenção" : "✓ OK"],
     ["Neutro (N)", "—", `${metrics?.neutral_a || 0} A (calc.)`, "—", "Verificar corrente harmônica"],
   ];
   let pbY = curY;
@@ -410,7 +410,7 @@ function generatePDF(project, metrics, { brandName = "NACIF Solutions Eletric", 
   checkY(40);
   h2("7. QUADRO DE DISTRIBUIÇÃO — COMPOSIÇÃO");
   para(`O quadro de distribuição (QDC) deverá ser dimensionado para ${metrics.panelSize} módulos DIN, incluindo reserva de 20% para expansões futuras, conforme boa prática de engenharia e NBR 5410.`);
-  bullet(`Disjuntor geral: ${poles_label(project.supply_type)} ${metrics.generalBreaker}A Curva C`);
+  bullet(metrics.generalBreaker ? `Disjuntor geral: ${poles_label(project.supply_type)} ${metrics.generalBreaker}A Curva C` : "Disjuntor geral: a definir (sem cargas)");
   bullet(`DR geral (opcional): ${project.supply_type === "Trifásico" ? "4P" : "2P"} — proteção diferencial geral`);
   bullet(`DPS Classe II — ${project.voltage || 220}V — instalado após o medidor`);
   bullet(`Barramento de neutro (N) e terra (PE) separados — conforme NBR 5410`);
@@ -531,7 +531,7 @@ function generatePDF(project, metrics, { brandName = "NACIF Solutions Eletric", 
   h2("11. CONCLUSÃO E ASSINATURA");
   para(`O presente memorial descritivo apresenta o dimensionamento completo da instalação elétrica de baixa tensão para o empreendimento "${project.name || "descrito na capa"}", elaborado em conformidade com a NBR 5410:2004 e suas referências normativas.`);
   curY += 2;
-  para(`O projeto prevê ${circuits.length} circuito(s) finais com potência total instalada de ${(metrics.totalPower / 1000).toFixed(2)} kW, alimentados por sistema ${project.supply_type || "—"} em ${project.voltage || 220}V, protegidos por disjuntor geral de ${metrics.generalBreaker}A.`);
+  para(`O projeto prevê ${circuits.length} circuito(s) finais com potência total instalada de ${(metrics.totalPower / 1000).toFixed(2)} kW, alimentados por sistema ${project.supply_type || "—"} em ${project.voltage || 220}V${metrics.generalBreaker ? `, protegidos por disjuntor geral de ${metrics.generalBreaker}A` : ""}.`);
   curY += 2;
   para(`O NBR Score calculado pela plataforma ${brandName} considera queda de tensão, balanceamento de fases, proteção diferencial e DPS, resultando em uma avaliação objetiva da conformidade normativa.`);
   curY += 4;

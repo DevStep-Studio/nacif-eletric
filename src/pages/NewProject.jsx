@@ -49,12 +49,24 @@ export default function NewProject() {
         }
       />
 
-      {/* Seletor Superior de Disciplina: Instalações Elétricas vs Projeto Solar */}
-      <div className="mx-auto w-full max-w-2xl rounded-2xl bg-white p-2.5 border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-        <div className="grid grid-cols-2 gap-2">
+      {/* Seletor Superior Inovador & Minimalista de Disciplina */}
+      <div className="mx-auto w-full max-w-4xl">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {[
-            { value: "Instalações Elétricas", label: "Instalações elétricas", icon: Zap },
-            { value: "Solar", label: "Projeto solar", icon: Sun },
+            {
+              value: "Instalações Elétricas",
+              label: "Instalações Elétricas",
+              tag: "NBR 5410",
+              description: "Quadros de distribuição, circuitos, proteções e diagrama unifilar.",
+              icon: Zap,
+            },
+            {
+              value: "Solar",
+              label: "Projeto Solar Fotovoltaico",
+              tag: "Geração Distribuída",
+              description: "Leitura de conta por IA, dimensionamento, telhado 3D e memorial.",
+              icon: Sun,
+            },
           ].map((item) => {
             const Icon = item.icon;
             const active = form.project_type === item.value;
@@ -63,20 +75,47 @@ export default function NewProject() {
                 key={item.value}
                 type="button"
                 onClick={() => setForm({ ...form, project_type: item.value })}
-                className={`flex h-13 items-center justify-center gap-2.5 rounded-xl border-2 text-center transition-all ${
+                className={`group relative flex items-start justify-between rounded-2xl p-4 text-left transition-all duration-200 cursor-pointer ${
                   active
-                    ? "border-[#00d8b8] bg-[#00d8b8]/[0.06] text-slate-900 font-black"
-                    : "border-transparent bg-slate-50/70 text-slate-600 font-bold hover:border-slate-200 hover:bg-slate-100/60"
+                    ? "border-2 border-[#00d8b8] bg-white shadow-[0_2px_10px_rgba(0,216,184,0.08)]"
+                    : "border border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/50 shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
                 }`}
               >
+                <div className="flex items-start gap-3.5 pr-2">
+                  <span
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                      active
+                        ? "bg-[#00d8b8] text-white"
+                        : "bg-slate-100 text-slate-500 group-hover:bg-slate-200/70 group-hover:text-slate-700"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className={`text-sm font-black transition-colors ${active ? "text-slate-900" : "text-slate-700 group-hover:text-slate-900"}`}>
+                        {item.label}
+                      </p>
+                      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-slate-600">
+                        {item.tag}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500 font-medium leading-relaxed">
+                      {item.description}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Indicador de Seleção Minimalista */}
                 <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
-                    active ? "bg-[#00d8b8] text-white" : "bg-slate-200/70 text-slate-500"
+                  className={`mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                    active
+                      ? "border-[#00d8b8] bg-[#00d8b8]"
+                      : "border-slate-300 bg-white group-hover:border-slate-400"
                   }`}
                 >
-                  <Icon className="h-3.5 w-3.5" />
+                  {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
                 </span>
-                <span className="text-xs sm:text-sm">{item.label}</span>
               </button>
             );
           })}

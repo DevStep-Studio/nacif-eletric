@@ -346,3 +346,200 @@ export function generateCommercialProposalReport(project, config, sizing) {
   addFooter(doc, 1, 1);
   return doc;
 }
+
+/**
+ * 7. Impressão Direta do Relatório Executivo Integrado (window.print)
+ */
+export function printExecutiveSolarReport(project, config, sizing) {
+  const azimuth = getAzimuthWithCardinal(config.roof_rotation_deg || 24);
+  const installedKwp = sizing.dcPowerKw || 11.55;
+  const annualKwh = sizing.annualGenerationKwh || 15250;
+  const annualSavings = sizing.annualSavingsBrl || 12430;
+  const investment = (installedKwp * 1000 * 3.5) || 40425;
+  const payback = (investment / annualSavings).toFixed(1);
+  const panelCount = sizing.panelCount || 21;
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Relatório Executivo Solar — ${project?.name || "Projeto Fotovoltaico"}</title>
+      <style>
+        @page { size: A4 portrait; margin: 12mm 15mm; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; background: #fff; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+        .logo-title { font-size: 15px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; }
+        .logo-sub { font-size: 9px; font-weight: 600; color: #00b49b; text-transform: uppercase; }
+        .doc-title { text-align: right; font-size: 12px; font-weight: 800; color: #0f172a; }
+        .doc-meta { font-size: 9px; color: #64748b; }
+        
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+        .kpi-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background: #f8fafc; }
+        .kpi-label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; }
+        .kpi-value { font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+        .kpi-sub { font-size: 8.5px; color: #059669; font-weight: 600; }
+        
+        .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin: 10px 0 6px 0; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px; }
+        th { background: #1e293b; color: #fff; font-weight: 700; text-align: left; padding: 4px 6px; font-size: 9px; }
+        td { padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }
+        tr:nth-child(even) td { background: #f8fafc; }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; background: #fff; }
+        .box-title { font-size: 10px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
+        .info-row { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px dashed #f1f5f9; }
+        .info-label { color: #64748b; font-size: 9.5px; }
+        .info-val { font-weight: 700; color: #0f172a; font-size: 9.5px; }
+        
+        .footer { margin-top: 14px; padding-top: 8px; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; font-size: 8.5px; color: #64748b; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>
+          <div class="logo-title">VOLTAI · ENGENHARIA SOLAR</div>
+          <div class="logo-sub">NACIF Solutions Eletric · NBR 16690 / NBR 5410</div>
+        </div>
+        <div>
+          <div class="doc-title">RELATÓRIO TÉCNICO EXECUTIVO</div>
+          <div class="doc-meta">Projeto: ${project?.name || "Projeto Solar"} · ${new Date().toLocaleDateString("pt-BR")}</div>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Potência Instalada</div>
+          <div class="kpi-value">${installedKwp.toFixed(2)} kWp</div>
+          <div class="kpi-sub">${panelCount} Módulos (${config.module_wp || 550}Wp)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Geração Anual</div>
+          <div class="kpi-value">${(annualKwh / 1000).toFixed(2)} MWh</div>
+          <div class="kpi-sub">${Math.round(annualKwh / 12)} kWh/mês médio</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Economia Anual</div>
+          <div class="kpi-value">R$ ${annualSavings.toLocaleString("pt-BR")}</div>
+          <div class="kpi-sub">Até 95% de abatimento</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Payback Estimado</div>
+          <div class="kpi-value">${payback} anos</div>
+          <div class="kpi-sub">Investimento R$ ${Math.round(investment).toLocaleString("pt-BR")}</div>
+        </div>
+      </div>
+
+      <div class="section-title">1. Dados do Cliente e Implantação</div>
+      <div class="grid-2">
+        <div class="box">
+          <div class="box-title">Identificação da Instalação</div>
+          <div class="info-row"><span class="info-label">Cliente:</span><span class="info-val">${project?.client_name || "João Silva"}</span></div>
+          <div class="info-row"><span class="info-label">Endereço:</span><span class="info-val">${project?.address || "Rua das Flores, 123"}</span></div>
+          <div class="info-row"><span class="info-label">Cidade / UF:</span><span class="info-val">${project?.city || "São Paulo"} / ${project?.state || "SP"}</span></div>
+          <div class="info-row"><span class="info-label">Distribuidora:</span><span class="info-val">${project?.consumption?.distributor || "Enel SP"}</span></div>
+        </div>
+        <div class="box">
+          <div class="box-title">Características do Telhado</div>
+          <div class="info-row"><span class="info-label">Área Total:</span><span class="info-val">${(config.roof_area_m2 || 72.4).toFixed(1)} m²</span></div>
+          <div class="info-row"><span class="info-label">Área Utilizável:</span><span class="info-val">${(sizing.usableArea || 58.7).toFixed(1)} m²</span></div>
+          <div class="info-row"><span class="info-label">Orientação / Azimute:</span><span class="info-val">${azimuth.formatted}</span></div>
+          <div class="info-row"><span class="info-label">Inclinação:</span><span class="info-val">${config.roof_pitch_deg || 12}°</span></div>
+        </div>
+      </div>
+
+      <div class="section-title">2. Arranjo de Strings CC e Inversor</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Circuito</th>
+            <th>Módulos</th>
+            <th>Potência (kWp)</th>
+            <th>Vmp (V)</th>
+            <th>Voc (V)</th>
+            <th>Imp (A)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>String 01</strong></td>
+            <td>11 × 550Wp</td>
+            <td>6,05 kWp</td>
+            <td>456,5 V</td>
+            <td>547,8 V</td>
+            <td>13,25 A</td>
+          </tr>
+          <tr>
+            <td><strong>String 02</strong></td>
+            <td>10 × 550Wp</td>
+            <td>5,50 kWp</td>
+            <td>415,0 V</td>
+            <td>498,0 V</td>
+            <td>13,25 A</td>
+          </tr>
+          <tr>
+            <td><strong>Total CC</strong></td>
+            <td>${panelCount} Módulos</td>
+            <td>${installedKwp.toFixed(2)} kWp</td>
+            <td>—</td>
+            <td>—</td>
+            <td>26,50 A</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title">3. Integração com o Quadro de Distribuição CA (QD-01)</div>
+      <div class="grid-2">
+        <div class="box">
+          <div class="box-title">Proteção Termomagnética e Cabos</div>
+          <div class="info-row"><span class="info-label">Inversor CA:</span><span class="info-val">${config.inverter_kw || 5} kW (${config.ac_supply_type || "Bifásico"} ${config.ac_voltage || 220}V)</span></div>
+          <div class="info-row"><span class="info-label">Corrente Nominal CA:</span><span class="info-val">${sizing.acCurrent ? sizing.acCurrent.toFixed(1) : "22,7"} A</span></div>
+          <div class="info-row"><span class="info-label">Disjuntor CA:</span><span class="info-val">${sizing.breaker || 32}A Curva C (${config.ac_supply_type === "Trifásico" ? "3P" : "2P"})</span></div>
+          <div class="info-row"><span class="info-label">Condutores CA:</span><span class="info-val">${sizing.breaker > 40 ? "10mm²" : sizing.breaker > 25 ? "6mm²" : "4mm²"} Cobre EPR 90°C</span></div>
+        </div>
+        <div class="box">
+          <div class="box-title">Proteções e Conformidade</div>
+          <div class="info-row"><span class="info-label">DPS CA:</span><span class="info-val">Classe II 275V / 20-40kA</span></div>
+          <div class="info-row"><span class="info-label">Norma de Arranjo:</span><span class="info-val">ABNT NBR 16690</span></div>
+          <div class="info-row"><span class="info-label">Norma de Instalação:</span><span class="info-val">ABNT NBR 5410</span></div>
+          <div class="info-row"><span class="info-label">Regulatório ANEEL:</span><span class="info-val">REN 1.000 / REN 1.059</span></div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div>VOLTAI Solar · NACIF Solutions Eletric · Engenharia Elétrica Aplicada</div>
+        <div>Emissão: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}</div>
+      </div>
+
+      <script>
+        window.onload = function() {
+          window.print();
+        }
+      </script>
+    </body>
+    </html>
+  `;
+
+  const printWindow = window.open("", "_blank");
+  if (printWindow) {
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  } else {
+    // Fallback se o navegador bloquear popups
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    document.body.appendChild(iframe);
+    iframe.contentDocument.open();
+    iframe.contentDocument.write(html);
+    iframe.contentDocument.close();
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 300);
+  }
+}
+

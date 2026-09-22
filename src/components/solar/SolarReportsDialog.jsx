@@ -8,6 +8,7 @@ import {
   Flame,
   Layers,
   Loader2,
+  Printer,
   Receipt,
   Sun,
   Zap,
@@ -20,12 +21,13 @@ import {
   generateGenerationSimulationReport,
   generateSitePlanReport,
   generateTechnicalMemorialReport,
+  printExecutiveSolarReport,
 } from "@/lib/solarReportGenerator";
 
 const REPORT_CARDS = [
   {
     id: "site_plan",
-    title: "Planta de implantação",
+    title: "Planta de Implantação",
     desc: "Layout dos módulos, cotas, inclinação, azimute e rosa dos ventos.",
     icon: Layers,
     fn: generateSitePlanReport,
@@ -33,7 +35,7 @@ const REPORT_CARDS = [
   },
   {
     id: "electrical",
-    title: "Diagrama elétrico solar",
+    title: "Diagrama Elétrico Solar",
     desc: "Arranjo das strings, tensões CC, inversor e proteções CA integradas.",
     icon: Zap,
     fn: generateElectricalDiagramReport,
@@ -41,7 +43,7 @@ const REPORT_CARDS = [
   },
   {
     id: "memorial",
-    title: "Memorial descritivo",
+    title: "Memorial Descritivo",
     desc: "Especificações técnicas, normas NBR 16690/5410 e premissas de projeto.",
     icon: FileText,
     fn: generateTechnicalMemorialReport,
@@ -49,7 +51,7 @@ const REPORT_CARDS = [
   },
   {
     id: "bom",
-    title: "Lista de materiais",
+    title: "Lista de Materiais (BOM)",
     desc: "Quantitativo detalhado de módulos, inversor, cabos, conectores e fixação.",
     icon: FileSpreadsheet,
     fn: generateBillOfMaterialsReport,
@@ -57,7 +59,7 @@ const REPORT_CARDS = [
   },
   {
     id: "simulation",
-    title: "Simulação de geração",
+    title: "Simulação de Geração",
     desc: "Previsão mensal e anual em kWh, perdas estimadas e irradiação HSP.",
     icon: Sun,
     fn: generateGenerationSimulationReport,
@@ -65,7 +67,7 @@ const REPORT_CARDS = [
   },
   {
     id: "proposal",
-    title: "Proposta comercial",
+    title: "Proposta Comercial",
     desc: "Apresentação executiva para cliente com payback, ROI e economia de 25 anos.",
     icon: Receipt,
     fn: generateCommercialProposalReport,
@@ -76,6 +78,22 @@ const REPORT_CARDS = [
 export default function SolarReportsDialog({ open, onOpenChange, project, config, sizing }) {
   const { toast } = useToast();
   const [downloadingId, setDownloadingId] = useState(null);
+
+  const handlePrint = () => {
+    try {
+      printExecutiveSolarReport(project, config, sizing);
+      toast({
+        title: "Janela de impressão aberta",
+        description: "O relatório executivo foi enviado para visualização e impressão.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao abrir impressão",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleDownload = async (report) => {
     setDownloadingId(report.id);
@@ -122,15 +140,26 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-slate-900 border-white/10 text-white p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg font-black text-foreground">
-            <Download className="h-5 w-5 text-primary" />
-            Relatórios Profissionais Fotovoltaicos
-          </DialogTitle>
-          <p className="text-xs font-semibold text-muted-foreground">
-            Exporte os relatórios técnicos e comerciais completos em PDF com a identidade visual do seu projeto.
-          </p>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <DialogTitle className="flex items-center gap-2 text-lg font-black text-white">
+                <FileText className="h-5 w-5 text-primary" />
+                Relatórios Profissionais Fotovoltaicos
+              </DialogTitle>
+              <p className="text-xs font-semibold text-white/60 mt-1">
+                Gere documentos técnicos de engenharia e propostas executivas em PDF ou imprima diretamente.
+              </p>
+            </div>
+            <Button
+              type="button"
+              onClick={handlePrint}
+              className="h-9 px-4 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/15 shrink-0"
+            >
+              <Printer className="mr-1.5 h-4 w-4 text-primary" /> Imprimir Relatório
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="grid gap-3 sm:grid-cols-2 pt-2">
@@ -140,15 +169,15 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
             return (
               <div
                 key={report.id}
-                className="flex flex-col justify-between rounded-2xl border border-border/80 bg-card p-4 transition hover:border-primary/50 hover:shadow-sm"
+                className="flex flex-col justify-between rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-primary/50"
               >
                 <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Icon className="h-4 w-4" />
                   </span>
                   <div>
-                    <p className="text-sm font-black text-foreground">{report.title}</p>
-                    <p className="mt-0.5 text-xs font-semibold text-muted-foreground leading-relaxed">{report.desc}</p>
+                    <p className="text-sm font-black text-white">{report.title}</p>
+                    <p className="mt-1 text-xs text-white/60 leading-relaxed">{report.desc}</p>
                   </div>
                 </div>
 
@@ -159,12 +188,12 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
                     variant="outline"
                     disabled={isDownloading}
                     onClick={() => handleDownload(report)}
-                    className="h-8 text-xs font-bold"
+                    className="h-8 border-white/15 bg-white/5 hover:bg-white/10 text-xs font-bold text-white rounded-lg"
                   >
                     {isDownloading ? (
-                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <Download className="mr-1 h-3.5 w-3.5" />
+                      <Download className="mr-1.5 h-3.5 w-3.5 text-primary" />
                     )}
                     Baixar PDF
                   </Button>
@@ -174,23 +203,38 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
           })}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0 pt-3 border-t border-border">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Fechar
-          </Button>
+        <DialogFooter className="gap-2 sm:gap-0 pt-4 border-t border-white/10 flex items-center justify-between">
           <Button
             type="button"
-            disabled={downloadingId === "all"}
-            onClick={handleDownloadAll}
-            className="font-bold bg-primary text-primary-foreground"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            className="text-xs font-semibold text-white/60 hover:text-white hover:bg-white/5"
           >
-            {downloadingId === "all" ? (
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="mr-1.5 h-4 w-4" />
-            )}
-            Baixar Pacote Completo (6 PDFs)
+            Fechar
           </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              onClick={handlePrint}
+              variant="outline"
+              className="border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs font-bold rounded-xl"
+            >
+              <Printer className="mr-1.5 h-4 w-4 text-primary" /> Imprimir
+            </Button>
+            <Button
+              type="button"
+              disabled={downloadingId === "all"}
+              onClick={handleDownloadAll}
+              className="bg-primary text-slate-950 text-xs font-black rounded-xl hover:bg-primary/90"
+            >
+              {downloadingId === "all" ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-1.5 h-4 w-4" />
+              )}
+              Baixar Todos (6 PDFs)
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

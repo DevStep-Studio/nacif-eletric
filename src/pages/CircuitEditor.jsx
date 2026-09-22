@@ -429,17 +429,21 @@ function ValidationPanel({ metrics, validations, onAutoFix, saving = false, canA
         </div>
       )}
 
-      {validations.length === 0 ? (
+      {validations.length === 0 && (metrics?.circuits?.length || 0) > 0 ? (
         <div className="mt-4 rounded-[14px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-          Projeto em 100% no cálculo atual. Sem pendências críticas de NBR.
+          ✓ Projeto com todas as verificações preliminares da NBR 5410 atendidas.
+        </div>
+      ) : validations.length === 0 && (metrics?.circuits?.length || 0) === 0 ? (
+        <div className="mt-4 rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-600">
+          Nenhuma carga cadastrada para auditoria normativa.
         </div>
       ) : (
         <>
           <div className="mt-4 rounded-[14px] border border-[#BCEEE5] bg-[#F2FFFC] p-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#0f4f49]">Para chegar a 100%</p>
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#0f4f49]">Plano de Ação NBR</p>
               <span className="rounded-[9px] bg-white px-2.5 py-1 text-[10px] font-extrabold text-[#00a98e] ring-1 ring-[#D6E8F3]">
-                meta NBR
+                meta NBR 5410
               </span>
             </div>
             <div className="mt-3 space-y-2">
@@ -484,6 +488,10 @@ function ValidationPanel({ metrics, validations, onAutoFix, saving = false, canA
           </div>
         </>
       )}
+
+      <p className="mt-4 border-t border-slate-100 pt-3 text-[11px] font-medium text-slate-500">
+        ℹ A aprovação final do projeto e o memorial descritivo requerem validação técnica e recolhimento de ART/RRT por Engenheiro Eletricista habilitado.
+      </p>
     </section>
   );
 }
@@ -639,23 +647,30 @@ export default function CircuitEditor() {
                 <ExecutiveMetric
                   icon={Zap}
                   label="Carga & Demanda"
-                  value={formatNumber((m.totalDemandPower ?? m.totalPower) / 1000, " kW")}
-                  sub={`${formatNumber(m.totalPower / 1000, " kW")} inst · ${formatNumber(m.generalCurrent, " A")} dem. geral`}
+                  value={circuits.length === 0 ? "0,00 kW" : formatNumber((m.totalDemandPower ?? m.totalPower) / 1000, " kW")}
+                  sub={circuits.length === 0 ? "Nenhuma carga cadastrada" : `${formatNumber(m.totalPower / 1000, " kW")} inst · ${formatNumber(m.generalCurrent, " A")} dem. geral`}
                 />
                 <ExecutiveMetric
                   icon={ShieldCheck}
                   label="Proteção Geral"
-                  value={`${m.generalBreakerPoles || 2}P ${m.generalBreaker}A`}
-                  sub={`IDR ${m.generalDrPoles || 2}P ${m.generalDr}A 30mA · ${project.supply_type || "Alimentação"}`}
+                  value={circuits.length === 0 || !m.generalBreaker ? "Dados insuficientes" : `${m.generalBreakerPoles || 2}P ${m.generalBreaker}A`}
+                  sub={circuits.length === 0 ? "Adicione cargas para dimensionar" : (m.mainProtection?.breaker?.statusMessage || `IDR ${m.generalDrPoles || 2}P ${m.generalDr}A 30mA · ${project.supply_type || "Alimentação"}`)}
+                  tone={m.mainProtection?.breaker?.isOverloaded ? "danger" : "default"}
                 />
-                <ExecutiveMetric icon={Layers} label="Quadro" value={`${m.panelSize} DIN`} sub={`${m.totalDins} módulos + reserva`} />
-                <ExecutiveMetric icon={CircleGauge} label="DR / críticos" value={`${drCount} / ${criticalCount}`} sub="circuitos com atenção" tone={criticalCount ? "warning" : "default"} />
+                <ExecutiveMetric icon={Layers} label="Quadro" value={`${m.panelSize} DIN`} sub={circuits.length === 0 ? "Quadro padrão 12 DIN" : `${m.totalDins} módulos + reserva`} />
                 <ExecutiveMetric
-                  icon={m.nbrScore >= 90 ? CheckCircle2 : AlertTriangle}
+                  icon={CircleGauge}
+                  label="DR / críticos"
+                  value={`${drCount} / ${criticalCount}`}
+                  sub={criticalCount > 0 ? `${criticalCount} circuito(s) com atenção` : drCount > 0 ? `${drCount} circuito(s) com DR 30mA` : "Nenhum circuito crítico"}
+                  tone={criticalCount ? "warning" : "default"}
+                />
+                <ExecutiveMetric
+                  icon={circuits.length === 0 ? CircleGauge : m.nbrScore >= 90 ? CheckCircle2 : AlertTriangle}
                   label="Conformidade NBR"
-                  value={`${m.nbrScore}%`}
-                  sub={m.nbrScore >= 90 ? "Conforme" : "Revisar pendências"}
-                  tone={m.nbrScore >= 90 ? "default" : "warning"}
+                  value={circuits.length === 0 ? "Pendente" : `${m.nbrScore}%`}
+                  sub={circuits.length === 0 ? "Sem cargas para auditoria" : (m.audit?.statusText || (m.nbrScore >= 90 ? "Conforme NBR 5410" : "Revisar pendências"))}
+                  tone={circuits.length === 0 ? "warning" : m.nbrScore >= 90 ? "default" : "warning"}
                 />
               </section>
 

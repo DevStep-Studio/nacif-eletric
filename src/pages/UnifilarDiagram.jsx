@@ -239,7 +239,7 @@ function CircuitBox({ x, y, circuit, num }) {
 
 function UnifilarSVG({ project, metrics }) {
   const circuits = metrics?.circuits || autoBalancePhases(project?.circuits || []);
-  const generalBreaker = metrics?.generalBreaker || 40;
+  const generalBreaker = metrics?.generalBreaker || null;
   const supply  = project?.supply_type || "Monofásico";
   const voltage = project?.voltage || 220;
   const W = 1189;
@@ -266,7 +266,7 @@ function UnifilarSVG({ project, metrics }) {
   const busXs = phaseNames.map((_, i) => busBaseX + (i - (phaseNames.length - 1) / 2) * busSpacing);
   const feederPhaseCount = supply === "Trifásico" || hasPolyphaseCircuits ? 3 : supply === "Bifásico" ? 2 : 1;
   const feederGauge = (current) => {
-    if (current <= 50) return 10;
+    if (!current || current <= 50) return 10;
     if (current <= 70) return 16;
     if (current <= 100) return 25;
     if (current <= 150) return 35;
@@ -275,7 +275,7 @@ function UnifilarSVG({ project, metrics }) {
     if (current <= 320) return 95;
     return 120;
   };
-  const feeder = feederGauge(metrics?.generalCurrent || generalBreaker);
+  const feeder = feederGauge(metrics?.generalCurrent || generalBreaker || 16);
   const tableWidths = [34, 140, 44, 37, 42, 36, 46, 52, 44, 54, 44, 44, 44, 35];
   const tableHeaders = ["Circuito", "Descrição", "Pva (W)", "V", "In(A)", "Fc", "Iaj(A)", "Disjuntor", "Queda", "Condutor", "Fase A", "Fase B", "Fase C", "Esp."];
   const phasePower = (c, ph) => (c.phase || "").includes(ph) ? Math.round(c.power_w || 0) : "";
@@ -378,7 +378,9 @@ function UnifilarSVG({ project, metrics }) {
         {Array.from({ length: feederPhaseCount }).map((_, i) => (
           <ellipse key={i} cx={busXs[i]} cy={top - 20} rx="8" ry="3.2" fill="none" stroke="#ff5cff" strokeWidth="0.7" />
         ))}
-        <text x={busXs[Math.max(0, feederPhaseCount - 1)] + 26} y={top - 18} fill="#ff5cff" fontSize="5.8">{generalBreaker}A</text>
+        {generalBreaker ? (
+          <text x={busXs[Math.max(0, feederPhaseCount - 1)] + 26} y={top - 18} fill="#ff5cff" fontSize="5.8">{generalBreaker}A</text>
+        ) : null}
 
         {displayRows.map((rowData, index) => {
           const circuit = rowData.circuit;
@@ -560,8 +562,8 @@ function UnifilarSVG({ project, metrics }) {
       ["DEMANDA DE PROJETO:", `${demandKvaVal} kVA (Fd ${metrics?.averageDemandFactor || 1})`],
       ["TENSÃO NOMINAL:", `${supply.toUpperCase()} ${voltage}V`],
       ["CORRENTE DE DEMANDA:", `${mainCurrent}A`],
-      ["PROTEÇÃO GERAL:", `DISJUNTOR TERMOMAG. ${supply === "Trifásico" ? "TRIPOLAR" : "BIPOLAR"} DE ${generalBreaker}A`],
-      ["BARRAMENTO:", `${supply === "Trifásico" ? "3F+N+T" : supply === "Bifásico" ? "2F+N+T" : "F+N+T"} DE ${Math.max(80, generalBreaker)}A`],
+      ["PROTEÇÃO GERAL:", generalBreaker ? `DISJUNTOR TERMOMAG. ${supply === "Trifásico" ? "TRIPOLAR" : "BIPOLAR"} DE ${generalBreaker}A` : "A DEFINIR (SEM CARGAS)"],
+      ["BARRAMENTO:", `${supply === "Trifásico" ? "3F+N+T" : supply === "Bifásico" ? "2F+N+T" : "F+N+T"} DE ${Math.max(80, generalBreaker || 80)}A`],
       ["CONDUTORES:", `FASES - #${feeder}mm2 XLPE OU HPE`],
       ["", `NEUTRO - #${feeder}mm2 XLPE OU HPE`],
       ["", `TERRA - #${conductorPe}mm2 XLPE OU HPE`],
@@ -787,18 +789,18 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
   });
 
   // 2. Disjuntor Geral
-  const mainBreakerAmps = projMetrics?.generalBreaker || 40;
+  const mainBreakerAmps = projMetrics?.generalBreaker;
   initialNodes.push({
     id: "node-general-breaker",
     type: "breaker",
     x: 80,
     y: 200,
     title: "DISJUNTOR GERAL (DJ)",
-    subtitle: `${projMetrics?.generalBreakerPoles || 2}P · ${mainBreakerAmps}A / Curva C`,
-    value: `${mainBreakerAmps}A`,
+    subtitle: mainBreakerAmps ? `${projMetrics?.generalBreakerPoles || 2}P · ${mainBreakerAmps}A / Curva C` : "Pendente (sem circuitos)",
+    value: mainBreakerAmps ? `${mainBreakerAmps}A` : "—",
     phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
     accentColor: "#00d8b8",
-    active: true
+    active: Boolean(mainBreakerAmps),
   });
   initialConnections.push({
     id: "c-feed-to-breaker",
@@ -1853,7 +1855,7 @@ export default function UnifilarDiagram() {
           {[
             { l: "Potência Total",  v: `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW` },
             { l: "Corrente Geral",  v: `${metrics?.generalCurrent || 0} A` },
-            { l: "Disjuntor Geral", v: `${metrics?.generalBreaker || 40} A` },
+            { l: "Disjuntor Geral", v: metrics?.generalBreaker ? `${metrics.generalBreaker} A` : "—" },
             { l: "Desequilíbrio",   v: `${metrics?.imbalance_pct || 0}%`, alert: Number(metrics?.imbalance_pct || 0) > 10 },
           ].map(k => (
             <div key={k.l} className={`p-3 rounded-xl bg-card border ${k.alert ? "border-destructive/40" : "border-border/40"}`}>

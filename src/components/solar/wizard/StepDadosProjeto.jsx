@@ -60,6 +60,8 @@ const INSTALLATION_TYPES = [
 export default function StepDadosProjeto({ state, onChange }) {
   const fileInputRef = useRef(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [readingStage, setReadingStage] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [batteryModalOpen, setBatteryModalOpen] = useState(false);
 
@@ -71,38 +73,51 @@ export default function StepDadosProjeto({ state, onChange }) {
   const handleFileUpload = async (file) => {
     if (!file) return;
 
-    // Validação de tipo e tamanho (max 15MB)
-    const validTypes = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
-    if (!validTypes.includes(file.type)) {
+    // Validação de tipo e tamanho (max 20MB)
+    const validMimes = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+    const validExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
+    const fileExt = "." + (file.name.split(".").pop() || "").toLowerCase();
+
+    if (!validMimes.includes(file.type) && !validExtensions.includes(fileExt)) {
       setField("bill_reading_status", "unavailable");
-      setField("bill_reading_message", "Formato inválido. Envie arquivos em PDF, JPG ou PNG.");
+      setField("bill_reading_message", "Formato de arquivo não suportado. Envie faturas em PDF, JPG ou PNG.");
       return;
     }
-    if (file.size > 15 * 1024 * 1024) {
+    if (file.size > 20 * 1024 * 1024) {
       setField("bill_reading_status", "unavailable");
-      setField("bill_reading_message", "Arquivo muito grande (máximo 15 MB).");
+      setField("bill_reading_message", "Arquivo muito grande. O limite máximo permitido é 20 MB.");
       return;
     }
 
     setAnalyzing(true);
+    setReadingStage("Enviando arquivo da conta...");
     setField("bill_reading_status", "reading");
     setField("bill_file_name", file.name);
 
     try {
-      const response = await analyzeEnergyBillFile(file);
+      const response = await analyzeEnergyBillFile(file, {
+        onProgress: (_code, message) => {
+          setReadingStage(message);
+        },
+      });
+
       if (response.success && response.extracted) {
         const ext = response.extracted;
+        const historyList = Array.isArray(ext.history_12_months) ? ext.history_12_months : [];
+        const hasValidHistory = historyList.some((h) => h && h.kwh > 0);
+
         onChange({
           bill_file_name: file.name,
           bill_file_url: response.file_url,
-          bill_reading_status: "done",
-          bill_reading_message: "",
-          bill_history_12_months: ext.history_12_months || [],
-          monthly_consumption_kwh: ext.monthly_consumption_kwh,
-          tariff_brl_kwh: ext.tariff_brl_kwh,
-          contracted_demand_kw: ext.contracted_demand_kw,
-          tariff_class: ext.tariff_class || "B1 - Residencial",
-          distributor: ext.distributor || "",
+          bill_file_size: file.size,
+          bill_reading_status: hasValidHistory ? "done" : "partial",
+          bill_reading_message: ext.warnings?.length ? ext.warnings.join(" ") : "",
+          bill_history_12_months: historyList,
+          monthly_consumption_kwh: ext.monthly_consumption_kwh || null,
+          tariff_brl_kwh: ext.tariff_brl_kwh || null,
+          contracted_demand_kw: ext.contracted_demand_kw || null,
+          tariff_class: ext.tariff_class || state.tariff_class || "B1 - Residencial",
+          distributor: ext.distributor || state.distributor || "",
           name: state.name || (ext.holder_name ? `Projeto ${ext.holder_name}` : "Residência Solar"),
           client_name: state.client_name || ext.holder_name || "",
           address: state.address || ext.address || "",
@@ -110,9 +125,13 @@ export default function StepDadosProjeto({ state, onChange }) {
       }
     } catch (error) {
       setField("bill_reading_status", "unavailable");
-      setField("bill_reading_message", error?.message || "Não foi possível extrair dados automaticamente. Preencha manualmente.");
+      setField(
+        "bill_reading_message",
+        error?.message || "Não foi possível ler esta conta. Envie um documento mais nítido ou preencha os dados manualmente."
+      );
     } finally {
       setAnalyzing(false);
+      setReadingStage("");
     }
   };
 
@@ -120,11 +139,39 @@ export default function StepDadosProjeto({ state, onChange }) {
     onChange({
       bill_file_name: "",
       bill_file_url: "",
+      bill_file_size: null,
       bill_reading_status: "idle",
       bill_reading_message: "",
     });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      handleFileUpload(files[0]);
+    }
+  };
+
+  const validHistoryEntries = Array.isArray(state.bill_history_12_months)
+    ? state.bill_history_12_months.filter((h) => h && Number(h.kwh) > 0)
+    : [];
+  const historyCount = validHistoryEntries.length;
 
   const handleSystemModeChange = (mode) => {
     onChange({
@@ -244,8 +291,9 @@ export default function StepDadosProjeto({ state, onChange }) {
 
       {/* 3. Subformulário da Modalidade Selecionada */}
       {state.entry_method === "bill" && (
-        <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:grid-cols-[1fr_1.5fr]">
-          <div className="space-y-2">
+        <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4.5 sm:grid-cols-[1fr_1.3fr] shadow-sm">
+          {/* Coluna Esquerda: Upload e Processamento da Conta */}
+          <div className="space-y-2.5">
             <input
               ref={fileInputRef}
               type="file"
@@ -253,85 +301,168 @@ export default function StepDadosProjeto({ state, onChange }) {
               className="hidden"
               onChange={(e) => handleFileUpload(e.target.files?.[0])}
             />
+
             <div
-              onClick={() => fileInputRef.current?.click()}
-              className="flex min-h-[130px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/40 bg-white p-4 text-center transition hover:border-primary hover:bg-primary/5"
+              onClick={() => !analyzing && fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`flex min-h-[140px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 text-center transition-all ${
+                isDragging
+                  ? "border-[#00d8b8] bg-[#00d8b8]/10 ring-2 ring-[#00d8b8]/20"
+                  : analyzing
+                  ? "border-slate-300 bg-slate-50 cursor-wait"
+                  : "border-slate-300 bg-slate-50/60 hover:border-[#00d8b8] hover:bg-slate-50"
+              }`}
             >
               {analyzing ? (
-                <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                <div className="flex flex-col items-center gap-2 py-1">
+                  <Loader2 className="h-7 w-7 animate-spin text-[#00d8b8]" />
+                  <span className="text-xs font-bold text-slate-800">{readingStage || "Processando fatura..."}</span>
+                  <span className="text-[10px] text-slate-500 font-medium">Isso pode levar alguns segundos</span>
+                </div>
               ) : (
-                <UploadCloud className="h-7 w-7 text-primary" />
+                <>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#00d8b8]">
+                    <UploadCloud className="h-5 w-5" />
+                  </div>
+                  <span className="text-xs font-black text-slate-900">
+                    {state.bill_file_name ? "Substituir conta de energia" : "Importar conta de energia"}
+                  </span>
+                  <span className="text-[11px] font-medium text-slate-500">
+                    Arraste ou clique para selecionar (PDF, JPG, PNG até 20MB)
+                  </span>
+                </>
               )}
-              <span className="text-xs font-black text-foreground">
-                {state.bill_file_name || "Importar conta de energia"}
-              </span>
-              <span className="text-[11px] font-semibold text-muted-foreground">
-                Arraste ou clique (PDF, JPG, PNG)
-              </span>
             </div>
 
             {state.bill_file_name && (
-              <div className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-xs">
-                <span className="truncate font-semibold text-slate-700 max-w-[180px]">
-                  {state.bill_file_name}
-                </span>
-                <button
-                  type="button"
-                  onClick={removeBillFile}
-                  className="text-red-500 hover:text-red-700 p-0.5 rounded"
-                  title="Remover arquivo"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-4 w-4 text-[#00d8b8] shrink-0" />
+                  <span className="truncate font-bold text-slate-800 max-w-[180px]">
+                    {state.bill_file_name}
+                  </span>
+                  {state.bill_file_size && (
+                    <span className="text-[10px] text-slate-400 font-semibold shrink-0">
+                      ({(state.bill_file_size / 1024).toFixed(0)} KB)
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-[11px] font-bold text-[#00d8b8] hover:underline"
+                  >
+                    Trocar
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={removeBillFile}
+                    className="text-[11px] font-bold text-red-500 hover:text-red-700"
+                    title="Remover arquivo"
+                  >
+                    Remover
+                  </button>
+                </div>
               </div>
             )}
 
             {state.bill_reading_status === "unavailable" && (
-              <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900 border border-amber-200">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
-                {state.bill_reading_message}
+              <p className="flex items-start gap-1.5 rounded-xl bg-amber-50 p-2.5 text-xs font-semibold text-amber-900 border border-amber-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                {state.bill_reading_message || "Não foi possível ler a conta. Preencha manualmente."}
               </p>
             )}
           </div>
 
-          <div className="flex flex-col justify-between space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          {/* Coluna Direita: Resumo Real e Auditável da Conta */}
+          <div className="flex flex-col justify-between space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                </span>
-                <p className="text-xs font-black text-emerald-900">
-                  {state.bill_reading_status === "done" ? "Dados extraídos com sucesso!" : "Resumo da conta"}
-                </p>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                      state.bill_reading_status === "done"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : state.bill_reading_status === "partial"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-slate-200 text-slate-600"
+                    }`}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  </span>
+                  <p className="text-xs font-black text-slate-900">
+                    {state.bill_reading_status === "done"
+                      ? "Dados extraídos com sucesso"
+                      : state.bill_reading_status === "partial"
+                      ? "Extração parcial — confira os dados"
+                      : "Resumo da conta"}
+                  </p>
+                </div>
+
+                {historyCount > 0 && (
+                  <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-black text-slate-700">
+                    {historyCount}/12 meses
+                  </span>
+                )}
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs font-semibold">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
                 <div>
-                  <span className="text-muted-foreground">Consumo médio:</span>{" "}
-                  <strong className="text-foreground">{state.monthly_consumption_kwh || 842} kWh/mês</strong>
+                  <span className="text-slate-500 font-semibold block text-[11px]">Consumo médio</span>
+                  <strong className="text-slate-900 font-black">
+                    {state.monthly_consumption_kwh
+                      ? `${Number(state.monthly_consumption_kwh).toLocaleString("pt-BR")} kWh/mês`
+                      : "Não identificado"}
+                  </strong>
                 </div>
+
                 <div>
-                  <span className="text-muted-foreground">Demanda:</span>{" "}
-                  <strong className="text-foreground">{state.contracted_demand_kw || 15} kW</strong>
+                  <span className="text-slate-500 font-semibold block text-[11px]">Demanda contratada</span>
+                  <strong className="text-slate-900 font-black">
+                    {state.contracted_demand_kw
+                      ? `${Number(state.contracted_demand_kw).toLocaleString("pt-BR")} kW`
+                      : state.tariff_class?.startsWith("A4")
+                      ? "Não identificada"
+                      : "Não aplicável (B1)"}
+                  </strong>
                 </div>
+
                 <div>
-                  <span className="text-muted-foreground">Tarifa:</span>{" "}
-                  <strong className="text-foreground">{state.tariff_class || "B1 - Residencial"}</strong>
+                  <span className="text-slate-500 font-semibold block text-[11px]">Classe tarifária</span>
+                  <strong className="text-slate-900 font-black">
+                    {state.tariff_class || "Não identificada"}
+                  </strong>
                 </div>
+
                 <div>
-                  <span className="text-muted-foreground">Distribuidora:</span>{" "}
-                  <strong className="text-foreground">{state.distributor || "Enel SP"}</strong>
+                  <span className="text-slate-500 font-semibold block text-[11px]">Distribuidora</span>
+                  <strong className="text-slate-900 font-black">
+                    {state.distributor || "Não identificada"}
+                  </strong>
                 </div>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setHistoryModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs font-extrabold text-primary hover:underline self-start"
-            >
-              <BarChart3 className="h-3.5 w-3.5" /> Ver histórico completo (12 meses)
-            </button>
+            <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setHistoryModalOpen(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-black text-[#00d8b8] hover:underline"
+              >
+                <BarChart3 className="h-4 w-4" />
+                {historyCount > 0 ? "Conferir e editar histórico" : "Preencher histórico de 12 meses"}
+              </button>
+
+              {state.monthly_consumption_kwh && (
+                <span className="text-[10px] font-bold text-slate-400">
+                  Pronto para dimensionar
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}

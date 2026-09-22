@@ -1,11 +1,11 @@
 /**
  * Motor NBR 5410 Profissional
- * Cálculos elétricos paramétricos conforme NBR 5410:2004 + Em.1:2008
+ * Cálculos elétricos paramétricos e auditoria normativa conforme ABNT NBR 5410:2004 + Em.1:2008
  */
 
 // ─── Tabela de bitolas NBR 5410 (corrente nominal em A por método de instalação) ──────────────
 // Método B2 = Eletroduto embutido | B1 = Eletroduto aparente | D1 = No solo
-const WIRE_TABLE = [
+export const WIRE_TABLE = [
   { gauge: "1.5mm²",  area: 1.5,  B2: 13,  B1: 15,  D1: 18,  resistance: 12.1 },
   { gauge: "2.5mm²",  area: 2.5,  B2: 18,  B1: 21,  D1: 24,  resistance: 7.41 },
   { gauge: "4mm²",    area: 4,    B2: 24,  B1: 28,  D1: 32,  resistance: 4.61 },
@@ -18,25 +18,30 @@ const WIRE_TABLE = [
   { gauge: "70mm²",   area: 70,   B2: 136, B1: 160, D1: 184, resistance: 0.268 },
   { gauge: "95mm²",   area: 95,   B2: 164, B1: 194, D1: 223, resistance: 0.193 },
   { gauge: "120mm²",  area: 120,  B2: 188, B1: 225, D1: 259, resistance: 0.153 },
+  { gauge: "150mm²",  area: 150,  B2: 216, B1: 260, D1: 299, resistance: 0.124 },
+  { gauge: "185mm²",  area: 185,  B2: 245, B1: 297, D1: 341, resistance: 0.099 },
+  { gauge: "240mm²",  area: 240,  B2: 286, B1: 350, D1: 403, resistance: 0.075 },
 ];
 
-// ─── Fatores de correção NBR 5410 Table 40 (temperatura ambiente) ─────────────────────────────
-const TEMP_FACTORS = {
-  25: 1.06, 30: 1.00, 35: 0.94, 40: 0.87, 45: 0.79, 50: 0.71, 55: 0.61, 60: 0.50
+// ─── Fatores de correção NBR 5410 Tabela 40 (temperatura ambiente para condutores PVC) ─────────
+export const TEMP_FACTORS = {
+  25: 1.06, 30: 1.00, 35: 0.94, 40: 0.87, 45: 0.79, 50: 0.71, 55: 0.61, 60: 0.50,
 };
 
-// ─── Fatores de agrupamento NBR 5410 Table 42 ─────────────────────────────────────────────────
-const GROUP_FACTORS = { 1: 1.00, 2: 0.80, 3: 0.70, 4: 0.65, 5: 0.60, 6: 0.57, 7: 0.54, 8: 0.52, 9: 0.50 };
+// ─── Fatores de agrupamento NBR 5410 Tabela 42 (em feixe ou eletroduto) ────────────────────────
+export const GROUP_FACTORS = {
+  1: 1.00, 2: 0.80, 3: 0.70, 4: 0.65, 5: 0.60, 6: 0.57, 7: 0.54, 8: 0.52, 9: 0.50,
+};
 
-// ─── Capacidade de interrupção por tensão ─────────────────────────────────────────────────────
-const BREAKING_CAPACITY = (voltage) => {
-  if (voltage <= 220) return 3; // kA mínimo residencial
-  if (voltage <= 380) return 6;
+// ─── Capacidade de interrupção recomendada por nível de tensão e porte ────────────────────────
+export const BREAKING_CAPACITY = (voltage) => {
+  if (voltage <= 220) return 3; // kA mínimo residencial / comercial leve
+  if (voltage <= 380) return 6; // kA padrão comercial
   return 10;
 };
 
-// ─── Método de instalação → coluna da tabela ──────────────────────────────────────────────────
-const METHOD_COL = {
+// ─── Método de instalação → coluna da tabela NBR 5410 ─────────────────────────────────────────
+export const METHOD_COL = {
   "Eletroduto Embutido em Parede":    "B2",
   "Eletroduto Aparente":              "B1",
   "Cabo Multipolar Fixado":           "B1",
@@ -45,69 +50,52 @@ const METHOD_COL = {
   "Eletroduto Enterrado":             "D1",
 };
 
-// ─── DR obrigatório por tipo (NBR 5410 item 6.3.6) ────────────────────────────────────────────
-const NEEDS_DR = (type) => [
-  "Tomadas de Uso Geral", "Tomadas de Uso Específico", "Chuveiro", "Ar Condicionado",
-  "Bomba Hidráulica", "Carregador Veicular",
-].includes(type);
-
-// ─── Curva do disjuntor por tipo de carga ─────────────────────────────────────────────────────
-const BREAKER_CURVE = (type) => {
-  if (["Motor", "Ar Condicionado", "Bomba Hidráulica"].includes(type)) return "D";
-  if (["Servidor", "Nobreak"].includes(type)) return "C";
-  return "B";
+// ─── DR obrigatório por tipo (NBR 5410 item 5.1.3.2.2) ────────────────────────────────────────
+export const NEEDS_DR = (type = "") => {
+  const norm = String(type || "").toLowerCase();
+  return (
+    norm.includes("tomada") ||
+    norm.includes("tug") ||
+    norm.includes("tue") ||
+    norm.includes("chuveiro") ||
+    norm.includes("ducha") ||
+    norm.includes("banheiro") ||
+    norm.includes("cozinha") ||
+    norm.includes("lavanderia") ||
+    norm.includes("extern") ||
+    norm.includes("ar condicionado") ||
+    norm.includes("bomba") ||
+    norm.includes("veicular") ||
+    norm.includes("piscina")
+  );
 };
 
-// ─── Número de polos por tipo de alimentação ──────────────────────────────────────────────────
-const POLES = (supply) => {
+// ─── Curva do disjuntor por tipo de carga ─────────────────────────────────────────────────────
+export const BREAKER_CURVE = (type = "") => {
+  const norm = String(type || "").toLowerCase();
+  if (norm.includes("motor") || norm.includes("bomba") || norm.includes("ar condicionado") || norm.includes("compressor")) return "D";
+  if (norm.includes("servidor") || norm.includes("nobreak") || norm.includes("cftv") || norm.includes("rack")) return "C";
+  if (norm.includes("chuveiro") || norm.includes("forno") || norm.includes("resistiv") || norm.includes("ilumina")) return "B";
+  return "C";
+};
+
+// ─── Número de polos por tipo de alimentação da carga ─────────────────────────────────────────
+export const POLES = (supply) => {
   if (supply === "Monofásico") return 1;
   if (supply === "Bifásico")   return 2;
   if (supply === "Trifásico")  return 3;
   return 1;
 };
 
-// ─── Corrente nominal de projeto ──────────────────────────────────────────────────────────────
-export function calcNominalCurrent(power_w, voltage, supply_type, power_factor = 0.92) {
-  if (!power_w || !voltage) return 0;
-  const isTri = supply_type === "Trifásico";
-  const isBi  = supply_type === "Bifásico";
-  let I;
-  if (isTri) {
-    // I = P / (√3 × V_linha × fp) — cada fase transporta I
-    I = power_w / (Math.sqrt(3) * voltage * power_factor);
-  } else if (isBi) {
-    // Bifásico 220V: dois condutores de fase (127V cada), tensão entre eles = 220V
-    // I = P / (V_linha × fp) — AMBOS os condutores transportam a mesma corrente I
-    // NÃO dividir por 2: cada condutor carrega a corrente total, não P/2
-    I = power_w / (voltage * power_factor);
-  } else {
-    I = power_w / (voltage * power_factor);
-  }
-  return Math.round(I * 100) / 100;
-}
+// ─── Série comercial padronizada de disjuntores (NBR NM 60898 / NBR IEC 60947-2) ──────────────
+export const COMMERCIAL_BREAKER_RATINGS = [
+  6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125, 160, 200, 225, 250, 315, 350, 400, 500, 630, 800,
+];
 
-// ─── Corrente corrigida (com fatores de temperatura e agrupamento) ─────────────────────────────
-export function calcCorrectedCurrent(nominal_a, temp_ambient = 30, group_count = 1) {
-  const ft = TEMP_FACTORS[temp_ambient] || 1.0;
-  const fg = GROUP_FACTORS[Math.min(group_count, 9)] || 0.50;
-  return Math.round((nominal_a / (ft * fg)) * 100) / 100;
-}
+// ─── Degraus comerciais de IDR de entrada (Piso padrão 40A em conformidade com materiais) ─────
+export const DR_RATINGS = [40, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630];
 
-// ─── Seleção da bitola do condutor ────────────────────────────────────────────────────────────
-export function minimumWireAreaForCircuit(type = "") {
-  const normalized = String(type).toLowerCase();
-  if (normalized.includes("ilumina")) return 1.5;
-  return 2.5;
-}
-
-export function selectWireGauge(corrected_a, install_method = "Eletroduto Embutido em Parede", min_area = 1.5) {
-  const col = METHOD_COL[install_method] || "B2";
-  const min = WIRE_TABLE.find(w => w[col] >= corrected_a && w.area >= min_area);
-  return min || WIRE_TABLE[WIRE_TABLE.length - 1];
-}
-
-// ─── Seleção do disjuntor (NBR 5410) ──────────────────────────────────────────────────────────
-// ─── Fatores de demanda padrão (NBR 5410 / Concessionárias brasileiras) ──────────────────────
+// ─── Fatores de demanda padrão (NBR 5410 / Concessionárias brasileiras) ───────────────────────
 export const DEFAULT_DEMAND_FACTORS = {
   "Iluminação": 1.0,
   "Tomadas de Uso Geral": 0.70,
@@ -151,64 +139,280 @@ export function getDefaultDemandFactor(type = "", name = "") {
   return 0.80;
 }
 
-// ─── Seleção do disjuntor (NBR 5410) ──────────────────────────────────────────────────────────
-export function selectBreaker(nominal_a) {
-  const SIZES = [6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400];
-  return SIZES.find(s => s >= nominal_a) || 400;
-}
+// ─── Normalização e Conversão de Potências (W, kW, VA, kVA, cv, HP) ───────────────────────────
+export function normalizeElectricalPower({
+  power = 0,
+  power_unit = "W",
+  power_w = null,
+  power_va = null,
+  power_factor = 0.92,
+  efficiency = 1.0,
+} = {}) {
+  const fp = Math.max(0.01, Number(power_factor) || 0.92);
+  const eta = Math.min(1.0, Math.max(0.1, Number(efficiency) || 1.0));
+  const rawVal = Number(power_w !== null && power_w !== undefined && power_w !== "" ? power_w : power || 0);
+  const unit = String(power_unit || "W").trim().toUpperCase();
 
-// ─── Seleção do IDR de entrada (In ≥ In do disjuntor geral) ───────────────────────────────────
-// Piso de 40 A: alinha com a base de materiais/orçamento, que cota IDR a partir de 40 A.
-export const DR_RATINGS = [40, 63, 80, 100, 125, 160, 200, 250, 315, 400];
+  let activeW = 0;
+  let apparentVa = 0;
 
-export function selectDrRating(breaker_a) {
-  const n = Number(breaker_a) || 0;
-  return DR_RATINGS.find(r => r >= n) || DR_RATINGS[DR_RATINGS.length - 1];
-}
+  if (unit === "KW") {
+    activeW = rawVal * 1000;
+    apparentVa = activeW / fp;
+  } else if (unit === "KVA") {
+    apparentVa = rawVal * 1000;
+    activeW = apparentVa * fp;
+  } else if (unit === "VA") {
+    apparentVa = rawVal;
+    activeW = apparentVa * fp;
+  } else if (unit === "CV") {
+    // 1 cv = 735.49875 W mecânicos; Potência elétrica de entrada = Pmec / eta
+    const pMecW = rawVal * 735.49875;
+    activeW = pMecW / eta;
+    apparentVa = activeW / fp;
+  } else if (unit === "HP") {
+    // 1 HP = 745.69987 W mecânicos; Potência elétrica de entrada = Pmec / eta
+    const pMecW = rawVal * 745.69987;
+    activeW = pMecW / eta;
+    apparentVa = activeW / fp;
+  } else {
+    // Padrão em W
+    activeW = rawVal;
+    apparentVa = activeW / fp;
+  }
 
-// Polos da proteção geral (disjuntor e IDR) conforme a alimentação.
-export function mainProtectionPoles(supply_type) {
-  if (supply_type === "Trifásico") return { breaker: 3, dr: 4 };
-  return { breaker: 2, dr: 2 };
-}
+  if (power_va !== null && power_va !== undefined && Number(power_va) > 0) {
+    apparentVa = Number(power_va);
+    activeW = apparentVa * fp;
+  }
 
-// ─── Proteção geral: fonte única de verdade do dimensionamento da entrada ─────────────────────
-// Usada pelo editor de circuitos, balanceamento, diagrama, quadro, orçamento e materiais
-// para que o disjuntor geral e o IDR geral batam em todas as telas.
-export function calcMainProtection(project = {}, precomputedMetrics = null) {
-  const metrics = precomputedMetrics || calcProjectMetrics(project);
-  const poles = mainProtectionPoles(project?.supply_type || "Monofásico");
-  // Sem circuitos dimensionados o valor não tem significado — usa 40 A como padrão de entrada.
-  const hasCircuits = (metrics?.circuits?.length || 0) > 0;
-  const breakerCurrent = hasCircuits ? (Number(metrics?.generalBreaker) || 40) : 40;
   return {
-    breaker: { current: breakerCurrent, poles: poles.breaker, curve: "C" },
-    dr: { current: selectDrRating(breakerCurrent), poles: poles.dr, sensitivity_ma: 30 },
-    current: Number(metrics?.generalCurrent) || 0,
+    power_w: Math.round(activeW * 100) / 100,
+    power_va: Math.round(apparentVa * 100) / 100,
+    power_factor: fp,
+    efficiency: eta,
   };
 }
 
-// ─── Cálculo da queda de tensão ────────────────────────────────────────────────────────────────
+// ─── Motor de Cálculo de Corrente por Tipo de Alimentação ─────────────────────────────────────
+export function calcNominalCurrent(power_w, voltage, supply_type, power_factor = 0.92, power_va = null) {
+  const p = Number(power_w) || 0;
+  const v = Number(voltage) || 0;
+  const fp = Math.max(0.01, Number(power_factor) || 0.92);
+  if (v <= 0) return 0;
+
+  const s = (power_va !== null && power_va !== undefined && Number(power_va) > 0)
+    ? Number(power_va)
+    : (p > 0 ? p / fp : 0);
+
+  if (p <= 0 && s <= 0) return 0;
+
+  let I = 0;
+  if (supply_type === "Trifásico") {
+    // Trifásico equilibrado: I = P / (√3 × V_linha × fp) = S / (√3 × V_linha)
+    I = s / (Math.sqrt(3) * v);
+  } else if (supply_type === "Bifásico") {
+    // Carga monofásica ligada entre duas fases (tensão entre fases V_FF):
+    // I = P / (V_linha × fp) = S / V_linha (NÃO aplicar raiz de 3)
+    I = s / v;
+  } else {
+    // Monofásico F+N: I = P / (V_fn × fp) = S / V_fn
+    I = s / v;
+  }
+
+  return Math.round(I * 100) / 100;
+}
+
+// ─── Corrente corrigida (fatores de temperatura e agrupamento NBR 5410) ─────────────────────────
+export function calcCorrectedCurrent(nominal_a, temp_ambient = 30, group_count = 1) {
+  const current = Number(nominal_a) || 0;
+  if (current <= 0) return 0;
+  const ft = TEMP_FACTORS[temp_ambient] || 1.0;
+  const fg = GROUP_FACTORS[Math.min(Math.max(1, Number(group_count) || 1), 9)] || 0.50;
+  return Math.round((current / (ft * fg)) * 100) / 100;
+}
+
+// ─── Seção mínima dos condutores (NBR 5410 Tabela 47) ─────────────────────────────────────────
+export function minimumWireAreaForCircuit(type = "") {
+  const normalized = String(type).toLowerCase();
+  if (normalized.includes("ilumina") || normalized.includes("luz")) return 1.5;
+  return 2.5;
+}
+
+// ─── Seleção da bitola do condutor (critério da capacidade de condução) ───────────────────────
+export function selectWireGauge(corrected_a, install_method = "Eletroduto Embutido em Parede", min_area = 1.5) {
+  const col = METHOD_COL[install_method] || "B2";
+  const min = WIRE_TABLE.find(w => w[col] >= corrected_a && w.area >= min_area);
+  return min || WIRE_TABLE[WIRE_TABLE.length - 1];
+}
+
+// ─── Seleção do condutor alimentador geral ────────────────────────────────────────────────────
+export function selectFeederCable(designCurrent_a, installMethod = "Eletroduto Embutido em Parede", tempAmbient = 30, groupCount = 1) {
+  const current = Number(designCurrent_a) || 0;
+  const corrected_a = calcCorrectedCurrent(current, tempAmbient, groupCount);
+  const col = METHOD_COL[installMethod] || "B2";
+  const cable = WIRE_TABLE.find(w => w[col] >= corrected_a && w.area >= 2.5) || WIRE_TABLE[WIRE_TABLE.length - 1];
+  const ft = TEMP_FACTORS[tempAmbient] || 1.0;
+  const fg = GROUP_FACTORS[Math.min(Math.max(1, Number(groupCount) || 1), 9)] || 0.50;
+  const iz = Math.round(cable[col] * ft * fg * 10) / 10;
+  return {
+    gauge: cable.gauge,
+    area: cable.area,
+    baseAmpacity: cable[col],
+    iz,
+    correctedAmpacity: iz,
+  };
+}
+
+// ─── Seleção comercial do disjuntor (NBR 5410) ────────────────────────────────────────────────
+export function selectBreaker(nominal_a) {
+  const val = Number(nominal_a);
+  if (!Number.isFinite(val) || val <= 0) return null;
+  return COMMERCIAL_BREAKER_RATINGS.find(s => s >= val) || COMMERCIAL_BREAKER_RATINGS[COMMERCIAL_BREAKER_RATINGS.length - 1];
+}
+
+// ─── Seleção do IDR geral (In,DR ≥ In,disjuntor) ──────────────────────────────────────────────
+export function selectDrRating(breaker_a) {
+  const n = Number(breaker_a);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return DR_RATINGS.find(r => r >= n) || DR_RATINGS[DR_RATINGS.length - 1];
+}
+
+// ─── Polos da proteção geral conforme a alimentação ──────────────────────────────────────────
+export function mainProtectionPoles(supply_type, { neutral_switched = true } = {}) {
+  if (supply_type === "Trifásico") {
+    return {
+      breaker: neutral_switched ? 3 : 3, // Padrão 3P (ou 4P em esquemas com neutro seccionado)
+      dr: 4,                             // IDR Tetrapolar (3F+N)
+    };
+  }
+  if (supply_type === "Bifásico") {
+    return {
+      breaker: 2, // Bipolar (2 fases)
+      dr: 2,      // IDR Bipolar
+    };
+  }
+  return {
+    breaker: neutral_switched ? 2 : 1, // Monofásico com seccionamento de entrada (2P ou 1P)
+    dr: 2,
+  };
+}
+
+// ─── Proteção Geral: Fonte Única de Verdade do Dimensionamento da Entrada ─────────────────────
+export function calcMainProtection(project = {}, precomputedMetrics = null) {
+  const metrics = precomputedMetrics || calcProjectMetrics(project);
+  const supply = project?.supply_type || "Monofásico";
+  const poles = mainProtectionPoles(supply);
+  const circuits = metrics?.circuits || [];
+  const hasCircuits = circuits.length > 0;
+  const generalCurrent = Number(metrics?.generalCurrent) || 0;
+
+  if (!hasCircuits || generalCurrent <= 0) {
+    return {
+      breaker: {
+        current: null,
+        poles: poles.breaker,
+        curve: "C",
+        status: "insufficient_data",
+        statusMessage: "Nenhuma carga cadastrada",
+        isManual: false,
+        isVerified: false,
+      },
+      dr: {
+        current: null,
+        poles: poles.dr,
+        sensitivity_ma: 30,
+        status: "insufficient_data",
+      },
+      feeder: null,
+      current: 0,
+      status: "insufficient_data",
+      statusMessage: "Dados insuficientes — cadastre circuitos para dimensionar a proteção geral",
+    };
+  }
+
+  const autoBreaker = selectBreaker(generalCurrent);
+  const manualBreaker = project?.manual_general_breaker ? Number(project.manual_general_breaker) : null;
+  const breakerCurrent = manualBreaker || autoBreaker;
+  const isManual = Boolean(manualBreaker);
+
+  // Dimensionamento / verificação do alimentador geral
+  const installMethod = project?.feeder_install_method || "Eletroduto Embutido em Parede";
+  const tempAmbient = project?.temp_ambient || 30;
+  const groupCount = project?.group_count || 1;
+  const feeder = selectFeederCable(breakerCurrent, installMethod, tempAmbient, groupCount);
+
+  // Verificação de sobrecarga NBR 5410: Ib <= In <= Iz
+  let status = "verified";
+  let statusMessage = "Dimensionamento verificado conforme NBR 5410";
+  let isOverloaded = false;
+  let isCableProtected = true;
+
+  if (breakerCurrent < generalCurrent) {
+    status = "incompatible";
+    statusMessage = `Disjuntor geral (${breakerCurrent}A) menor que a corrente de demanda Ib (${generalCurrent}A)`;
+    isOverloaded = true;
+  } else if (feeder.iz < breakerCurrent) {
+    status = "incompatible";
+    statusMessage = `Capacidade do cabo alimentador (${feeder.iz}A) menor que o disjuntor geral In (${breakerCurrent}A)`;
+    isCableProtected = false;
+  } else if (isManual) {
+    status = "verified_manual";
+    statusMessage = `Disjuntor manual (${breakerCurrent}A) verificado (Ib: ${generalCurrent}A ≤ In: ${breakerCurrent}A ≤ Iz: ${feeder.iz}A)`;
+  }
+
+  const drRating = selectDrRating(breakerCurrent);
+
+  return {
+    breaker: {
+      current: breakerCurrent,
+      poles: poles.breaker,
+      curve: "C",
+      status,
+      statusMessage,
+      isManual,
+      isOverloaded,
+      isCableProtected,
+      isVerified: status === "verified" || status === "verified_manual",
+    },
+    dr: {
+      current: drRating,
+      poles: poles.dr,
+      sensitivity_ma: 30,
+      status: "verified",
+      statusMessage: `IDR ${poles.dr}P ${drRating}A 30mA coordenado (In,DR ≥ In)`,
+    },
+    feeder,
+    current: generalCurrent,
+    status,
+    statusMessage,
+  };
+}
+
+// ─── Cálculo da Queda de Tensão (NBR 5410 item 6.2.7) ──────────────────────────────────────────
 export function calcVoltageDrop(power_w, voltage, supply_type, length_m, wire_gauge, power_factor = 0.92) {
   const wireData = WIRE_TABLE.find(w => w.gauge === wire_gauge) || WIRE_TABLE[1];
   const I = calcNominalCurrent(power_w, voltage, supply_type, power_factor);
-  const R = wireData.resistance / 1000; // Ω/m → mΩ/m
+  const R = wireData.resistance / 1000; // Ω/km → Ω/m
   const isTri = supply_type === "Trifásico";
   // ΔU = (√3 ou 2) × I × R × L  /  tensão  × 100
   const factor = isTri ? Math.sqrt(3) : 2;
   const deltaU = factor * I * R * length_m;
-  const pct = (deltaU / voltage) * 100;
+  const pct = voltage > 0 ? (deltaU / voltage) * 100 : 0;
   return {
     drop_v:   Math.round(deltaU * 100) / 100,
     drop_pct: Math.round(pct * 100) / 100,
-    ok: pct <= 4, // NBR 5410 item 6.2.7 — 4% para terminais
+    ok: pct <= 4, // NBR 5410 item 6.2.7 — limite de 4% para circuitos terminais
   };
 }
 
-// ─── Cálculo completo de um circuito ──────────────────────────────────────────────────────────
-export function calcCircuit(circuit) {
+// ─── Cálculo Completo de um Circuito Individual ───────────────────────────────────────────────
+export function calcCircuit(circuit = {}) {
   const {
+    power,
+    power_unit = "W",
     power_w = 0,
+    power_va = null,
     voltage = 220,
     supply_type = "Monofásico",
     type = "Tomadas de Uso Geral",
@@ -218,7 +422,7 @@ export function calcCircuit(circuit) {
     length_m = 15,
     power_factor,
     demand_factor,
-    point_count = 1,
+    efficiency = 1.0,
   } = circuit;
 
   const rawDemand = (demand_factor !== undefined && demand_factor !== null && demand_factor !== "")
@@ -226,21 +430,34 @@ export function calcCircuit(circuit) {
     : getDefaultDemandFactor(type, circuit?.name);
   const resolvedDemandFactor = Number.isFinite(rawDemand) && rawDemand > 0 ? rawDemand : 1.0;
 
-  const fp = Number(power_factor) || (type === "Motor" || type === "Ar Condicionado" ? 0.85 : type === "Iluminação" ? 0.92 : 1.0);
-  const installedPowerW = Number(power_w) || 0;
-  const effectivePowerW = Math.round(installedPowerW * resolvedDemandFactor * 100) / 100;
-  const installedPowerVa = fp > 0 ? Math.round((installedPowerW / fp) * 100) / 100 : installedPowerW;
-  const effectivePowerVa = fp > 0 ? Math.round((effectivePowerW / fp) * 100) / 100 : effectivePowerW;
+  const defaultFp = (type === "Motor" || type === "Ar Condicionado" ? 0.85 : type === "Iluminação" ? 0.92 : 1.0);
+  const fp = Number(power_factor) || defaultFp;
 
-  const nominal_a      = calcNominalCurrent(installedPowerW, voltage, supply_type, fp);
-  const demand_a       = calcNominalCurrent(effectivePowerW, voltage, supply_type, fp);
+  const normalized = normalizeElectricalPower({
+    power,
+    power_unit,
+    power_w,
+    power_va,
+    power_factor: fp,
+    efficiency,
+  });
+
+  const installedPowerW = normalized.power_w;
+  const effectivePowerW = Math.round(installedPowerW * resolvedDemandFactor * 100) / 100;
+  const installedPowerVa = normalized.power_va;
+  const effectivePowerVa = Math.round(installedPowerVa * resolvedDemandFactor * 100) / 100;
+
+  const nominal_a       = calcNominalCurrent(installedPowerW, voltage, supply_type, fp, installedPowerVa);
+  const demand_a        = calcNominalCurrent(effectivePowerW, voltage, supply_type, fp, effectivePowerVa);
   const project_current_a = demand_a;
-  const corrected_a    = calcCorrectedCurrent(project_current_a, temp_ambient, group_count);
-  const minWireArea    = minimumWireAreaForCircuit(type);
-  let wireData         = selectWireGauge(corrected_a, install_method, minWireArea);
-  // Dimensionamento do disjuntor do circuito: In >= Ib (corrente de projeto de demanda conforme NBR 5410)
-  const breaker_a      = selectBreaker(project_current_a);
-  let vd               = calcVoltageDrop(effectivePowerW, voltage, supply_type, length_m, wireData.gauge, fp);
+  const corrected_a     = calcCorrectedCurrent(project_current_a, temp_ambient, group_count);
+  const minWireArea     = minimumWireAreaForCircuit(type);
+  let wireData          = selectWireGauge(corrected_a, install_method, minWireArea);
+
+  // Dimensionamento do disjuntor do circuito: In >= Ib
+  const breaker_a       = selectBreaker(project_current_a) || (project_current_a > 0 ? 10 : null);
+  let vd                = calcVoltageDrop(effectivePowerW, voltage, supply_type, length_m, wireData.gauge, fp);
+
   if (!vd.ok) {
     const methodCol = METHOD_COL[install_method] || "B2";
     const voltageDropWire = WIRE_TABLE.find((wire) => (
@@ -254,11 +471,12 @@ export function calcCircuit(circuit) {
       vd = calcVoltageDrop(effectivePowerW, voltage, supply_type, length_m, wireData.gauge, fp);
     }
   }
-  const temp_factor    = TEMP_FACTORS[temp_ambient] || 1.0;
-  const group_factor   = GROUP_FACTORS[Math.min(group_count, 9)] || 0.50;
-  const poles          = POLES(supply_type);
-  const curve          = BREAKER_CURVE(type);
-  const breaking_ka    = BREAKING_CAPACITY(voltage);
+
+  const temp_factor     = TEMP_FACTORS[temp_ambient] || 1.0;
+  const group_factor    = GROUP_FACTORS[Math.min(Math.max(1, Number(group_count) || 1), 9)] || 0.50;
+  const poles           = POLES(supply_type);
+  const curve           = BREAKER_CURVE(type);
+  const breaking_ka     = BREAKING_CAPACITY(voltage);
 
   return {
     ...circuit,
@@ -274,7 +492,7 @@ export function calcCircuit(circuit) {
     wire_gauge:           wireData.gauge,
     wire_area:            wireData.area,
     minimum_wire_area:    minWireArea,
-    breaker_a,
+    breaker_a:            breaker_a || 0,
     breaker_curve:        curve,
     breaker_poles:        poles,
     breaking_capacity_ka: breaking_ka,
@@ -290,11 +508,17 @@ export function calcCircuit(circuit) {
   };
 }
 
-// ─── Balanceamento automático de fases ────────────────────────────────────────────────────────
+// ─── Balanceamento Automático de Fases ────────────────────────────────────────────────────────
 const PHASE_CODES = ["A", "B", "C"];
 const BIPHASE_PAIRS = ["AB", "BC", "AC"];
 
-const phaseOptionsForCircuit = (circuit = {}) => {
+const phaseOptionsForCircuit = (circuit = {}, projectSupplyType = "Trifásico") => {
+  const projSupply = projectSupplyType || "Trifásico";
+  if (projSupply === "Monofásico") return ["A"];
+  if (projSupply === "Bifásico") {
+    if (circuit.supply_type === "Bifásico" || circuit.supply_type === "Trifásico") return ["AB"];
+    return ["A", "B"];
+  }
   if (circuit.supply_type === "Trifásico") return ["ABC"];
   if (circuit.supply_type === "Bifásico") return BIPHASE_PAIRS;
   return PHASE_CODES;
@@ -357,7 +581,7 @@ const greedyPhaseAssignments = (items, phaseLoad) => {
   return { assignments, load, score: phaseLoadScore(load) };
 };
 
-export function autoBalancePhases(circuits) {
+export function autoBalancePhases(circuits, projectSupplyType = "Trifásico") {
   const calculated = (Array.isArray(circuits) ? circuits : []).map(calcCircuit);
   let basePhaseLoad = { A: 0, B: 0, C: 0 };
   const fixedAssignments = {};
@@ -365,7 +589,7 @@ export function autoBalancePhases(circuits) {
 
   calculated.forEach((circuit, index) => {
     const current = Number(circuit.project_current_a) || 0;
-    const options = phaseOptionsForCircuit(circuit);
+    const options = phaseOptionsForCircuit(circuit, projectSupplyType);
     if (options.length === 1) {
       fixedAssignments[index] = options[0];
       basePhaseLoad = addCurrentToPhaseLoad(basePhaseLoad, options[0], current);
@@ -402,15 +626,264 @@ export function autoBalancePhases(circuits) {
   const bestAssignments = best?.assignments || {};
   return calculated.map((circuit, index) => ({
     ...circuit,
-    phase: bestAssignments[index] || fixedAssignments[index] || phaseOptionsForCircuit(circuit)[0],
+    phase: bestAssignments[index] || fixedAssignments[index] || phaseOptionsForCircuit(circuit, projectSupplyType)[0],
   }));
 }
 
-// ─── Métricas do projeto ───────────────────────────────────────────────────────────────────────
+// ─── Auditoria Técnica Rastreável de Conformidade NBR 5410 ────────────────────────────────────
+export function auditProjectNBR5410(project = {}, metrics = {}) {
+  const circuits = metrics?.circuits || [];
+  const checks = [];
+  const hasCircuits = circuits.length > 0;
+
+  if (!hasCircuits) {
+    return {
+      score: null,
+      status: "pending",
+      statusText: "Sem cargas cadastradas",
+      checks: [
+        {
+          id: "no_loads",
+          title: "Cadastro de Circuitos",
+          standardRef: "NBR 5410 item 4.2",
+          status: "pending",
+          detail: "Nenhum circuito cadastrado no projeto. Adicione cargas para iniciar as verificações normativas.",
+          action: "Cadastre os circuitos terminais no Editor de Circuitos.",
+        },
+      ],
+      passedCount: 0,
+      warnCount: 0,
+      errorCount: 0,
+      pendingCount: 1,
+      disclaimer: "Aprovação final do projeto sujeita à validação e emissão de ART/RRT por Engenheiro Eletricista habilitado.",
+    };
+  }
+
+  const mainProtection = metrics?.mainProtection || calcMainProtection(project, metrics);
+  const generalBreaker = mainProtection?.breaker?.current;
+  const feeder = mainProtection?.feeder;
+
+  // 1. Proteção contra Sobrecarga (NBR 5410 item 5.3.4: Ib <= In <= Iz)
+  if (mainProtection?.breaker?.isOverloaded) {
+    checks.push({
+      id: "overload_protection",
+      title: "Proteção contra Sobrecarga (Alimentador)",
+      standardRef: "NBR 5410 item 5.3.4",
+      status: "fail",
+      detail: `Disjuntor geral (${generalBreaker}A) é inferior à corrente de demanda de projeto (${metrics.generalCurrent}A). Condição Ib ≤ In violada.`,
+      action: "Aumente a corrente nominal do disjuntor geral para acompanhar a demanda.",
+    });
+  } else if (feeder && feeder.iz < generalBreaker) {
+    checks.push({
+      id: "overload_protection",
+      title: "Proteção contra Sobrecarga (Alimentador)",
+      standardRef: "NBR 5410 item 5.3.4",
+      status: "fail",
+      detail: `Capacidade corrigida do condutor alimentador (${feeder.iz}A) é menor que o disjuntor (${generalBreaker}A). Condição In ≤ Iz violada.`,
+      action: "Aumente a seção dos condutores do alimentador geral.",
+    });
+  } else {
+    checks.push({
+      id: "overload_protection",
+      title: "Proteção contra Sobrecarga (Alimentador)",
+      standardRef: "NBR 5410 item 5.3.4",
+      status: "pass",
+      detail: `Condição Ib (${metrics.generalCurrent}A) ≤ In (${generalBreaker}A) ≤ Iz (${feeder?.iz || "—"}A) plenamente satisfeita.`,
+    });
+  }
+
+  // 2. Queda de Tensão nos Circuitos Terminais (NBR 5410 item 6.2.7: Delta U <= 4%)
+  const highVdCircuits = circuits.filter(c => !c.voltage_drop_ok);
+  if (highVdCircuits.length > 0) {
+    checks.push({
+      id: "voltage_drop",
+      title: "Limites de Queda de Tensão (Terminais)",
+      standardRef: "NBR 5410 item 6.2.7",
+      status: "fail",
+      detail: `${highVdCircuits.length} circuito(s) excedem o limite de 4% de queda de tensão (máx: ${Math.max(...highVdCircuits.map(c => c.voltage_drop_pct))}%)`,
+      action: "Aumente a seção dos condutores dos circuitos críticos ou reduza a extensão do alimentador.",
+    });
+  } else {
+    checks.push({
+      id: "voltage_drop",
+      title: "Limites de Queda de Tensão (Terminais)",
+      standardRef: "NBR 5410 item 6.2.7",
+      status: "pass",
+      detail: `Todos os ${circuits.length} circuitos atendem ao limite normativo de queda de tensão (ΔU ≤ 4%).`,
+    });
+  }
+
+  // 3. Seções Mínimas de Condutores (NBR 5410 Tabela 47: 1.5mm² Iluminação / 2.5mm² Tomadas/Força)
+  const invalidGaugeCircuits = circuits.filter(c => {
+    const min = minimumWireAreaForCircuit(c.type);
+    return (c.wire_area || 2.5) < min;
+  });
+  if (invalidGaugeCircuits.length > 0) {
+    checks.push({
+      id: "minimum_conductor_section",
+      title: "Seções Mínimas dos Condutores",
+      standardRef: "NBR 5410 Tabela 47",
+      status: "fail",
+      detail: `${invalidGaugeCircuits.length} circuito(s) com bitola inferior ao mínimo normativo (1,5 mm² iluminação / 2,5 mm² tomadas).`,
+      action: "Adequar a seção mínima dos condutores conforme a Tabela 47 da NBR 5410.",
+    });
+  } else {
+    checks.push({
+      id: "minimum_conductor_section",
+      title: "Seções Mínimas dos Condutores",
+      standardRef: "NBR 5410 Tabela 47",
+      status: "pass",
+      detail: `Seções mínimas de cobre atendidas (1,5 mm² para iluminação e 2,5 mm² para tomadas/força).`,
+    });
+  }
+
+  // 4. Proteção Diferencial-Residual Obrigatória (NBR 5410 item 5.1.3.2.2)
+  const missingDrCircuits = circuits.filter(c => NEEDS_DR(c.type) && !c.needs_dr);
+  if (missingDrCircuits.length > 0) {
+    checks.push({
+      id: "dr_protection",
+      title: "Proteção Diferencial Residual (DR 30mA)",
+      standardRef: "NBR 5410 item 5.1.3.2.2",
+      status: "warn",
+      detail: `${missingDrCircuits.length} circuito(s) em locais molhados ou tomadas gerais sem indicação de proteção DR de 30mA.`,
+      action: "Preveja dispositivo IDR de alta sensibilidade (30mA) para as cargas exigidas pela norma.",
+    });
+  } else {
+    checks.push({
+      id: "dr_protection",
+      title: "Proteção Diferencial Residual (DR 30mA)",
+      standardRef: "NBR 5410 item 5.1.3.2.2",
+      status: "pass",
+      detail: `Proteção DR de alta sensibilidade (30mA) aplicada a todos os circuitos obrigatórios.`,
+    });
+  }
+
+  // 5. Coordenação Disjuntor-IDR (In,DR >= In,disjuntor)
+  const drCurrent = mainProtection?.dr?.current;
+  if (generalBreaker && drCurrent && drCurrent < generalBreaker) {
+    checks.push({
+      id: "dr_coordination",
+      title: "Coordenação IDR Geral com Disjuntor",
+      standardRef: "NBR 5410 item 5.3.5",
+      status: "fail",
+      detail: `Corrente nominal do IDR (${drCurrent}A) é inferior ao disjuntor à montante (${generalBreaker}A).`,
+      action: "Adote IDR com corrente nominal igual ou superior à do disjuntor geral.",
+    });
+  } else {
+    checks.push({
+      id: "dr_coordination",
+      title: "Coordenação IDR Geral com Disjuntor",
+      standardRef: "NBR 5410 item 5.3.5",
+      status: "pass",
+      detail: `IDR dimensionado com capacidade adequada (${drCurrent || 40}A ≥ ${generalBreaker || 0}A).`,
+    });
+  }
+
+  // 6. Equilíbrio de Fases (NBR 5410 item 4.2.5.5)
+  const supply = project?.supply_type || "Monofásico";
+  if (supply === "Trifásico" || supply === "Bifásico") {
+    const imbalance = metrics?.imbalance_pct || 0;
+    if (imbalance > 10) {
+      checks.push({
+        id: "phase_balance",
+        title: "Equilíbrio de Fases",
+        standardRef: "NBR 5410 item 4.2.5.5",
+        status: "fail",
+        detail: `Desequilíbrio de ${imbalance}% entre as fases (limite de projeto recomendado: 5% a 10%).`,
+        action: "Redistribua os circuitos entre as fases através do balanceamento automático.",
+      });
+    } else if (imbalance > 5) {
+      checks.push({
+        id: "phase_balance",
+        title: "Equilíbrio de Fases",
+        standardRef: "NBR 5410 item 4.2.5.5",
+        status: "warn",
+        detail: `Desequilíbrio moderado de ${imbalance}% entre as fases.`,
+        action: "Rebalanceie as fases para buscar desequilíbrio inferior a 5%.",
+      });
+    } else {
+      checks.push({
+        id: "phase_balance",
+        title: "Equilíbrio de Fases",
+        standardRef: "NBR 5410 item 4.2.5.5",
+        status: "pass",
+        detail: `Fases equilibradas com desequilíbrio de apenas ${imbalance}%.`,
+      });
+    }
+  }
+
+  // 7. Dispositivo de Proteção contra Surtos - DPS (NBR 5410 item 5.4.2.1)
+  const hasDps = circuits.some(c => c.needs_dps) || project?.has_dps !== false;
+  if (!hasDps) {
+    checks.push({
+      id: "dps_protection",
+      title: "Proteção contra Sobretensões (DPS)",
+      standardRef: "NBR 5410 item 5.4.2.1",
+      status: "warn",
+      detail: "DPS Classe II não previsto na entrada do quadro de distribuição.",
+      action: "Inclua DPS Classe II (mínimo 20kA 275V) para cada fase e neutro.",
+    });
+  } else {
+    checks.push({
+      id: "dps_protection",
+      title: "Proteção contra Sobretensões (DPS)",
+      standardRef: "NBR 5410 item 5.4.2.1",
+      status: "pass",
+      detail: "Proteção contra sobretensões transitórias prevista com DPS Classe II.",
+    });
+  }
+
+  // 8. Espaço de Reserva no Quadro (NBR 5410 item 6.5.4.7)
+  const totalDins = metrics?.totalDins || 0;
+  const panelSize = metrics?.panelSize || 0;
+  const reserveDins = Math.max(0, panelSize - totalDins);
+  if (reserveDins < 2) {
+    checks.push({
+      id: "panel_reserve",
+      title: "Espaço de Reserva no Quadro Elétrico",
+      standardRef: "NBR 5410 item 6.5.4.7",
+      status: "warn",
+      detail: `Espaço de reserva insuficiente (${reserveDins} módulos livres). A norma exige de 15% a 30% de reserva.`,
+      action: "Aumente as dimensões do quadro para prever expansões futuras.",
+    });
+  } else {
+    checks.push({
+      id: "panel_reserve",
+      title: "Espaço de Reserva no Quadro Elétrico",
+      standardRef: "NBR 5410 item 6.5.4.7",
+      status: "pass",
+      detail: `Quadro com ${reserveDins} módulos de reserva técnica (atende à NBR 5410 item 6.5.4.7).`,
+    });
+  }
+
+  const passedCount = checks.filter(c => c.status === "pass").length;
+  const warnCount = checks.filter(c => c.status === "warn").length;
+  const errorCount = checks.filter(c => c.status === "fail").length;
+  const pendingCount = checks.filter(c => c.status === "pending").length;
+
+  const score = checks.length > 0 ? Math.round((passedCount / checks.length) * 100) : 0;
+  let status = "conforme";
+  if (errorCount > 0) status = "incompativel";
+  else if (warnCount > 0) status = "revisar";
+
+  return {
+    score,
+    status,
+    statusText: errorCount > 0 ? `${errorCount} incompatibilidade(s)` : warnCount > 0 ? `${warnCount} aviso(s)` : "Conforme",
+    checks,
+    passedCount,
+    warnCount,
+    errorCount,
+    pendingCount,
+    disclaimer: "Aprovação final do projeto sujeita à validação e emissão de ART/RRT por Engenheiro Eletricista habilitado.",
+  };
+}
+
+// ─── Métricas Consolidadas do Projeto ─────────────────────────────────────────────────────────
 export function calcProjectMetrics(project) {
-  const circuits = autoBalancePhases(project?.circuits || []);
-  // Circuitos com as fases "como estão" no projeto salvo, antes do balanceamento automático.
+  const circuits = autoBalancePhases(project?.circuits || [], project?.supply_type || "Trifásico");
   const rawCircuits = (project?.circuits || []).map(calcCircuit);
+  const hasCircuits = circuits.length > 0;
   const phaseLoad = { A: 0, B: 0, C: 0 };
   let totalPower = 0;
   let totalDemandPower = 0;
@@ -427,7 +900,7 @@ export function calcProjectMetrics(project) {
     totalDemandPower += pDem;
     totalDemandVa += sDem;
 
-    const ph = c.phase || "A";
+    const ph = String(c.phase || "A");
     const I = Number(c.project_current_a) || 0;
     if (ph === "ABC") { phaseLoad.A += I; phaseLoad.B += I; phaseLoad.C += I; }
     else if (ph.length === 2) {
@@ -445,7 +918,7 @@ export function calcProjectMetrics(project) {
   const imbalance_pct = maxI > 0 ? Math.round(((maxI - minI) / maxI) * 100) : 0;
   const neutral_a = Math.round((phaseLoad.A + phaseLoad.B + phaseLoad.C) * 0.1 * 10) / 10;
 
-  // Desequilíbrio "como está" (fases informadas nos circuitos), para comparar antes/depois do ajuste.
+  // Desequilíbrio com as fases salvas antes do auto-balance
   const storedPhaseLoad = { A: 0, B: 0, C: 0 };
   rawCircuits.forEach((c) => {
     const ph = String(c.phase || "A");
@@ -461,66 +934,27 @@ export function calcProjectMetrics(project) {
   const storedMin = Math.min(storedPhaseLoad.A, storedPhaseLoad.B, storedPhaseLoad.C);
   const storedImbalance_pct = storedMax > 0 ? Math.round(((storedMax - storedMin) / storedMax) * 100) : 0;
 
-  const totalDins = circuits.reduce((s, c) => s + (c.din_modules || 1), 0) + 4 + 2; // + geral + DPS
+  const totalDins = hasCircuits ? circuits.reduce((s, c) => s + (c.din_modules || 1), 0) + 4 + 2 : 0;
   const drCircuits = circuits.filter(c => c.needs_dr).length;
-  const drDins = Math.ceil(drCircuits / 2) * 2; // DRs 2P agrupam 2 circuitos
-  const panelSize = Math.ceil((totalDins + drDins) * 1.2 / 6) * 6; // +20% reserva, multiplo de 6
+  const drDins = Math.ceil(drCircuits / 2) * 2;
+  const panelSize = hasCircuits ? Math.ceil((totalDins + drDins) * 1.2 / 6) * 6 : 12;
 
-  // Corrente geral = fase mais carregada (NBR 5410 — proteção geral com base na demanda)
-  const generalCurrent = Math.round(maxI * 10) / 10;
-  // Dimensionamento do disjuntor geral: In >= Ib (corrente de projeto de demanda)
-  const generalBreaker = selectBreaker(generalCurrent > 0 ? generalCurrent : 40);
+  // Corrente geral = fase mais carregada (NBR 5410)
+  const generalCurrent = hasCircuits ? Math.round(maxI * 10) / 10 : 0;
+
+  // Proteção geral rigorosa (sem 40A fictício se não houver circuitos)
+  const generalBreaker = hasCircuits ? selectBreaker(generalCurrent) : null;
   const generalPolesSet = mainProtectionPoles(project?.supply_type || "Monofásico");
   const generalBreakerPoles = generalPolesSet.breaker;
-  const generalDr = selectDrRating(generalBreaker);
+  const generalDr = generalBreaker ? selectDrRating(generalBreaker) : null;
   const generalDrPoles = generalPolesSet.dr;
 
   const averageDemandFactor = totalPower > 0 ? Math.round((totalDemandPower / totalPower) * 100) / 100 : 1.0;
   const totalDemandKva = Math.round((totalDemandVa / 1000) * 100) / 100;
 
-  // Validações NBR 5410
-  const validations = [];
-  if (imbalance_pct > 10) validations.push({
-    severity: "error",
-    code: "phase_imbalance",
-    msg: `Desequilíbrio severo de fases: ${imbalance_pct}%`,
-    action: "Redistribua os circuitos entre as fases até o desequilíbrio ficar em 5% ou menos.",
-  });
-  else if (imbalance_pct > 5) validations.push({
-    severity: "warning",
-    code: "phase_imbalance",
-    msg: `Desequilíbrio de fases: ${imbalance_pct}% (recomendado < 5%)`,
-    action: "Rebalanceie os circuitos monofásicos e bifásicos para aproximar as correntes das fases A, B e C.",
-  });
-  circuits.forEach(c => {
-    if (!c.voltage_drop_ok) validations.push({
-      severity: "error",
-      code: "voltage_drop",
-      circuit_id: c.id || c.circuit_id,
-      msg: `Circuito "${c.name}": queda de tensão ${c.voltage_drop_pct}% > 4%`,
-      action: "Aumente a seção do condutor; se continuar acima de 4%, reduza o comprimento ou divida o circuito.",
-    });
-    if (!c.needs_dr && ["Tomadas de Uso Geral", "Chuveiro", "Ar Condicionado"].includes(c.type)) validations.push({
-      severity: "warning",
-      code: "dr_required",
-      circuit_id: c.id || c.circuit_id,
-      msg: `Circuito "${c.name}": DR recomendado`,
-      action: "Preveja proteção DR de 30 mA para esse circuito.",
-    });
-  });
-  if (!circuits.some(c => c.needs_dps)) validations.push({
-    severity: "warning",
-    code: "dps_required",
-    msg: "DPS não instalado — recomendado NBR 5410",
-    action: "Inclua DPS no quadro e atualize o diagrama do projeto.",
-  });
-
-  const nbrScore = Math.max(0, 100 - validations.filter(v => v.severity === "error").length * 15 - validations.filter(v => v.severity === "warning").length * 5);
-
-  // Carga monofásica de maior corrente na fase mais carregada: é ela que trava o
-  // balanceamento automático, porque não pode ser dividida entre fases.
+  // Carga monofásica que trava o balanceamento
   let imbalanceBlocker = null;
-  if (imbalance_pct > 5) {
+  if (imbalance_pct > 5 && hasCircuits) {
     const heaviestPhase = ["A", "B", "C"].reduce((a, b) => (phaseLoad[b] > phaseLoad[a] ? b : a));
     const blocker = circuits
       .filter((c) => {
@@ -539,16 +973,49 @@ export function calcProjectMetrics(project) {
     }
   }
 
-  return {
+  // Objeto de métricas preliminar para passar à auditoria
+  const partialMetrics = {
     circuits, phaseLoad, imbalance_pct, storedImbalance_pct, imbalanceBlocker, neutral_a,
     totalPower, totalInstalledPower: totalPower, totalDemandPower: Math.round(totalDemandPower * 100) / 100,
-    totalDemandKva, averageDemandFactor,
-    totalDins, panelSize, generalBreaker, generalCurrent: Math.round(generalCurrent * 10) / 10,
+    totalDemandVa: Math.round(totalDemandVa * 100) / 100, totalDemandKva, averageDemandFactor,
+    totalDins, panelSize, generalBreaker, generalCurrent,
     generalBreakerPoles, generalDr, generalDrPoles,
-    validations, nbrScore,
+  };
+
+  const mainProtection = calcMainProtection(project, partialMetrics);
+  const audit = auditProjectNBR5410(project, { ...partialMetrics, mainProtection });
+
+  // Lista de validações compatível com componentes existentes
+  const validations = [];
+  audit.checks.forEach(check => {
+    if (check.status === "fail") {
+      validations.push({
+        severity: "error",
+        code: check.id,
+        msg: `${check.title}: ${check.detail}`,
+        action: check.action,
+      });
+    } else if (check.status === "warn") {
+      validations.push({
+        severity: "warning",
+        code: check.id,
+        msg: `${check.title}: ${check.detail}`,
+        action: check.action,
+      });
+    }
+  });
+
+  return {
+    ...partialMetrics,
+    mainProtection,
+    audit,
+    validations,
+    nbrScore: audit.score ?? 0,
+    hasLoads: hasCircuits,
   };
 }
 
+// ─── Geração de Layout de Quadro de Distribuição ──────────────────────────────────────────────
 export function generateDefaultPanelLayout(proj, options = {}) {
   const ROW_MAX = 18;
   if (!proj) return { rails: [], wires: [], infrastructure: [] };
@@ -598,18 +1065,16 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     const phase = String(breaker?.phase || "");
     return phase.length === 1 && phase !== "N" && Number(breaker?.poles || 1) <= 1;
   };
-  
-  const totalPower = circuits.reduce((sum, c) => sum + (c.power_w || 0), 0);
-  // Proteção geral vem do dimensionamento (mesma fonte do editor de circuitos),
-  // para o quadro bater com balanceamento, diagrama, orçamento e materiais.
+
   const mainProtection = calcMainProtection({ ...proj, circuits, supply_type: supply, voltage });
-  const genCurrent = mainProtection.breaker.current;
+  const hasValidProtection = mainProtection.breaker.current !== null;
+  const genCurrent = hasValidProtection ? mainProtection.breaker.current : 0;
   const genPoles = mainProtection.breaker.poles;
-  const genDrCurrent = mainProtection.dr.current;
+  const genDrCurrent = hasValidProtection ? mainProtection.dr.current : 0;
   const genDrPoles = mainProtection.dr.poles;
-  
+
   const rail1Components = [];
-  
+
   // DPS
   const dpsCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
   for (let i = 0; i < dpsCount; i++) {
@@ -623,41 +1088,35 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       dpsStatus: "OK"
     });
   }
-  
+
   // Geral
   rail1Components.push({
     id: "gen_brk",
     type: "breaker",
     label: "DJ GERAL",
-    current: genCurrent,
+    current: genCurrent || 0,
     curve: "C",
     poles: genPoles,
     isGeneral: true,
     phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
-    status: "ON"
+    status: hasValidProtection ? "ON" : "OFF",
   });
-  
-  // DR Geral
-  const hasDR = Boolean(
-    proj?.has_dr !== false && (
-      circuits.length === 0
-      || circuits.some(c => c.needs_dr || c.wet_area || NEEDS_DR(c.type || c.circuit_type))
-      || proj?.has_dr === true
-    )
-  );
+
+  // DR Geral (padrão em quadros de distribuição conforme NBR 5410, exceto se desabilitado)
+  const hasDR = Boolean(proj?.has_dr !== false);
   if (hasDR) {
     rail1Components.push({
       id: "gen_dr",
       type: "dr",
       label: "IDR GERAL",
-      current: genDrCurrent,
+      current: genDrCurrent || 0,
       poles: genDrPoles,
       phase: supply === "Trifásico" ? "ABCN" : supply === "Bifásico" ? "AB" : "AN",
       supply_type: supply,
-      status: "ON"
+      status: hasValidProtection ? "ON" : "OFF",
     });
   }
-  
+
   // Preenche trilho 1
   const rail1Used = rail1Components.reduce((sum, c) => sum + c.poles, 0);
   if (rail1Used < ROW_MAX) {
@@ -668,11 +1127,11 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       label: "RESERVA TÉCNICA"
     });
   }
-  
+
   // Trilhos 2 e 3
   const rail2Components = [];
   const rail3Components = [];
-  
+
   circuits.forEach((c, idx) => {
     const circuitId = c.id || c.circuit_id || c.source_point_id || `circuit_${idx}`;
     const circuitNumber = getCircuitNumber(c, idx);
@@ -700,7 +1159,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       conduit_diameter: c.conduit_diameter,
       status: "ON"
     };
-    
+
     const rail2Used = rail2Components.reduce((sum, item) => sum + item.poles, 0);
     if (rail2Used + comp.poles <= ROW_MAX) {
       rail2Components.push(comp);
@@ -708,7 +1167,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       rail3Components.push(comp);
     }
   });
-  
+
   const rail2Used = rail2Components.reduce((sum, item) => sum + item.poles, 0);
   if (rail2Used < ROW_MAX) {
     rail2Components.push({
@@ -718,7 +1177,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       label: "RESERVA"
     });
   }
-  
+
   const rails = [{
     id: "rail_1",
     name: isSolarProject ? "Trilho DIN Solar (Proteção e Inversor)" : "Trilho DIN Superior (Entrada e Proteção)",
@@ -728,7 +1187,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   if (!isSolarProject) {
     rails.push({ id: "rail_2", name: "Trilho DIN Central (Distribuição)", components: rail2Components });
   }
-  
+
   if (!isSolarProject && (rail3Components.length > 0 || circuits.length > 6)) {
     const rail3Used = rail3Components.reduce((sum, item) => sum + item.poles, 0);
     if (rail3Used < ROW_MAX) {
@@ -742,9 +1201,9 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     rails.push({ id: "rail_3", name: "Trilho DIN Inferior (Distribuição)", components: rail3Components });
   }
 
-  // FIOS AUTOMÁTICOS
+  // Fiação automática
   const wires = [];
-  
+
   // 1. Terra alimentação externa ao barramento
   wires.push({
     id: "w_ground_feed",
@@ -754,7 +1213,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     target: "busbar_ground:0",
     label: "10 mm²"
   });
-  
+
   // 2. Terra aos DPS
   for (let i = 0; i < dpsCount; i++) {
     wires.push({
@@ -766,8 +1225,8 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       label: "6 mm²"
     });
   }
-  
-  // 3. Neutro geral e barramento superior.
+
+  // 3. Neutro geral e barramento superior
   if (hasNeutralConductor) {
     const neutralPoleIndex = supply === "Trifásico" ? 3 : 1;
     if (hasDR) {
@@ -807,8 +1266,8 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       });
     }
   }
-  
-  // 4. Alimentação superior por fase conforme o tipo do quadro.
+
+  // 4. Alimentação superior por fase
   const feedCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
   for (let i = 0; i < feedCount; i++) {
     wires.push({
@@ -820,7 +1279,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       label: "10 mm²"
     });
   }
-  
+
   // DR Alimentação Fases
   if (hasDR) {
     for (let i = 0; i < feedCount; i++) {
@@ -834,7 +1293,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
       });
     }
   }
-  
+
   // Distribuição Trilho 2
   const sourceComp = hasDR ? "gen_dr" : "gen_brk";
   const distributionBreakers = isSolarProject ? [] : [...rail2Components, ...rail3Components].filter(c => c.type === "breaker");
@@ -989,14 +1448,6 @@ function withSolarRailReserve(components, id, label = "RESERVA TÉCNICA") {
   return used >= SOLAR_RAIL_MAX_POLES ? components : [...components, { id, type: "spacer", poles: SOLAR_RAIL_MAX_POLES - used, label }];
 }
 
-/**
- * Gera as trilhas e a fiação de proteção CA do inversor solar (disjuntor de entrada,
- * DPS por fase, seccionamento de saída e disjuntor do inversor). Fonte única usada
- * tanto pelo assistente/editor solar quanto pelo Quadro Elétrico — sempre para serem
- * anexadas ao quadro PRINCIPAL do projeto, nunca a um quadro solar separado.
- * `existingWires` é usado só para descobrir os próximos índices livres de
- * busbar_ground/busbar_neutral e não colidir com a fiação da distribuição normal.
- */
 export function buildSolarAcCircuitLayout(project = {}, existingWires = []) {
   const supply = project?.solar_config?.ac_supply_type || "Bifásico";
   const phaseCount = solarAcPhaseCount(supply);
@@ -1054,12 +1505,6 @@ export function buildSolarAcCircuitLayout(project = {}, existingWires = []) {
   };
 }
 
-/**
- * Garante que a proteção CA do inversor esteja dentro do quadro PRINCIPAL do projeto
- * (não em um quadro "QD Solar CA" separado). Se as trilhas solares já estiverem lá
- * (rail_solar_1/rail_solar_2), não duplica — a menos que forceRegenerate seja usado
- * para atualizar o dimensionamento após uma mudança no inversor/circuito solar.
- */
 export function mergeSolarLayoutIntoPrincipal(project, layout, { forceRegenerate = false } = {}) {
   if (!isSolarProject(project)) return layout;
   const rails = Array.isArray(layout?.rails) ? layout.rails : [];
@@ -1076,8 +1521,6 @@ export function mergeSolarLayoutIntoPrincipal(project, layout, { forceRegenerate
 }
 
 export function buildPanelBoardsWithLayout(project, panelLayout = generateDefaultPanelLayout(project, { forceDistribution: true })) {
-  // Quadros "QD Solar CA" (type: solar_ac / solar) legados nunca voltam a ser criados aqui —
-  // a proteção CA do inversor é mesclada diretamente no quadro principal.
   const existingBoards = (Array.isArray(project?.panel_boards) ? project.panel_boards : [])
     .filter((board) => !isDedicatedSolarBoard(board));
   const distributionType = "principal";

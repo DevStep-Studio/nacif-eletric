@@ -13,6 +13,7 @@
     "test:panel-generator": "node scripts/panel-generator-smoke.mjs",
     "test:budget": "node scripts/budget-materials-smoke.mjs",
     "test:main-protection": "node scripts/main-protection-smoke.mjs",
+    "test:electrical-audit": "node scripts/electrical-engine-audit-smoke.mjs",
     "test:solar-sizing": "node scripts/solar-sizing-smoke.mjs",
     "test:solar-board-merge": "node scripts/solar-board-merge-smoke.mjs",
     "test:solar-advanced": "node scripts/solar-advanced-features-smoke.mjs",

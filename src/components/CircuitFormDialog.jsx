@@ -32,10 +32,13 @@ const DEMAND_PRESETS = [
   { label: "0.60 (Uso Intermitente)", value: 0.60 },
 ];
 
+const POWER_UNITS = ["W", "kW", "VA", "kVA", "cv", "HP"];
+
 const EMPTY_CIRCUIT = {
   name: "", description: "", type: "Tomadas de Uso Geral",
   supply_type: "", voltage: "",
-  power_w: "", power_factor: "", length_m: "",
+  power_w: "", power_unit: "W", efficiency: 0.85,
+  power_factor: "", length_m: "",
   install_method: "Eletroduto Embutido em Parede",
   temp_ambient: 30, group_count: 1,
   point_count: 1, demand_factor: 0.70,
@@ -124,13 +127,15 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
       setPreview(calcCircuit({
         ...form,
         power_w: Number(form.power_w),
+        power_unit: form.power_unit || "W",
+        efficiency: Number(form.efficiency) || 0.85,
         voltage: Number(form.voltage),
         demand_factor: Number(form.demand_factor) || getDefaultDemandFactor(form.type, form.name),
       }));
     } else {
       setPreview(null);
     }
-  }, [form.power_w, form.voltage, form.supply_type, form.power_factor, form.length_m, form.temp_ambient, form.group_count, form.install_method, form.demand_factor, form.type]);
+  }, [form.power_w, form.power_unit, form.efficiency, form.voltage, form.supply_type, form.power_factor, form.length_m, form.temp_ambient, form.group_count, form.install_method, form.demand_factor, form.type]);
 
   useEffect(() => {
     if (!open) return;
@@ -147,6 +152,7 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
       setForm(f => ({
         ...f,
         power_w: String(local.power_w),
+        power_unit: "W",
         voltage: String(local.voltage),
         supply_type: local.supply_type,
         power_factor: String(local.power_factor),
@@ -177,6 +183,7 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
         setForm(f => ({
           ...f,
           power_w: String(res.power_w),
+          power_unit: "W",
           voltage: String(res.voltage),
           supply_type: res.supply_type,
           power_factor: String(res.power_factor),
@@ -196,6 +203,8 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
     const calc = calcCircuit({
       ...form,
       power_w: Number(form.power_w) || 0,
+      power_unit: form.power_unit || "W",
+      efficiency: Number(form.efficiency) || 0.85,
       voltage: Number(form.voltage),
       power_factor: Number(form.power_factor) || undefined,
       length_m: Number(form.length_m) || 15,
@@ -312,28 +321,64 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
           <section>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Carga e demanda (NBR 5410)</h3>
-              {currentEffectivePower > 0 && (
+              {preview?.power_w > 0 && (
                 <span className="text-xs font-bold text-primary">
-                  Demanda: {currentEffectivePower} W ({form.demand_factor || 1}x)
+                  {preview.power_w} W ({preview.power_va} VA) · Demanda: {preview.demand_power_w} W
                 </span>
               )}
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-1">
-                <Label>Potência Instalada (W)</Label>
-                <Input type="number" min="0" placeholder="Ex: 2000" value={form.power_w} onChange={e => set("power_w", e.target.value)} />
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="space-y-1 col-span-2">
+                <Label>Potência Instalada</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="Ex: 2000"
+                    value={form.power_w}
+                    onChange={e => set("power_w", e.target.value)}
+                    className="flex-1"
+                  />
+                  <Select value={form.power_unit || "W"} onValueChange={v => set("power_unit", v)}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {POWER_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="space-y-1">
                 <Label>Fator de Potência (fp)</Label>
-                <Input type="number" step="0.01" min="0.5" max="1" placeholder="Ex: 0.92" value={form.power_factor} onChange={e => set("power_factor", e.target.value)} />
+                <Input type="number" step="0.01" min="0.1" max="1" placeholder="Ex: 0.92" value={form.power_factor} onChange={e => set("power_factor", e.target.value)} />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <Label>Fator de Demanda (Fd)</Label>
+                  <Label>Fator Demanda (Fd)</Label>
                   <span className="text-[10px] font-bold text-slate-500">Padrão: {getDefaultDemandFactor(form.type, form.name)}</span>
                 </div>
-                <Input type="number" step="0.05" min="0.1" max="1" placeholder="Ex: 0.70" value={form.demand_factor} onChange={e => set("demand_factor", e.target.value)} />
+                <Input type="number" step="0.05" min="0.05" max="1" placeholder="Ex: 0.70" value={form.demand_factor} onChange={e => set("demand_factor", e.target.value)} />
               </div>
+
+              {(["cv", "HP"].includes(form.power_unit) || ["Motor", "Bomba Hidráulica"].includes(form.type)) && (
+                <div className="space-y-1 col-span-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Rendimento do Motor (η)</Label>
+                    <span className="text-[10px] font-bold text-slate-500">Ex: 0.85 = 85%</span>
+                  </div>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.4"
+                    max="1.0"
+                    placeholder="0.85"
+                    value={form.efficiency ?? 0.85}
+                    onChange={e => set("efficiency", Number(e.target.value))}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
