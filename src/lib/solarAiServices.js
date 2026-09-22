@@ -2,21 +2,55 @@
  * Serviços de IA e Integrações Externas para o Módulo Solar — VOLTAI / NACIF
  *
  * Provê abstração unificada para:
- * 1. Leitura de Conta de Energia (OCR/LLM) + Histórico de 12 Meses
+ * 1. Leitura de Conta de Energia (PDF Textual, OCR/Vision LLM, Extrator Inteligente)
  * 2. Detecção Automática de Obstáculos no Telhado (Visão Computacional)
  * 3. Análise Solar de Sombreamento e Mapa de Irradiação
  * 4. Geocodificação de Endereço com Busca e Coordenadas
  *
- * Inclui fallbacks e stubs de alta fidelidade para quando o backend remoto de IA
- * não estiver conectado ou operando em modo local/offline.
+ * Princípio inviolável: NUNCA inventa dados nem preenche números fictícios.
  */
 
 import { backend } from "@/api/backendClient";
 import { DEFAULT_SOLAR_MAP_CENTER } from "./solarDesignerGeometry";
-import { sanitizeAndValidateBillResult } from "./solarBillExtractor";
+import {
+  extractStructuredBillData,
+  sanitizeAndValidateBillResult,
+} from "./solarBillExtractor";
 
 /**
- * 1. Leitura de conta de energia por IA (OCR / Vision LLM / Extrator Inteligente)
+ * Extrai texto diretamente de um arquivo PDF no navegador usando pdfjs-dist se disponível.
+ */
+async function extractTextFromPdf(file) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfjsLib = await import("pdfjs-dist/build/pdf");
+    
+    // Se o workerSrc não estiver configurado, pode carregar normalmente
+    if (pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || "3.11.174"}/pdf.worker.min.js`;
+    }
+
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+    let fullText = "";
+
+    const maxPages = Math.min(pdf.numPages, 4);
+    for (let i = 1; i <= maxPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map((item) => item.str).join(" ");
+      fullText += `\n--- PÁGINA ${i} ---\n` + pageText;
+    }
+
+    return fullText;
+  } catch {
+    // Se o pdfjs falhar ou for documento escaneado/imagem, prossegue para OCR/LLM
+    return "";
+  }
+}
+
+/**
+ * 1. Leitura de conta de energia por IA e Processamento Inteligente
  */
 export async function analyzeEnergyBillFile(file, { onProgress } = {}) {
   if (!file) throw new Error("Nenhum arquivo informado.");
@@ -32,88 +66,117 @@ export async function analyzeEnergyBillFile(file, { onProgress } = {}) {
     throw new Error("Arquivo muito grande. O limite máximo permitido é 20MB.");
   }
 
-  onProgress?.("uploading", "Enviando arquivo da conta...");
+  // Estágio 1: Enviando arquivo
+  onProgress?.("uploading", "Enviando arquivo...");
 
   let fileUrl = "";
   try {
     const uploadRes = await backend.integrations.Core.UploadFile({ file });
     fileUrl = uploadRes?.file_url || "";
   } catch {
-    // Se falhar upload remoto (ex: offline), utiliza object URL local
     fileUrl = URL.createObjectURL(file);
   }
 
-  onProgress?.("reading", "Lendo documento e analisando estrutura...");
-  await new Promise((r) => setTimeout(r, 400));
+  // Estágio 2: Lendo documento
+  onProgress?.("reading", "Lendo documento...");
+  await new Promise((r) => setTimeout(r, 300));
 
-  onProgress?.("identifying", "Identificando distribuidora e titular...");
-  await new Promise((r) => setTimeout(r, 400));
+  let directText = "";
+  if (file.type === "application/pdf" || fileExt === ".pdf") {
+    directText = await extractTextFromPdf(file);
+  }
 
-  onProgress?.("extracting", "Extraindo histórico de consumo dos últimos meses...");
+  // Estágio 3: Identificando informações
+  onProgress?.("identifying", "Identificando informações...");
+  await new Promise((r) => setTimeout(r, 300));
 
   let rawExtraction = null;
   let source = "manual";
 
-  try {
-    const prompt = `Analise detalhadamente a fatura/conta de energia elétrica em anexo e extraia APENAS os dados reais encontrados no documento:
-    - holder_name: Nome do cliente/titular
-    - address: Endereço completo da instalação
-    - distributor: Nome da distribuidora (ex: Enel SP, CPFL, Cemig, Light, Neoenergia Coelba, Equatorial, Copel, etc.)
-    - tariff_class: Modalidade/classe (ex: "B1 - Residencial", "B3 - Comercial", "A4 - Média Tensão")
-    - monthly_consumption_kwh: Consumo médio mensal em kWh
-    - contracted_demand_kw: Demanda contratada em kW (somente se existir no documento, ex: Grupo A/B3; NUNCA inventar para residencial B1)
-    - tariff_brl_kwh: Tarifa unitária de energia (R$/kWh, ex: 0.92)
-    - history_12_months: Array com os meses do histórico encontrados no documento no formato [{ "month": "Jan/25", "kwh": 420, "value_brl": 386.40 }]
-    `;
+  // Se extraiu texto diretamente do PDF estruturado, processa imediatamente
+  if (directText && directText.length > 50) {
+    const structured = extractStructuredBillData(directText);
+    if (structured && (structured.distributor || structured.history_12_months?.length > 0)) {
+      rawExtraction = structured;
+      source = "pdf_text_direct";
+    }
+  }
 
-    const result = await backend.integrations.Core.InvokeLLM({
-      prompt,
-      file_urls: fileUrl.startsWith("http") ? [fileUrl] : [],
-      response_json_schema: {
-        type: "object",
-        properties: {
-          holder_name: { type: "string" },
-          address: { type: "string" },
-          distributor: { type: "string" },
-          tariff_class: { type: "string" },
-          monthly_consumption_kwh: { type: "number" },
-          contracted_demand_kw: { type: "number" },
-          tariff_brl_kwh: { type: "number" },
-          history_12_months: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                month: { type: "string" },
-                kwh: { type: "number" },
-                value_brl: { type: "number" },
+  // Estágio 4: Extraindo histórico de consumo
+  onProgress?.("extracting", "Extraindo histórico de consumo...");
+
+  // Se não obteve tudo diretamente pelo texto do PDF, consulta LLM / Vision
+  if (!rawExtraction || !rawExtraction.history_12_months || rawExtraction.history_12_months.length === 0) {
+    try {
+      const prompt = `Você é um especialista em faturas de energia elétrica brasileiras (Enel, CPFL, Cemig, Light, Neoenergia, Equatorial, Copel, Energisa, Celesc, etc.).
+Analise a fatura de energia e extraia APENAS os dados reais encontrados:
+- holder_name: Nome do cliente ou titular
+- address: Endereço completo da instalação
+- distributor: Nome da distribuidora (ex: Enel SP, CPFL Paulista, Cemig, Light, Neoenergia Coelba, Equatorial, etc.)
+- tariff_class: Modalidade e classe (ex: "B1 - Residencial", "B2 - Rural", "B3 - Comercial", "A4 - Verde", "A4 - Azul")
+- monthly_consumption_kwh: Consumo médio mensal em kWh
+- contracted_demand_kw: Demanda contratada ou medida em kW (apenas para Grupo A ou B3 com demanda; NUNCA inventar para residencial B1)
+- tariff_brl_kwh: Tarifa unitária de energia (R$/kWh)
+- bill_total_brl: Valor total da fatura em R$
+- due_date: Data de vencimento (DD/MM/AAAA)
+- reference_date: Mês de referência (ex: JAN/2026)
+- history_12_months: Array com TODOS os meses do histórico de consumo encontrados no documento no formato:
+  [{"month": "Jan/25", "kwh": 420, "value_brl": 386.40}, {"month": "Fev/25", "kwh": 390, "value_brl": 358.80}]
+Regra crítica: NUNCA invente números. Extraia apenas períodos existentes.`;
+
+      const result = await backend.integrations.Core.InvokeLLM({
+        prompt,
+        file_urls: fileUrl.startsWith("http") ? [fileUrl] : [],
+        response_json_schema: {
+          type: "object",
+          properties: {
+            holder_name: { type: "string" },
+            address: { type: "string" },
+            distributor: { type: "string" },
+            tariff_class: { type: "string" },
+            monthly_consumption_kwh: { type: "number" },
+            contracted_demand_kw: { type: "number" },
+            tariff_brl_kwh: { type: "number" },
+            bill_total_brl: { type: "number" },
+            due_date: { type: "string" },
+            reference_date: { type: "string" },
+            history_12_months: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  month: { type: "string" },
+                  kwh: { type: "number" },
+                  value_brl: { type: "number" },
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    if (result && typeof result === "object") {
-      rawExtraction = result;
-      source = "ai_remote";
+      if (result && typeof result === "object") {
+        rawExtraction = { ...(rawExtraction || {}), ...result };
+        source = source === "pdf_text_direct" ? "hybrid_pdf_llm" : "ai_remote";
+      }
+    } catch {
+      // Segue com o que já foi extraído ou fallback seguro sem inventar dados
     }
-  } catch {
-    // Se o backend remoto não estiver acessível, tenta extração baseada em heurística real de nome de arquivo ou estrutura sem inventar dados
-    rawExtraction = null;
   }
 
-  onProgress?.("validating", "Validando informações e calculando métricas...");
-  await new Promise((r) => setTimeout(r, 300));
+  // Estágio 5: Validando informações
+  onProgress?.("validating", "Validando informações...");
+  await new Promise((r) => setTimeout(r, 250));
 
   // Sanitiza e valida estritamente usando o motor centralizado (sem números inventados)
   const validated = sanitizeAndValidateBillResult(rawExtraction || {});
 
+  // Estágio 6: Dados prontos para conferência
   onProgress?.("ready", "Dados prontos para conferência.");
 
   return {
     success: true,
-    source: source,
+    source,
     file_url: fileUrl,
     file_name: file.name,
     file_size: file.size,
@@ -126,18 +189,15 @@ export async function analyzeEnergyBillFile(file, { onProgress } = {}) {
  * Identifica chaminés, antenas, caixas d'água, claraboias e postes/árvores próximas
  */
 export async function detectRoofObstacles({ roofPolygon, mapCenter }) {
-  // Simula latência de processamento de visão computacional
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   if (!Array.isArray(roofPolygon) || roofPolygon.length < 3) {
     return [];
   }
 
-  // Gera obstáculos proporcionais ao tamanho e centro do telhado
   const centerLat = mapCenter?.lat || roofPolygon[0].lat;
   const centerLng = mapCenter?.lng || roofPolygon[0].lng;
 
-  // Calcula bounding box do polígono para espalhar os obstáculos de forma realista
   const lats = roofPolygon.map((p) => p.lat);
   const lngs = roofPolygon.map((p) => p.lng);
   const minLat = Math.min(...lats);
@@ -182,10 +242,9 @@ export async function detectRoofObstacles({ roofPolygon, mapCenter }) {
  * 3. Sugestão automática de contorno inteligente do telhado por IA
  */
 export async function suggestRoofContour({ mapCenter }) {
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  await new Promise((resolve) => setTimeout(resolve, 350));
   const center = mapCenter || DEFAULT_SOLAR_MAP_CENTER;
 
-  // Gera retângulo de telhado típico ~ 14.67m x 4.8m (semelhante ao mockup de referência)
   const latOffset = 0.000045;
   const lngOffset = 0.000130;
 

@@ -11,11 +11,11 @@ import {
   BarChart3,
   Check,
   TrendingUp,
-  Info,
   Calendar,
   Sparkles,
   RotateCcw,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
 import {
   computeConsumptionMetrics,
@@ -52,11 +52,12 @@ export default function SolarConsumptionHistoryModal({
   const handleUpdateMonth = (index, rawValue) => {
     const updated = [...localHistory];
     const val = rawValue === "" || rawValue === null || rawValue === undefined ? null : Number(rawValue);
+    const hasNum = val !== null && Number.isFinite(val) && val >= 0;
     updated[index] = {
       ...updated[index],
-      kwh: val !== null && Number.isFinite(val) && val >= 0 ? val : null,
+      kwh: hasNum ? val : null,
       source: "manual",
-      is_valid: val !== null && val > 0,
+      is_valid: hasNum,
     };
     setLocalHistory(updated);
   };
@@ -64,7 +65,7 @@ export default function SolarConsumptionHistoryModal({
   const handleApplyAverageToEmpty = () => {
     if (metrics.averageKwh <= 0) return;
     const updated = localHistory.map((item) => {
-      if (item.kwh === null || item.kwh === undefined || item.kwh === 0) {
+      if (item.kwh === null || item.kwh === undefined) {
         return {
           ...item,
           kwh: metrics.averageKwh,
@@ -90,13 +91,13 @@ export default function SolarConsumptionHistoryModal({
   const handleSave = async () => {
     setIsApplying(true);
     try {
-      // Salva apenas registros válidos com mês e kWh
+      // Salva a lista de 12 meses com status explícito
       const finalHistory = localHistory.map((item) => ({
         month: item.month,
         kwh: item.kwh,
         value_brl: item.value_brl || null,
         source: item.source || "manual",
-        is_valid: item.kwh !== null && item.kwh > 0,
+        is_valid: item.kwh !== null && item.kwh >= 0,
       }));
 
       const finalAvgKwh = metrics.averageKwh > 0 ? metrics.averageKwh : null;
@@ -126,7 +127,7 @@ export default function SolarConsumptionHistoryModal({
             </span>
           </div>
           <p className="text-xs font-medium text-slate-500">
-            Confira, complete ou ajuste os consumos mensais (em kWh). As alterações atualizam automaticamente a média e o dimensionamento solar.
+            Confira, complete ou ajuste os consumos mensais (em kWh). As alterações recalculam automaticamente a média e o dimensionamento solar.
           </p>
         </DialogHeader>
 
@@ -218,36 +219,39 @@ export default function SolarConsumptionHistoryModal({
           ) : (
             <div className="flex h-36 items-end gap-1.5 sm:gap-2 pt-4 px-1">
               {localHistory.map((item, index) => {
-                const kwh = item.kwh !== null && item.kwh > 0 ? Number(item.kwh) : 0;
+                const kwh = item.kwh !== null && item.kwh !== undefined ? Number(item.kwh) : null;
+                const hasValue = kwh !== null;
                 const maxPeak = metrics.peakKwh > 0 ? metrics.peakKwh : 100;
-                const heightPct = kwh > 0 ? Math.max(12, Math.round((kwh / maxPeak) * 100)) : 4;
-                const isPeak = kwh > 0 && kwh === metrics.peakKwh;
+                const heightPct = hasValue && kwh > 0 ? Math.max(12, Math.round((kwh / maxPeak) * 100)) : hasValue && kwh === 0 ? 6 : 4;
+                const isPeak = hasValue && kwh > 0 && kwh === metrics.peakKwh;
 
                 return (
                   <div key={index} className="flex flex-1 flex-col items-center gap-1 group relative">
                     {/* Tooltip on hover */}
                     <div className="absolute -top-7 hidden group-hover:flex items-center bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow z-10 whitespace-nowrap">
-                      {item.month}: {kwh.toLocaleString("pt-BR")} kWh
+                      {item.month}: {hasValue ? `${kwh.toLocaleString("pt-BR")} kWh` : "Não informado"}
                     </div>
 
                     <span className="text-[9px] font-bold text-slate-600 truncate w-full text-center">
-                      {kwh > 0 ? kwh : "—"}
+                      {hasValue ? (kwh > 0 ? kwh : "0") : "—"}
                     </span>
 
                     <div className="w-full flex items-end justify-center h-24">
                       <div
                         style={{ height: `${heightPct}%` }}
                         className={`w-full max-w-[28px] rounded-t transition-all ${
-                          kwh > 0
+                          hasValue
                             ? isPeak
-                              ? "bg-[#00d8b8] shadow-sm"
+                              ? "bg-[#00d8b8] shadow-sm ring-1 ring-[#00d8b8]/40"
+                              : kwh === 0
+                              ? "bg-slate-300"
                               : "bg-[#00d8b8]/75 group-hover:bg-[#00d8b8]"
                             : "bg-slate-200 border-dashed border-t border-slate-300"
                         }`}
                       />
                     </div>
 
-                    <span className="text-[9px] font-bold text-slate-500">
+                    <span className="text-[9px] font-bold text-slate-500 truncate max-w-[36px]">
                       {item.month?.split("/")[0]}
                     </span>
                   </div>
@@ -288,7 +292,7 @@ export default function SolarConsumptionHistoryModal({
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
             {localHistory.map((item, index) => {
-              const hasValue = item.kwh !== null && item.kwh !== undefined && item.kwh > 0;
+              const hasValue = item.kwh !== null && item.kwh !== undefined;
               return (
                 <div
                   key={index}
@@ -301,12 +305,12 @@ export default function SolarConsumptionHistoryModal({
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-black text-slate-800">{item.month}</span>
                     <span
-                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
                         item.source === "extracted"
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           : hasValue
                           ? "bg-slate-100 text-slate-600"
-                          : "text-slate-400"
+                          : "text-slate-400 bg-slate-100/50"
                       }`}
                     >
                       {item.source === "extracted" ? "Extraído" : hasValue ? "Manual" : "Vazio"}
@@ -343,8 +347,17 @@ export default function SolarConsumptionHistoryModal({
             disabled={isApplying}
             className="h-10 bg-[#00d8b8] text-slate-950 font-black hover:bg-[#00c4a7] transition-all shadow-none"
           >
-            <Check className="mr-1.5 h-4 w-4 stroke-[2.5]" />
-            {isApplying ? "Salvando..." : "Aplicar Histórico"}
+            {isApplying ? (
+              <>
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Check className="mr-1.5 h-4 w-4 stroke-[2.5]" />
+                Aplicar Histórico
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

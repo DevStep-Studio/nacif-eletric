@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/components/ui/use-toast";
 import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
 import Solar3DView from "@/components/solar/Solar3DView";
@@ -36,49 +36,49 @@ import {
 import { estimateAnnualGenerationKwh, estimateAnnualSavingsBrl, estimateSimplePaybackYears } from "@/lib/solarSizing";
 import { generateDefaultPanelLayout, getPrimaryPanelBoard, mergeSolarLayoutIntoPrincipal } from "@/lib/electricalEngine";
 import { detectRoofObstacles, geocodeAddress, suggestRoofContour } from "@/lib/solarAiServices";
+import { printExecutiveSolarReport } from "@/lib/solarReportGenerator";
 import {
   ArrowLeft,
   AlertTriangle,
   BarChart3,
-  Bell,
   Box,
-  Building2,
   Check,
   CheckCircle2,
   ChevronDown,
   Compass,
   Download,
-  ExternalLink,
   Flame,
   Grid2X2,
   HelpCircle,
   Home,
-  Image as ImageIcon,
+  Info,
   Layers,
   Loader2,
   Lock,
   Map as MapIcon,
   MapPin,
-  MoreVertical,
+  Maximize2,
+  Minus,
   MousePointer2,
   Move3D,
   Pencil,
   PiggyBank,
   Plus,
+  Printer,
   Redo2,
   Rotate3d,
   RotateCw,
   Save,
   Search,
   Settings,
+  ShieldAlert,
   ShieldCheck,
+  Sliders,
   Sparkles,
   Square,
   Sun,
   Trash2,
   Undo2,
-  Unlock,
-  UserCircle,
   Zap,
 } from "lucide-react";
 
@@ -106,6 +106,16 @@ const defaultSolarConfig = {
   ac_supply_type: "Bifásico",
   layout_note: "",
 };
+
+const OBSTACLE_PRESETS = [
+  { type: "caixa_dagua", name: "Caixa d'água", icon: Box, radius: 1.2 },
+  { type: "chamine", name: "Chaminé / Exaustor", icon: Flame, radius: 0.6 },
+  { type: "claraboia", name: "Clarabóia / Domus", icon: Square, radius: 0.8 },
+  { type: "respiro", name: "Tubulação / Respiro", icon: Layers, radius: 0.4 },
+  { type: "antena", name: "Antena / Mastro", icon: Compass, radius: 0.5 },
+  { type: "arvore", name: "Árvore / Sombra", icon: Sun, radius: 1.8 },
+  { type: "custom", name: "Obstáculo Personalizado", icon: ShieldAlert, radius: 1.0 },
+];
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -155,7 +165,7 @@ function normalizeSolarConfig(config = {}) {
     roof_pitch_deg: asNumber(merged.roof_pitch_deg, defaultSolarConfig.roof_pitch_deg),
     map_center_lat: asNumber(merged.map_center_lat, defaultSolarConfig.map_center_lat),
     map_center_lng: asNumber(merged.map_center_lng, defaultSolarConfig.map_center_lng),
-    map_zoom: clamp(asNumber(merged.map_zoom, defaultSolarConfig.map_zoom), 15, 22),
+    map_zoom: clamp(asNumber(merged.map_zoom, defaultSolarConfig.map_zoom), 3, 23),
     roof_polygon: normalizedRoofPolygon,
     roof_defined: hasExplicitRoofState
       ? Boolean(merged.roof_defined) && normalizedRoofPolygon.length >= 3
@@ -227,52 +237,6 @@ function calculateSolar(config, panelCapacity = null) {
   };
 }
 
-function buildSolarCircuits(project, config, sizing) {
-  const poles = polesForSupply(config.ac_supply_type);
-  const phase = phaseForSupply(config.ac_supply_type);
-  const inverterPower = Math.round(config.inverter_kw * 1000);
-
-  return [
-    {
-      id: "solar_inverter_ac",
-      name: `Inversor Solar ${config.inverter_kw}kW CA`,
-      type: "Solar Fotovoltaico CA",
-      supply_type: config.ac_supply_type,
-      voltage: config.ac_voltage,
-      power_w: inverterPower,
-      power_factor: 1,
-      length_m: 15,
-      phase,
-      breaker_a: sizing.breaker,
-      breaker_poles: poles,
-      breaker_curve: "C",
-      wire_gauge: sizing.breaker > 40 ? "10mm²" : sizing.breaker > 25 ? "6mm²" : "4mm²",
-      needs_dr: false,
-      needs_dps: true,
-      point_count: 1,
-      description: `Saída CA do inversor solar para ${project?.name || "projeto"}`,
-    },
-    {
-      id: "solar_dps_ac",
-      name: "DPS CA Fotovoltaico",
-      type: "Proteção Solar CA",
-      supply_type: config.ac_supply_type,
-      voltage: config.ac_voltage,
-      power_w: 0,
-      power_factor: 1,
-      length_m: 3,
-      phase,
-      breaker_a: 16,
-      breaker_poles: phaseCountForSupply(config.ac_supply_type),
-      breaker_curve: "C",
-      wire_gauge: "6mm²",
-      needs_dr: false,
-      needs_dps: true,
-      point_count: 1,
-    },
-  ];
-}
-
 const STRATEGIES = [
   { id: "max_generation", title: "Máxima geração (padrão)", icon: Sun, desc: "Maximiza a produção anual de energia em MWh." },
   { id: "max_utilization", title: "Máximo aproveitamento", icon: Grid2X2, desc: "Maior densidade e quantidade de módulos na área." },
@@ -289,8 +253,10 @@ export default function SolarProject() {
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState("map"); // "map" | "3d" | "shadows" | "irradiation"
   const [editorMode, setEditorMode] = useState("select");
-  const [roofLocked, setRoofLocked] = useState(false);
   const [fitRoofRequest, setFitRoofRequest] = useState(0);
+  const [viewportRequest, setViewportRequest] = useState(0);
+  const [selectedObstacleId, setSelectedObstacleId] = useState(null);
+  const [activeSidebarTab, setActiveSidebarTab] = useState("water"); // "water" | "obstacles" | "pv"
   const [reportsOpen, setReportsOpen] = useState(false);
   const [searchAddress, setSearchAddress] = useState("");
   const [searchingAddress, setSearchingAddress] = useState(false);
@@ -311,6 +277,7 @@ export default function SolarProject() {
       roofHistoryRef.current = [initialRoof];
       roofHistoryIndexRef.current = 0;
       setRoofHistoryState({ canUndo: false, canRedo: false });
+      setViewportRequest((n) => n + 1);
     });
   }, [projectId]);
 
@@ -471,9 +438,13 @@ export default function SolarProject() {
       const results = await geocodeAddress(searchAddress);
       if (results.length > 0) {
         const first = results[0];
-        updateConfig("map_center_lat", first.lat);
-        updateConfig("map_center_lng", first.lng);
-        updateConfig("map_zoom", 20);
+        setConfig((current) => ({
+          ...current,
+          map_center_lat: first.lat,
+          map_center_lng: first.lng,
+          map_zoom: 20,
+        }));
+        setViewportRequest((n) => n + 1);
         toast({ title: "Endereço localizado", description: first.display_name });
       } else {
         toast({ title: "Endereço não encontrado", description: "Tente um termo mais específico.", variant: "destructive" });
@@ -481,6 +452,49 @@ export default function SolarProject() {
     } finally {
       setSearchingAddress(false);
     }
+  };
+
+  const handleAddObstacle = (preset) => {
+    const center = getRoofCenterFromConfig(config);
+    // Adiciona pequeno deslocamento para não sobrepor se já houver outros
+    const existingCount = config.obstacles.length;
+    const offsetLat = (existingCount % 3 - 1) * 0.00002;
+    const offsetLng = (Math.floor(existingCount / 3) - 1) * 0.00003;
+
+    const newObstacle = {
+      id: `obs_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      type: preset.type,
+      name: preset.name,
+      lat: center.lat + offsetLat,
+      lng: center.lng + offsetLng,
+      radiusM: preset.radius,
+      excludeArea: true,
+    };
+
+    const nextObstacles = [...config.obstacles, newObstacle];
+    updateConfig("obstacles", nextObstacles);
+    setSelectedObstacleId(newObstacle.id);
+    setActiveSidebarTab("obstacles");
+    toast({
+      title: "Obstáculo adicionado",
+      description: `${preset.name} inserido. Você pode arrastá-lo e ajustar o raio na barra lateral.`,
+    });
+  };
+
+  const handleUpdateObstacle = (id, updates) => {
+    const nextObstacles = config.obstacles.map((obs) =>
+      obs.id === id ? { ...obs, ...updates } : obs
+    );
+    updateConfig("obstacles", nextObstacles);
+  };
+
+  const handleRemoveObstacle = (id) => {
+    const nextObstacles = config.obstacles.filter((obs) => obs.id !== id);
+    updateConfig("obstacles", nextObstacles);
+    if (selectedObstacleId === id) {
+      setSelectedObstacleId(null);
+    }
+    toast({ title: "Obstáculo removido", description: "Área liberada para instalação de módulos." });
   };
 
   const handleDetectObstacles = async () => {
@@ -491,6 +505,7 @@ export default function SolarProject() {
         mapCenter: { lat: config.map_center_lat, lng: config.map_center_lng },
       });
       updateConfig("obstacles", detected);
+      setActiveSidebarTab("obstacles");
       toast({
         title: "Obstáculos detectados por IA",
         description: `${detected.length} obstáculos identificados e excluídos da área de instalação.`,
@@ -522,6 +537,15 @@ export default function SolarProject() {
     });
   };
 
+  const handlePrint = () => {
+    try {
+      printExecutiveSolarReport(project, config, visualSizing);
+      toast({ title: "Impressão iniciada", description: "Relatório executivo enviado para impressão." });
+    } catch (err) {
+      toast({ title: "Erro ao imprimir", description: err.message, variant: "destructive" });
+    }
+  };
+
   const saveConfig = async () => {
     if (!projectId) return;
     setSaving(true);
@@ -536,7 +560,7 @@ export default function SolarProject() {
       await backend.entities.Project.update(projectId, payload);
       setConfig(normalizedConfig);
       setProject((current) => (current ? { ...current, ...payload } : current));
-      toast({ title: "Projeto salvo", description: "Layout, strings e proteções foram atualizados." });
+      toast({ title: "Projeto salvo", description: "Layout, obstáculos e proteções atualizados com sucesso." });
     } catch {
       toast({ title: "Não foi possível salvar", variant: "destructive" });
     } finally {
@@ -553,15 +577,16 @@ export default function SolarProject() {
   }
 
   const hasRoof = normalizeRoofPolygon(config.roof_polygon).length >= 3 && config.roof_defined !== false;
+  const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
 
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col overflow-hidden bg-[#0e1726] font-inter text-white">
-      {/* 1. Barra Superior Principal com Busca de Endereço e Abas */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-[#0d1829] px-4 shadow-md">
+    <div className="fixed inset-0 z-[80] flex flex-col overflow-hidden bg-[#0a0f18] font-inter text-slate-100 antialiased select-none">
+      {/* 1. Header Minimalista */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-[#0d1522] px-4">
         <div className="flex items-center gap-3">
           <Link
             to="/projects"
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-white/80 hover:bg-white/15 hover:text-white"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition"
             title="Voltar aos projetos"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -572,29 +597,21 @@ export default function SolarProject() {
             <Input
               value={searchAddress}
               onChange={(e) => setSearchAddress(e.target.value)}
-              placeholder="Buscar endereço no mapa..."
-              className="h-9 w-72 sm:w-96 rounded-xl border-white/10 bg-slate-900/80 pl-9 pr-8 text-xs font-semibold text-white placeholder:text-white/40 focus:border-primary"
+              placeholder="Buscar endereço ou CEP no mapa..."
+              className="h-9 w-64 md:w-80 lg:w-96 rounded-xl border-white/10 bg-slate-950/70 pl-9 pr-8 text-xs font-medium text-white placeholder:text-white/40 focus:border-primary"
             />
             <button
               type="submit"
               disabled={searchingAddress}
-              className="absolute right-2 text-white/60 hover:text-white"
+              className="absolute right-2 text-white/50 hover:text-white transition"
             >
               {searchingAddress ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
             </button>
           </form>
-
-          <button
-            type="button"
-            title="Configurações de visualização"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-slate-900/80 text-white/70 hover:text-white"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
         </div>
 
-        {/* 2. Alternador de Abas de Visualização (Mapa | 3D | Sombras | Irradiação) */}
-        <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-slate-900/90 p-1">
+        {/* Alternador de Abas de Visualização */}
+        <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-slate-950/80 p-1">
           {[
             { id: "map", label: "Mapa", icon: MapIcon },
             { id: "3d", label: "3D", icon: Rotate3d },
@@ -608,10 +625,10 @@ export default function SolarProject() {
                 key={tab.id}
                 type="button"
                 onClick={() => setViewMode(tab.id)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-extrabold transition-all ${
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                   active
                     ? "bg-primary text-slate-950 shadow-sm"
-                    : "text-white/70 hover:bg-white/10 hover:text-white"
+                    : "text-white/60 hover:bg-white/5 hover:text-white"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -621,16 +638,27 @@ export default function SolarProject() {
           })}
         </div>
 
-        {/* Ações Direitas (Salvar, Bloquear, Relatórios) */}
+        {/* Ações Principais do Cabeçalho */}
         <div className="flex items-center gap-2">
           <Button
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setReportsOpen(true)}
-            className="h-9 rounded-xl border-white/15 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
+            onClick={handlePrint}
+            className="h-9 rounded-xl border-white/10 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
+            title="Imprimir relatório executivo"
           >
-            <Download className="mr-1.5 h-3.5 w-3.5 text-primary" /> Relatórios
+            <Printer className="mr-1.5 h-3.5 w-3.5 text-primary" /> Imprimir
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setReportsOpen(true)}
+            className="h-9 rounded-xl border-white/10 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5 text-primary" /> Relatórios PDF
           </Button>
 
           <Button
@@ -638,7 +666,7 @@ export default function SolarProject() {
             size="sm"
             onClick={saveConfig}
             disabled={saving}
-            className="h-9 rounded-xl bg-primary px-4 text-xs font-black text-slate-950 shadow-md hover:bg-primary/90"
+            className="h-9 rounded-xl bg-primary px-4 text-xs font-black text-slate-950 hover:bg-primary/90 shadow-sm"
           >
             {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
             Salvar
@@ -646,92 +674,155 @@ export default function SolarProject() {
         </div>
       </header>
 
-      {/* 3. Barra de Ferramentas / Ribbon Superior */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#121e33] px-4">
+      {/* 2. Ribbon Toolbar de Ferramentas */}
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#0f1929] px-4 overflow-x-auto">
         <div className="flex items-center gap-1.5">
-          {[
-            { mode: "select", icon: MousePointer2, label: "Navegar no mapa" },
-            { mode: "draw-polygon", icon: Home, label: "Desenhar contorno livre" },
-            { mode: "draw-rectangle", icon: Square, label: "Desenhar retângulo" },
-            { mode: "edit", icon: Pencil, label: "Ajustar vértices", reqRoof: true },
-            { mode: "rotate", icon: RotateCw, label: "Girar telhado", reqRoof: true },
-          ].map((t) => (
+          {/* Grupo de Ferramentas de Contorno */}
+          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-white/10">
+            {[
+              { mode: "select", icon: MousePointer2, label: "Navegar" },
+              { mode: "draw-polygon", icon: Home, label: "Polígono Livre" },
+              { mode: "draw-rectangle", icon: Square, label: "Retângulo" },
+              { mode: "edit", icon: Pencil, label: "Vértices", reqRoof: true },
+              { mode: "rotate", icon: RotateCw, label: "Girar", reqRoof: true },
+            ].map((t) => (
+              <button
+                key={t.mode}
+                type="button"
+                title={t.label}
+                disabled={t.reqRoof && !hasRoof}
+                onClick={() => setEditorMode(t.mode)}
+                className={`flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition ${
+                  editorMode === t.mode
+                    ? "bg-primary text-slate-950 font-black"
+                    : "text-white/60 hover:bg-white/10 hover:text-white"
+                } disabled:opacity-25`}
+              >
+                <t.icon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <span className="mx-1 h-5 w-px bg-white/10" />
+
+          {/* Ferramenta de Obstáculos (Menu Dropdown + IA) */}
+          <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-rose-300 hover:bg-slate-900 transition"
+                >
+                  <Plus className="h-3.5 w-3.5 text-rose-400" />
+                  <span>Obstáculo</span>
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56 bg-slate-900 border-white/15 text-white">
+                <DropdownMenuLabel className="text-[11px] font-bold text-white/50 uppercase">
+                  Adicionar Obstáculo no Telhado
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/10" />
+                {OBSTACLE_PRESETS.map((preset) => {
+                  const Icon = preset.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={preset.type}
+                      onClick={() => handleAddObstacle(preset)}
+                      className="flex items-center gap-2 p-2 text-xs font-semibold focus:bg-white/10 focus:text-white cursor-pointer"
+                    >
+                      <Icon className="h-4 w-4 text-rose-400" />
+                      <span>{preset.name}</span>
+                      <span className="ml-auto text-[10px] text-white/40">+{preset.radius}m</span>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <button
-              key={t.mode}
               type="button"
-              title={t.label}
-              disabled={t.reqRoof && !hasRoof}
-              onClick={() => setEditorMode(t.mode)}
-              className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition ${
-                editorMode === t.mode
-                  ? "bg-primary text-slate-950"
-                  : "text-white/70 hover:bg-white/10 hover:text-white"
-              } disabled:opacity-30`}
+              disabled={detectingObstacles}
+              onClick={handleDetectObstacles}
+              className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-amber-300 hover:bg-slate-900 transition"
             >
-              <t.icon className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">{t.label}</span>
+              {detectingObstacles ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+              )}
+              Obstáculos IA
             </button>
-          ))}
+          </div>
 
-          <span className="mx-1 h-5 w-px bg-white/20" />
+          <span className="mx-1 h-5 w-px bg-white/10" />
 
+          {/* Automação e IA */}
           <button
             type="button"
             onClick={handleAutoSuggestContour}
-            className="flex h-8 items-center gap-1 rounded-lg bg-white/5 px-2.5 text-xs font-bold text-cyan-300 hover:bg-white/15"
+            className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-cyan-300 hover:bg-slate-900 transition"
           >
-            <Sparkles className="h-3.5 w-3.5" /> Contorno IA
-          </button>
-
-          <button
-            type="button"
-            disabled={detectingObstacles}
-            onClick={handleDetectObstacles}
-            className="flex h-8 items-center gap-1 rounded-lg bg-white/5 px-2.5 text-xs font-bold text-amber-300 hover:bg-white/15"
-          >
-            {detectingObstacles ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <AlertTriangle className="h-3.5 w-3.5" />
-            )}
-            Obstáculos IA
+            <Sparkles className="h-3.5 w-3.5 text-cyan-400" /> Contorno IA
           </button>
         </div>
 
-        {/* Menu Dropdown de Simulação de Layout Automático */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-gradient-to-r from-primary/20 to-cyan-500/20 border border-primary/40 px-3 text-xs font-black text-primary hover:bg-primary/30"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Simular layout automático</span>
-              <ChevronDown className="h-3.5 w-3.5 opacity-80" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64 bg-slate-900 border-white/15 text-white">
-            <DropdownMenuLabel className="text-xs font-black text-white/60">
-              Estratégias de Otimização
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-white/10" />
-            {STRATEGIES.map((strat) => (
-              <DropdownMenuItem
-                key={strat.id}
-                onClick={() => handleSelectStrategy(strat.id)}
-                className="flex flex-col items-start gap-0.5 p-2 focus:bg-primary/20 focus:text-white cursor-pointer"
+        {/* Lado Direito do Ribbon: Estratégias de Simulação & Desfazer */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={undoRoofChange}
+            disabled={!roofHistoryState.canUndo}
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-slate-950/60 text-white/60 hover:text-white disabled:opacity-25 transition"
+            title="Desfazer"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={redoRoofChange}
+            disabled={!roofHistoryState.canRedo}
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-slate-950/60 text-white/60 hover:text-white disabled:opacity-25 transition"
+            title="Refazer"
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-primary hover:bg-slate-900 transition"
               >
-                <div className="flex items-center gap-1.5 font-black text-xs text-primary">
-                  <strat.icon className="h-3.5 w-3.5" /> {strat.title}
-                </div>
-                <p className="text-[10px] text-white/60 leading-tight">{strat.desc}</p>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Simular layout</span>
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 bg-slate-900 border-white/15 text-white">
+              <DropdownMenuLabel className="text-[11px] font-bold text-white/50 uppercase">
+                Estratégias de Otimização
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-white/10" />
+              {STRATEGIES.map((strat) => (
+                <DropdownMenuItem
+                  key={strat.id}
+                  onClick={() => handleSelectStrategy(strat.id)}
+                  className="flex flex-col items-start gap-0.5 p-2 focus:bg-white/10 focus:text-white cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-primary">
+                    <strat.icon className="h-3.5 w-3.5" /> {strat.title}
+                  </div>
+                  <p className="text-[10px] text-white/60 leading-tight">{strat.desc}</p>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      {/* 4. Canvas Central + Painel Lateral da Água */}
+      {/* 3. Canvas Central + Painel Lateral com Abas Descomprimidas */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Visualizador Principal (Mapa 2D ou 3D) */}
         <main className="relative flex-1 bg-slate-950">
@@ -745,163 +836,425 @@ export default function SolarProject() {
               sizing={visualSizing}
               editorMode={editorMode}
               fitRoofRequest={fitRoofRequest}
+              viewportRequest={viewportRequest}
+              selectedObstacleId={selectedObstacleId}
               panelPolygons={visiblePanelPolygons}
               showBadges={false}
               showMeasurements
               onEditorModeChange={setEditorMode}
               onRoofChange={handleRoofGeometryChange}
-              onViewportChange={({ center, zoom }) => updateConfig("map_center_lat", center.lat)}
+              onViewportChange={({ center, zoom }) => {
+                setConfig((current) => ({
+                  ...current,
+                  map_center_lat: center.lat,
+                  map_center_lng: center.lng,
+                  map_zoom: zoom,
+                }));
+              }}
+              onFitRoof={() => setFitRoofRequest((n) => n + 1)}
+              onUpdateObstacle={handleUpdateObstacle}
+              onSelectObstacle={(id) => {
+                setSelectedObstacleId(id);
+                setActiveSidebarTab("obstacles");
+              }}
+              onRemoveObstacle={handleRemoveObstacle}
             />
           )}
         </main>
 
-        {/* 5. Painel Lateral de Informações da Água (Água 01) */}
-        <aside className="w-80 shrink-0 overflow-y-auto border-l border-white/10 bg-[#0d1829] p-4 text-xs font-semibold space-y-4">
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-primary" />
-              <h3 className="text-sm font-black text-white">Água 01</h3>
-            </div>
-            <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-black text-emerald-400">
-              ✔ Selecionada
-            </span>
+        {/* 4. Painel Lateral Organizado com Abas */}
+        <aside className="w-80 lg:w-96 shrink-0 flex flex-col border-l border-white/10 bg-[#0d1522] overflow-hidden">
+          {/* Seletor de Abas da Sidebar */}
+          <div className="grid grid-cols-3 border-b border-white/10 bg-slate-950/60 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveSidebarTab("water")}
+              className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition ${
+                activeSidebarTab === "water"
+                  ? "bg-white/10 text-white shadow-sm"
+                  : "text-white/50 hover:text-white"
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-primary" />
+              Água 01
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSidebarTab("obstacles")}
+              className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition ${
+                activeSidebarTab === "obstacles"
+                  ? "bg-white/10 text-white shadow-sm"
+                  : "text-white/50 hover:text-white"
+              }`}
+            >
+              <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+              Obstáculos ({obstacles.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSidebarTab("pv")}
+              className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition ${
+                activeSidebarTab === "pv"
+                  ? "bg-white/10 text-white shadow-sm"
+                  : "text-white/50 hover:text-white"
+              }`}
+            >
+              <Sliders className="h-3.5 w-3.5 text-cyan-400" />
+              Config FV
+            </button>
           </div>
 
-          <div className="space-y-2.5">
-            <div className="flex justify-between border-b border-white/5 pb-1.5">
-              <span className="text-white/60">Área total:</span>
-              <strong className="text-white">{(config.roof_area_m2 || 72.4).toFixed(1)} m²</strong>
-            </div>
-            <div className="flex justify-between border-b border-white/5 pb-1.5">
-              <span className="text-white/60">Área utilizável:</span>
-              <strong className="text-white">{(visualSizing.usableArea || 58.7).toFixed(1)} m²</strong>
-            </div>
-            <div className="flex justify-between border-b border-white/5 pb-1.5">
-              <span className="text-white/60">Azimute:</span>
-              <strong className="text-cyan-300">{technicalAnalysis.azimuth.formatted}</strong>
-            </div>
-            <div className="flex justify-between border-b border-white/5 pb-1.5">
-              <span className="text-white/60">Inclinação:</span>
-              <strong className="text-white">{config.roof_pitch_deg || 12}°</strong>
-            </div>
-            <div className="flex justify-between border-b border-white/5 pb-1.5">
-              <span className="text-white/60">Módulos:</span>
-              <strong className="text-white">{visualSizing.panelCount} × {config.module_wp} Wp</strong>
-            </div>
-            <div className="flex justify-between border-b border-white/5 pb-1.5">
-              <span className="text-white/60">Potência:</span>
-              <strong className="text-primary">{visualSizing.dcPowerKw.toFixed(2)} kWp</strong>
-            </div>
-            <div className="flex justify-between border-b border-white/5 pb-1.5">
-              <span className="text-white/60">Geração estimada:</span>
-              <strong className="text-emerald-400">{(annualGenerationKwh / 1000).toFixed(2)} MWh/ano</strong>
-            </div>
-            <div className="flex justify-between border-b border-white/5 pb-1.5">
-              <span className="text-white/60">Perdas estimadas:</span>
-              <strong className="text-amber-400">{technicalAnalysis.estimatedLossPct}%</strong>
-            </div>
-          </div>
-
-          {/* Agrupamento de Strings */}
-          <div className="space-y-2 rounded-xl bg-slate-900/80 border border-white/10 p-3">
-            <p className="text-[11px] font-black uppercase text-white/70">Arranjo de Strings</p>
-            <div className="space-y-1.5">
-              {strings.map((st) => (
-                <div key={st.id} className="flex items-center justify-between text-[11px] bg-white/5 px-2 py-1.5 rounded">
-                  <span className="font-bold text-cyan-300">{st.name}:</span>
-                  <span className="font-semibold text-white/80">Módulos {st.startModule}–{st.endModule} ({st.powerKw}kWp)</span>
+          {/* Conteúdo da Aba 1: Água 01 (Métricas e Strings) */}
+          {activeSidebarTab === "water" && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-full bg-primary" />
+                  <h3 className="text-sm font-black text-white">Água 01 — Telhado</h3>
                 </div>
-              ))}
-            </div>
-          </div>
+                <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400">
+                  <Check className="h-3 w-3" /> Selecionada
+                </span>
+              </div>
 
-          {/* Ações da Área */}
-          <div className="grid grid-cols-2 gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEditorMode("edit")}
-              className="h-8 border-white/20 bg-white/5 text-xs font-bold text-white hover:bg-white/15"
-            >
-              <Pencil className="mr-1 h-3 w-3" /> Editar área
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={clearRoof}
-              className="h-8 border-red-500/30 bg-red-950/30 text-xs font-bold text-red-400 hover:bg-red-950/60"
-            >
-              <Trash2 className="mr-1 h-3 w-3" /> Excluir área
-            </Button>
-          </div>
+              <div className="space-y-2 rounded-xl bg-slate-950/60 border border-white/10 p-3">
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-white/60">Área total:</span>
+                  <strong className="text-white">{(config.roof_area_m2 || 72.4).toFixed(1)} m²</strong>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-white/60">Área utilizável:</span>
+                  <strong className="text-white">{(visualSizing.usableArea || 58.7).toFixed(1)} m²</strong>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-white/60">Azimute:</span>
+                  <strong className="text-cyan-300">{technicalAnalysis.azimuth.formatted}</strong>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-white/60">Inclinação:</span>
+                  <strong className="text-white">{config.roof_pitch_deg || 12}°</strong>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-white/60">Módulos instalados:</span>
+                  <strong className="text-white">{visualSizing.panelCount} × {config.module_wp} Wp</strong>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-white/60">Potência CC:</span>
+                  <strong className="text-primary">{visualSizing.dcPowerKw.toFixed(2)} kWp</strong>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-white/60">Geração estimada:</span>
+                  <strong className="text-emerald-400">{(annualGenerationKwh / 1000).toFixed(2)} MWh/ano</strong>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-white/60">Perdas estimadas:</span>
+                  <strong className="text-amber-400">{technicalAnalysis.estimatedLossPct}%</strong>
+                </div>
+              </div>
+
+              {/* Agrupamento de Strings */}
+              <div className="space-y-2 rounded-xl bg-slate-950/60 border border-white/10 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-white/60">Arranjo de Strings CC</p>
+                  <span className="text-[10px] text-primary font-bold">{strings.length} Strings</span>
+                </div>
+                <div className="space-y-1.5">
+                  {strings.map((st) => (
+                    <div key={st.id} className="flex items-center justify-between text-[11px] bg-white/5 px-2.5 py-1.5 rounded-lg border border-white/5">
+                      <span className="font-bold text-cyan-300">{st.name}</span>
+                      <span className="text-white/80">Módulos {st.startModule}–{st.endModule} ({st.powerKw} kWp)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ações da Área */}
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditorMode("edit")}
+                  className="h-8 border-white/15 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
+                >
+                  <Pencil className="mr-1.5 h-3 w-3" /> Editar área
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={clearRoof}
+                  className="h-8 border-rose-500/30 bg-rose-950/30 text-xs font-bold text-rose-400 hover:bg-rose-950/60"
+                >
+                  <Trash2 className="mr-1.5 h-3 w-3" /> Excluir área
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Conteúdo da Aba 2: Obstáculos no Telhado (Adicionar, Arrastar, Ajustar Raio) */}
+          {activeSidebarTab === "obstacles" && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div>
+                  <h3 className="text-sm font-black text-white">Obstáculos no Telhado</h3>
+                  <p className="text-[11px] text-white/50">Arraste os marcadores no mapa e ajuste o raio.</p>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" className="h-7 px-2.5 bg-rose-500 hover:bg-rose-600 text-slate-950 font-bold text-xs rounded-lg">
+                      <Plus className="mr-1 h-3.5 w-3.5" /> Adicionar
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52 bg-slate-900 border-white/15 text-white">
+                    {OBSTACLE_PRESETS.map((preset) => {
+                      const Icon = preset.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={preset.type}
+                          onClick={() => handleAddObstacle(preset)}
+                          className="flex items-center gap-2 p-2 text-xs font-semibold focus:bg-white/10 cursor-pointer"
+                        >
+                          <Icon className="h-4 w-4 text-rose-400" />
+                          <span>{preset.name}</span>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {obstacles.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-white/15 p-6 text-center text-white/50 space-y-2">
+                  <AlertTriangle className="mx-auto h-6 w-6 text-white/30" />
+                  <p className="font-semibold">Nenhum obstáculo cadastrado</p>
+                  <p className="text-[11px]">Adicione chaminés, caixas d'água ou claraboias para recalcular os módulos ao redor.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {obstacles.map((obs) => {
+                    const isSelected = selectedObstacleId === obs.id;
+                    return (
+                      <div
+                        key={obs.id}
+                        onClick={() => setSelectedObstacleId(obs.id)}
+                        className={`rounded-xl border p-3 transition space-y-2.5 cursor-pointer ${
+                          isSelected
+                            ? "border-sky-400 bg-sky-950/40 shadow-sm"
+                            : "border-white/10 bg-slate-950/60 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                            <strong className="text-white text-xs">{obs.name || "Obstáculo"}</strong>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveObstacle(obs.id);
+                            }}
+                            className="text-white/40 hover:text-rose-400 transition"
+                            title="Remover obstáculo"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Controle de Raio de Afastamento */}
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex justify-between text-[11px]">
+                            <span className="text-white/60">Raio de segurança:</span>
+                            <strong className="text-sky-300">{(obs.radiusM || 1.0).toFixed(1)} m</strong>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.2"
+                            max="3.5"
+                            step="0.1"
+                            value={obs.radiusM || 1.0}
+                            onChange={(e) => handleUpdateObstacle(obs.id, { radiusM: parseFloat(e.target.value) })}
+                            className="w-full accent-primary h-1 bg-white/10 rounded-lg cursor-pointer"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-[10px] text-white/40 pt-1 border-t border-white/5">
+                          <span>Posição: {obs.lat.toFixed(5)}, {obs.lng.toFixed(5)}</span>
+                          <span className="text-sky-400 font-semibold">Arraste no mapa</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Conteúdo da Aba 3: Configurações do Sistema FV */}
+          {activeSidebarTab === "pv" && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+              <div className="border-b border-white/10 pb-3">
+                <h3 className="text-sm font-black text-white">Parâmetros Fotovoltaicos</h3>
+                <p className="text-[11px] text-white/50">Ajuste potência, orientação e conexão CA.</p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs font-bold text-white/70">Potência do Módulo (Wp)</Label>
+                  <select
+                    value={config.module_wp}
+                    onChange={(e) => updateConfig("module_wp", Number(e.target.value))}
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus:outline-none"
+                  >
+                    {[450, 500, 550, 580, 600, 670, 700].map((wp) => (
+                      <option key={wp} value={wp}>{wp} Wp (Half-Cell Monocristalino)</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-bold text-white/70">Orientação dos Módulos</Label>
+                  <select
+                    value={config.module_orientation}
+                    onChange={(e) => updateConfig("module_orientation", e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus:outline-none"
+                  >
+                    <option value="auto">Automático (Melhor encaixe)</option>
+                    <option value="vertical">Retrato (Em pé)</option>
+                    <option value="horizontal">Paisagem (Deitado)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-bold text-white/70">Potência do Inversor (kW)</Label>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    max="100"
+                    value={config.inverter_kw}
+                    onChange={(e) => updateConfig("inverter_kw", parseFloat(e.target.value) || 5)}
+                    className="mt-1.5 h-9 rounded-xl border-white/10 bg-slate-950 text-xs font-bold text-white"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-xs font-bold text-white/70">Alimentação CA do Inversor</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-1.5">
+                    <select
+                      value={config.ac_supply_type}
+                      onChange={(e) => updateConfig("ac_supply_type", e.target.value)}
+                      className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus:outline-none"
+                    >
+                      <option value="Monofásico">Monofásico</option>
+                      <option value="Bifásico">Bifásico</option>
+                      <option value="Trifásico">Trifásico</option>
+                    </select>
+                    <select
+                      value={config.ac_voltage}
+                      onChange={(e) => updateConfig("ac_voltage", Number(e.target.value))}
+                      className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus:outline-none"
+                    >
+                      <option value={127}>127 V</option>
+                      <option value={220}>220 V</option>
+                      <option value={380}>380 V</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-bold text-white/70">Inclinação do Telhado (°)</Label>
+                  <Input
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="45"
+                    value={config.roof_pitch_deg}
+                    onChange={(e) => updateConfig("roof_pitch_deg", parseInt(e.target.value, 10) || 12)}
+                    className="mt-1.5 h-9 rounded-xl border-white/10 bg-slate-950 text-xs font-bold text-white"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </aside>
       </div>
 
-      {/* 6. Barra Inferior Global de Resultados Integrados (Mockup) */}
-      <footer className="h-20 shrink-0 border-t border-white/10 bg-[#07111e] px-4 flex flex-col justify-center">
-        <div className="grid grid-cols-2 lg:grid-cols-[1.3fr_1.3fr_1fr] gap-4 items-center">
-          {/* Resultados Integrados */}
-          <div className="flex items-center gap-4 overflow-x-auto">
-            <div>
-              <p className="text-base font-black text-primary flex items-center gap-1">
-                <Zap className="h-4 w-4" /> {visualSizing.dcPowerKw.toFixed(2)} kWp
-              </p>
-              <p className="text-[10px] font-bold text-white/50 uppercase">Potência instalada</p>
-            </div>
-            <div className="h-8 w-px bg-white/10" />
-            <div>
-              <p className="text-base font-black text-white flex items-center gap-1">
-                <Grid2X2 className="h-4 w-4 text-cyan-400" /> {visualSizing.panelCount} Módulos
-              </p>
-              <p className="text-[10px] font-bold text-white/50 uppercase">Quantidade</p>
-            </div>
-            <div className="h-8 w-px bg-white/10" />
-            <div>
-              <p className="text-base font-black text-emerald-400 flex items-center gap-1">
-                <Sun className="h-4 w-4" /> {(annualGenerationKwh / 1000).toFixed(2)} MWh/ano
-              </p>
-              <p className="text-[10px] font-bold text-white/50 uppercase">Geração estimada</p>
-            </div>
-            <div className="h-8 w-px bg-white/10" />
-            <div>
-              <p className="text-base font-black text-emerald-400 flex items-center gap-1">
-                <PiggyBank className="h-4 w-4" /> R$ {annualSavingsBrl.toLocaleString("pt-BR")}/ano
-              </p>
-              <p className="text-[10px] font-bold text-white/50 uppercase">Economia estimada</p>
-            </div>
+      {/* 5. Rodapé Executivo Descomprimido com Métricas Claras e Verificações */}
+      <footer className="h-20 shrink-0 border-t border-white/10 bg-[#080d16] px-6 flex items-center justify-between">
+        <div className="flex items-center gap-6 overflow-x-auto">
+          <div>
+            <p className="text-base font-black text-primary flex items-center gap-1.5">
+              <Zap className="h-4 w-4" /> {visualSizing.dcPowerKw.toFixed(2)} kWp
+            </p>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Potência Instalada</p>
           </div>
 
-          {/* Checklist de Integração com o Projeto Elétrico */}
-          <div className="hidden lg:grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] font-bold text-white/80 border-l border-r border-white/10 px-4">
+          <div className="h-8 w-px bg-white/10" />
+
+          <div>
+            <p className="text-base font-black text-white flex items-center gap-1.5">
+              <Grid2X2 className="h-4 w-4 text-cyan-400" /> {visualSizing.panelCount} Módulos
+            </p>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Quantidade</p>
+          </div>
+
+          <div className="h-8 w-px bg-white/10" />
+
+          <div>
+            <p className="text-base font-black text-emerald-400 flex items-center gap-1.5">
+              <Sun className="h-4 w-4" /> {(annualGenerationKwh / 1000).toFixed(2)} MWh/ano
+            </p>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Geração Estimada</p>
+          </div>
+
+          <div className="h-8 w-px bg-white/10" />
+
+          <div>
+            <p className="text-base font-black text-emerald-400 flex items-center gap-1.5">
+              <PiggyBank className="h-4 w-4" /> R$ {annualSavingsBrl.toLocaleString("pt-BR")}/ano
+            </p>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Economia Estimada</p>
+          </div>
+
+          <div className="h-8 w-px bg-white/10" />
+
+          <div>
+            <p className="text-base font-black text-cyan-300">
+              {paybackYears} anos
+            </p>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Payback Simples</p>
+          </div>
+        </div>
+
+        {/* Integração Elétrica com QD-01 e Botões de Impressão */}
+        <div className="flex items-center gap-4">
+          <div className="hidden xl:flex items-center gap-3 text-[11px] font-bold border-l border-white/10 pl-4 text-white/70">
             <span className="flex items-center gap-1 text-emerald-400">
-              <Check className="h-3 w-3 stroke-[3]" /> Circuito CA automático
+              <Check className="h-3 w-3 stroke-[3]" /> Disjuntor {sizing.breaker}A ({config.ac_supply_type === "Trifásico" ? "3P" : "2P"})
             </span>
             <span className="flex items-center gap-1 text-emerald-400">
-              <Check className="h-3 w-3 stroke-[3]" /> Dimensiona cabos e DPS
-            </span>
-            <span className="flex items-center gap-1 text-emerald-400">
-              <Check className="h-3 w-3 stroke-[3]" /> Integra com QD-01
-            </span>
-            <span className="flex items-center gap-1 text-emerald-400">
-              <Check className="h-3 w-3 stroke-[3]" /> Unifilar e quantitativo
+              <Check className="h-3 w-3 stroke-[3]" /> NBR 16690 / 5410
             </span>
           </div>
 
-          {/* Relatórios e Branding VOLTAI */}
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handlePrint}
+              className="h-10 rounded-xl border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs font-bold"
+            >
+              <Printer className="mr-1.5 h-4 w-4 text-primary" /> Imprimir
+            </Button>
             <Button
               type="button"
               onClick={() => setReportsOpen(true)}
-              className="h-10 bg-[#00d8b8] text-slate-950 text-xs font-black hover:bg-[#00c4a7]"
+              className="h-10 rounded-xl bg-primary hover:bg-primary/90 text-slate-950 text-xs font-black px-4 shadow-sm"
             >
               <Download className="mr-1.5 h-4 w-4" /> Relatórios PDF
             </Button>
-            <div className="hidden xl:block text-right">
-              <p className="text-xs font-black text-primary tracking-wider">⚡ VOLTAI</p>
-              <p className="text-[9px] font-bold text-white/40">TUDO EM UM SÓ LUGAR</p>
-            </div>
           </div>
         </div>
       </footer>

@@ -12,7 +12,6 @@ import {
   FileText,
   Home,
   Loader2,
-  MapPin,
   PiggyBank,
   Ruler,
   ShieldCheck,
@@ -24,6 +23,7 @@ import {
 } from "lucide-react";
 import { analyzeEnergyBillFile } from "@/lib/solarAiServices";
 import { getInstantResults, getPreliminarySizing } from "@/lib/solarWizardState";
+import { computeConsumptionMetrics } from "@/lib/solarConsumptionEngine";
 import PtBrNumericInput from "./PtBrNumericInput";
 import SolarConsumptionHistoryModal from "./SolarConsumptionHistoryModal";
 import SolarPriorityLoadsModal from "./SolarPriorityLoadsModal";
@@ -70,6 +70,11 @@ export default function StepDadosProjeto({ state, onChange }) {
   const results = useMemo(() => getInstantResults(state), [state]);
   const preliminary = useMemo(() => getPreliminarySizing(state), [state]);
 
+  // Métricas dinâmicas centralizadas para o resumo
+  const consumptionMetrics = useMemo(() => {
+    return computeConsumptionMetrics(state.bill_history_12_months, state.monthly_consumption_kwh);
+  }, [state.bill_history_12_months, state.monthly_consumption_kwh]);
+
   const handleFileUpload = async (file) => {
     if (!file) return;
 
@@ -90,7 +95,7 @@ export default function StepDadosProjeto({ state, onChange }) {
     }
 
     setAnalyzing(true);
-    setReadingStage("Enviando arquivo da conta...");
+    setReadingStage("Enviando arquivo...");
     setField("bill_reading_status", "reading");
     setField("bill_file_name", file.name);
 
@@ -104,21 +109,21 @@ export default function StepDadosProjeto({ state, onChange }) {
       if (response.success && response.extracted) {
         const ext = response.extracted;
         const historyList = Array.isArray(ext.history_12_months) ? ext.history_12_months : [];
-        const hasValidHistory = historyList.some((h) => h && h.kwh > 0);
+        const hasValidHistory = historyList.some((h) => h && h.kwh !== null && h.kwh > 0);
 
         onChange({
           bill_file_name: file.name,
           bill_file_url: response.file_url,
           bill_file_size: file.size,
-          bill_reading_status: hasValidHistory ? "done" : "partial",
+          bill_reading_status: hasValidHistory && ext.metrics?.isCompleteAnnual ? "done" : hasValidHistory ? "partial" : "done",
           bill_reading_message: ext.warnings?.length ? ext.warnings.join(" ") : "",
           bill_history_12_months: historyList,
-          monthly_consumption_kwh: ext.monthly_consumption_kwh || null,
-          tariff_brl_kwh: ext.tariff_brl_kwh || null,
+          monthly_consumption_kwh: ext.monthly_consumption_kwh || (hasValidHistory ? ext.metrics?.averageKwh : null),
+          tariff_brl_kwh: ext.tariff_brl_kwh || state.tariff_brl_kwh || "",
           contracted_demand_kw: ext.contracted_demand_kw || null,
           tariff_class: ext.tariff_class || state.tariff_class || "B1 - Residencial",
           distributor: ext.distributor || state.distributor || "",
-          name: state.name || (ext.holder_name ? `Projeto ${ext.holder_name}` : "Residência Solar"),
+          name: state.name || (ext.holder_name ? `Projeto ${ext.holder_name}` : "Projeto Solar"),
           client_name: state.client_name || ext.holder_name || "",
           address: state.address || ext.address || "",
         });
@@ -168,11 +173,6 @@ export default function StepDadosProjeto({ state, onChange }) {
     }
   };
 
-  const validHistoryEntries = Array.isArray(state.bill_history_12_months)
-    ? state.bill_history_12_months.filter((h) => h && Number(h.kwh) > 0)
-    : [];
-  const historyCount = validHistoryEntries.length;
-
   const handleSystemModeChange = (mode) => {
     onChange({
       system_mode: mode,
@@ -193,6 +193,8 @@ export default function StepDadosProjeto({ state, onChange }) {
       });
     }
   };
+
+  const isB1 = state.tariff_class === "B1 - Residencial" || state.tariff_class?.startsWith("B1") || state.tariff_class?.startsWith("B2");
 
   return (
     <div className="space-y-6">
@@ -235,11 +237,11 @@ export default function StepDadosProjeto({ state, onChange }) {
                   onClick={() => setField("installation_type", item.value)}
                   className={`flex h-11 items-center justify-center gap-2 rounded-xl border text-xs font-extrabold transition ${
                     active
-                      ? "border-primary bg-primary/10 text-primary shadow-sm"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-primary/40 hover:bg-slate-50"
+                      ? "border-[#00d8b8] bg-[#00d8b8]/10 text-slate-900 shadow-sm"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-[#00d8b8]/40 hover:bg-slate-50"
                   }`}
                 >
-                  <Icon className="h-4 w-4" /> {item.label}
+                  <Icon className="h-4 w-4 text-[#00d8b8]" /> {item.label}
                 </button>
               );
             })}
@@ -247,7 +249,7 @@ export default function StepDadosProjeto({ state, onChange }) {
         </div>
       </div>
 
-      {/* 2. Como deseja iniciar o projeto? (3 Cards de Altura Uniforme) */}
+      {/* 2. Como deseja iniciar o projeto? (3 Cards Uniformes) */}
       <div className="space-y-2.5">
         <Label className="text-xs font-black text-foreground">Como deseja iniciar o projeto?</Label>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -261,8 +263,8 @@ export default function StepDadosProjeto({ state, onChange }) {
                 onClick={() => setField("entry_method", method.key)}
                 className={`relative flex min-h-[140px] flex-col items-start justify-between rounded-2xl border-2 p-4 text-left transition-all ${
                   active
-                    ? "border-primary bg-primary/[0.04] shadow-sm ring-1 ring-primary/20"
-                    : "border-slate-200 bg-white hover:border-primary/40 hover:bg-slate-50/50"
+                    ? "border-[#00d8b8] bg-[#00d8b8]/[0.05] shadow-sm ring-1 ring-[#00d8b8]/20"
+                    : "border-slate-200 bg-white hover:border-[#00d8b8]/40 hover:bg-slate-50/50"
                 }`}
               >
                 {method.badge && (
@@ -272,7 +274,7 @@ export default function StepDadosProjeto({ state, onChange }) {
                 )}
                 <span
                   className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
-                    active ? "bg-primary text-white" : "bg-slate-100 text-slate-600"
+                    active ? "bg-[#00d8b8] text-slate-950 font-bold" : "bg-slate-100 text-slate-600"
                   }`}
                 >
                   <Icon className="h-5 w-5" />
@@ -289,7 +291,7 @@ export default function StepDadosProjeto({ state, onChange }) {
         </div>
       </div>
 
-      {/* 3. Subformulário da Modalidade Selecionada */}
+      {/* 3. Subformulário da Modalidade: Conta de Energia */}
       {state.entry_method === "bill" && (
         <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4.5 sm:grid-cols-[1fr_1.3fr] shadow-sm">
           {/* Coluna Esquerda: Upload e Processamento da Conta */}
@@ -319,7 +321,7 @@ export default function StepDadosProjeto({ state, onChange }) {
                 <div className="flex flex-col items-center gap-2 py-1">
                   <Loader2 className="h-7 w-7 animate-spin text-[#00d8b8]" />
                   <span className="text-xs font-bold text-slate-800">{readingStage || "Processando fatura..."}</span>
-                  <span className="text-[10px] text-slate-500 font-medium">Isso pode levar alguns segundos</span>
+                  <span className="text-[10px] text-slate-500 font-medium">Extraindo dados reais da conta</span>
                 </div>
               ) : (
                 <>
@@ -385,27 +387,27 @@ export default function StepDadosProjeto({ state, onChange }) {
                 <div className="flex items-center gap-2">
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded-full ${
-                      state.bill_reading_status === "done"
+                      consumptionMetrics.validCount > 0
                         ? "bg-emerald-100 text-emerald-700"
-                        : state.bill_reading_status === "partial"
-                        ? "bg-amber-100 text-amber-700"
                         : "bg-slate-200 text-slate-600"
                     }`}
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />
                   </span>
                   <p className="text-xs font-black text-slate-900">
-                    {state.bill_reading_status === "done"
-                      ? "Dados extraídos com sucesso"
-                      : state.bill_reading_status === "partial"
-                      ? "Extração parcial — confira os dados"
+                    {consumptionMetrics.validCount === 12
+                      ? "Histórico anual completo identificado"
+                      : consumptionMetrics.validCount > 0
+                      ? `Histórico parcial (${consumptionMetrics.validCount} meses)`
+                      : state.monthly_consumption_kwh
+                      ? "Consumo informado"
                       : "Resumo da conta"}
                   </p>
                 </div>
 
-                {historyCount > 0 && (
+                {consumptionMetrics.validCount > 0 && (
                   <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-black text-slate-700">
-                    {historyCount}/12 meses
+                    {consumptionMetrics.validCount}/12 meses
                   </span>
                 )}
               </div>
@@ -414,8 +416,8 @@ export default function StepDadosProjeto({ state, onChange }) {
                 <div>
                   <span className="text-slate-500 font-semibold block text-[11px]">Consumo médio</span>
                   <strong className="text-slate-900 font-black">
-                    {state.monthly_consumption_kwh
-                      ? `${Number(state.monthly_consumption_kwh).toLocaleString("pt-BR")} kWh/mês`
+                    {consumptionMetrics.averageKwh > 0
+                      ? `${consumptionMetrics.averageKwh.toLocaleString("pt-BR")} kWh/mês`
                       : "Não identificado"}
                   </strong>
                 </div>
@@ -423,11 +425,11 @@ export default function StepDadosProjeto({ state, onChange }) {
                 <div>
                   <span className="text-slate-500 font-semibold block text-[11px]">Demanda contratada</span>
                   <strong className="text-slate-900 font-black">
-                    {state.contracted_demand_kw
+                    {isB1
+                      ? "Não aplicável (B1)"
+                      : state.contracted_demand_kw
                       ? `${Number(state.contracted_demand_kw).toLocaleString("pt-BR")} kW`
-                      : state.tariff_class?.startsWith("A4")
-                      ? "Não identificada"
-                      : "Não aplicável (B1)"}
+                      : "Não identificada"}
                   </strong>
                 </div>
 
@@ -454,10 +456,12 @@ export default function StepDadosProjeto({ state, onChange }) {
                 className="inline-flex items-center gap-1.5 text-xs font-black text-[#00d8b8] hover:underline"
               >
                 <BarChart3 className="h-4 w-4" />
-                {historyCount > 0 ? "Conferir e editar histórico" : "Preencher histórico de 12 meses"}
+                {consumptionMetrics.validCount > 0
+                  ? `Conferir e editar histórico (${consumptionMetrics.validCount}/12)`
+                  : "Preencher histórico de 12 meses"}
               </button>
 
-              {state.monthly_consumption_kwh && (
+              {consumptionMetrics.averageKwh > 0 && (
                 <span className="text-[10px] font-bold text-slate-400">
                   Pronto para dimensionar
                 </span>
@@ -493,14 +497,14 @@ export default function StepDadosProjeto({ state, onChange }) {
           </div>
 
           {/* Resumo Técnico do Dimensionamento Preliminar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-white p-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs">
             <div>
               <span className="text-muted-foreground font-semibold">Módulos necessários:</span>{" "}
               <strong className="text-foreground font-black">{preliminary?.panelCount || 0} unidades</strong>
             </div>
             <div>
               <span className="text-muted-foreground font-semibold">Potência calculada:</span>{" "}
-              <strong className="text-primary font-black">{Number(preliminary?.installedKwp || 0).toFixed(2).replace(".", ",")} kWp</strong>
+              <strong className="text-slate-900 font-black">{Number(preliminary?.installedKwp || 0).toFixed(2).replace(".", ",")} kWp</strong>
             </div>
             <div>
               <span className="text-muted-foreground font-semibold">Área estimada:</span>{" "}
@@ -535,14 +539,14 @@ export default function StepDadosProjeto({ state, onChange }) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-white p-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs">
             <div>
               <span className="text-muted-foreground font-semibold">Capacidade estimada:</span>{" "}
               <strong className="text-foreground font-black">{preliminary?.panelCount || 0} módulos</strong>
             </div>
             <div>
               <span className="text-muted-foreground font-semibold">Potência pico:</span>{" "}
-              <strong className="text-primary font-black">{Number(preliminary?.installedKwp || 0).toFixed(2).replace(".", ",")} kWp</strong>
+              <strong className="text-slate-900 font-black">{Number(preliminary?.installedKwp || 0).toFixed(2).replace(".", ",")} kWp</strong>
             </div>
           </div>
         </div>
@@ -558,7 +562,7 @@ export default function StepDadosProjeto({ state, onChange }) {
             </p>
           </div>
 
-          {/* Toggle rápido de inclusão de bateria */}
+          {/* Toggle de inclusão de bateria */}
           <div className="flex items-center gap-2">
             <Label htmlFor="toggle-battery" className="text-xs font-bold text-slate-700 cursor-pointer">
               Incluir bateria?
@@ -586,8 +590,8 @@ export default function StepDadosProjeto({ state, onChange }) {
                 onClick={() => handleSystemModeChange(mode.id)}
                 className={`h-11 rounded-xl border text-xs font-extrabold transition ${
                   active
-                    ? "border-primary bg-primary/10 text-primary shadow-sm"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-primary/40 hover:bg-slate-50"
+                    ? "border-[#00d8b8] bg-[#00d8b8]/10 text-slate-900 shadow-sm"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-[#00d8b8]/40 hover:bg-slate-50"
                 }`}
               >
                 {mode.label}
@@ -598,9 +602,9 @@ export default function StepDadosProjeto({ state, onChange }) {
 
         {/* Configuração de Cargas Prioritárias quando tem bateria */}
         {state.has_battery && (
-          <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/[0.03] p-3 text-xs">
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs">
             <div className="flex items-center gap-2">
-              <BatteryCharging className="h-4 w-4 text-primary" />
+              <BatteryCharging className="h-4 w-4 text-[#00d8b8]" />
               <span className="font-semibold text-slate-700">
                 Banco de {state.battery_config?.capacity_kwh || 10} kWh configurado para backup.
               </span>
@@ -610,9 +614,9 @@ export default function StepDadosProjeto({ state, onChange }) {
               size="sm"
               variant="outline"
               onClick={() => setBatteryModalOpen(true)}
-              className="h-8 border-primary text-xs font-extrabold text-primary hover:bg-primary/10"
+              className="h-8 border-[#00d8b8] text-xs font-extrabold text-slate-900 hover:bg-[#00d8b8]/10"
             >
-              <ShieldCheck className="mr-1 h-3.5 w-3.5" /> Configurar Cargas
+              <ShieldCheck className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" /> Configurar Cargas
             </Button>
           </div>
         )}
@@ -622,9 +626,9 @@ export default function StepDadosProjeto({ state, onChange }) {
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-xs font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4 text-primary" /> Dados preliminares (calculados pela IA)
+            <Sparkles className="h-4 w-4 text-[#00d8b8]" /> Dados preliminares (calculados pela IA)
           </p>
-          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-black text-primary">
+          <span className="rounded-full bg-[#00d8b8]/10 px-2.5 py-0.5 text-[10px] font-black text-slate-900">
             Tempo Real
           </span>
         </div>
@@ -632,7 +636,7 @@ export default function StepDadosProjeto({ state, onChange }) {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
             <p className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
-              <Zap className="h-3 w-3 text-primary" /> Potência recomendada
+              <Zap className="h-3 w-3 text-[#00d8b8]" /> Potência recomendada
             </p>
             <p className="mt-1 text-base font-black text-foreground">
               {Number(results?.installedKwp || 0) > 0 ? `${Number(results.installedKwp).toFixed(2).replace(".", ",")} kWp` : "—"}
@@ -641,7 +645,7 @@ export default function StepDadosProjeto({ state, onChange }) {
 
           <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
             <p className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
-              <Sun className="h-3 w-3 text-primary" /> Módulos ({state.module_wp} Wp)
+              <Sun className="h-3 w-3 text-[#00d8b8]" /> Módulos ({state.module_wp} Wp)
             </p>
             <p className="mt-1 text-base font-black text-foreground">
               {results?.panelCount > 0 ? `${results.panelCount} unidades` : "—"}
@@ -650,7 +654,7 @@ export default function StepDadosProjeto({ state, onChange }) {
 
           <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
             <p className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
-              <BarChart3 className="h-3 w-3 text-primary" /> Geração estimada
+              <BarChart3 className="h-3 w-3 text-[#00d8b8]" /> Geração estimada
             </p>
             <p className="mt-1 text-base font-black text-foreground">
               {results?.annualGenerationKwh

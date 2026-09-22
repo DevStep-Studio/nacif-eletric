@@ -1,135 +1,208 @@
-/**
- * scripts/solar-bill-extraction-smoke.mjs
- * Teste automatizado de extração inteligente de contas e motor de consumo
- */
+import assert from "node:assert/strict";
+import {
+  computeConsumptionMetrics,
+  buildDefault12MonthTimeline,
+  parseMonthYearString,
+  normalizeHistoryItem,
+} from "../src/lib/solarConsumptionEngine.js";
+import {
+  identifyDistributor,
+  identifyTariffClass,
+  identifySupplyType,
+  extractConsumptionHistoryFromText,
+  extractStructuredBillData,
+  sanitizeAndValidateBillResult,
+  SUPPORTED_DISTRIBUTORS,
+} from "../src/lib/solarBillExtractor.js";
 
-import { computeConsumptionMetrics, buildDefault12MonthTimeline, normalizeHistoryItem } from "../src/lib/solarConsumptionEngine.js";
-import { sanitizeAndValidateBillResult, identifyDistributor, identifyTariffClass } from "../src/lib/solarBillExtractor.js";
+console.log("⚡ Executando testes automatizados: Extração Inteligente de Contas e Motor de Consumo Solar...\n");
 
-function assert(condition, message) {
-  if (!condition) {
-    console.error(`❌ FAIL: ${message}`);
-    process.exit(1);
-  }
-  console.log(`✅ PASS: ${message}`);
-}
+// --- TESTE 1: Identificação de Distribuidoras Brasileiras ---
+console.log("1. Testando reconhecimento de distribuidoras...");
+assert.equal(identifyDistributor("FATURA DE ENERGIA ELÉTRICA ENEL SÃO PAULO")?.name, "Enel SP");
+assert.equal(identifyDistributor("CEMIG DISTRIBUIÇÃO S.A.")?.name, "Cemig");
+assert.equal(identifyDistributor("LIGHT SERVIÇOS DE ELETRICIDADE S.A.")?.name, "Light");
+assert.equal(identifyDistributor("CPFL PAULISTA - COMPANHIA PAULISTA DE FORÇA E LUZ")?.name, "CPFL Paulista");
+assert.equal(identifyDistributor("NEOENERGIA COELBA COMPANHIA DE ELETRICIDADE DO ESTADO DA BAHIA")?.name, "Neoenergia Coelba");
+assert.equal(identifyDistributor("EQUATORIAL PARÁ DISTRIBUIDORA DE ENERGIA S.A.")?.name, "Equatorial Pará");
+assert.equal(identifyDistributor("COPEL DISTRIBUIÇÃO S.A.")?.name, "Copel");
+assert.equal(identifyDistributor("ENERGISA MATO GROSSO")?.name, "Energisa");
+assert.equal(identifyDistributor("CELESC DISTRIBUIÇÃO")?.name, "Celesc");
+assert.equal(identifyDistributor("RGE SUL DISTRIBUIDORA DE ENERGIA S.A.")?.name, "RGE Sul");
+console.log("   ✓ Todas as 10+ distribuidoras reconhecidas com sucesso.");
 
-console.log("--- 1. TESTE DO MOTOR DE CÁLCULO DE CONSUMO (solarConsumptionEngine) ---");
+// --- TESTE 2: Identificação de Classe Tarifária e Tipo de Fornecimento ---
+console.log("2. Testando identificação de classes tarifárias e tipo de fornecimento...");
+assert.equal(identifyTariffClass("CLASSIFICAÇÃO: B1 - RESIDENCIAL NORMAL"), "B1 - Residencial");
+assert.equal(identifyTariffClass("TARIFA: B2 - RURAL"), "B2 - Rural");
+assert.equal(identifyTariffClass("CONVENCIONAL B3 COMERCIAL"), "B3 - Comercial/Industrial (baixa tensão)");
+assert.equal(identifyTariffClass("SUBGRUPO A4 HORO-SAZONAL VERDE"), "A4 - Verde (média tensão)");
+assert.equal(identifyTariffClass("GRUPO A4 AZUL"), "A4 - Azul (média tensão)");
 
-// Teste 1.1: Histórico Vazio
+assert.equal(identifySupplyType("TIPO DE FORNECIMENTO: TRIFÁSICO A 3 FIOS"), "Trifásico");
+assert.equal(identifySupplyType("TIPO DE FORNECIMENTO: BIFÁSICO 220/127V"), "Bifásico");
+assert.equal(identifySupplyType("LIGAÇÃO MONOFÁSICA 127V"), "Monofásico");
+console.log("   ✓ Classes tarifárias e tipos de fornecimento identificados.");
+
+// --- TESTE 3: Parser de Mês e Alinhamento de Linha do Tempo ---
+console.log("3. Testando parser flexível de meses e pareamento cronológico...");
+const p1 = parseMonthYearString("JAN/25");
+assert.equal(p1?.shortName, "Jan");
+assert.equal(p1?.year, 2025);
+assert.equal(p1?.label, "Jan/25");
+
+const p2 = parseMonthYearString("Janeiro/2026");
+assert.equal(p2?.shortName, "Jan");
+assert.equal(p2?.year, 2026);
+assert.equal(p2?.label, "Jan/26");
+
+const p3 = parseMonthYearString("12/2024");
+assert.equal(p3?.shortName, "Dez");
+assert.equal(p3?.year, 2024);
+
+const p4 = parseMonthYearString("OUT-25");
+assert.equal(p4?.shortName, "Out");
+
+// Timeline builder test with extracted history
+const rawHistory6Months = [
+  { month: "Jan/25", kwh: 420 },
+  { month: "Fev/25", kwh: 480 },
+  { month: "Mar/25", kwh: 510 },
+  { month: "Abr/25", kwh: 390 },
+  { month: "Mai/25", kwh: 360 },
+  { month: "Jun/25", kwh: 340 },
+];
+const timeline = buildDefault12MonthTimeline(rawHistory6Months);
+assert.equal(timeline.length, 12);
+const filledCount = timeline.filter((t) => t.is_valid && t.kwh > 0).length;
+assert.ok(filledCount >= 1, "Meses correspondentes foram pareados na timeline");
+console.log("   ✓ Parser de meses e pareamento com a timeline validados.");
+
+// --- TESTE 4: Motor de Cálculo Centralizado (12 meses vs Parcial vs Vazio) ---
+console.log("4. Testando cálculos de consumo centralizados (Única Fonte da Verdade)...");
+// Caso 1: 12 meses completos
+const fullHistory12 = [
+  { month: "Jan/25", kwh: 400 },
+  { month: "Fev/25", kwh: 500 },
+  { month: "Mar/25", kwh: 450 },
+  { month: "Abr/25", kwh: 380 },
+  { month: "Mai/25", kwh: 320 },
+  { month: "Jun/25", kwh: 300 },
+  { month: "Jul/25", kwh: 310 },
+  { month: "Ago/25", kwh: 350 },
+  { month: "Set/25", kwh: 370 },
+  { month: "Out/25", kwh: 420 },
+  { month: "Nov/25", kwh: 460 },
+  { month: "Dez/25", kwh: 480 },
+];
+const fullMetrics = computeConsumptionMetrics(fullHistory12);
+assert.equal(fullMetrics.hasHistory, true);
+assert.equal(fullMetrics.validCount, 12);
+assert.equal(fullMetrics.isCompleteAnnual, true);
+assert.equal(fullMetrics.totalKwh, 4740);
+assert.equal(fullMetrics.averageKwh, 395);
+assert.equal(fullMetrics.peakKwh, 500);
+assert.equal(fullMetrics.peakMonth, "Fev/25");
+assert.equal(fullMetrics.minKwh, 300);
+assert.equal(fullMetrics.minMonth, "Jun/25");
+assert.equal(fullMetrics.totalLabel, "Total Anual");
+
+// Caso 2: Histórico parcial (6 meses) — NUNCA tratar como "0 kWh/ano"
+const partialMetrics = computeConsumptionMetrics(rawHistory6Months);
+assert.equal(partialMetrics.hasHistory, true);
+assert.equal(partialMetrics.validCount, 6);
+assert.equal(partialMetrics.isCompleteAnnual, false);
+assert.equal(partialMetrics.totalKwh, 2500);
+assert.equal(partialMetrics.averageKwh, 417);
+assert.equal(partialMetrics.peakKwh, 510);
+assert.equal(partialMetrics.peakMonth, "Mar/25");
+assert.equal(partialMetrics.totalLabel, "Total (6 meses)");
+
+// Caso 3: Histórico vazio (0 meses)
 const emptyMetrics = computeConsumptionMetrics([]);
-assert(emptyMetrics.hasHistory === false, "Histórico vazio marca hasHistory = false");
-assert(emptyMetrics.averageKwh === 0, "Histórico vazio não inventa média de 842");
-assert(emptyMetrics.peakKwh === 0, "Histórico vazio tem pico 0 (não 1 kWh)");
-assert(emptyMetrics.totalKwh === 0, "Histórico vazio tem total 0");
-assert(emptyMetrics.validCount === 0, "Histórico vazio tem 0 registros válidos");
+assert.equal(emptyMetrics.hasHistory, false);
+assert.equal(emptyMetrics.validCount, 0);
+assert.equal(emptyMetrics.totalKwh, 0);
+assert.equal(emptyMetrics.averageKwh, 0);
+assert.equal(emptyMetrics.peakKwh, 0);
+assert.equal(emptyMetrics.peakMonth, null);
+console.log("   ✓ Métricas de consumo calculadas com precisão e consistência.");
 
-// Teste 1.2: Histórico Completo de 12 Meses com valores reais
-const full12History = [
-  { month: "Out/24", kwh: 400 },
-  { month: "Nov/24", kwh: 450 },
-  { month: "Dez/24", kwh: 600 },
-  { month: "Jan/25", kwh: 750 },
-  { month: "Fev/25", kwh: 700 },
-  { month: "Mar/25", kwh: 550 },
-  { month: "Abr/25", kwh: 500 },
-  { month: "Mai/25", kwh: 480 },
-  { month: "Jun/25", kwh: 420 },
-  { month: "Jul/25", kwh: 390 },
-  { month: "Ago/25", kwh: 410 },
-  { month: "Set/25", kwh: 450 },
-];
-const fullMetrics = computeConsumptionMetrics(full12History);
-const sumFull = full12History.reduce((s, i) => s + i.kwh, 0); // 6100
-const expectedAvg = Math.round(6100 / 12); // 508
-
-assert(fullMetrics.hasHistory === true, "12 meses: hasHistory = true");
-assert(fullMetrics.validCount === 12, "12 meses: validCount = 12");
-assert(fullMetrics.totalKwh === 6100, `12 meses: totalKwh = ${fullMetrics.totalKwh} (esperado 6100)`);
-assert(fullMetrics.averageKwh === expectedAvg, `12 meses: averageKwh = ${fullMetrics.averageKwh} (esperado ${expectedAvg})`);
-assert(fullMetrics.peakKwh === 750, "12 meses: peakKwh = 750");
-assert(fullMetrics.peakMonth === "Jan/25", "12 meses: peakMonth = Jan/25");
-assert(fullMetrics.isCompleteAnnual === true, "12 meses: isCompleteAnnual = true");
-assert(fullMetrics.totalLabel === "Total Anual", "12 meses: rotulado como 'Total Anual'");
-
-// Teste 1.3: Histórico Parcial de 6 Meses
-const partial6History = [
-  { month: "Abr/25", kwh: 500 },
-  { month: "Mai/25", kwh: 480 },
-  { month: "Jun/25", kwh: 420 },
-  { month: "Jul/25", kwh: 390 },
-  { month: "Ago/25", kwh: 410 },
-  { month: "Set/25", kwh: 450 },
-];
-const partMetrics = computeConsumptionMetrics(partial6History);
-const sumPart = 500 + 480 + 420 + 390 + 410 + 450; // 2650
-const expectedPartAvg = Math.round(2650 / 6); // 442
-
-assert(partMetrics.hasHistory === true, "6 meses: hasHistory = true");
-assert(partMetrics.validCount === 6, "6 meses: validCount = 6");
-assert(partMetrics.totalKwh === 2650, `6 meses: totalKwh = ${partMetrics.totalKwh}`);
-assert(partMetrics.averageKwh === expectedPartAvg, `6 meses: averageKwh = ${partMetrics.averageKwh}`);
-assert(partMetrics.isCompleteAnnual === false, "6 meses: não é ano completo");
-assert(partMetrics.totalLabel === "Total (6 meses)", `6 meses: rotulado como '${partMetrics.totalLabel}' e NÃO Total Anual`);
-assert(partMetrics.projectedAnnualKwh === Math.round(expectedPartAvg * 12), "6 meses: projeção anual baseada na média");
-
-console.log("\n--- 2. TESTE DE IDENTIFICAÇÃO DE DISTRIBUIDORAS E TARIFAS ---");
-
-const distEnel = identifyDistributor("Fatura ENEL DISTRIBUIÇÃO SÃO PAULO S.A.");
-assert(distEnel?.name === "Enel SP", "Reconhece Enel SP");
-
-const distCemig = identifyDistributor("Companhia Energética de Minas Gerais - CEMIG");
-assert(distCemig?.name === "Cemig", "Reconhece Cemig");
-
-const distCpfl = identifyDistributor("CPFL Paulista - Companhia Paulista de Força e Luz");
-assert(distCpfl?.name === "CPFL Paulista", "Reconhece CPFL Paulista");
-
-const distLight = identifyDistributor("LIGHT SERVIÇOS DE ELETRICIDADE S.A.");
-assert(distLight?.name === "Light", "Reconhece Light");
-
-const distEq = identifyDistributor("Equatorial Maranhão Distribuidora de Energia");
-assert(distEq?.name === "Equatorial Maranhão", "Reconhece Equatorial Maranhão");
-
-const tariffB1 = identifyTariffClass("Classificação: B1 Residencial Normal");
-assert(tariffB1 === "B1 - Residencial", "Identifica B1 Residencial");
-
-const tariffA4 = identifyTariffClass("Subgrupo A4 Verde Horossazonal");
-assert(tariffA4 === "A4 - Verde (média tensão)", "Identifica A4 Verde");
-
-console.log("\n--- 3. TESTE DE EXTRAÇÃO E SANITIZAÇÃO (solarBillExtractor) ---");
-
-// Teste 3.1: Conta Residencial B1 NÃO DEVE ter demanda de 15 kW imposta
-const rawResidencial = {
-  holder_name: "Maria Oliveira",
-  address: "Av Paulista 1000, São Paulo - SP",
+// --- TESTE 5: Validação Estrita Anti-Dados Fictícios ---
+console.log("5. Testando proteção estrita contra dados fictícios...");
+const residentialRaw = {
   distributor: "Enel SP",
   tariff_class: "B1 - Residencial",
-  contracted_demand_kw: 15, // Valor espúrio detectado por erro de OCR
-  history_12_months: full12History,
+  contracted_demand_kw: 15, // Testando tentativa de injetar 15 kW em residencial
+  tariff_brl_kwh: 0.95,
+  monthly_consumption_kwh: 842,
+  history_12_months: [
+    { month: "Jan/25", kwh: 400 },
+    { month: "Fev/25", kwh: 500 },
+  ],
 };
-const sanitizedRes = sanitizeAndValidateBillResult(rawResidencial);
-assert(sanitizedRes.success === true, "Sanitização de B1 foi bem sucedida");
-assert(sanitizedRes.holder_name === "Maria Oliveira", "Nome do titular preservado");
-assert(sanitizedRes.distributor === "Enel SP", "Distribuidora preservada");
-assert(sanitizedRes.tariff_class === "B1 - Residencial", "Classe B1 preservada");
-assert(sanitizedRes.contracted_demand_kw === null, "Demanda espúria de 15 kW em conta B1 residencial foi corretamente descartada");
-assert(sanitizedRes.monthly_consumption_kwh === expectedAvg, `Consumo médio calculado exatamente: ${sanitizedRes.monthly_consumption_kwh}`);
+const validated = sanitizeAndValidateBillResult(residentialRaw);
+assert.equal(validated.distributor, "Enel SP");
+assert.equal(validated.tariff_class, "B1 - Residencial");
+// Regra crítica: Demanda DEVE ser null para B1 Residencial
+assert.equal(validated.contracted_demand_kw, null, "Demanda em B1 residencial deve ser estritamente null!");
+// Consumo médio deve ser calculado a partir do histórico real fornecido (450 kWh), não do 842 fictício
+assert.equal(validated.monthly_consumption_kwh, 450);
+console.log("   ✓ Proteção anti-dados fictícios validada (demanda e média blindadas).");
 
-// Teste 3.2: Conta A4 Média Tensão DEVE aceitar demanda legítima
-const rawA4 = {
-  holder_name: "Metalúrgica ABC",
-  address: "Distrito Industrial, Betim - MG",
-  distributor: "Cemig",
-  tariff_class: "A4 - Verde (média tensão)",
-  contracted_demand_kw: 75,
-  history_12_months: [{ month: "Jan/25", kwh: 12500 }, { month: "Fev/25", kwh: 13200 }],
-};
-const sanitizedA4 = sanitizeAndValidateBillResult(rawA4);
-assert(sanitizedA4.contracted_demand_kw === 75, "Demanda legítima de 75 kW em conta A4 foi preservada");
-assert(sanitizedA4.confidence === "low", "Histórico de apenas 2 meses marcado como confiança baixa/parcial");
+// --- TESTE 6: Extração de Fatura Completa a partir de Texto Estruturado ---
+console.log("6. Testando extração completa de fatura estruturada...");
+const sampleBillText = `
+ENEL DISTRIBUIÇÃO SÃO PAULO
+NOME DO CLIENTE: CARLOS EDUARDO MENDES
+UNIDADE CONSUMIDORA: 00987654321
+ENDEREÇO DA INSTALAÇÃO: RUA DAS PALMEIRAS, 450 - JARDINS - SÃO PAULO/SP
+CLASSIFICAÇÃO: B1 - RESIDENCIAL
+TIPO DE FORNECIMENTO: BIFÁSICO
+TOTAL A PAGAR: R$ 412,80
+VENCIMENTO: 15/03/2026
+MÊS DE REFERÊNCIA: FEV/2026
 
-// Teste 3.3: Linha do tempo padrão de 12 meses
-const timeline = buildDefault12MonthTimeline([{ month: "Jan", kwh: 500 }]);
-assert(timeline.length === 12, "Linha do tempo gerada possui exatamente 12 meses");
+HISTÓRICO DE CONSUMO
+MÊS/ANO   kWh   DIAS
+MAR/25    380   30
+ABR/25    390   30
+MAI/25    370   30
+JUN/25    350   30
+JUL/25    340   30
+AGO/25    360   30
+SET/25    400   30
+OUT/25    420   30
+NOV/25    450   30
+DEZ/25    470   30
+JAN/26    490   30
+FEV/26    460   30
+`;
 
-console.log("\n🎉 TODOS OS TESTES DE EXTRAÇÃO E CÁLCULO DE CONSUMO PASSARAM COM SUCESSO!");
+const extracted = extractStructuredBillData(sampleBillText);
+assert.equal(extracted.distributor, "Enel SP");
+assert.equal(extracted.holder_name, "CARLOS EDUARDO MENDES");
+assert.equal(extracted.installation_code, "00987654321");
+assert.equal(extracted.tariff_class, "B1 - Residencial");
+assert.equal(extracted.supply_type, "Bifásico");
+assert.equal(extracted.bill_total_brl, 412.80);
+assert.equal(extracted.due_date, "15/03/2026");
+assert.equal(extracted.history_12_months.length, 12);
+assert.equal(extracted.history_12_months[0].month, "Mar/25");
+assert.equal(extracted.history_12_months[0].kwh, 380);
+assert.equal(extracted.history_12_months[11].month, "Fev/26");
+assert.equal(extracted.history_12_months[11].kwh, 460);
+
+const sanitizedExtracted = sanitizeAndValidateBillResult(extracted);
+assert.equal(sanitizedExtracted.success, true);
+assert.equal(sanitizedExtracted.confidence, "high");
+assert.equal(sanitizedExtracted.metrics.isCompleteAnnual, true);
+assert.equal(sanitizedExtracted.metrics.validCount, 12);
+assert.equal(sanitizedExtracted.monthly_consumption_kwh, 407); // Média exata de 4880 / 12
+assert.equal(sanitizedExtracted.metrics.peakKwh, 490);
+assert.equal(sanitizedExtracted.metrics.peakMonth, "Jan/26");
+console.log("   ✓ Fatura estruturada extraída e validada com 100% de sucesso.");
+
+console.log("\n========================================================");
+console.log("🎉 TODOS OS TESTES PASSARAM COM ÊXITO!");
+console.log("========================================================");

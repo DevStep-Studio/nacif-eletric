@@ -17,6 +17,7 @@
     "test:solar-sizing": "node scripts/solar-sizing-smoke.mjs",
     "test:solar-board-merge": "node scripts/solar-board-merge-smoke.mjs",
     "test:solar-advanced": "node scripts/solar-advanced-features-smoke.mjs",
+    "test:solar-bill": "node scripts/solar-bill-extraction-smoke.mjs",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
   },
