@@ -133,7 +133,7 @@ export default function AddressPickerMap({
 
     const newLayer = mapType === "satellite"
       ? L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", { maxZoom: 21, maxNativeZoom: 20 })
-      : L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
+      : L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", { maxZoom: 21, maxNativeZoom: 20 });
 
     newLayer.addTo(mapInstanceRef.current);
     tileLayerRef.current = newLayer;

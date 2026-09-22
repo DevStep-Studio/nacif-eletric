@@ -1,7 +1,7 @@
 import { Check, AlertCircle } from "lucide-react";
 
 /**
- * SolarStepper.jsx — Indicador de etapas com alinhamento geométrico perfeito e conectores responsivos.
+ * SolarStepper.jsx — Indicador de etapas minimalista, limpo e profissional (sem gradientes).
  */
 export default function SolarStepper({
   steps = [],
@@ -11,31 +11,48 @@ export default function SolarStepper({
   onStepClick,
 }) {
   const currentStep = steps[currentIndex] || steps[0];
+  const progressPct = steps.length > 1 ? (currentIndex / (steps.length - 1)) * 100 : 0;
 
   return (
-    <div className="rounded-2xl border border-border/80 bg-white p-4 shadow-sm">
-      {/* Visualização Mobile: Barra de progresso + Etapa atual */}
-      <div className="block sm:hidden">
-        <div className="flex items-center justify-between text-xs font-black text-foreground mb-2">
-          <span className="text-primary uppercase tracking-wider font-extrabold text-[11px]">
+    <div className="w-full rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+      {/* Mobile: Barra de progresso compacta e minimalista */}
+      <div className="block sm:hidden space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-600">
             Etapa {currentIndex + 1} de {steps.length}
           </span>
-          <span className="text-foreground">{currentStep?.label}</span>
+          <span className="text-xs font-black text-slate-900">
+            {currentStep?.label}
+          </span>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
           <div
-            className="h-full bg-primary transition-all duration-300 rounded-full"
+            className="h-full bg-[#00d8b8] transition-all duration-300 ease-out rounded-full"
             style={{ width: `${((currentIndex + 1) / steps.length) * 100}%` }}
           />
         </div>
       </div>
 
-      {/* Visualização Desktop: Stepper completo com círculos e conectores perfeitos */}
+      {/* Desktop: Stepper linear minimalista */}
       <nav aria-label="Progresso do cadastro" className="hidden sm:block">
         <ol className="relative flex items-center justify-between w-full">
-          {/* Linha de fundo contínua que passa exatamente pelo centro dos círculos */}
+          {/* Linha conectora de fundo (track cinza neutro) */}
           <div
-            className="absolute top-4 left-6 right-6 h-0.5 bg-slate-200 -z-0"
+            className="absolute top-4.5 h-[2px] bg-slate-100 -z-0"
+            style={{
+              left: `${100 / (steps.length * 2)}%`,
+              right: `${100 / (steps.length * 2)}%`,
+            }}
+            aria-hidden="true"
+          />
+
+          {/* Linha de progresso ativa preenchida (sem gradiente) */}
+          <div
+            className="absolute top-4.5 h-[2px] bg-[#00d8b8] transition-all duration-300 ease-out -z-0"
+            style={{
+              left: `${100 / (steps.length * 2)}%`,
+              width: `calc(${progressPct}% * ${(steps.length - 1) / steps.length})`,
+            }}
             aria-hidden="true"
           />
 
@@ -48,27 +65,27 @@ export default function SolarStepper({
             return (
               <li
                 key={step.key}
-                className="relative z-10 flex flex-col items-center flex-1"
+                className="relative z-10 flex flex-1 flex-col items-center"
               >
                 <button
                   type="button"
                   disabled={!isClickable}
                   onClick={() => isClickable && onStepClick?.(index)}
                   aria-current={isCurrent ? "step" : undefined}
-                  className={`group flex flex-col items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-xl p-1 transition ${
-                    isClickable ? "cursor-pointer" : "cursor-not-allowed opacity-80"
+                  className={`group flex flex-col items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8] focus-visible:ring-offset-2 rounded-xl transition-all ${
+                    isClickable ? "cursor-pointer" : "cursor-not-allowed opacity-90"
                   }`}
                 >
-                  {/* Círculo do passo */}
+                  {/* Círculo da etapa */}
                   <span
-                    className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black transition-all duration-200 ${
+                    className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black transition-all duration-200 ${
                       isCurrent
                         ? isError
-                          ? "border-amber-500 bg-amber-500 text-white shadow-md shadow-amber-500/20 scale-105"
-                          : "border-primary bg-primary text-white shadow-md shadow-primary/20 scale-105"
+                          ? "bg-amber-500 text-white ring-4 ring-amber-500/20"
+                          : "bg-[#00d8b8] text-white ring-4 ring-[#00d8b8]/20"
                         : isDone
-                        ? "border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                        : "border-slate-200 bg-white text-slate-400 group-hover:border-slate-300"
+                        ? "bg-[#00d8b8] text-white"
+                        : "border-2 border-slate-200 bg-white text-slate-400 group-hover:border-slate-300 group-hover:text-slate-500"
                     }`}
                   >
                     {isDone ? (
@@ -80,11 +97,11 @@ export default function SolarStepper({
                     )}
                   </span>
 
-                  {/* Rótulo do passo */}
+                  {/* Texto da etapa */}
                   <span
-                    className={`whitespace-nowrap text-center text-[11px] transition-colors ${
+                    className={`whitespace-nowrap text-center text-[11px] sm:text-[12px] transition-colors ${
                       isCurrent
-                        ? "font-black text-primary"
+                        ? "font-black text-slate-900"
                         : isDone
                         ? "font-bold text-slate-700"
                         : "font-semibold text-slate-400 group-hover:text-slate-600"

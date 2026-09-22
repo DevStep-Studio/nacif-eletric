@@ -18,8 +18,8 @@ import {
   normalizeRoofPolygon,
 } from "@/lib/solarDesignerGeometry";
 
-const SATELLITE_TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-const SATELLITE_ATTRIBUTION = "Tiles &copy; Esri";
+const SATELLITE_TILE_URL = "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}";
+const SATELLITE_ATTRIBUTION = "Google Maps Satélite";
 
 const ROOF_LAYER_OPTIONS = {
   allowSelfIntersection: false,

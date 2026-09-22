@@ -100,7 +100,7 @@ export default function StepLocalizacao({ state, onChange }) {
     <div className="space-y-5">
       {/* 1. Mapa Interativo com Satélite */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-black text-foreground">Localização do imóvel no mapa</Label>
+        <Label className="text-xs font-black text-slate-800">Localização do imóvel no mapa</Label>
         <AddressPickerMap
           lat={state.map_center_lat}
           lng={state.map_center_lng}
@@ -109,13 +109,29 @@ export default function StepLocalizacao({ state, onChange }) {
         />
       </div>
 
-      {/* 2. Formulário Estruturado de Endereço com CEP Automático */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3.5">
-        <div className="grid gap-3 sm:grid-cols-[140px_1fr_100px]">
+      {/* 2. Formulário Estruturado de Endereço com CEP Automático (Minimalista & Limpo) */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-[#00d8b8]" />
+            <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+              Endereço da Instalação
+            </span>
+          </div>
+          {loadingCep && (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#00d8b8]" />
+              Consultando CEP...
+            </span>
+          )}
+        </div>
+
+        {/* Linha 1: CEP (3 col), Logradouro (6 col), Número (3 col) */}
+        <div className="grid gap-3.5 sm:grid-cols-12">
           {/* CEP com máscara e auto-busca */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground flex items-center justify-between">
-              CEP {loadingCep && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+          <div className="space-y-1.5 sm:col-span-3">
+            <Label className="text-xs font-bold text-slate-700">
+              CEP
             </Label>
             <div className="relative">
               <Input
@@ -123,83 +139,94 @@ export default function StepLocalizacao({ state, onChange }) {
                 maxLength={9}
                 value={state.zip_code}
                 onChange={(e) => handleCepChange(e.target.value)}
-                className="h-11 font-medium tracking-wide pr-8"
+                className="h-11 rounded-xl border border-slate-200 bg-white pr-9 text-sm font-semibold tracking-wide text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
               />
-              <Search className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground">
-              Endereço / Logradouro <span className="text-primary">*</span>
+          {/* Endereço / Logradouro */}
+          <div className="space-y-1.5 sm:col-span-6">
+            <Label className="text-xs font-bold text-slate-700">
+              Endereço / Logradouro <span className="text-[#00d8b8] font-bold">*</span>
             </Label>
             <Input
-              placeholder="Ex: Av. Paulista, Rua das Flores"
+              placeholder="Ex: Rua Hernani, Av. Paulista"
               value={state.address}
               onChange={(e) => setField("address", e.target.value)}
-              className="h-11 font-medium"
+              className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground">Número</Label>
+          {/* Número */}
+          <div className="space-y-1.5 sm:col-span-3">
+            <Label className="text-xs font-bold text-slate-700">Número</Label>
             <Input
-              placeholder="123"
+              placeholder="Ex: 1046"
               value={state.number}
               onChange={(e) => setField("number", e.target.value)}
-              className="h-11 font-medium"
+              className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
             />
           </div>
         </div>
 
         {cepMessage && (
-          <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
             {cepMessage}
-          </p>
+          </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground">Complemento</Label>
+        {/* Linha 2: Complemento (3 col), Bairro (3 col), Cidade (4 col), UF (2 col) */}
+        <div className="grid gap-3.5 sm:grid-cols-12">
+          {/* Complemento */}
+          <div className="space-y-1.5 sm:col-span-3">
+            <Label className="text-xs font-bold text-slate-700">Complemento</Label>
             <Input
-              placeholder="Ex: Bloco B, Apto 42, Galpão 3"
+              placeholder="Ex: Condomínio cin, Apto 42"
               value={state.complement}
               onChange={(e) => setField("complement", e.target.value)}
-              className="h-11 font-medium"
+              className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground">Bairro</Label>
+
+          {/* Bairro */}
+          <div className="space-y-1.5 sm:col-span-3">
+            <Label className="text-xs font-bold text-slate-700">Bairro</Label>
             <Input
-              placeholder="Ex: Centro, Pinheiros"
+              placeholder="Ex: Vila do Tinguá, Centro"
               value={state.neighborhood}
               onChange={(e) => setField("neighborhood", e.target.value)}
-              className="h-11 font-medium"
+              className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
             />
           </div>
-        </div>
 
-        <div className="grid gap-3 sm:grid-cols-[1fr_110px]">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground">
-              Cidade <span className="text-primary">*</span>
+          {/* Cidade */}
+          <div className="space-y-1.5 sm:col-span-4">
+            <Label className="text-xs font-bold text-slate-700">
+              Cidade <span className="text-[#00d8b8] font-bold">*</span>
             </Label>
             <Input
-              placeholder="Ex: São Paulo, Campinas"
+              placeholder="Ex: Queimados, São Paulo"
               value={state.city}
               onChange={(e) => setField("city", e.target.value)}
-              className="h-11 font-medium"
+              className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground">
-              Estado (UF) <span className="text-primary">*</span>
+
+          {/* Estado (UF) */}
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label className="text-xs font-bold text-slate-700">
+              Estado (UF) <span className="text-[#00d8b8] font-bold">*</span>
             </Label>
             <Select value={state.state} onValueChange={(v) => setField("state", v)}>
-              <SelectTrigger className="h-11 font-medium"><SelectValue placeholder="UF" /></SelectTrigger>
+              <SelectTrigger className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none">
+                <SelectValue placeholder="UF" />
+              </SelectTrigger>
               <SelectContent>
                 {BR_STATES.map((uf) => (
-                  <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                  <SelectItem key={uf} value={uf} className="font-semibold">
+                    {uf}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

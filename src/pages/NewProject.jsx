@@ -50,8 +50,8 @@ export default function NewProject() {
       />
 
       {/* Seletor Superior de Disciplina: Instalações Elétricas vs Projeto Solar */}
-      <div className="mx-auto w-full max-w-2xl rounded-2xl bg-white p-3 border border-slate-200 shadow-sm">
-        <div className="grid grid-cols-2 gap-2.5">
+      <div className="mx-auto w-full max-w-2xl rounded-2xl bg-white p-2.5 border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+        <div className="grid grid-cols-2 gap-2">
           {[
             { value: "Instalações Elétricas", label: "Instalações elétricas", icon: Zap },
             { value: "Solar", label: "Projeto solar", icon: Sun },
@@ -63,20 +63,20 @@ export default function NewProject() {
                 key={item.value}
                 type="button"
                 onClick={() => setForm({ ...form, project_type: item.value })}
-                className={`flex h-14 items-center justify-center gap-3 rounded-xl border-2 text-center transition-all ${
+                className={`flex h-13 items-center justify-center gap-2.5 rounded-xl border-2 text-center transition-all ${
                   active
-                    ? "border-primary bg-primary/[0.04] text-primary font-black shadow-sm ring-1 ring-primary/20"
-                    : "border-slate-200 bg-white text-slate-600 font-bold hover:border-slate-300 hover:bg-slate-50/60"
+                    ? "border-[#00d8b8] bg-[#00d8b8]/[0.06] text-slate-900 font-black"
+                    : "border-transparent bg-slate-50/70 text-slate-600 font-bold hover:border-slate-200 hover:bg-slate-100/60"
                 }`}
               >
                 <span
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
-                    active ? "bg-primary text-white" : "bg-slate-100 text-slate-500"
+                  className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
+                    active ? "bg-[#00d8b8] text-white" : "bg-slate-200/70 text-slate-500"
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5" />
                 </span>
-                <span className="text-sm">{item.label}</span>
+                <span className="text-xs sm:text-sm">{item.label}</span>
               </button>
             );
           })}
