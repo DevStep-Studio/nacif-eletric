@@ -34,7 +34,17 @@ import {
 } from "@/lib/solarDesignerGeometry";
 import { estimateAnnualGenerationKwh, estimateAnnualSavingsBrl, estimateSimplePaybackYears } from "@/lib/solarSizing";
 import { geocodeAddress, suggestRoofContour } from "@/lib/solarAiServices";
-import { printExecutiveSolarReport } from "@/lib/solarReportGenerator";
+import {
+  downloadPdfBlob,
+  generateBillOfMaterialsReport,
+  generateCommercialProposalReport,
+  generateElectricalDiagramReport,
+  generateExecutiveSolarPdf,
+  generateGenerationSimulationReport,
+  generateSitePlanReport,
+  generateTechnicalMemorialReport,
+  printExecutiveSolarReport,
+} from "@/lib/solarReportGenerator";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -560,6 +570,43 @@ export default function SolarProject() {
     }
   };
 
+  const handleDownloadDirect = (reportType = "executive") => {
+    try {
+      if (reportType === "executive") {
+        const doc = generateExecutiveSolarPdf(reportProject, config, visualSizing);
+        downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
+      } else if (reportType === "site_plan") {
+        const doc = generateSitePlanReport(reportProject, config, visualSizing);
+        downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
+      } else if (reportType === "electrical") {
+        const doc = generateElectricalDiagramReport(reportProject, config, visualSizing);
+        downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
+      } else if (reportType === "memorial") {
+        const doc = generateTechnicalMemorialReport(reportProject, config, visualSizing);
+        downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
+      } else if (reportType === "bom") {
+        const doc = generateBillOfMaterialsReport(reportProject, config, visualSizing);
+        downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
+      } else if (reportType === "simulation") {
+        const doc = generateGenerationSimulationReport(reportProject, config, visualSizing);
+        downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
+      } else if (reportType === "proposal") {
+        const doc = generateCommercialProposalReport(reportProject, config, visualSizing);
+        downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
+      }
+      toast({
+        title: "Download concluído",
+        description: "O relatório PDF foi gerado e baixado com sucesso.",
+      });
+    } catch (err) {
+      toast({
+        title: "Erro ao gerar PDF",
+        description: err?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const saveConfig = async () => {
     if (!projectId) return;
     setSaving(true);
@@ -673,15 +720,74 @@ export default function SolarProject() {
             <Printer className="mr-1.5 h-3.5 w-3.5 text-primary" /> Imprimir
           </Button>
 
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setReportsOpen(true)}
-            className="h-9 rounded-xl border-white/10 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
-          >
-            <Download className="mr-1.5 h-3.5 w-3.5 text-primary" /> Relatórios PDF
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-9 rounded-xl border-white/10 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5 text-primary" /> Relatórios PDF <ChevronDown className="ml-1 h-3 w-3 text-white/50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 bg-slate-900 border-white/10 text-white p-1.5 shadow-xl">
+              <DropdownMenuLabel className="text-[10px] font-black uppercase text-white/50 px-2 py-1">
+                Download Direto em PDF
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => handleDownloadDirect("executive")}
+                className="text-xs font-bold text-primary hover:bg-primary/10 cursor-pointer rounded-lg px-2.5 py-2"
+              >
+                <Download className="mr-2 h-4 w-4 text-primary" /> Relatório Executivo Completo
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-white/10" />
+              <DropdownMenuItem
+                onClick={() => handleDownloadDirect("site_plan")}
+                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
+              >
+                Planta de Implantação (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleDownloadDirect("electrical")}
+                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
+              >
+                Diagrama Elétrico & Strings (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleDownloadDirect("memorial")}
+                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
+              >
+                Memorial Descritivo (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleDownloadDirect("bom")}
+                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
+              >
+                Lista de Materiais - BOM (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleDownloadDirect("simulation")}
+                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
+              >
+                Simulação de Geração (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleDownloadDirect("proposal")}
+                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
+              >
+                Proposta Comercial (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-white/10" />
+              <DropdownMenuItem
+                onClick={() => setReportsOpen(true)}
+                className="text-xs font-bold text-white hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5 flex items-center justify-between"
+              >
+                <span>Central de Relatórios...</span>
+                <Layers className="h-3.5 w-3.5 text-primary" />
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Button
             type="button"

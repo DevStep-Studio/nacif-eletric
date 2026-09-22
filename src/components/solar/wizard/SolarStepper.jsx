@@ -1,7 +1,13 @@
 import { Check, AlertCircle } from "lucide-react";
 
 /**
- * SolarStepper.jsx — Indicador de etapas minimalista, limpo e profissional (sem gradientes).
+ * SolarStepper.jsx — Indicador de etapas minimalista, limpo e perfeitamente alinhado.
+ *
+ * Características:
+ * - Círculos e conectores perfeitamente alinhados e simétricos (sem desvios).
+ * - Identidade visual moderna: branco, cinza claro e verde-turquesa (#00d8b8).
+ * - Sem gradientes ou transparências decorativas.
+ * - Versão mobile responsiva e compacta com indicador e barra de progresso.
  */
 export default function SolarStepper({
   steps = [],
@@ -11,18 +17,22 @@ export default function SolarStepper({
   onStepClick,
 }) {
   const currentStep = steps[currentIndex] || steps[0];
-  const progressPct = steps.length > 1 ? (currentIndex / (steps.length - 1)) * 100 : 0;
 
   return (
-    <div className="w-full rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-      {/* Mobile: Barra de progresso compacta e minimalista */}
+    <div className="w-full rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
+      {/* Mobile: Barra de progresso compacta e elegante */}
       <div className="block sm:hidden space-y-2">
         <div className="flex items-center justify-between">
-          <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-600">
-            Etapa {currentIndex + 1} de {steps.length}
-          </span>
-          <span className="text-xs font-black text-slate-900">
-            {currentStep?.label}
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center justify-center rounded-md bg-[#00d8b8]/15 px-2 py-0.5 text-[10px] font-black tracking-wide text-slate-900">
+              Etapa {currentIndex + 1} de {steps.length}
+            </span>
+            <span className="text-xs font-black text-slate-900">
+              {currentStep?.label}
+            </span>
+          </div>
+          <span className="text-[11px] font-bold text-slate-500">
+            {Math.round(((currentIndex + 1) / steps.length) * 100)}%
           </span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -33,29 +43,9 @@ export default function SolarStepper({
         </div>
       </div>
 
-      {/* Desktop: Stepper linear minimalista */}
+      {/* Desktop: Stepper linear perfeitamente simétrico */}
       <nav aria-label="Progresso do cadastro" className="hidden sm:block">
-        <ol className="relative flex items-center justify-between w-full">
-          {/* Linha conectora de fundo (track cinza neutro) */}
-          <div
-            className="absolute top-4.5 h-[2px] bg-slate-100 -z-0"
-            style={{
-              left: `${100 / (steps.length * 2)}%`,
-              right: `${100 / (steps.length * 2)}%`,
-            }}
-            aria-hidden="true"
-          />
-
-          {/* Linha de progresso ativa preenchida (sem gradiente) */}
-          <div
-            className="absolute top-4.5 h-[2px] bg-[#00d8b8] transition-all duration-300 ease-out -z-0"
-            style={{
-              left: `${100 / (steps.length * 2)}%`,
-              width: `calc(${progressPct}% * ${(steps.length - 1) / steps.length})`,
-            }}
-            aria-hidden="true"
-          />
-
+        <ol className="flex items-center justify-between w-full">
           {steps.map((step, index) => {
             const isCurrent = index === currentIndex;
             const isDone = index < currentIndex;
@@ -63,30 +53,45 @@ export default function SolarStepper({
             const isError = isCurrent && hasErrors;
 
             return (
-              <li
-                key={step.key}
-                className="relative z-10 flex flex-1 flex-col items-center"
-              >
-                <button
-                  type="button"
-                  disabled={!isClickable}
-                  onClick={() => isClickable && onStepClick?.(index)}
-                  aria-current={isCurrent ? "step" : undefined}
-                  className={`group flex flex-col items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8] focus-visible:ring-offset-2 rounded-xl transition-all ${
-                    isClickable ? "cursor-pointer" : "cursor-not-allowed opacity-90"
-                  }`}
-                >
-                  {/* Círculo da etapa */}
-                  <span
-                    className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black transition-all duration-200 ${
+              <li key={step.key} className="flex-1 flex flex-col items-center relative">
+                {/* Linhas conectoras horizontais contínuas e simétricas */}
+                <div className="w-full flex items-center justify-center relative">
+                  {/* Conector esquerdo */}
+                  {index > 0 && (
+                    <div
+                      className={`absolute left-0 right-1/2 top-1/2 -translate-y-1/2 h-[2px] -mr-4.5 ${
+                        index <= currentIndex ? "bg-[#00d8b8]" : "bg-slate-200"
+                      } transition-colors duration-300`}
+                      aria-hidden="true"
+                    />
+                  )}
+
+                  {/* Conector direito */}
+                  {index < steps.length - 1 && (
+                    <div
+                      className={`absolute left-1/2 right-0 top-1/2 -translate-y-1/2 h-[2px] -ml-4.5 ${
+                        index < currentIndex ? "bg-[#00d8b8]" : "bg-slate-200"
+                      } transition-colors duration-300`}
+                      aria-hidden="true"
+                    />
+                  )}
+
+                  {/* Círculo indicador */}
+                  <button
+                    type="button"
+                    disabled={!isClickable}
+                    onClick={() => isClickable && onStepClick?.(index)}
+                    aria-current={isCurrent ? "step" : undefined}
+                    aria-label={`Etapa ${index + 1}: ${step.label}`}
+                    className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-full text-xs font-black transition-all duration-200 ${
                       isCurrent
                         ? isError
-                          ? "bg-amber-500 text-white ring-4 ring-amber-500/20"
-                          : "bg-[#00d8b8] text-white ring-4 ring-[#00d8b8]/20"
+                          ? "bg-amber-500 text-white ring-4 ring-amber-500/20 shadow-sm"
+                          : "bg-[#00d8b8] text-slate-950 ring-4 ring-[#00d8b8]/25 shadow-sm"
                         : isDone
-                        ? "bg-[#00d8b8] text-white"
-                        : "border-2 border-slate-200 bg-white text-slate-400 group-hover:border-slate-300 group-hover:text-slate-500"
-                    }`}
+                        ? "bg-[#00d8b8] text-slate-950 font-black hover:opacity-90"
+                        : "border border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                    } ${isClickable ? "cursor-pointer" : "cursor-default"}`}
                   >
                     {isDone ? (
                       <Check className="h-4 w-4 stroke-[3]" />
@@ -95,20 +100,23 @@ export default function SolarStepper({
                     ) : (
                       index + 1
                     )}
-                  </span>
+                  </button>
+                </div>
 
-                  {/* Texto da etapa */}
-                  <span
-                    className={`whitespace-nowrap text-center text-[11px] sm:text-[12px] transition-colors ${
-                      isCurrent
-                        ? "font-black text-slate-900"
-                        : isDone
-                        ? "font-bold text-slate-700"
-                        : "font-semibold text-slate-400 group-hover:text-slate-600"
-                    }`}
-                  >
-                    {step.label}
-                  </span>
+                {/* Título da etapa centralizado */}
+                <button
+                  type="button"
+                  disabled={!isClickable}
+                  onClick={() => isClickable && onStepClick?.(index)}
+                  className={`mt-2 text-center text-xs transition-colors block select-none ${
+                    isCurrent
+                      ? "font-black text-slate-900"
+                      : isDone
+                      ? "font-bold text-slate-700 hover:text-slate-900"
+                      : "font-semibold text-slate-400 hover:text-slate-600"
+                  } ${isClickable ? "cursor-pointer" : "cursor-default"}`}
+                >
+                  {step.label}
                 </button>
               </li>
             );

@@ -5,7 +5,6 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
-  Flame,
   Layers,
   Loader2,
   Printer,
@@ -19,6 +18,7 @@ import {
   generateBillOfMaterialsReport,
   generateCommercialProposalReport,
   generateElectricalDiagramReport,
+  generateExecutiveSolarPdf,
   generateGenerationSimulationReport,
   generateSitePlanReport,
   generateTechnicalMemorialReport,
@@ -26,6 +26,15 @@ import {
 } from "@/lib/solarReportGenerator";
 
 const REPORT_CARDS = [
+  {
+    id: "executive",
+    title: "Relatório Executivo Completo",
+    desc: "Documento consolidado de 2 páginas com capa, KPIs, layout, strings, BOM e retorno financeiro.",
+    icon: FileText,
+    fn: generateExecutiveSolarPdf,
+    filename: "00_Relatorio_Executivo_Completo_Solar.pdf",
+    highlight: true,
+  },
   {
     id: "site_plan",
     title: "Planta de Implantação",
@@ -126,7 +135,7 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
       }
       toast({
         title: "Todos os relatórios gerados",
-        description: "Os 6 relatórios em PDF foram baixados.",
+        description: "Os relatórios em PDF foram baixados.",
       });
     } catch (error) {
       toast({
@@ -170,14 +179,25 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
             return (
               <div
                 key={report.id}
-                className="flex flex-col justify-between rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-primary/50"
+                className={`flex flex-col justify-between rounded-xl border p-4 transition ${
+                  report.highlight
+                    ? "border-primary/60 bg-primary/[0.06] shadow-sm sm:col-span-2"
+                    : "border-white/10 bg-slate-950/60 hover:border-primary/50"
+                }`}
               >
                 <div className="flex items-start gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <Icon className="h-4 w-4" />
                   </span>
                   <div>
-                    <p className="text-sm font-black text-white">{report.title}</p>
+                    <p className="text-sm font-black text-white flex items-center gap-2">
+                      {report.title}
+                      {report.highlight && (
+                        <span className="rounded-full bg-primary/20 text-primary px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                          Recomendado
+                        </span>
+                      )}
+                    </p>
                     <p className="mt-1 text-xs text-white/60 leading-relaxed">{report.desc}</p>
                   </div>
                 </div>
@@ -233,7 +253,7 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
               ) : (
                 <Download className="mr-1.5 h-4 w-4" />
               )}
-              Baixar Todos (6 PDFs)
+              Baixar Todos os PDFs
             </Button>
           </div>
         </DialogFooter>

@@ -17,8 +17,8 @@ import {
 import { normalizeRoofPolygon } from "@/lib/solarDesignerGeometry";
 import SolarStepper from "./SolarStepper";
 import StepDadosProjeto from "./StepDadosProjeto";
-import StepConsumo from "./StepConsumo";
 import StepLocalizacao from "./StepLocalizacao";
+import StepConsumo from "./StepConsumo";
 import StepTelhado from "./StepTelhado";
 import StepEquipamentos from "./StepEquipamentos";
 import StepProjeto from "./StepProjeto";
@@ -91,7 +91,7 @@ export default function SolarProjectWizard() {
       return;
     }
     setAttemptedAdvance(false);
-    if (stepKey === "localizacao") seedRoofIfNeeded();
+    if (stepKey === "consumo" || stepKey === "localizacao") seedRoofIfNeeded();
     const nextIndex = Math.min(WIZARD_STEPS.length - 1, stepIndex + 1);
     setStepIndex(nextIndex);
     setMaxVisited((current) => Math.max(current, nextIndex));
@@ -213,7 +213,11 @@ export default function SolarProjectWizard() {
   };
 
   const nextButtonLabel = stepIndex === 0
+    ? "Avançar para localização →"
+    : stepIndex === 1
     ? "Avançar para consumo →"
+    : stepIndex === 2
+    ? "Avançar para telhado →"
     : stepIndex === WIZARD_STEPS.length - 2
     ? "Revisar Projeto →"
     : "Avançar →";
@@ -229,11 +233,11 @@ export default function SolarProjectWizard() {
         onStepClick={jumpTo}
       />
 
-      {/* Conteúdo da Etapa Atual */}
+      {/* Conteúdo da Etapa Atual (Ordem: Dados -> Localização -> Consumo -> Telhado -> Equipamentos -> Projeto) */}
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} />}
-        {stepKey === "consumo" && <StepConsumo state={state} onChange={updateState} />}
         {stepKey === "localizacao" && <StepLocalizacao state={state} onChange={updateState} />}
+        {stepKey === "consumo" && <StepConsumo state={state} onChange={updateState} />}
         {stepKey === "telhado" && <StepTelhado state={state} onChange={updateState} />}
         {stepKey === "equipamentos" && <StepEquipamentos state={state} onChange={updateState} />}
         {stepKey === "projeto" && (

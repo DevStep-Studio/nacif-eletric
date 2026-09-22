@@ -117,6 +117,7 @@ const AuthenticatedApp = () => {
           <Route path="/" element={fullAccess ? <Home /> : <Navigate to="/planta-ia" replace />} />
           <Route path="/projects" element={requireFullAccess(<Projects />)} />
           <Route path="/projects/new" element={requireFullAccess(<NewProject />)} />
+          <Route path="/solar-project-wizard" element={requireFullAccess(<NewProject />)} />
           <Route path="/projects/:projectId" element={requireFullAccess(<ProjectDetail />)} />
           <Route path="/calculator" element={requireFullAccess(<Calculator />)} />
           <Route path="/ai-assistant" element={requireFullAccess(<AIAssistant />)} />

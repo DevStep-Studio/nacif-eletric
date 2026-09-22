@@ -15,8 +15,8 @@ import {
 
 export const WIZARD_STEPS = [
   { key: "dados", label: "Dados do projeto" },
-  { key: "consumo", label: "Consumo" },
   { key: "localizacao", label: "Localização" },
+  { key: "consumo", label: "Consumo" },
   { key: "telhado", label: "Telhado" },
   { key: "equipamentos", label: "Equipamentos" },
   { key: "projeto", label: "Projeto" },
@@ -41,15 +41,7 @@ export function defaultWizardState() {
     bill_reading_message: "",
     bill_history_12_months: [],
 
-    // 2. Consumo
-    monthly_consumption_kwh: "",
-    tariff_brl_kwh: "",
-    contracted_demand_kw: "",
-    tariff_class: "B1 - Residencial",
-    distributor: "",
-    consumer_unit: "",
-
-    // 3. Localização
+    // 2. Localização
     address: "",
     number: "",
     complement: "",
@@ -61,6 +53,22 @@ export function defaultWizardState() {
     map_center_lng: DEFAULT_SOLAR_MAP_CENTER.lng,
     map_zoom: DEFAULT_SOLAR_MAP_ZOOM,
     location_confirmed: false,
+    energy_lookup_status: "idle",
+    energy_lookup_message: "",
+    energy_source_url: "",
+    distributor_candidates: [],
+    distributor_agent: "",
+    distributor_auto_filled: false,
+    tariff_auto_filled: false,
+    tariff_reference: null,
+
+    // 3. Consumo
+    monthly_consumption_kwh: "",
+    tariff_brl_kwh: "",
+    contracted_demand_kw: "",
+    tariff_class: "B1 - Residencial",
+    distributor: "",
+    consumer_unit: "",
 
     // 4. Telhado
     roof_polygon: [],
