@@ -19,7 +19,6 @@ import SolarStepper from "./SolarStepper";
 import StepDadosProjeto from "./StepDadosProjeto";
 import StepLocalizacao from "./StepLocalizacao";
 import StepConsumo from "./StepConsumo";
-import StepTelhado from "./StepTelhado";
 import StepEquipamentos from "./StepEquipamentos";
 import StepProjeto from "./StepProjeto";
 import ResultsBar from "./ResultsBar";
@@ -45,7 +44,6 @@ export default function SolarProjectWizard() {
   const [attemptedAdvance, setAttemptedAdvance] = useState(false);
   const [creating, setCreating] = useState(false);
   const [savedDraftNotice, setSavedDraftNotice] = useState(false);
-  const roofSeededRef = useRef(normalizeRoofPolygon(state.roof_polygon).length >= 3);
 
   // Auto-save do rascunho com debounce
   useEffect(() => {
@@ -68,30 +66,12 @@ export default function SolarProjectWizard() {
 
   const updateState = (patch) => setState((current) => ({ ...current, ...patch }));
 
-  const seedRoofIfNeeded = () => {
-    if (roofSeededRef.current) return;
-    const preliminary = getPreliminarySizing(state);
-    const moduleArea = state.module_width_m * state.module_height_m;
-    const approxArea = state.entry_method === "area"
-      ? Math.max(4, Number(state.available_area_m2) || 0)
-      : (Math.max(1, preliminary.panelCount) * moduleArea) / 0.55;
-    const { widthM, heightM } = estimateRoofRectangleFromArea(approxArea);
-    roofSeededRef.current = true;
-    updateState({
-      roof_width_m: widthM,
-      roof_height_m: heightM,
-      roof_area_m2: Math.round(widthM * heightM * 10) / 10,
-      requested_panel_count: preliminary.panelCount || state.requested_panel_count,
-    });
-  };
-
   const goNext = () => {
     if (stepErrors.length > 0) {
       setAttemptedAdvance(true);
       return;
     }
     setAttemptedAdvance(false);
-    if (stepKey === "consumo" || stepKey === "localizacao") seedRoofIfNeeded();
     const nextIndex = Math.min(WIZARD_STEPS.length - 1, stepIndex + 1);
     setStepIndex(nextIndex);
     setMaxVisited((current) => Math.max(current, nextIndex));
@@ -148,8 +128,8 @@ export default function SolarProjectWizard() {
         map_center_lat: state.map_center_lat,
         map_center_lng: state.map_center_lng,
         map_zoom: state.map_zoom,
-        roof_polygon: state.roof_polygon,
-        roof_defined: state.roof_defined,
+        roof_polygon: state.roof_polygon || [],
+        roof_defined: state.roof_defined || false,
         module_orientation: state.module_orientation,
         obstacles: state.obstacles || [],
         layout_strategy: state.layout_strategy || "max_generation",
@@ -203,7 +183,7 @@ export default function SolarProjectWizard() {
 
       const project = await backend.entities.Project.create(payload);
       try { window.localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
-      toast({ title: "Projeto solar criado com sucesso!", description: "Abrindo o layout do telhado." });
+      toast({ title: "Projeto solar criado com sucesso!", description: "Abrindo o projeto solar." });
       navigate(`/solar-project?project=${project.id}`);
     } catch (error) {
       toast({ title: "Não foi possível criar o projeto", description: error?.message || "Tente novamente.", variant: "destructive" });
@@ -217,7 +197,7 @@ export default function SolarProjectWizard() {
     : stepIndex === 1
     ? "Avançar para consumo →"
     : stepIndex === 2
-    ? "Avançar para telhado →"
+    ? "Avançar para equipamentos →"
     : stepIndex === WIZARD_STEPS.length - 2
     ? "Revisar Projeto →"
     : "Avançar →";
@@ -233,19 +213,18 @@ export default function SolarProjectWizard() {
         onStepClick={jumpTo}
       />
 
-      {/* Conteúdo da Etapa Atual (Ordem: Dados -> Localização -> Consumo -> Telhado -> Equipamentos -> Projeto) */}
+      {/* Conteúdo da Etapa Atual (Ordem: Dados -> Localização -> Consumo -> Equipamentos -> Projeto) */}
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} />}
         {stepKey === "localizacao" && <StepLocalizacao state={state} onChange={updateState} />}
         {stepKey === "consumo" && <StepConsumo state={state} onChange={updateState} />}
-        {stepKey === "telhado" && <StepTelhado state={state} onChange={updateState} />}
         {stepKey === "equipamentos" && <StepEquipamentos state={state} onChange={updateState} />}
         {stepKey === "projeto" && (
           <StepProjeto state={state} onChange={updateState} onCreate={handleCreate} creating={creating} />
         )}
       </div>
 
-      {/* Barra de Resultados Integrados (exibida nas etapas 1 a 5) */}
+      {/* Barra de Resultados Integrados (exibida nas etapas 1 a 4) */}
       {stepKey !== "projeto" && (
         <ResultsBar results={results} investmentIsEstimated={results.investmentIsEstimated} />
       )}

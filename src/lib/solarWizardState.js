@@ -17,7 +17,6 @@ export const WIZARD_STEPS = [
   { key: "dados", label: "Dados do projeto" },
   { key: "localizacao", label: "Localização" },
   { key: "consumo", label: "Consumo" },
-  { key: "telhado", label: "Telhado" },
   { key: "equipamentos", label: "Equipamentos" },
   { key: "projeto", label: "Projeto" },
 ];
@@ -70,7 +69,7 @@ export function defaultWizardState() {
     distributor: "",
     consumer_unit: "",
 
-    // 4. Telhado
+    // 4. Telhado (mantido no estado como opcional/compatibilidade)
     roof_polygon: [],
     roof_defined: false,
     roof_width_m: 9,
@@ -154,12 +153,13 @@ export function getRoofPhysicalLayout(state) {
 }
 
 export function getEffectivePanelCount(state) {
-  const hasRoof = normalizeRoofPolygon(state.roof_polygon).length >= 3 && state.roof_defined !== false;
+  const hasRoof = normalizeRoofPolygon(state.roof_polygon).length >= 3 && state.roof_defined === true;
 
   if (!hasRoof) {
     const preliminary = getPreliminarySizing(state);
-    const panelCount = Math.max(0, Math.round(preliminary.panelCount || 0));
-    return { panelCount, physicalCapacity: panelCount, requested: panelCount, hasRoof, fits: true };
+    const req = num(state.requested_panel_count, 0);
+    const panelCount = Math.max(0, Math.round(req || preliminary.panelCount || 0));
+    return { panelCount, physicalCapacity: panelCount, requested: panelCount, hasRoof: false, fits: true };
   }
 
   const layout = getRoofPhysicalLayout(state);
@@ -168,7 +168,7 @@ export function getEffectivePanelCount(state) {
     panelCount: Math.min(requested, layout.panelCount),
     physicalCapacity: layout.panelCount,
     requested,
-    hasRoof,
+    hasRoof: true,
     fits: requested <= layout.panelCount,
   };
 }
@@ -219,12 +219,6 @@ export function getStepErrors(stepKey, state) {
     if (!state.address?.trim()) errors.push("Informe o endereço.");
     if (!state.city?.trim()) errors.push("Informe a cidade.");
     if (!state.state?.trim()) errors.push("Informe o estado (UF).");
-  }
-
-  if (stepKey === "telhado") {
-    if (!(normalizeRoofPolygon(state.roof_polygon).length >= 3 && state.roof_defined !== false)) {
-      errors.push("Desenhe o contorno do telhado no mapa.");
-    }
   }
 
   if (stepKey === "equipamentos") {

@@ -13,16 +13,18 @@ import {
 
 console.log("⚡ Executando testes automatizados: Stepper, Reordenação de Etapas, Auto-detecção de Distribuidora e Relatórios PDF...");
 
-// 1. Validar Nova Ordem das Etapas
+// 1. Validar Nova Ordem das Etapas (5 Etapas: Dados, Localização, Consumo, Equipamentos, Projeto)
 console.log("1. Validando a ordem exata das etapas do Wizard...");
-const expectedKeys = ["dados", "localizacao", "consumo", "telhado", "equipamentos", "projeto"];
-assert.equal(WIZARD_STEPS.length, 6, "O wizard deve ter exatamente 6 etapas.");
+const expectedKeys = ["dados", "localizacao", "consumo", "equipamentos", "projeto"];
+assert.equal(WIZARD_STEPS.length, 5, "O wizard deve ter exatamente 5 etapas.");
 expectedKeys.forEach((key, idx) => {
   assert.equal(WIZARD_STEPS[idx].key, key, `Etapa ${idx + 1} deve ser '${key}' mas é '${WIZARD_STEPS[idx].key}'`);
 });
 assert.equal(WIZARD_STEPS[1].key, "localizacao", "Etapa 2 DEVE ser Localização.");
 assert.equal(WIZARD_STEPS[2].key, "consumo", "Etapa 3 DEVE ser Consumo.");
-console.log("   ✓ Ordem das etapas validada com sucesso: Dados -> Localização -> Consumo -> Telhado -> Equipamentos -> Projeto.");
+assert.equal(WIZARD_STEPS[3].key, "equipamentos", "Etapa 4 DEVE ser Equipamentos.");
+assert.equal(WIZARD_STEPS[4].key, "projeto", "Etapa 5 DEVE ser Projeto.");
+console.log("   ✓ Ordem das etapas validada com sucesso: Dados -> Localização -> Consumo -> Equipamentos -> Projeto.");
 
 // 2. Validar Auto-detecção de Concessionária e Tarifa por Localidade
 console.log("2. Validando auto-detecção de distribuidoras e tarifas...");

@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, BatteryCharging, Plus, ShieldCheck, Trash2, Zap } from "lucide-react";
 import { getBatteryAutonomyHours, getEffectivePanelCount, getRoofPhysicalLayout } from "@/lib/solarWizardState";
+import { normalizeRoofPolygon } from "@/lib/solarDesignerGeometry";
 import PtBrNumericInput from "./PtBrNumericInput";
 
 const BATTERY_TECHNOLOGIES = ["Íon-lítio", "Chumbo-ácido (AGM/GEL)", "Sódio-íon"];
@@ -12,7 +13,8 @@ export default function StepEquipamentos({ state, onChange }) {
   const setField = (field, value) => onChange({ [field]: value });
   const setBatteryField = (field, value) => onChange({ battery_config: { ...state.battery_config, [field]: value } });
 
-  const physicalCapacity = getRoofPhysicalLayout(state).panelCount;
+  const hasDrawnRoof = normalizeRoofPolygon(state.roof_polygon).length >= 3 && state.roof_defined === true;
+  const physicalCapacity = hasDrawnRoof ? getRoofPhysicalLayout(state).panelCount : null;
   const { fits, physicalCapacity: capacity } = getEffectivePanelCount(state);
   const autonomyHours = getBatteryAutonomyHours(state.battery_config);
   const totalPriorityLoadW = (state.battery_config?.priority_loads || []).reduce((sum, l) => sum + Number(l.power_w || 0), 0);
@@ -72,9 +74,11 @@ export default function StepEquipamentos({ state, onChange }) {
               suffix="unidades"
               min={1}
             />
-            <p className="text-[11px] font-semibold text-muted-foreground">
-              Capacidade física do telhado: {physicalCapacity} módulos.
-            </p>
+            {hasDrawnRoof && physicalCapacity !== null && (
+              <p className="text-[11px] font-semibold text-muted-foreground">
+                Capacidade física do telhado: {physicalCapacity} módulos.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -156,7 +160,7 @@ export default function StepEquipamentos({ state, onChange }) {
           </div>
         </div>
 
-        {!fits && (
+        {hasDrawnRoof && !fits && (
           <p className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
             A quantidade solicitada ({state.requested_panel_count} módulos) excede a capacidade geométrica do telhado desenhado ({capacity} módulos). O projeto adotará {capacity} módulos até que a área seja ampliada.
