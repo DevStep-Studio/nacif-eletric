@@ -22,12 +22,17 @@ export const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
  * Opção 2 do cadastro: potência desejada -> quantidade de módulos.
  * quantidade = ceil(potência desejada / potência do módulo), recalculando a potência efetiva instalada.
  */
-export function sizeFromDesiredPower(desiredKwp, moduleWp) {
+export function sizeFromDesiredPower(desiredKwp, moduleWp, {
+  moduleWidthM = SOLAR_MODULE_WIDTH_M,
+  moduleHeightM = SOLAR_MODULE_HEIGHT_M,
+} = {}) {
   const wp = Math.max(1, asNumber(moduleWp, 550));
   const desiredW = Math.max(0, asNumber(desiredKwp, 0)) * 1000;
   const panelCount = wp > 0 ? Math.ceil(desiredW / wp) : 0;
   const installedKwp = (panelCount * wp) / 1000;
-  return { panelCount, installedKwp };
+  const moduleArea = Math.max(0.1, asNumber(moduleWidthM, SOLAR_MODULE_WIDTH_M) * asNumber(moduleHeightM, SOLAR_MODULE_HEIGHT_M));
+  const areaM2 = panelCount * moduleArea * 1.35; // estimativa de área com afastamentos
+  return { panelCount, installedKwp, areaM2, moduleArea };
 }
 
 /**
@@ -50,7 +55,7 @@ export function sizeFromAvailableArea(areaM2, {
   const panelCount = Math.max(0, Math.floor(effectiveArea / moduleArea));
   const installedKwp = (panelCount * Math.max(1, asNumber(moduleWp, 550))) / 1000;
 
-  return { panelCount, installedKwp, effectiveArea, moduleArea };
+  return { panelCount, installedKwp, areaM2: totalArea, effectiveArea, moduleArea };
 }
 
 /**

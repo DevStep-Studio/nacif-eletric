@@ -1851,10 +1851,10 @@ export default function UnifilarDiagram() {
       {metrics && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           {[
-            { l: "Potência Total",  v: `${(metrics.totalPower / 1000).toFixed(2)} kW` },
-            { l: "Corrente Geral",  v: `${metrics.generalCurrent} A` },
-            { l: "Disjuntor Geral", v: `${metrics.generalBreaker} A` },
-            { l: "Desequilíbrio",   v: `${metrics.imbalance_pct}%`, alert: metrics.imbalance_pct > 10 },
+            { l: "Potência Total",  v: `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW` },
+            { l: "Corrente Geral",  v: `${metrics?.generalCurrent || 0} A` },
+            { l: "Disjuntor Geral", v: `${metrics?.generalBreaker || 40} A` },
+            { l: "Desequilíbrio",   v: `${metrics?.imbalance_pct || 0}%`, alert: Number(metrics?.imbalance_pct || 0) > 10 },
           ].map(k => (
             <div key={k.l} className={`p-3 rounded-xl bg-card border ${k.alert ? "border-destructive/40" : "border-border/40"}`}>
               <p className="text-muted-foreground">{k.l}</p>

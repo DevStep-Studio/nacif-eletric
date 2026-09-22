@@ -140,14 +140,14 @@ export default function StepTelhado({ state, onChange }) {
           <>
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
             <span className="leading-relaxed">
-              Área de {state.roof_area_m2.toFixed(1).replace(".", ",")} m² comporta com folga os {requested} módulos solicitados (capacidade física máxima: {physicalCapacity} módulos).
+              Área de {Number(state.roof_area_m2 || 0).toFixed(1).replace(".", ",")} m² comporta com folga os {requested} módulos solicitados (capacidade física máxima: {physicalCapacity} módulos).
             </span>
           </>
         ) : (
           <>
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <span className="leading-relaxed">
-              A área desenhada de {state.roof_area_m2.toFixed(1).replace(".", ",")} m² comporta no máximo {physicalCapacity} dos {requested} módulos solicitados. Amplie o contorno ou ajuste a quantidade na etapa Equipamentos.
+              A área desenhada de {Number(state.roof_area_m2 || 0).toFixed(1).replace(".", ",")} m² comporta no máximo {physicalCapacity} dos {requested} módulos solicitados. Amplie o contorno ou ajuste a quantidade na etapa Equipamentos.
             </span>
           </>
         )}

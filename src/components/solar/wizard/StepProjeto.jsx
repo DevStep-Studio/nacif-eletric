@@ -60,7 +60,7 @@ export default function StepProjeto({ state, onChange, onCreate, creating }) {
           />
           <SummaryRow
             label="Arranjo fotovoltaico"
-            value={`${results.panelCount} módulos de ${state.module_wp} Wp (${results.installedKwp.toFixed(2).replace(".", ",")} kWp)`}
+            value={`${results?.panelCount || 0} módulos de ${state.module_wp} Wp (${Number(results?.installedKwp || 0).toFixed(2).replace(".", ",")} kWp)`}
             highlight
           />
           <SummaryRow

@@ -365,15 +365,15 @@ export default function StepDadosProjeto({ state, onChange }) {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-white p-3 text-xs">
             <div>
               <span className="text-muted-foreground font-semibold">Módulos necessários:</span>{" "}
-              <strong className="text-foreground font-black">{preliminary.panelCount} unidades</strong>
+              <strong className="text-foreground font-black">{preliminary?.panelCount || 0} unidades</strong>
             </div>
             <div>
               <span className="text-muted-foreground font-semibold">Potência calculada:</span>{" "}
-              <strong className="text-primary font-black">{preliminary.installedKwp.toFixed(2).replace(".", ",")} kWp</strong>
+              <strong className="text-primary font-black">{Number(preliminary?.installedKwp || 0).toFixed(2).replace(".", ",")} kWp</strong>
             </div>
             <div>
               <span className="text-muted-foreground font-semibold">Área estimada:</span>{" "}
-              <strong className="text-slate-700 font-black">{preliminary.areaM2.toFixed(1).replace(".", ",")} m²</strong>
+              <strong className="text-slate-700 font-black">{Number(preliminary?.areaM2 || 0).toFixed(1).replace(".", ",")} m²</strong>
             </div>
           </div>
         </div>
@@ -407,11 +407,11 @@ export default function StepDadosProjeto({ state, onChange }) {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-white p-3 text-xs">
             <div>
               <span className="text-muted-foreground font-semibold">Capacidade estimada:</span>{" "}
-              <strong className="text-foreground font-black">{preliminary.panelCount} módulos</strong>
+              <strong className="text-foreground font-black">{preliminary?.panelCount || 0} módulos</strong>
             </div>
             <div>
               <span className="text-muted-foreground font-semibold">Potência pico:</span>{" "}
-              <strong className="text-primary font-black">{preliminary.installedKwp.toFixed(2).replace(".", ",")} kWp</strong>
+              <strong className="text-primary font-black">{Number(preliminary?.installedKwp || 0).toFixed(2).replace(".", ",")} kWp</strong>
             </div>
           </div>
         </div>
@@ -504,7 +504,7 @@ export default function StepDadosProjeto({ state, onChange }) {
               <Zap className="h-3 w-3 text-primary" /> Potência recomendada
             </p>
             <p className="mt-1 text-base font-black text-foreground">
-              {results.installedKwp > 0 ? `${results.installedKwp.toFixed(2).replace(".", ",")} kWp` : "—"}
+              {Number(results?.installedKwp || 0) > 0 ? `${Number(results.installedKwp).toFixed(2).replace(".", ",")} kWp` : "—"}
             </p>
           </div>
 
@@ -513,7 +513,7 @@ export default function StepDadosProjeto({ state, onChange }) {
               <Sun className="h-3 w-3 text-primary" /> Módulos ({state.module_wp} Wp)
             </p>
             <p className="mt-1 text-base font-black text-foreground">
-              {results.panelCount > 0 ? `${results.panelCount} unidades` : "—"}
+              {results?.panelCount > 0 ? `${results.panelCount} unidades` : "—"}
             </p>
           </div>
 
@@ -522,8 +522,8 @@ export default function StepDadosProjeto({ state, onChange }) {
               <BarChart3 className="h-3 w-3 text-primary" /> Geração estimada
             </p>
             <p className="mt-1 text-base font-black text-foreground">
-              {results.annualGenerationKwh
-                ? `${(results.annualGenerationKwh / 1000).toFixed(2).replace(".", ",")} MWh/ano`
+              {results?.annualGenerationKwh
+                ? `${(Number(results.annualGenerationKwh) / 1000).toFixed(2).replace(".", ",")} MWh/ano`
                 : "—"}
             </p>
           </div>

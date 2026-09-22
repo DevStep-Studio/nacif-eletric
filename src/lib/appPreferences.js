@@ -172,7 +172,7 @@ const hexToHsl = (hex) => {
     h /= 6;
   }
 
-  const precision = (number) => Number(number.toFixed(2));
+  const precision = (number) => Number((Number(number) || 0).toFixed(2));
   return `${precision(h * 360)} ${precision(s * 100)}% ${precision(l * 100)}%`;
 };
 

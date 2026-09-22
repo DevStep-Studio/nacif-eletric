@@ -101,7 +101,7 @@ export default function SolarPriorityLoadsModal({ open, onOpenChange, batteryCon
             <p className="text-[10px] font-black uppercase text-emerald-800">Autonomia Estimada</p>
             <p className="mt-1 text-base font-black text-emerald-950 flex items-center gap-1">
               <Clock className="h-4 w-4 text-emerald-600" />
-              {autonomyHours ? `${autonomyHours.toFixed(1)} horas` : "—"}
+              {Number(autonomyHours) > 0 ? `${Number(autonomyHours).toFixed(1)} horas` : "—"}
             </p>
           </div>
         </div>

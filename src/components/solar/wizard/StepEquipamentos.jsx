@@ -235,7 +235,7 @@ export default function StepEquipamentos({ state, onChange }) {
               <ShieldCheck className="h-4 w-4 text-primary" /> Autonomia estimada do banco:
             </span>
             <strong className="text-primary text-sm font-black">
-              {autonomyHours ? `${autonomyHours.toFixed(1).replace(".", ",")} horas` : "—"}
+              {Number(autonomyHours) > 0 ? `${Number(autonomyHours).toFixed(1).replace(".", ",")} horas` : "—"}
             </strong>
           </div>
         </div>

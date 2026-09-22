@@ -148,10 +148,10 @@ function generatePDF(project, metrics, { brandName = "NACIF Solutions Eletric", 
     ["Cliente:", project.client_name || "—"],
     ["Endereço:", project.address || "—"],
     ["Região:", region],
-    ["Área:", areaM2 > 0 ? `${areaM2.toFixed(2).replace(".", ",")} m²` : "—"],
+    ["Área:", Number(areaM2 || 0) > 0 ? `${Number(areaM2).toFixed(2).replace(".", ",")} m²` : "—"],
     ["GPS:", gps || "—"],
     ["Alimentação:", `${project.supply_type || "—"} · ${project.voltage || "—"}V`],
-    ["Potência Total:", `${(metrics.totalPower / 1000).toFixed(2)} kW`],
+    ["Potência Total:", `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW`],
     ["Nº de Circuitos:", `${circuits.length}`],
     ["Disjuntor Geral:", `${metrics.generalBreaker}A`],
     ["Tamanho do Quadro:", `${metrics.panelSize} DINs`],
@@ -278,9 +278,9 @@ function generatePDF(project, metrics, { brandName = "NACIF Solutions Eletric", 
     ["Tensão nominal", `${project.voltage || 220}V`, "Alimentação da concessionária"],
     ["Frequência", "60 Hz", "Padrão brasileiro ANEEL"],
     ["Nível de tensão", "Baixa Tensão (BT)", "≤ 1000V CA — NBR 5410"],
-    ["Potência total instalada", `${(metrics.totalPower / 1000).toFixed(2)} kW`, "Soma da carga instalada nominal"],
-    ["Demanda total calculada", `${((metrics.totalDemandPower ?? metrics.totalPower) / 1000).toFixed(2)} kW (${metrics.totalDemandKva || ((metrics.totalDemandPower ?? metrics.totalPower) / 1000).toFixed(2)} kVA)`, `Fator de demanda médio: ${metrics.averageDemandFactor || 1}`],
-    ["Corrente de demanda geral (Ib)", `${metrics.generalCurrent} A`, "Corrente de projeto na fase mais carregada"],
+    ["Potência total instalada", `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW`, "Soma da carga instalada nominal"],
+    ["Demanda total calculada", `${(Number(metrics?.totalDemandPower ?? metrics?.totalPower ?? 0) / 1000).toFixed(2)} kW (${metrics?.totalDemandKva || (Number(metrics?.totalDemandPower ?? metrics?.totalPower ?? 0) / 1000).toFixed(2)} kVA)`, `Fator de demanda médio: ${metrics?.averageDemandFactor || 1}`],
+    ["Corrente de demanda geral (Ib)", `${metrics?.generalCurrent || 0} A`, "Corrente de projeto na fase mais carregada"],
     ["Disjuntor geral", `${metrics.generalBreaker} A / ${metrics.generalBreakerPoles || 2}P`, "Proteção geral da instalação"],
     ["IDR geral", `${metrics.generalDr} A / ${metrics.generalDrPoles || 2}P · 30 mA`, "Diferencial residual da entrada"],
     ["Número de circuitos", `${circuits.length}`, "Circuitos finais dimensionados"],
@@ -378,13 +378,13 @@ function generatePDF(project, metrics, { brandName = "NACIF Solutions Eletric", 
   checkY(60);
   h2("6. BALANCEAMENTO DE FASES");
 
-  const phLoad = metrics.phaseLoad;
+  const phLoad = metrics?.phaseLoad || {};
   const phRows = [
     ["Fase", "Circuitos", "Corrente Total (A)", "% Carregamento", "Status"],
-    ["A (R)", circuits.filter(c => (c.phase||"").includes("A")).length, `${phLoad.A.toFixed(1)} A`, `${((phLoad.A / (metrics.generalCurrent || 1)) * 100).toFixed(1)}%`, phLoad.A > metrics.generalBreaker * 0.9 ? "⚠ Atenção" : "✓ OK"],
-    ["B (S)", circuits.filter(c => (c.phase||"").includes("B")).length, `${phLoad.B.toFixed(1)} A`, `${((phLoad.B / (metrics.generalCurrent || 1)) * 100).toFixed(1)}%`, phLoad.B > metrics.generalBreaker * 0.9 ? "⚠ Atenção" : "✓ OK"],
-    ["C (T)", circuits.filter(c => (c.phase||"").includes("C")).length, `${phLoad.C.toFixed(1)} A`, `${((phLoad.C / (metrics.generalCurrent || 1)) * 100).toFixed(1)}%`, phLoad.C > metrics.generalBreaker * 0.9 ? "⚠ Atenção" : "✓ OK"],
-    ["Neutro (N)", "—", `${metrics.neutral_a} A (calc.)`, "—", "Verificar corrente harmônica"],
+    ["A (R)", circuits.filter(c => (c.phase||"").includes("A")).length, `${Number(phLoad?.A || 0).toFixed(1)} A`, `${((Number(phLoad?.A || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, Number(phLoad?.A || 0) > (metrics?.generalBreaker || 40) * 0.9 ? "⚠ Atenção" : "✓ OK"],
+    ["B (S)", circuits.filter(c => (c.phase||"").includes("B")).length, `${Number(phLoad?.B || 0).toFixed(1)} A`, `${((Number(phLoad?.B || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, Number(phLoad?.B || 0) > (metrics?.generalBreaker || 40) * 0.9 ? "⚠ Atenção" : "✓ OK"],
+    ["C (T)", circuits.filter(c => (c.phase||"").includes("C")).length, `${Number(phLoad?.C || 0).toFixed(1)} A`, `${((Number(phLoad?.C || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, Number(phLoad?.C || 0) > (metrics?.generalBreaker || 40) * 0.9 ? "⚠ Atenção" : "✓ OK"],
+    ["Neutro (N)", "—", `${metrics?.neutral_a || 0} A (calc.)`, "—", "Verificar corrente harmônica"],
   ];
   let pbY = curY;
   phRows.forEach((row, ri) => {
@@ -626,10 +626,10 @@ export default function MemorialDescritivo() {
           {/* Métricas do projeto */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { icon: Cpu,           label: "Potência Total",    value: `${(metrics.totalPower/1000).toFixed(2)} kW` },
-              { icon: Shield,        label: "NBR Score",         value: `${metrics.nbrScore}/100`, color: metrics.nbrScore >= 70 ? "text-primary" : "text-red-600" },
-              { icon: BookOpen,      label: "Circuitos",         value: `${(metrics.circuits||[]).length}` },
-              { icon: FileText,      label: "Material (est.)",   value: `R$ ${totalBOM.toFixed(0)}` },
+              { icon: Cpu,           label: "Potência Total",    value: `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW` },
+              { icon: Shield,        label: "NBR Score",         value: `${metrics?.nbrScore || 0}/100`, color: Number(metrics?.nbrScore || 0) >= 70 ? "text-primary" : "text-red-600" },
+              { icon: BookOpen,      label: "Circuitos",         value: `${(metrics?.circuits || []).length}` },
+              { icon: FileText,      label: "Material (est.)",   value: `R$ ${Number(totalBOM || 0).toFixed(0)}` },
             ].map(k => (
               <div key={k.label} className="bg-card border border-border/50 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-1">
