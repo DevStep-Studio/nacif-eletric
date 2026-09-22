@@ -70,14 +70,14 @@ export default function PtBrNumericInput({
         disabled={disabled}
         onChange={handleChange}
         onBlur={handleBlur}
-        className={`h-11 font-medium transition ${
+        className={`h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none ${
           suffix ? "pr-14" : ""
         } ${
-          error ? "border-amber-400 focus-visible:ring-amber-400" : ""
+          error ? "border-amber-400 focus:border-amber-400 focus:ring-amber-400/20" : ""
         } ${className}`}
       />
       {suffix && (
-        <span className="pointer-events-none absolute right-3 text-xs font-bold text-muted-foreground select-none">
+        <span className="pointer-events-none absolute right-3.5 text-xs font-bold text-slate-400 select-none">
           {suffix}
         </span>
       )}

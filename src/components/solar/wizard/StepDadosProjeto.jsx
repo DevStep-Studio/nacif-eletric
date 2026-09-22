@@ -153,23 +153,23 @@ export default function StepDadosProjeto({ state, onChange }) {
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground">
-              Nome do projeto <span className="text-primary">*</span>
+            <Label className="text-xs font-bold text-slate-700">
+              Nome do projeto <span className="text-[#00d8b8] font-bold">*</span>
             </Label>
             <Input
               placeholder="Ex: Residência João Silva"
               value={state.name}
               onChange={(e) => setField("name", e.target.value)}
-              className="h-11 font-medium"
+              className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground">Cliente</Label>
+            <Label className="text-xs font-bold text-slate-700">Cliente</Label>
             <Input
               placeholder="Nome do cliente ou empresa"
               value={state.client_name}
               onChange={(e) => setField("client_name", e.target.value)}
-              className="h-11 font-medium"
+              className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
             />
           </div>
         </div>
