@@ -28,6 +28,8 @@ import {
   normalizeRoofPolygon,
   serializeRoofPolygon,
 } from "@/lib/solarDesignerGeometry";
+import { estimateAnnualGenerationKwh } from "@/lib/solarSizing";
+import { generateDefaultPanelLayout, getPrimaryPanelBoard, mergeSolarLayoutIntoPrincipal } from "@/lib/electricalEngine";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -85,10 +87,6 @@ const defaultSolarConfig = {
   ac_supply_type: "Trifásico",
   layout_note: "",
 };
-
-const PHASE_COLORS = ["black", "red", "brown"];
-const PHASE_LABELS = ["L1", "L2", "L3"];
-const PHASE_KEYS = ["A", "B", "C"];
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -290,185 +288,10 @@ function buildSolarCircuits(project, config, sizing) {
   ];
 }
 
-function buildSolarAcPanelLayout(config, sizing) {
-  const ROW_MAX = 18;
-  const supply = config.ac_supply_type || "Bifásico";
-  const phaseCount = phaseCountForSupply(supply);
-  const breakerPoles = polesForSupply(supply);
-  const feederGauge = sizing.breaker > 63 ? "16mm²" : sizing.breaker > 40 ? "10mm²" : sizing.breaker > 25 ? "6mm²" : "4mm²";
-  const feederBreaker = {
-    id: "solar_feeder_breaker",
-    type: "breaker",
-    label: "DJ ENTRADA CA",
-    current: sizing.breaker,
-    curve: "C",
-    poles: breakerPoles,
-    isSolarFeeder: true,
-    phase: phaseForSupply(supply),
-    supply_type: supply,
-    status: "ON",
-  };
-  const serviceBreaker = {
-    id: "solar_service_breaker",
-    type: "breaker",
-    label: "DJ SAÍDA CA",
-    current: sizing.breaker,
-    curve: "C",
-    poles: breakerPoles,
-    isSolarServiceDisconnect: true,
-    phase: phaseForSupply(supply),
-    supply_type: supply,
-    status: "ON",
-  };
-  const dpsComponents = Array.from({ length: phaseCount }).map((_, index) => ({
-    id: `solar_dps_${index}`,
-    type: "dps",
-    label: `DPS CA ${PHASE_LABELS[index]}`,
-    poles: 1,
-    phase: PHASE_KEYS[index],
-    status: "ON",
-    dpsStatus: "OK",
-  }));
-  const breakerComponent = {
-    id: "solar_main_breaker",
-    type: "breaker",
-    label: "DJ INVERSOR CA",
-    current: sizing.breaker,
-    curve: "C",
-    poles: breakerPoles,
-    isGeneral: false,
-    phase: phaseForSupply(supply),
-    supply_type: supply,
-    status: "ON",
-  };
-  const protectionUsedPoles = [feederBreaker, ...dpsComponents, serviceBreaker]
-    .reduce((sum, component) => sum + Number(component.poles || 0), 0);
-  const breakerUsedPoles = Number(breakerComponent.poles || 0);
-  const protectionComponents = protectionUsedPoles < ROW_MAX
-    ? [feederBreaker, ...dpsComponents, serviceBreaker, {
-        id: "solar_spacer_protection",
-        type: "spacer",
-        poles: ROW_MAX - protectionUsedPoles,
-        label: "RESERVA TÉCNICA",
-      }]
-    : [feederBreaker, ...dpsComponents, serviceBreaker];
-  const inverterComponents = breakerUsedPoles < ROW_MAX
-    ? [breakerComponent, {
-        id: "solar_spacer_inverter",
-        type: "spacer",
-        poles: ROW_MAX - breakerUsedPoles,
-        label: "RESERVA",
-      }]
-    : [breakerComponent];
-
-  const wires = [
-    {
-      id: "solar_ground_feed",
-      color: "green",
-      gauge: "10mm²",
-      source: "terminal_left_top:0",
-      target: "busbar_ground:0",
-      label: "10 mm²",
-    },
-  ];
-
-  dpsComponents.forEach((component, index) => {
-    wires.push({
-      id: `solar_dps_phase_${index}`,
-      color: PHASE_COLORS[index],
-      gauge: "6mm²",
-      source: `terminal_left_top:${index + 1}`,
-      target: `comp:${component.id}:top:0`,
-      label: "",
-    });
-    wires.push({
-      id: `solar_dps_ground_${index}`,
-      color: "green",
-      gauge: "6mm²",
-      source: `comp:${component.id}:bottom:0`,
-      target: `busbar_ground:${1 + index}`,
-      label: "6 mm²",
-    });
-  });
-
-  if (supply === "Monofásico") {
-    wires.push({
-      id: "solar_neutral_feed",
-      color: "blue",
-      gauge: feederGauge,
-      source: "busbar_neutral:11",
-      target: `comp:${feederBreaker.id}:top:1`,
-      label: feederGauge.replace("mm²", " mm²"),
-    });
-    wires.push({
-      id: "solar_neutral_feeder_to_inverter",
-      color: "blue",
-      gauge: feederGauge,
-      source: `comp:${feederBreaker.id}:bottom:1`,
-      target: `comp:${breakerComponent.id}:top:1`,
-      label: feederGauge.replace("mm²", " mm²"),
-    });
-    wires.push({
-      id: "solar_neutral_load",
-      color: "blue",
-      gauge: feederGauge,
-      source: "comp:solar_main_breaker:bottom:1",
-      target: "load_out:solar_inverter:neutral",
-      label: feederGauge.replace("mm²", " mm²"),
-    });
-  }
-
-  for (let index = 0; index < phaseCount; index += 1) {
-    wires.push({
-      id: `solar_phase_feed_${index}`,
-      color: PHASE_COLORS[index],
-      gauge: feederGauge,
-      source: `terminal_left_top:${index + 1}`,
-      target: `comp:${feederBreaker.id}:top:${index}`,
-      label: "",
-    });
-    wires.push({
-      id: `solar_phase_feeder_to_service_${index}`,
-      color: PHASE_COLORS[index],
-      gauge: feederGauge,
-      source: `comp:${feederBreaker.id}:bottom:${index}`,
-      target: `comp:${serviceBreaker.id}:top:${index}`,
-      label: "",
-    });
-    wires.push({
-      id: `solar_phase_service_to_inverter_${index}`,
-      color: PHASE_COLORS[index],
-      gauge: feederGauge,
-      source: `comp:${serviceBreaker.id}:bottom:${index}`,
-      target: `comp:${breakerComponent.id}:top:${index}`,
-      label: "",
-    });
-    wires.push({
-      id: `solar_phase_load_${index}`,
-      color: PHASE_COLORS[index],
-      gauge: feederGauge,
-      source: `comp:solar_main_breaker:bottom:${index}`,
-      target: `load_out:solar_inverter:${index}`,
-      label: "",
-    });
-  }
-
-  return {
-    rails: [
-      {
-        id: "rail_1",
-        name: "Trilho DIN Superior (Entrada e Proteção CA)",
-        components: protectionComponents,
-      },
-      {
-        id: "rail_2",
-        name: "Trilho DIN Inferior (Disjuntor do Inversor)",
-        components: inverterComponents,
-      },
-    ],
-    wires,
-  };
-}
+// A geração da proteção CA do inversor (disjuntores + DPS) vem de uma fonte única
+// (buildSolarAcCircuitLayout/mergeSolarLayoutIntoPrincipal, em electricalEngine.js),
+// compartilhada com o Quadro Elétrico — sempre mesclada no quadro PRINCIPAL do
+// projeto, nunca em um quadro "QD Solar CA" separado.
 
 export default function SolarProject() {
   const { toast } = useToast();
@@ -667,32 +490,50 @@ export default function SolarProject() {
       const normalizedLayout = getBestPanelLayout(normalizedConfig, 1200);
       const normalizedSizing = calculateSolar(normalizedConfig, normalizedLayout.panelCount);
       const solarCircuits = buildSolarCircuits(project, normalizedConfig, normalizedSizing);
-      const layout = buildSolarAcPanelLayout(normalizedConfig, normalizedSizing);
-      const existingBoards = Array.isArray(project.panel_boards) ? project.panel_boards : [];
-      const existingSolarBoard = existingBoards.find((board) => board.type === "solar_ac");
-      const panelBoards = [
-        ...existingBoards.filter((board) => board.type !== "solar_ac"),
-        {
-          id: existingSolarBoard?.id || `solar_ac_${Date.now()}`,
-          name: "QD Solar CA",
-          location: "Saída CA do inversor",
-          type: "solar_ac",
-          supply_type: normalizedConfig.ac_supply_type,
-          layout,
-        },
+      const solarCircuitIds = new Set(solarCircuits.map((circuit) => circuit.id));
+      const existingCircuits = Array.isArray(project.circuits) ? project.circuits : [];
+      // Substitui só os circuitos solares (pelo id) — preserva os demais circuitos
+      // do projeto (iluminação, tomadas, etc.) em vez de sobrescrever tudo.
+      const nextCircuits = [
+        ...existingCircuits.filter((circuit) => !solarCircuitIds.has(circuit.id)),
+        ...solarCircuits,
       ];
+      const projectForLayout = { ...project, circuits: nextCircuits, solar_config: normalizedConfig };
+
+      // A proteção CA do inversor é mesclada no quadro PRINCIPAL do projeto —
+      // nunca em um quadro "QD Solar CA" separado (fonte única em electricalEngine.js).
+      const existingBoards = Array.isArray(project.panel_boards) ? project.panel_boards : [];
+      const otherBoards = existingBoards.filter((board) => board.type !== "solar_ac");
+      const principalBoard = getPrimaryPanelBoard(otherBoards) || {
+        id: `board_distribution_${Date.now()}`,
+        name: "QD-01 Principal",
+        location: "Entrada / Distribuição",
+        type: "principal",
+        supply_type: project.supply_type || "Monofásico",
+        layout: generateDefaultPanelLayout(projectForLayout, { forceDistribution: true }),
+      };
+      const mergedLayout = mergeSolarLayoutIntoPrincipal(projectForLayout, principalBoard.layout, { forceRegenerate: true });
+      const updatedPrincipalBoard = { ...principalBoard, layout: mergedLayout };
+      const panelBoards = otherBoards.some((board) => board.id === updatedPrincipalBoard.id)
+        ? otherBoards.map((board) => (board.id === updatedPrincipalBoard.id ? updatedPrincipalBoard : board))
+        : [updatedPrincipalBoard, ...otherBoards];
+
       const payload = {
         project_type: "Solar",
         solar_config: normalizedConfig,
-        voltage: normalizedConfig.ac_voltage,
-        supply_type: normalizedConfig.ac_supply_type,
-        circuits: solarCircuits,
+        circuits: nextCircuits,
         panel_boards: panelBoards,
-        panel_layout: layout,
+        panel_layout: updatedPrincipalBoard.layout,
       };
       await backend.entities.Project.update(projectId, payload);
       setConfig(normalizedConfig);
       setProject({ ...project, ...payload });
+      toast({
+        title: "Quadro elétrico atualizado",
+        description: "A proteção CA do inversor foi incluída no QD-01 Principal.",
+      });
+    } catch (error) {
+      toast({ title: "Não foi possível atualizar o quadro", description: error?.message || "Tente novamente.", variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -1232,7 +1073,9 @@ function PanelQuantityCard({ disabled = false, hasRoof, sizing, onQuantityChange
 }
 
 function DesignerStatsHud({ sizing }) {
-  const productionMwh = sizing.dcPowerKw * 1.32;
+  // Mesma fórmula usada no assistente de cadastro (solarSizing.estimateAnnualGenerationKwh)
+  // para que a produção anual não divirja entre as duas telas.
+  const productionMwh = (estimateAnnualGenerationKwh(sizing.dcPowerKw) || 0) / 1000;
   const formatDecimal = (value) => value.toLocaleString("pt-BR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,

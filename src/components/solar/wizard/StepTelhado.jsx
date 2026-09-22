@@ -1,0 +1,116 @@
+import { useCallback, useMemo, useState } from "react";
+import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
+import {
+  normalizeRoofPolygon,
+  serializeRoofPolygon,
+  getRoofMetricsFromPolygon,
+} from "@/lib/solarDesignerGeometry";
+import { getEffectivePanelCount, getRoofPhysicalLayout } from "@/lib/solarWizardState";
+import { AlertTriangle, CheckCircle2, Home, Pencil, RotateCw, Square, Trash2 } from "lucide-react";
+
+const TOOLS = [
+  { mode: "select", icon: Home, label: "Navegar" },
+  { mode: "draw-polygon", icon: Home, label: "Desenhar contorno" },
+  { mode: "draw-rectangle", icon: Square, label: "Desenhar retângulo" },
+  { mode: "edit", icon: Pencil, label: "Editar vértices", requiresRoof: true },
+  { mode: "rotate", icon: RotateCw, label: "Girar", requiresRoof: true },
+];
+
+export default function StepTelhado({ state, onChange }) {
+  const [editorMode, setEditorMode] = useState(state.roof_defined ? "select" : "draw-polygon");
+  const [fitRequest, setFitRequest] = useState(0);
+
+  const hasRoof = normalizeRoofPolygon(state.roof_polygon).length >= 3 && state.roof_defined !== false;
+  const roofLayout = useMemo(() => getRoofPhysicalLayout(state), [state]);
+  const { panelCount, physicalCapacity, requested, fits } = useMemo(() => getEffectivePanelCount(state), [state]);
+  const visiblePanels = useMemo(() => roofLayout.panels.slice(0, panelCount), [roofLayout.panels, panelCount]);
+
+  const handleRoofChange = useCallback((positions) => {
+    const normalized = serializeRoofPolygon(normalizeRoofPolygon(positions));
+    if (normalized.length < 3) {
+      onChange({ roof_defined: false, roof_polygon: [] });
+      return;
+    }
+    const metrics = getRoofMetricsFromPolygon(normalized, state);
+    onChange({
+      roof_defined: true,
+      roof_polygon: normalized,
+      roof_width_m: Math.round(metrics.widthM * 10) / 10,
+      roof_height_m: Math.round(metrics.heightM * 10) / 10,
+      roof_area_m2: Math.round(metrics.areaM2 * 10) / 10,
+      roof_rotation_deg: Math.round(metrics.rotationDeg * 10) / 10,
+      map_center_lat: metrics.center.lat,
+      map_center_lng: metrics.center.lng,
+    });
+  }, [onChange, state]);
+
+  const clearRoof = () => {
+    onChange({ roof_defined: false, roof_polygon: [] });
+    setEditorMode("draw-polygon");
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
+        {TOOLS.map(({ mode, icon: Icon, label, requiresRoof }) => (
+          <button
+            key={mode}
+            type="button"
+            title={label}
+            disabled={requiresRoof && !hasRoof}
+            onClick={() => setEditorMode(mode)}
+            className={`flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-bold transition ${
+              editorMode === mode ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:bg-muted"
+            } disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            <Icon className="h-4 w-4" /> {label}
+          </button>
+        ))}
+        <span className="mx-1 h-6 w-px bg-border" />
+        <button type="button" onClick={() => setFitRequest((n) => n + 1)} disabled={!hasRoof} className="flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-40">
+          Enquadrar
+        </button>
+        <button type="button" onClick={clearRoof} disabled={!hasRoof} className="flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-40">
+          <Trash2 className="h-4 w-4" /> Excluir área
+        </button>
+      </div>
+
+      <div className="relative h-[420px] overflow-hidden rounded-xl border border-border">
+        <SolarDesignerMap
+          className="h-full w-full"
+          config={state}
+          sizing={{ panelCount, dcPowerKw: (panelCount * state.module_wp) / 1000 }}
+          editorMode={editorMode}
+          fitRoofRequest={fitRequest}
+          panelPolygons={visiblePanels}
+          showBadges={false}
+          showMeasurements
+          onEditorModeChange={setEditorMode}
+          onRoofChange={handleRoofChange}
+          onViewportChange={({ center, zoom }) => onChange({ map_center_lat: center.lat, map_center_lng: center.lng, map_zoom: zoom })}
+        />
+      </div>
+
+      <div className={`flex items-start gap-2 rounded-lg border p-3 text-xs font-bold ${
+        !hasRoof ? "border-border bg-muted/50 text-muted-foreground" : fits ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-amber-300 bg-amber-50 text-amber-900"
+      }`}>
+        {!hasRoof ? (
+          <>
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Desenhe o contorno do telhado sobre a imagem de satélite para validar quantos módulos cabem na área.</span>
+          </>
+        ) : fits ? (
+          <>
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Área de {state.roof_area_m2.toFixed(1)} m² comporta os {requested} módulos solicitados (capacidade máxima: {physicalCapacity}).</span>
+          </>
+        ) : (
+          <>
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Área de {state.roof_area_m2.toFixed(1)} m² comporta {physicalCapacity} de {requested} módulos solicitados. Ajuste a quantidade na etapa Equipamentos ou amplie a área.</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

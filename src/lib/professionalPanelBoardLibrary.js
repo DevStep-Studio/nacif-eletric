@@ -1,3 +1,5 @@
+import { getPrimaryPanelBoard } from "@/lib/electricalEngine";
+
 export const PANEL_SHEET = {
   width: 1189,
   height: 841,
@@ -186,7 +188,9 @@ function buildPhaseLoads(metrics, circuits) {
 
 const getActivePanelLayout = (project) => {
   const boards = Array.isArray(project?.panel_boards) ? project.panel_boards : [];
-  const activeBoard = boards[0] || null;
+  // Mesmo critério de "quadro principal" usado no editor (Quadro Elétrico) —
+  // evita ler um quadro QGBT/solar por engano e mostrar um DR/IDR desatualizado.
+  const activeBoard = getPrimaryPanelBoard(boards) || boards[0] || null;
   const layout = activeBoard?.layout || project?.panel_layout || null;
   return {
     board: activeBoard,
