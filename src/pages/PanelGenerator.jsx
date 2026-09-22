@@ -8233,14 +8233,23 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               </div>
                               <div className="space-y-1">
                                 <Label className="text-[10px] font-bold text-slate-500">Corrente (A)</Label>
-                                <Select value={String(component.current)} onValueChange={(val) => handleUpdateComponent("current", parseInt(val, 10))}>
-                                  <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    {[6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125].map(val => (
-                                      <SelectItem key={val} value={String(val)}>{val}A</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                {component.isGeneral ? (
+                                  <>
+                                    <Input value={`${component.current}A`} disabled className="bg-slate-200 rounded-lg h-9 font-bold text-slate-500" />
+                                    <p className="text-[9px] font-semibold text-slate-400 leading-snug">
+                                      Dimensionado automaticamente pela carga do projeto (Ib ≤ In) — não editável.
+                                    </p>
+                                  </>
+                                ) : (
+                                  <Select value={String(component.current)} onValueChange={(val) => handleUpdateComponent("current", parseInt(val, 10))}>
+                                    <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      {[6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125].map(val => (
+                                        <SelectItem key={val} value={String(val)}>{val}A</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
                               </div>
                               <div className="space-y-1">
                                 <Label className="text-[10px] font-bold text-slate-500">Curva de Disparo</Label>

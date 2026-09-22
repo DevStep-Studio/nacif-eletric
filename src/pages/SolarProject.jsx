@@ -35,7 +35,7 @@ import {
 } from "@/lib/solarDesignerGeometry";
 import { estimateAnnualGenerationKwh, estimateAnnualSavingsBrl, estimateSimplePaybackYears } from "@/lib/solarSizing";
 import { generateDefaultPanelLayout, getPrimaryPanelBoard, mergeSolarLayoutIntoPrincipal } from "@/lib/electricalEngine";
-import { detectRoofObstacles, geocodeAddress, suggestRoofContour } from "@/lib/solarAiServices";
+import { geocodeAddress, suggestRoofContour } from "@/lib/solarAiServices";
 import { printExecutiveSolarReport } from "@/lib/solarReportGenerator";
 import {
   ArrowLeft,
@@ -79,6 +79,7 @@ import {
   Sun,
   Trash2,
   Undo2,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -260,7 +261,7 @@ export default function SolarProject() {
   const [reportsOpen, setReportsOpen] = useState(false);
   const [searchAddress, setSearchAddress] = useState("");
   const [searchingAddress, setSearchingAddress] = useState(false);
-  const [detectingObstacles, setDetectingObstacles] = useState(false);
+  const [pendingObstaclePreset, setPendingObstaclePreset] = useState(null);
 
   const [roofHistoryState, setRoofHistoryState] = useState({ canUndo: false, canRedo: false });
   const roofHistoryRef = useRef([[]]);
@@ -454,19 +455,29 @@ export default function SolarProject() {
     }
   };
 
-  const handleAddObstacle = (preset) => {
-    const center = getRoofCenterFromConfig(config);
-    // Adiciona pequeno deslocamento para não sobrepor se já houver outros
-    const existingCount = config.obstacles.length;
-    const offsetLat = (existingCount % 3 - 1) * 0.00002;
-    const offsetLng = (Math.floor(existingCount / 3) - 1) * 0.00003;
+  // Ativa o modo de posicionamento: o próximo clique no telhado define onde o
+  // obstáculo é desenhado, em vez de cair sempre no centro do telhado.
+  const handleStartPlaceObstacle = (preset) => {
+    setPendingObstaclePreset(preset);
+    setEditorMode("select"); // libera o clique no mapa (modo de desenho do telhado intercepta cliques)
+    toast({
+      title: "Clique no telhado para desenhar",
+      description: `Posicione "${preset.name}" clicando no ponto do mapa onde ele deve ficar.`,
+    });
+  };
+
+  const handleCancelPlaceObstacle = () => setPendingObstaclePreset(null);
+
+  const handleMapClick = (latlng) => {
+    if (!pendingObstaclePreset || !latlng) return;
+    const preset = pendingObstaclePreset;
 
     const newObstacle = {
       id: `obs_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       type: preset.type,
       name: preset.name,
-      lat: center.lat + offsetLat,
-      lng: center.lng + offsetLng,
+      lat: latlng.lat,
+      lng: latlng.lng,
       radiusM: preset.radius,
       excludeArea: true,
     };
@@ -475,9 +486,10 @@ export default function SolarProject() {
     updateConfig("obstacles", nextObstacles);
     setSelectedObstacleId(newObstacle.id);
     setActiveSidebarTab("obstacles");
+    setPendingObstaclePreset(null);
     toast({
-      title: "Obstáculo adicionado",
-      description: `${preset.name} inserido. Você pode arrastá-lo e ajustar o raio na barra lateral.`,
+      title: "Obstáculo desenhado",
+      description: `${preset.name} posicionado no telhado. Arraste para ajustar e use a barra lateral para o raio.`,
     });
   };
 
@@ -495,26 +507,6 @@ export default function SolarProject() {
       setSelectedObstacleId(null);
     }
     toast({ title: "Obstáculo removido", description: "Área liberada para instalação de módulos." });
-  };
-
-  const handleDetectObstacles = async () => {
-    setDetectingObstacles(true);
-    try {
-      const detected = await detectRoofObstacles({
-        roofPolygon: config.roof_polygon,
-        mapCenter: { lat: config.map_center_lat, lng: config.map_center_lng },
-      });
-      updateConfig("obstacles", detected);
-      setActiveSidebarTab("obstacles");
-      toast({
-        title: "Obstáculos detectados por IA",
-        description: `${detected.length} obstáculos identificados e excluídos da área de instalação.`,
-      });
-    } catch {
-      toast({ title: "Falha na detecção de obstáculos", variant: "destructive" });
-    } finally {
-      setDetectingObstacles(false);
-    }
   };
 
   const handleAutoSuggestContour = async () => {
@@ -706,13 +698,17 @@ export default function SolarProject() {
 
           <span className="mx-1 h-5 w-px bg-white/10" />
 
-          {/* Ferramenta de Obstáculos (Menu Dropdown + IA) */}
+          {/* Ferramenta de Obstáculos (Menu Dropdown → clique no mapa para posicionar) */}
           <div className="flex items-center gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-rose-300 hover:bg-slate-900 transition"
+                  className={`flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition ${
+                    pendingObstaclePreset
+                      ? "border-rose-400 bg-rose-500/20 text-rose-200 animate-pulse"
+                      : "border-white/10 bg-slate-950/60 text-rose-300 hover:bg-slate-900"
+                  }`}
                 >
                   <Plus className="h-3.5 w-3.5 text-rose-400" />
                   <span>Obstáculo</span>
@@ -721,7 +717,7 @@ export default function SolarProject() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56 bg-slate-900 border-white/15 text-white">
                 <DropdownMenuLabel className="text-[11px] font-bold text-white/50 uppercase">
-                  Adicionar Obstáculo no Telhado
+                  Desenhar Obstáculo no Telhado
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-white/10" />
                 {OBSTACLE_PRESETS.map((preset) => {
@@ -729,7 +725,7 @@ export default function SolarProject() {
                   return (
                     <DropdownMenuItem
                       key={preset.type}
-                      onClick={() => handleAddObstacle(preset)}
+                      onClick={() => handleStartPlaceObstacle(preset)}
                       className="flex items-center gap-2 p-2 text-xs font-semibold focus:bg-white/10 focus:text-white cursor-pointer"
                     >
                       <Icon className="h-4 w-4 text-rose-400" />
@@ -741,19 +737,16 @@ export default function SolarProject() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <button
-              type="button"
-              disabled={detectingObstacles}
-              onClick={handleDetectObstacles}
-              className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-amber-300 hover:bg-slate-900 transition"
-            >
-              {detectingObstacles ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
-              )}
-              Obstáculos IA
-            </button>
+            {pendingObstaclePreset && (
+              <button
+                type="button"
+                onClick={handleCancelPlaceObstacle}
+                className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-white/60 hover:bg-slate-900 hover:text-white transition"
+              >
+                <X className="h-3.5 w-3.5" />
+                Cancelar
+              </button>
+            )}
           </div>
 
           <span className="mx-1 h-5 w-px bg-white/10" />
@@ -858,7 +851,24 @@ export default function SolarProject() {
                 setActiveSidebarTab("obstacles");
               }}
               onRemoveObstacle={handleRemoveObstacle}
+              onMapClick={handleMapClick}
             />
+          )}
+
+          {pendingObstaclePreset && (
+            <div className="pointer-events-none absolute inset-x-0 top-4 z-[500] flex justify-center">
+              <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-rose-400/60 bg-slate-900/95 px-4 py-2 text-xs font-bold text-rose-200 shadow-2xl backdrop-blur">
+                <ShieldAlert className="h-3.5 w-3.5 text-rose-400 animate-pulse" />
+                Clique no telhado para desenhar: {pendingObstaclePreset.name}
+                <button
+                  type="button"
+                  onClick={handleCancelPlaceObstacle}
+                  className="ml-1 rounded-lg p-0.5 text-white/50 hover:bg-white/10 hover:text-white transition"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
           )}
         </main>
 
@@ -998,7 +1008,7 @@ export default function SolarProject() {
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div>
                   <h3 className="text-sm font-black text-white">Obstáculos no Telhado</h3>
-                  <p className="text-[11px] text-white/50">Arraste os marcadores no mapa e ajuste o raio.</p>
+                  <p className="text-[11px] text-white/50">Escolha um tipo e clique no telhado para desenhar. Depois arraste o marcador e ajuste o raio.</p>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1012,7 +1022,7 @@ export default function SolarProject() {
                       return (
                         <DropdownMenuItem
                           key={preset.type}
-                          onClick={() => handleAddObstacle(preset)}
+                          onClick={() => handleStartPlaceObstacle(preset)}
                           className="flex items-center gap-2 p-2 text-xs font-semibold focus:bg-white/10 cursor-pointer"
                         >
                           <Icon className="h-4 w-4 text-rose-400" />
