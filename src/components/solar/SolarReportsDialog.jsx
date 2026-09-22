@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import {
+  downloadPdfBlob,
   generateBillOfMaterialsReport,
   generateCommercialProposalReport,
   generateElectricalDiagramReport,
@@ -99,7 +100,7 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
     setDownloadingId(report.id);
     try {
       const doc = report.fn(project, config, sizing);
-      doc.save(report.filename);
+      downloadPdfBlob(doc, report.filename);
       toast({
         title: "Relatório gerado",
         description: `O arquivo ${report.title} foi baixado em PDF com sucesso.`,
@@ -120,7 +121,7 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
     try {
       for (const report of REPORT_CARDS) {
         const doc = report.fn(project, config, sizing);
-        doc.save(report.filename);
+        downloadPdfBlob(doc, report.filename);
         await new Promise((r) => setTimeout(r, 200));
       }
       toast({

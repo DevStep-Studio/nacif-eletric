@@ -571,8 +571,11 @@ export default function SolarProject() {
   const hasRoof = normalizeRoofPolygon(config.roof_polygon).length >= 3 && config.roof_defined !== false;
   const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
 
+  // z-[45]: cobre a sidebar (z-40) e o header (z-30) do app, mas fica abaixo da camada
+  // de overlays do Radix (z-50), que é portada para o body — acima dela, diálogos e
+  // dropdowns desta tela abrem atrás do fundo opaco e ficam invisíveis.
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col overflow-hidden bg-[#0a0f18] font-inter text-slate-100 antialiased select-none">
+    <div className="fixed inset-0 z-[45] flex flex-col overflow-hidden bg-[#0a0f18] font-inter text-slate-100 antialiased select-none">
       {/* 1. Header Minimalista */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-[#0d1522] px-4">
         <div className="flex items-center gap-3">
