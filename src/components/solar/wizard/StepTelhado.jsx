@@ -6,14 +6,26 @@ import {
   getRoofMetricsFromPolygon,
 } from "@/lib/solarDesignerGeometry";
 import { getEffectivePanelCount, getRoofPhysicalLayout } from "@/lib/solarWizardState";
-import { AlertTriangle, CheckCircle2, Home, Pencil, RotateCw, Square, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Compass,
+  Home,
+  Info,
+  Layers,
+  Maximize2,
+  Pencil,
+  RotateCw,
+  Square,
+  Trash2,
+} from "lucide-react";
 
 const TOOLS = [
   { mode: "select", icon: Home, label: "Navegar" },
   { mode: "draw-polygon", icon: Home, label: "Desenhar contorno" },
   { mode: "draw-rectangle", icon: Square, label: "Desenhar retângulo" },
   { mode: "edit", icon: Pencil, label: "Editar vértices", requiresRoof: true },
-  { mode: "rotate", icon: RotateCw, label: "Girar", requiresRoof: true },
+  { mode: "rotate", icon: RotateCw, label: "Girar telhado", requiresRoof: true },
 ];
 
 export default function StepTelhado({ state, onChange }) {
@@ -50,32 +62,50 @@ export default function StepTelhado({ state, onChange }) {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
-        {TOOLS.map(({ mode, icon: Icon, label, requiresRoof }) => (
+    <div className="space-y-4">
+      {/* Barra de Ferramentas do Telhado */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {TOOLS.map(({ mode, icon: Icon, label, requiresRoof }) => (
+            <button
+              key={mode}
+              type="button"
+              title={label}
+              disabled={requiresRoof && !hasRoof}
+              onClick={() => setEditorMode(mode)}
+              className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-extrabold transition ${
+                editorMode === mode
+                  ? "border-primary bg-primary/10 text-primary shadow-sm"
+                  : "border-transparent text-slate-600 hover:bg-slate-100"
+              } disabled:cursor-not-allowed disabled:opacity-40`}
+            >
+              <Icon className="h-4 w-4" /> {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1.5">
           <button
-            key={mode}
             type="button"
-            title={label}
-            disabled={requiresRoof && !hasRoof}
-            onClick={() => setEditorMode(mode)}
-            className={`flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-bold transition ${
-              editorMode === mode ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:bg-muted"
-            } disabled:cursor-not-allowed disabled:opacity-40`}
+            onClick={() => setFitRequest((n) => n + 1)}
+            disabled={!hasRoof}
+            className="flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 px-3 text-xs font-extrabold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
           >
-            <Icon className="h-4 w-4" /> {label}
+            <Maximize2 className="h-3.5 w-3.5" /> Enquadrar
           </button>
-        ))}
-        <span className="mx-1 h-6 w-px bg-border" />
-        <button type="button" onClick={() => setFitRequest((n) => n + 1)} disabled={!hasRoof} className="flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-40">
-          Enquadrar
-        </button>
-        <button type="button" onClick={clearRoof} disabled={!hasRoof} className="flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-40">
-          <Trash2 className="h-4 w-4" /> Excluir área
-        </button>
+          <button
+            type="button"
+            onClick={clearRoof}
+            disabled={!hasRoof}
+            className="flex h-9 items-center gap-1.5 rounded-xl border border-red-200 px-3 text-xs font-extrabold text-red-600 hover:bg-red-50 disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Limpar
+          </button>
+        </div>
       </div>
 
-      <div className="relative h-[420px] overflow-hidden rounded-xl border border-border">
+      {/* Canvas do Telhado sobre o Mapa Satélite */}
+      <div className="relative h-[430px] overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
         <SolarDesignerMap
           className="h-full w-full"
           config={state}
@@ -91,23 +121,34 @@ export default function StepTelhado({ state, onChange }) {
         />
       </div>
 
-      <div className={`flex items-start gap-2 rounded-lg border p-3 text-xs font-bold ${
-        !hasRoof ? "border-border bg-muted/50 text-muted-foreground" : fits ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-amber-300 bg-amber-50 text-amber-900"
+      {/* Feedback de Validação e Capacidade do Telhado */}
+      <div className={`flex items-start gap-2.5 rounded-2xl border p-4 text-xs font-bold ${
+        !hasRoof
+          ? "border-slate-200 bg-slate-50 text-slate-600"
+          : fits
+          ? "border-emerald-200 bg-emerald-50/70 text-emerald-900"
+          : "border-amber-300 bg-amber-50 text-amber-900"
       }`}>
         {!hasRoof ? (
           <>
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Desenhe o contorno do telhado sobre a imagem de satélite para validar quantos módulos cabem na área.</span>
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span className="leading-relaxed">
+              Desenhe o contorno do telhado sobre a imagem de satélite (clicando nos 4 cantos da água) para validar o arranjo físico e a capacidade de módulos.
+            </span>
           </>
         ) : fits ? (
           <>
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Área de {state.roof_area_m2.toFixed(1)} m² comporta os {requested} módulos solicitados (capacidade máxima: {physicalCapacity}).</span>
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            <span className="leading-relaxed">
+              Área de {state.roof_area_m2.toFixed(1).replace(".", ",")} m² comporta com folga os {requested} módulos solicitados (capacidade física máxima: {physicalCapacity} módulos).
+            </span>
           </>
         ) : (
           <>
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Área de {state.roof_area_m2.toFixed(1)} m² comporta {physicalCapacity} de {requested} módulos solicitados. Ajuste a quantidade na etapa Equipamentos ou amplie a área.</span>
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <span className="leading-relaxed">
+              A área desenhada de {state.roof_area_m2.toFixed(1).replace(".", ",")} m² comporta no máximo {physicalCapacity} dos {requested} módulos solicitados. Amplie o contorno ou ajuste a quantidade na etapa Equipamentos.
+            </span>
           </>
         )}
       </div>

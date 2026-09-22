@@ -15,7 +15,7 @@ export default function NewProject() {
     name: "",
     client_name: "",
     address: "",
-    project_type: "Instalações Elétricas",
+    project_type: "Solar",
     voltage: 220,
     supply_type: "Monofásico",
   });
@@ -23,8 +23,12 @@ export default function NewProject() {
 
   const handleSave = async () => {
     setSaving(true);
-    const project = await backend.entities.Project.create(form);
-    navigate(`/circuit-editor?project=${project.id}`);
+    try {
+      const project = await backend.entities.Project.create(form);
+      navigate(`/circuit-editor?project=${project.id}`);
+    } catch {
+      setSaving(false);
+    }
   };
 
   return (
@@ -32,16 +36,22 @@ export default function NewProject() {
       <PageHeader
         icon={Plus}
         title="Novo Projeto"
-        subtitle="Cadastre os dados iniciais para dimensionamento, quadro e documentação."
+        subtitle="Selecione a disciplina e cadastre os parâmetros técnicos de dimensionamento."
         actions={
-          <Button type="button" variant="outline" className="h-11 rounded-[12px] font-extrabold" onClick={() => navigate(-1)}>
-            <ArrowLeft className="w-4 h-4" />Voltar
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 rounded-xl font-extrabold border-slate-200 text-slate-700 hover:bg-slate-50"
+            onClick={() => navigate(-1)}
+          >
+            <ArrowLeft className="w-4 h-4 mr-1.5" /> Voltar
           </Button>
         }
       />
 
-      <div className="mx-auto w-full max-w-2xl space-y-4 p-6 rounded-2xl bg-card border border-border/50">
-        <div className="grid gap-3 sm:grid-cols-2">
+      {/* Seletor Superior de Disciplina: Instalações Elétricas vs Projeto Solar */}
+      <div className="mx-auto w-full max-w-2xl rounded-2xl bg-white p-3 border border-slate-200 shadow-sm">
+        <div className="grid grid-cols-2 gap-2.5">
           {[
             { value: "Instalações Elétricas", label: "Instalações elétricas", icon: Zap },
             { value: "Solar", label: "Projeto solar", icon: Sun },
@@ -53,14 +63,20 @@ export default function NewProject() {
                 key={item.value}
                 type="button"
                 onClick={() => setForm({ ...form, project_type: item.value })}
-                className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${
-                  active ? "border-primary bg-primary/10 text-primary" : "border-border bg-white hover:border-primary/40"
+                className={`flex h-14 items-center justify-center gap-3 rounded-xl border-2 text-center transition-all ${
+                  active
+                    ? "border-primary bg-primary/[0.04] text-primary font-black shadow-sm ring-1 ring-primary/20"
+                    : "border-slate-200 bg-white text-slate-600 font-bold hover:border-slate-300 hover:bg-slate-50/60"
                 }`}
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white">
-                  <Icon className="h-5 w-5" />
+                <span
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                    active ? "bg-primary text-white" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
                 </span>
-                <span className="font-extrabold">{item.label}</span>
+                <span className="text-sm">{item.label}</span>
               </button>
             );
           })}
@@ -72,24 +88,39 @@ export default function NewProject() {
           <SolarProjectWizard />
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-2xl space-y-4 p-6 rounded-2xl bg-card border border-border/50">
-          <div className="space-y-2">
-            <Label>Nome do Projeto *</Label>
-            <Input placeholder="Ex: Residência João Silva" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+        <div className="mx-auto w-full max-w-2xl space-y-4 p-6 rounded-3xl bg-white border border-slate-200 shadow-sm">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-black text-foreground">Nome do Projeto *</Label>
+            <Input
+              placeholder="Ex: Residência João Silva"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="h-11 font-medium"
+            />
           </div>
-          <div className="space-y-2">
-            <Label>Cliente</Label>
-            <Input placeholder="Nome do cliente" value={form.client_name} onChange={e => setForm({...form, client_name: e.target.value})} />
+          <div className="space-y-1.5">
+            <Label className="text-xs font-black text-foreground">Cliente</Label>
+            <Input
+              placeholder="Nome do cliente"
+              value={form.client_name}
+              onChange={(e) => setForm({ ...form, client_name: e.target.value })}
+              className="h-11 font-medium"
+            />
           </div>
-          <div className="space-y-2">
-            <Label>Endereço</Label>
-            <Input placeholder="Endereço da obra" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+          <div className="space-y-1.5">
+            <Label className="text-xs font-black text-foreground">Endereço</Label>
+            <Input
+              placeholder="Endereço da obra"
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              className="h-11 font-medium"
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Tensão (V)</Label>
-              <Select value={String(form.voltage)} onValueChange={v => setForm({...form, voltage: Number(v)})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Tensão (V)</Label>
+              <Select value={String(form.voltage)} onValueChange={(v) => setForm({ ...form, voltage: Number(v) })}>
+                <SelectTrigger className="h-11 font-medium"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="127">127V</SelectItem>
                   <SelectItem value="220">220V</SelectItem>
@@ -97,10 +128,10 @@ export default function NewProject() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Alimentação</Label>
-              <Select value={form.supply_type} onValueChange={v => setForm({...form, supply_type: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Alimentação</Label>
+              <Select value={form.supply_type} onValueChange={(v) => setForm({ ...form, supply_type: v })}>
+                <SelectTrigger className="h-11 font-medium"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Monofásico">Monofásico</SelectItem>
                   <SelectItem value="Bifásico">Bifásico</SelectItem>
@@ -109,8 +140,12 @@ export default function NewProject() {
               </Select>
             </div>
           </div>
-          <Button onClick={handleSave} disabled={!form.name || saving} className="w-full">
-            {saving ? "Salvando..." : "Criar Projeto"}
+          <Button
+            onClick={handleSave}
+            disabled={!form.name || saving}
+            className="w-full h-12 text-sm font-black bg-primary text-primary-foreground shadow-md hover:bg-primary/90 rounded-xl"
+          >
+            {saving ? "Salvando..." : "Criar Projeto e Abrir Editor"}
           </Button>
         </div>
       )}

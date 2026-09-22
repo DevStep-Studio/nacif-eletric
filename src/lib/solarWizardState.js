@@ -5,13 +5,13 @@ import {
   SOLAR_MODULE_WIDTH_M,
   getBestPanelLayout,
   normalizeRoofPolygon,
-} from "@/lib/solarDesignerGeometry";
+} from "./solarDesignerGeometry.js";
 import {
   computeInstantResults,
   estimateBatteryAutonomyHours,
   sizeFromAvailableArea,
   sizeFromDesiredPower,
-} from "@/lib/solarSizing";
+} from "./solarSizing.js";
 
 export const WIZARD_STEPS = [
   { key: "dados", label: "Dados do projeto" },

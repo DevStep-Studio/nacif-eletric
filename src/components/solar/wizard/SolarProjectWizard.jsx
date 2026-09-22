@@ -14,6 +14,7 @@ import {
   getStepErrors,
 } from "@/lib/solarWizardState";
 import { normalizeRoofPolygon } from "@/lib/solarDesignerGeometry";
+import SolarStepper from "./SolarStepper";
 import StepDadosProjeto from "./StepDadosProjeto";
 import StepConsumo from "./StepConsumo";
 import StepLocalizacao from "./StepLocalizacao";
@@ -41,14 +42,19 @@ export default function SolarProjectWizard() {
   const [maxVisited, setMaxVisited] = useState(0);
   const [attemptedAdvance, setAttemptedAdvance] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [savedDraftNotice, setSavedDraftNotice] = useState(false);
   const roofSeededRef = useRef(normalizeRoofPolygon(state.roof_polygon).length >= 3);
 
+  // Auto-save do rascunho com debounce
   useEffect(() => {
     const id = window.setTimeout(() => {
       try {
         window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state));
+        setSavedDraftNotice(true);
+        const hideId = window.setTimeout(() => setSavedDraftNotice(false), 2000);
+        return () => window.clearTimeout(hideId);
       } catch {
-        // storage indisponível
+        // Storage indisponível
       }
     }, 400);
     return () => window.clearTimeout(id);
@@ -190,62 +196,24 @@ export default function SolarProjectWizard() {
   };
 
   const nextButtonLabel = stepIndex === 0
-    ? "Avançar para o telhado →"
+    ? "Avançar para consumo →"
     : stepIndex === WIZARD_STEPS.length - 2
     ? "Revisar Projeto →"
     : "Avançar →";
 
   return (
-    <div className="space-y-6">
-      {/* 1. Indicador de Progresso (Stepper de 6 etapas) */}
-      <div className="rounded-2xl border border-border/80 bg-white p-4 shadow-sm">
-        <ol className="flex items-center justify-between overflow-x-auto">
-          {WIZARD_STEPS.map((step, index) => {
-            const isCurrent = index === stepIndex;
-            const isDone = index < stepIndex || (index === stepIndex && stepErrors.length === 0 && index < maxVisited);
-            const isClickable = index <= maxVisited;
-            return (
-              <li key={step.key} className="flex flex-1 items-center last:flex-none">
-                <button
-                  type="button"
-                  disabled={!isClickable}
-                  onClick={() => jumpTo(index)}
-                  className="flex flex-col items-center gap-1.5 disabled:cursor-not-allowed group transition"
-                >
-                  <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black transition-all ${
-                      isCurrent
-                        ? "border-primary bg-primary text-white shadow-md shadow-primary/20 scale-105"
-                        : isDone
-                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                        : "border-border bg-muted/40 text-muted-foreground group-hover:border-primary/40"
-                    }`}
-                  >
-                    {isDone && !isCurrent ? <Check className="h-4 w-4 stroke-[3]" /> : index + 1}
-                  </span>
-                  <span
-                    className={`hidden whitespace-nowrap text-[11px] font-bold sm:block ${
-                      isCurrent ? "text-primary font-black" : isDone ? "text-foreground" : "text-muted-foreground"
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                </button>
-                {index < WIZARD_STEPS.length - 1 && (
-                  <span
-                    className={`mx-2 h-0.5 flex-1 transition ${
-                      index < stepIndex ? "bg-emerald-400" : "bg-border"
-                    }`}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </div>
+    <div className="space-y-5">
+      {/* 1. Indicador de Progresso Reconstruído (SolarStepper) */}
+      <SolarStepper
+        steps={WIZARD_STEPS}
+        currentIndex={stepIndex}
+        maxVisited={maxVisited}
+        hasErrors={attemptedAdvance && stepErrors.length > 0}
+        onStepClick={jumpTo}
+      />
 
       {/* Conteúdo da Etapa Atual */}
-      <div className="rounded-3xl border border-border/80 bg-card p-6 shadow-sm">
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} />}
         {stepKey === "consumo" && <StepConsumo state={state} onChange={updateState} />}
         {stepKey === "localizacao" && <StepLocalizacao state={state} onChange={updateState} />}
@@ -256,17 +224,17 @@ export default function SolarProjectWizard() {
         )}
       </div>
 
-      {/* Barra de Resultados Integrados (se não estiver na etapa final) */}
+      {/* Barra de Resultados Integrados (exibida nas etapas 1 a 5) */}
       {stepKey !== "projeto" && (
         <ResultsBar results={results} investmentIsEstimated={results.investmentIsEstimated} />
       )}
 
-      {/* Alerta de Validação */}
+      {/* Alerta de Validação Contextual */}
       {attemptedAdvance && stepErrors.length > 0 && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs font-bold text-amber-950 shadow-sm">
+        <div className="flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs font-bold text-amber-950 shadow-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
           <div>
-            <p className="font-black text-amber-900 mb-1">Preencha os campos obrigatórios desta etapa:</p>
+            <p className="font-black text-amber-900 mb-1">Preencha os campos obrigatórios para avançar:</p>
             <ul className="list-disc space-y-0.5 pl-4">
               {stepErrors.map((error) => <li key={error}>{error}</li>)}
             </ul>
@@ -281,19 +249,15 @@ export default function SolarProjectWizard() {
             type="button"
             variant="outline"
             onClick={stepIndex === 0 ? handleCancel : goBack}
-            className="h-11 rounded-xl px-5 text-sm font-bold"
+            className="h-11 rounded-xl px-5 text-sm font-bold border-slate-200 text-slate-700 hover:bg-slate-50"
           >
-            {stepIndex === 0 ? (
-              <>Cancelar</>
-            ) : (
-              <><ArrowLeft className="mr-1.5 h-4 w-4" /> Voltar</>
-            )}
+            {stepIndex === 0 ? "Cancelar" : <><ArrowLeft className="mr-1.5 h-4 w-4" /> Voltar</>}
           </Button>
 
           <Button
             type="button"
             onClick={goNext}
-            className="h-11 rounded-xl bg-primary px-6 text-sm font-black text-primary-foreground shadow-md hover:bg-primary/90"
+            className="h-11 rounded-xl bg-primary px-6 text-sm font-black text-primary-foreground shadow-md hover:bg-primary/90 transition"
           >
             {nextButtonLabel}
           </Button>
@@ -306,7 +270,7 @@ export default function SolarProjectWizard() {
             type="button"
             variant="outline"
             onClick={goBack}
-            className="h-11 rounded-xl px-5 text-sm font-bold"
+            className="h-11 rounded-xl px-5 text-sm font-bold border-slate-200 text-slate-700 hover:bg-slate-50"
           >
             <ArrowLeft className="mr-1.5 h-4 w-4" /> Voltar para Equipamentos
           </Button>
