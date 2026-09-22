@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { backend } from "@/api/backendClient";
 import { useToast } from "@/components/ui/use-toast";
-import { AlertTriangle, ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, Sparkles, Sun, X, Zap } from "lucide-react";
 import {
   DRAFT_STORAGE_KEY,
   WIZARD_STEPS,
@@ -47,7 +48,7 @@ export default function SolarProjectWizard() {
       try {
         window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state));
       } catch {
-        // armazenamento indisponível (modo privado/quota) — segue sem rascunho
+        // storage indisponível
       }
     }, 400);
     return () => window.clearTimeout(id);
@@ -99,6 +100,17 @@ export default function SolarProjectWizard() {
     setStepIndex(index);
   };
 
+  const handleCancel = () => {
+    if (state.name || state.monthly_consumption_kwh) {
+      if (window.confirm("Deseja cancelar o cadastro? O rascunho atual será descartado.")) {
+        try { window.localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
+        navigate(-1);
+      }
+    } else {
+      navigate(-1);
+    }
+  };
+
   const handleCreate = async () => {
     const finalErrors = WIZARD_STEPS.flatMap((step) => getStepErrors(step.key, state));
     if (finalErrors.length > 0) {
@@ -119,12 +131,15 @@ export default function SolarProjectWizard() {
         roof_width_m: state.roof_width_m,
         roof_height_m: state.roof_height_m,
         roof_rotation_deg: state.roof_rotation_deg,
+        roof_pitch_deg: state.roof_pitch_deg || 12,
         map_center_lat: state.map_center_lat,
         map_center_lng: state.map_center_lng,
         map_zoom: state.map_zoom,
         roof_polygon: state.roof_polygon,
         roof_defined: state.roof_defined,
         module_orientation: state.module_orientation,
+        obstacles: state.obstacles || [],
+        layout_strategy: state.layout_strategy || "max_generation",
         ac_voltage: state.ac_voltage,
         ac_supply_type: state.ac_supply_type,
       };
@@ -157,14 +172,15 @@ export default function SolarProjectWizard() {
           file_name: state.bill_file_name,
           file_url: state.bill_file_url,
           reading_status: state.bill_reading_status,
+          history_12_months: state.bill_history_12_months,
         },
         investment_brl: Number(state.investment_brl) || null,
         sizing_results_snapshot: results,
       };
 
       const project = await backend.entities.Project.create(payload);
-      try { window.localStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
-      toast({ title: "Projeto criado", description: "Abrindo o editor do telhado para refinar o layout." });
+      try { window.localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
+      toast({ title: "Projeto solar criado com sucesso!", description: "Abrindo o layout do telhado." });
       navigate(`/solar-project?project=${project.id}`);
     } catch (error) {
       toast({ title: "Não foi possível criar o projeto", description: error?.message || "Tente novamente.", variant: "destructive" });
@@ -173,37 +189,63 @@ export default function SolarProjectWizard() {
     }
   };
 
+  const nextButtonLabel = stepIndex === 0
+    ? "Avançar para o telhado →"
+    : stepIndex === WIZARD_STEPS.length - 2
+    ? "Revisar Projeto →"
+    : "Avançar →";
+
   return (
     <div className="space-y-6">
-      <ol className="flex items-center justify-between overflow-x-auto pb-2">
-        {WIZARD_STEPS.map((step, index) => {
-          const isCurrent = index === stepIndex;
-          const isDone = index < stepIndex || (index === stepIndex && stepErrors.length === 0 && index < maxVisited);
-          const isClickable = index <= maxVisited;
-          return (
-            <li key={step.key} className="flex flex-1 items-center last:flex-none">
-              <button
-                type="button"
-                disabled={!isClickable}
-                onClick={() => jumpTo(index)}
-                className="flex flex-col items-center gap-1 disabled:cursor-not-allowed"
-              >
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black transition ${
-                  isCurrent ? "border-primary bg-primary text-white" : isDone ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-border bg-white text-muted-foreground"
-                }`}>
-                  {isDone && !isCurrent ? <Check className="h-4 w-4" /> : index + 1}
-                </span>
-                <span className={`hidden whitespace-nowrap text-[10px] font-bold sm:block ${isCurrent ? "text-primary" : "text-muted-foreground"}`}>
-                  {step.label}
-                </span>
-              </button>
-              {index < WIZARD_STEPS.length - 1 && <span className="mx-1 h-0.5 flex-1 bg-border sm:mx-2" />}
-            </li>
-          );
-        })}
-      </ol>
+      {/* 1. Indicador de Progresso (Stepper de 6 etapas) */}
+      <div className="rounded-2xl border border-border/80 bg-white p-4 shadow-sm">
+        <ol className="flex items-center justify-between overflow-x-auto">
+          {WIZARD_STEPS.map((step, index) => {
+            const isCurrent = index === stepIndex;
+            const isDone = index < stepIndex || (index === stepIndex && stepErrors.length === 0 && index < maxVisited);
+            const isClickable = index <= maxVisited;
+            return (
+              <li key={step.key} className="flex flex-1 items-center last:flex-none">
+                <button
+                  type="button"
+                  disabled={!isClickable}
+                  onClick={() => jumpTo(index)}
+                  className="flex flex-col items-center gap-1.5 disabled:cursor-not-allowed group transition"
+                >
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black transition-all ${
+                      isCurrent
+                        ? "border-primary bg-primary text-white shadow-md shadow-primary/20 scale-105"
+                        : isDone
+                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                        : "border-border bg-muted/40 text-muted-foreground group-hover:border-primary/40"
+                    }`}
+                  >
+                    {isDone && !isCurrent ? <Check className="h-4 w-4 stroke-[3]" /> : index + 1}
+                  </span>
+                  <span
+                    className={`hidden whitespace-nowrap text-[11px] font-bold sm:block ${
+                      isCurrent ? "text-primary font-black" : isDone ? "text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+                </button>
+                {index < WIZARD_STEPS.length - 1 && (
+                  <span
+                    className={`mx-2 h-0.5 flex-1 transition ${
+                      index < stepIndex ? "bg-emerald-400" : "bg-border"
+                    }`}
+                  />
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </div>
 
-      <div className="rounded-2xl border border-border/60 bg-card p-5">
+      {/* Conteúdo da Etapa Atual */}
+      <div className="rounded-3xl border border-border/80 bg-card p-6 shadow-sm">
         {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} />}
         {stepKey === "consumo" && <StepConsumo state={state} onChange={updateState} />}
         {stepKey === "localizacao" && <StepLocalizacao state={state} onChange={updateState} />}
@@ -214,47 +256,62 @@ export default function SolarProjectWizard() {
         )}
       </div>
 
-      {stepKey !== "projeto" && <ResultsBar results={results} investmentIsEstimated={results.investmentIsEstimated} />}
+      {/* Barra de Resultados Integrados (se não estiver na etapa final) */}
+      {stepKey !== "projeto" && (
+        <ResultsBar results={results} investmentIsEstimated={results.investmentIsEstimated} />
+      )}
 
+      {/* Alerta de Validação */}
       {attemptedAdvance && stepErrors.length > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <ul className="list-disc space-y-0.5 pl-4">
-            {stepErrors.map((error) => <li key={error}>{error}</li>)}
-          </ul>
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs font-bold text-amber-950 shadow-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+          <div>
+            <p className="font-black text-amber-900 mb-1">Preencha os campos obrigatórios desta etapa:</p>
+            <ul className="list-disc space-y-0.5 pl-4">
+              {stepErrors.map((error) => <li key={error}>{error}</li>)}
+            </ul>
+          </div>
         </div>
       )}
 
+      {/* Botões de Navegação Inferiores */}
       {stepKey !== "projeto" && (
-        <div className="flex items-center justify-between">
-          <button
+        <div className="flex items-center justify-between pt-2">
+          <Button
             type="button"
-            onClick={goBack}
-            disabled={stepIndex === 0}
-            className="flex h-11 items-center gap-1.5 rounded-xl border border-border px-4 text-sm font-extrabold text-muted-foreground disabled:opacity-40"
+            variant="outline"
+            onClick={stepIndex === 0 ? handleCancel : goBack}
+            className="h-11 rounded-xl px-5 text-sm font-bold"
           >
-            <ArrowLeft className="h-4 w-4" /> Voltar
-          </button>
-          <button
+            {stepIndex === 0 ? (
+              <>Cancelar</>
+            ) : (
+              <><ArrowLeft className="mr-1.5 h-4 w-4" /> Voltar</>
+            )}
+          </Button>
+
+          <Button
             type="button"
             onClick={goNext}
-            className="flex h-11 items-center gap-1.5 rounded-xl bg-primary px-5 text-sm font-extrabold text-primary-foreground hover:bg-primary/90"
+            className="h-11 rounded-xl bg-primary px-6 text-sm font-black text-primary-foreground shadow-md hover:bg-primary/90"
           >
-            Avançar <ArrowRight className="h-4 w-4" />
-          </button>
+            {nextButtonLabel}
+          </Button>
         </div>
       )}
-      {stepKey === "projeto" && stepIndex > 0 && (
-        <button
-          type="button"
-          onClick={goBack}
-          className="flex h-11 items-center gap-1.5 rounded-xl border border-border px-4 text-sm font-extrabold text-muted-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" /> Voltar
-        </button>
-      )}
 
-      <p className="text-center text-[11px] font-semibold text-muted-foreground">Rascunho salvo automaticamente neste dispositivo.</p>
+      {stepKey === "projeto" && stepIndex > 0 && (
+        <div className="flex items-center justify-start pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={goBack}
+            className="h-11 rounded-xl px-5 text-sm font-bold"
+          >
+            <ArrowLeft className="mr-1.5 h-4 w-4" /> Voltar para Equipamentos
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

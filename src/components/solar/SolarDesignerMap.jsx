@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
-import { MapContainer, Marker, Pane, Polygon, Polyline, TileLayer, ZoomControl, useMap, useMapEvents } from "react-leaflet";
+import { Circle, MapContainer, Marker, Pane, Polygon, Polyline, TileLayer, ZoomControl, useMap, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
-import { Move3D } from "lucide-react";
+import { AlertTriangle, Compass, Flame, Move3D, Sun, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DEFAULT_SOLAR_MAP_CENTER,
@@ -12,6 +12,7 @@ import {
   buildPanelPolygons,
   distanceMeters,
   edgeRotationDegrees,
+  getAzimuthWithCardinal,
   getMapCenterFromConfig,
   getRoofPolygonFromConfig,
   normalizeRoofPolygon,
@@ -32,7 +33,6 @@ function toLeafletPositions(points) {
 
 function extractLayerPositions(layer) {
   if (!layer?.getLatLngs) return [];
-
   const latLngs = layer.getLatLngs();
   const ring = Array.isArray(latLngs?.[0]) ? latLngs[0] : latLngs;
 
@@ -105,7 +105,7 @@ function MeasurementLabels({ roofPolygon }) {
         id: `measure-${index}`,
         midpoint,
         rotation: readableRotation,
-        label: `${distance.toFixed(distance >= 10 ? 2 : 1)}m`,
+        label: `${distance.toFixed(distance >= 10 ? 2 : 1)} m`,
       };
     }).filter(Boolean);
   }, [roofPolygon]);
@@ -117,9 +117,9 @@ function MeasurementLabels({ roofPolygon }) {
       interactive={false}
       icon={L.divIcon({
         className: "solar-measure-label",
-        html: `<span style="transform: rotate(${item.rotation}deg)">${item.label}</span>`,
-        iconSize: [72, 18],
-        iconAnchor: [36, 9],
+        html: `<span class="bg-slate-900/90 text-white border border-white/30 px-1.5 py-0.5 rounded text-[11px] font-black shadow-md whitespace-nowrap" style="transform: rotate(${item.rotation}deg); display: inline-block;">${item.label}</span>`,
+        iconSize: [80, 20],
+        iconAnchor: [40, 10],
       })}
     />
   ));
@@ -210,17 +210,16 @@ function RoofEditorLayer({ positions, mode, onChange, onModeChange }) {
     };
 
     const layer = L.polygon(toLeafletPositions(positions), {
-      color: "#f3ce67",
-      fillColor: "#d8cfb9",
-      fillOpacity: 0.3,
-      opacity: 0.96,
+      color: "#00d8b8",
+      fillColor: "#00d8b8",
+      fillOpacity: 0.18,
+      opacity: 0.95,
       pane: "overlayPane",
       pmIgnore: false,
-      weight: 1.8,
+      weight: 2.2,
     }).addTo(map);
 
     layer.pm.setOptions(ROOF_LAYER_OPTIONS);
-
     layer.on("pm:edit", emitGeometry);
     layer.on("pm:dragend", emitGeometry);
     layer.on("pm:rotateend", emitGeometry);
@@ -288,6 +287,7 @@ function RoofEditorLayer({ positions, mode, onChange, onModeChange }) {
 export default function SolarDesignerMap({
   config,
   sizing,
+  viewMode = "map", // "map" | "shadows" | "irradiation"
   className = "h-[520px]",
   designerMode = false,
   editorMode = "select",
@@ -296,6 +296,7 @@ export default function SolarDesignerMap({
   onEditorModeChange,
   onRoofChange,
   onViewportChange,
+  onRemoveObstacle,
   showBadges = true,
   showMeasurements = true,
   showMiniMap = false,
@@ -314,6 +315,9 @@ export default function SolarDesignerMap({
     []
   );
 
+  const azimuthInfo = useMemo(() => getAzimuthWithCardinal(config.roof_rotation_deg || 24), [config.roof_rotation_deg]);
+  const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
+
   return (
     <div className={`relative overflow-hidden bg-slate-950 ${className}`}>
       <MapContainer
@@ -330,6 +334,7 @@ export default function SolarDesignerMap({
         <ViewportController center={mapCenter} zoom={mapZoom} />
         <MapFitController roofPolygon={roofPolygon} request={fitRoofRequest} />
         <MapViewportEvents onViewportChange={onViewportChange} />
+        
         <RoofEditorLayer
           positions={roofPolygon}
           mode={editorMode}
@@ -338,6 +343,7 @@ export default function SolarDesignerMap({
         />
         {showMeasurements && <MeasurementLabels roofPolygon={roofPolygon} />}
 
+        {/* Camada de Módulos Fotovoltaicos */}
         <Pane name="solar-panels-pane" style={{ zIndex: 440, pointerEvents: "none" }}>
           {panelPolygons.map((panel, index) => (
             <Polygon
@@ -346,16 +352,16 @@ export default function SolarDesignerMap({
               interactive={false}
               pmIgnore
               pathOptions={{
-                color: "#a8c5ed",
+                color: "#99d1ff",
                 className: "solar-panel-shape",
-                fillColor: "#16458f",
-                fillOpacity: 0.97,
-                opacity: 0.82,
-                weight: 0.5,
+                fillColor: viewMode === "irradiation" ? "#00c853" : "#0d3b82",
+                fillOpacity: 0.96,
+                opacity: 0.88,
+                weight: 0.8,
               }}
             />
           ))}
-          {panelCellLines.length > 0 && (
+          {panelCellLines.length > 0 && viewMode !== "irradiation" && (
             <Polyline
               positions={panelCellLines}
               interactive={false}
@@ -363,56 +369,129 @@ export default function SolarDesignerMap({
               pathOptions={{
                 color: "#93b9eb",
                 className: "solar-panel-cell-lines",
-                opacity: 0.28,
-                weight: 0.3,
+                opacity: 0.35,
+                weight: 0.4,
               }}
             />
           )}
         </Pane>
-      </MapContainer>
 
-      <div className="pointer-events-none absolute bottom-0 right-4 z-[500] rounded-t-[2px] bg-white/75 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-[#334155]">
-        Leaflet · Imagens © Esri
-      </div>
+        {/* Camada de Obstáculos Detectados / Cadastrados */}
+        <Pane name="solar-obstacles-pane" style={{ zIndex: 450 }}>
+          {obstacles.map((obs) => (
+            <Circle
+              key={obs.id}
+              center={[obs.lat, obs.lng]}
+              radius={obs.radiusM || 1.0}
+              pathOptions={{
+                color: "#ef4444",
+                fillColor: "#ef4444",
+                fillOpacity: 0.45,
+                weight: 2,
+                dashArray: "3 3",
+              }}
+            />
+          ))}
+          {obstacles.map((obs) => (
+            <Marker
+              key={`marker-${obs.id}`}
+              position={[obs.lat, obs.lng]}
+              interactive
+              icon={L.divIcon({
+                className: "solar-obstacle-label",
+                html: `<div class="bg-red-950/90 text-red-200 border border-red-500/80 px-2 py-0.5 rounded-full text-[10px] font-black shadow-lg flex items-center gap-1 whitespace-nowrap -translate-x-1/2 -translate-y-1/2">
+                  <span>${obs.name || "Obstáculo"}</span>
+                </div>`,
+                iconSize: [0, 0],
+              })}
+            />
+          ))}
+        </Pane>
 
-      {showBadges && (
-        <div className="pointer-events-none absolute left-4 top-4 z-[500] flex max-w-[calc(100%-2rem)] flex-wrap gap-2">
-          <Badge className="rounded-lg bg-white/95 px-3 py-1 text-slate-900 shadow">
-            <Move3D className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
-            Area solar
-          </Badge>
-          <Badge className="rounded-lg bg-white/95 px-3 py-1 text-slate-900 shadow">
-            {sizing.panelCount} modulos · {sizing.dcPowerKw.toFixed(2)} kWp
-          </Badge>
-        </div>
-      )}
-
-      {showMiniMap && (
-        <div className="absolute bottom-4 right-4 z-[500] hidden h-[158px] w-[270px] overflow-hidden rounded-[3px] border-2 border-[#1c2c45] bg-slate-900 shadow-[0_18px_48px_rgba(0,0,0,0.38)] xl:block">
-          <MapContainer
-            center={initialCenter}
-            zoom={Math.max(15, mapZoom - 2)}
-            attributionControl={false}
-            boxZoom={false}
-            className="solar-designer-mini-map h-full w-full"
-            doubleClickZoom={false}
-            dragging={false}
-            keyboard={false}
-            scrollWheelZoom={false}
-            touchZoom={false}
-            zoomControl={false}
-          >
-            <TileLayer url={SATELLITE_TILE_URL} maxNativeZoom={19} maxZoom={22} />
-            <ViewportController center={mapCenter} zoom={Math.max(15, mapZoom - 2)} />
+        {/* Camada de Mapa de Calor de Irradiação */}
+        {viewMode === "irradiation" && roofPolygon.length >= 3 && (
+          <Pane name="solar-irradiation-pane" style={{ zIndex: 430, pointerEvents: "none" }}>
             <Polygon
               positions={toLeafletPositions(roofPolygon)}
               interactive={false}
-              pathOptions={{ color: "#ffffff", fillColor: "#d9d3c3", fillOpacity: 0.24, opacity: 0.95, weight: 1.25 }}
+              pathOptions={{
+                color: "#f59e0b",
+                fillColor: "#f59e0b",
+                fillOpacity: 0.35,
+                weight: 2,
+              }}
             />
-          </MapContainer>
+          </Pane>
+        )}
+      </MapContainer>
+
+      {/* Rosa dos Ventos / Compass Overlay */}
+      <div className="absolute top-4 right-4 z-[500] flex flex-col items-center gap-1 rounded-2xl border border-white/20 bg-slate-900/90 p-2.5 shadow-2xl backdrop-blur-md select-none text-white">
+        <div className="relative flex h-14 w-14 items-center justify-center">
+          <span className="absolute top-0 text-[10px] font-black text-red-400">N</span>
+          <span className="absolute right-0 text-[10px] font-black text-white/70">L</span>
+          <span className="absolute bottom-0 text-[10px] font-black text-white/70">S</span>
+          <span className="absolute left-0 text-[10px] font-black text-white/70">O</span>
+          <div
+            className="flex h-10 w-10 items-center justify-center transition-transform duration-500"
+            style={{ transform: `rotate(${-azimuthInfo.degrees}deg)` }}
+          >
+            <Compass className="h-8 w-8 text-primary" />
+          </div>
+        </div>
+        <span className="text-[10px] font-black text-primary">{azimuthInfo.formatted}</span>
+      </div>
+
+      {/* Trajetória Solar no modo "Sombras" */}
+      {viewMode === "shadows" && (
+        <div className="pointer-events-none absolute inset-x-8 top-12 z-[500] flex items-center justify-between">
+          <div className="flex items-center gap-1.5 rounded-full bg-amber-950/80 px-3 py-1 text-xs font-black text-amber-300 border border-amber-500/40 shadow-lg backdrop-blur">
+            <Sun className="h-4 w-4" /> 06:00 (Nascente L)
+          </div>
+          <div className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1 text-xs font-black text-amber-950 shadow-lg animate-pulse">
+            <Sun className="h-4 w-4" /> 12:00 (Zênite Solar)
+          </div>
+          <div className="flex items-center gap-1.5 rounded-full bg-amber-950/80 px-3 py-1 text-xs font-black text-amber-300 border border-amber-500/40 shadow-lg backdrop-blur">
+            <Sun className="h-4 w-4" /> 18:00 (Poente O)
+          </div>
         </div>
       )}
 
+      {/* Legenda de Irradiação no modo "Irradiação" */}
+      {viewMode === "irradiation" && (
+        <div className="absolute bottom-12 left-4 z-[500] rounded-2xl border border-white/20 bg-slate-900/90 p-3 text-white shadow-2xl backdrop-blur-md">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+            <Flame className="h-3.5 w-3.5 text-amber-400" /> Irradiação anual (kWh/m²)
+          </p>
+          <div className="space-y-1 text-xs font-bold">
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-4 rounded bg-[#ef4444]" />
+              <span>1.800 (melhor)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-4 rounded bg-[#f97316]" />
+              <span>1.600</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-4 rounded bg-[#eab308]" />
+              <span>1.400</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-4 rounded bg-[#22c55e]" />
+              <span>1.200</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-4 rounded bg-[#3b82f6]" />
+              <span>1.000 (menor)</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attribution */}
+      <div className="pointer-events-none absolute bottom-0 right-4 z-[500] rounded-t-[2px] bg-slate-900/80 px-2 py-0.5 text-[9px] font-semibold text-white/70">
+        Leaflet · Imagens © Esri
+      </div>
     </div>
   );
 }
