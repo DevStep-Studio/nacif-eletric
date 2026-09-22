@@ -293,9 +293,9 @@ export default function StepDadosProjeto({ state, onChange }) {
 
       {/* 3. Subformulário da Modalidade: Conta de Energia */}
       {state.entry_method === "bill" && (
-        <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4.5 sm:grid-cols-[1fr_1.3fr] shadow-sm">
-          {/* Coluna Esquerda: Upload e Processamento da Conta */}
-          <div className="space-y-2.5">
+        <div className="grid gap-4.5 rounded-2xl border border-slate-200/90 bg-white p-4.5 sm:p-5 sm:grid-cols-12 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          {/* Coluna Esquerda: Upload e Processamento da Conta (5 colunas) */}
+          <div className="flex flex-col justify-between space-y-2.5 sm:col-span-5">
             <input
               ref={fileInputRef}
               type="file"
@@ -309,29 +309,29 @@ export default function StepDadosProjeto({ state, onChange }) {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`flex min-h-[140px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 text-center transition-all ${
+              className={`group flex min-h-[150px] flex-1 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-4 text-center transition-all duration-200 ${
                 isDragging
-                  ? "border-[#00d8b8] bg-[#00d8b8]/10 ring-2 ring-[#00d8b8]/20"
+                  ? "border-[#00d8b8] bg-[#00d8b8]/[0.08] ring-2 ring-[#00d8b8]/20"
                   : analyzing
-                  ? "border-slate-300 bg-slate-50 cursor-wait"
-                  : "border-slate-300 bg-slate-50/60 hover:border-[#00d8b8] hover:bg-slate-50"
+                  ? "border-slate-300 bg-slate-50/80 cursor-wait"
+                  : "border-slate-300/80 bg-slate-50/50 hover:border-[#00d8b8] hover:bg-slate-50/90"
               }`}
             >
               {analyzing ? (
-                <div className="flex flex-col items-center gap-2 py-1">
-                  <Loader2 className="h-7 w-7 animate-spin text-[#00d8b8]" />
-                  <span className="text-xs font-bold text-slate-800">{readingStage || "Processando fatura..."}</span>
+                <div className="flex flex-col items-center gap-2 py-2">
+                  <Loader2 className="h-6 w-6 animate-spin text-[#00d8b8]" />
+                  <span className="text-xs font-black text-slate-800">{readingStage || "Processando fatura..."}</span>
                   <span className="text-[10px] text-slate-500 font-medium">Extraindo dados reais da conta</span>
                 </div>
               ) : (
                 <>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#00d8b8]">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white border border-slate-200/80 text-[#00d8b8] shadow-xs group-hover:border-[#00d8b8]/40 transition-colors">
                     <UploadCloud className="h-5 w-5" />
                   </div>
-                  <span className="text-xs font-black text-slate-900">
+                  <span className="text-xs font-black text-slate-900 group-hover:text-slate-950 transition-colors">
                     {state.bill_file_name ? "Substituir conta de energia" : "Importar conta de energia"}
                   </span>
-                  <span className="text-[11px] font-medium text-slate-500">
+                  <span className="text-[11px] font-medium text-slate-400 max-w-[200px] leading-tight">
                     Arraste ou clique para selecionar (PDF, JPG, PNG até 20MB)
                   </span>
                 </>
@@ -339,10 +339,10 @@ export default function StepDadosProjeto({ state, onChange }) {
             </div>
 
             {state.bill_file_name && (
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs">
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200/80 px-3.5 py-2.5 text-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <FileText className="h-4 w-4 text-[#00d8b8] shrink-0" />
-                  <span className="truncate font-bold text-slate-800 max-w-[180px]">
+                  <span className="truncate font-bold text-slate-800 max-w-[160px]">
                     {state.bill_file_name}
                   </span>
                   {state.bill_file_size && (
@@ -351,19 +351,19 @@ export default function StepDadosProjeto({ state, onChange }) {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="text-[11px] font-bold text-[#00d8b8] hover:underline"
+                    className="text-[11px] font-bold text-[#00d8b8] hover:underline cursor-pointer"
                   >
                     Trocar
                   </button>
-                  <span className="text-slate-300">|</span>
+                  <span className="text-slate-300">·</span>
                   <button
                     type="button"
                     onClick={removeBillFile}
-                    className="text-[11px] font-bold text-red-500 hover:text-red-700"
+                    className="text-[11px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer"
                     title="Remover arquivo"
                   >
                     Remover
@@ -380,16 +380,17 @@ export default function StepDadosProjeto({ state, onChange }) {
             )}
           </div>
 
-          {/* Coluna Direita: Resumo Real e Auditável da Conta */}
-          <div className="flex flex-col justify-between space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+          {/* Coluna Direita: Resumo Real e Auditável da Conta (7 colunas) */}
+          <div className="flex flex-col justify-between rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 sm:p-4.5 sm:col-span-7">
             <div>
-              <div className="flex items-center justify-between mb-3">
+              {/* Header do Card com Estado */}
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200/60">
                 <div className="flex items-center gap-2">
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded-full ${
                       consumptionMetrics.validCount > 0
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-slate-200 text-slate-600"
+                        ? "bg-[#00d8b8]/15 text-[#00d8b8]"
+                        : "bg-slate-200 text-slate-500"
                     }`}
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />
@@ -406,65 +407,76 @@ export default function StepDadosProjeto({ state, onChange }) {
                 </div>
 
                 {consumptionMetrics.validCount > 0 && (
-                  <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-black text-slate-700">
+                  <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-700">
                     {consumptionMetrics.validCount}/12 meses
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
-                <div>
-                  <span className="text-slate-500 font-semibold block text-[11px]">Consumo médio</span>
-                  <strong className="text-slate-900 font-black">
+              {/* Grid 2x2 com Tipografia Limpa e Alinhada */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Consumo médio
+                  </span>
+                  <p className="text-sm font-black text-slate-900 tracking-tight">
                     {consumptionMetrics.averageKwh > 0
                       ? `${consumptionMetrics.averageKwh.toLocaleString("pt-BR")} kWh/mês`
-                      : "Não identificado"}
-                  </strong>
+                      : "Não informado"}
+                  </p>
                 </div>
 
-                <div>
-                  <span className="text-slate-500 font-semibold block text-[11px]">Demanda contratada</span>
-                  <strong className="text-slate-900 font-black">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Demanda contratada
+                  </span>
+                  <p className="text-sm font-black text-slate-900 tracking-tight">
                     {isB1
                       ? "Não aplicável (B1)"
                       : state.contracted_demand_kw
                       ? `${Number(state.contracted_demand_kw).toLocaleString("pt-BR")} kW`
-                      : "Não identificada"}
-                  </strong>
+                      : "Não informada"}
+                  </p>
                 </div>
 
-                <div>
-                  <span className="text-slate-500 font-semibold block text-[11px]">Classe tarifária</span>
-                  <strong className="text-slate-900 font-black">
-                    {state.tariff_class || "Não identificada"}
-                  </strong>
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Classe tarifária
+                  </span>
+                  <p className="text-sm font-black text-slate-900 tracking-tight">
+                    {state.tariff_class || "B1 - Residencial"}
+                  </p>
                 </div>
 
-                <div>
-                  <span className="text-slate-500 font-semibold block text-[11px]">Distribuidora</span>
-                  <strong className="text-slate-900 font-black">
-                    {state.distributor || "Não identificada"}
-                  </strong>
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Distribuidora
+                  </span>
+                  <p className="text-sm font-black text-slate-900 tracking-tight">
+                    {state.distributor || "Pendente de localização"}
+                  </p>
                 </div>
               </div>
             </div>
 
-            <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between">
+            {/* Rodapé de Ação e Status */}
+            <div className="mt-4 pt-3 border-t border-slate-200/70 flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => setHistoryModalOpen(true)}
-                className="inline-flex items-center gap-1.5 text-xs font-black text-[#00d8b8] hover:underline"
+                className="inline-flex items-center gap-1.5 text-xs font-black text-[#00d8b8] hover:text-[#00c2a5] transition-colors cursor-pointer"
               >
-                <BarChart3 className="h-4 w-4" />
+                <BarChart3 className="h-3.5 w-3.5" />
                 {consumptionMetrics.validCount > 0
-                  ? `Conferir e editar histórico (${consumptionMetrics.validCount}/12)`
+                  ? `Editar histórico (${consumptionMetrics.validCount}/12)`
                   : "Preencher histórico de 12 meses"}
               </button>
 
               {consumptionMetrics.averageKwh > 0 && (
-                <span className="text-[10px] font-bold text-slate-400">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   Pronto para dimensionar
-                </span>
+                </div>
               )}
             </div>
           </div>
@@ -472,10 +484,12 @@ export default function StepDadosProjeto({ state, onChange }) {
       )}
 
       {state.entry_method === "power" && (
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-3.5 rounded-2xl border border-slate-200/90 bg-white p-4.5 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          <div className="grid gap-3.5 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-black text-foreground">Potência desejada (kWp)</Label>
+              <Label className="text-xs font-bold text-slate-700">
+                Potência desejada (kWp) <span className="text-[#00d8b8] font-bold">*</span>
+              </Label>
               <PtBrNumericInput
                 value={state.desired_power_kwp}
                 onChange={(v) => setField("desired_power_kwp", v)}
@@ -485,7 +499,9 @@ export default function StepDadosProjeto({ state, onChange }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-black text-foreground">Potência do módulo (Wp)</Label>
+              <Label className="text-xs font-bold text-slate-700">
+                Potência do módulo (Wp)
+              </Label>
               <PtBrNumericInput
                 value={state.module_wp}
                 onChange={(v) => setField("module_wp", v)}
@@ -497,28 +513,36 @@ export default function StepDadosProjeto({ state, onChange }) {
           </div>
 
           {/* Resumo Técnico do Dimensionamento Preliminar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-3.5 text-xs">
             <div>
-              <span className="text-muted-foreground font-semibold">Módulos necessários:</span>{" "}
-              <strong className="text-foreground font-black">{preliminary?.panelCount || 0} unidades</strong>
+              <span className="text-slate-400 font-bold uppercase text-[10px] block">Módulos necessários</span>
+              <strong className="text-slate-900 font-black text-xs">
+                {preliminary?.panelCount > 0 ? `${preliminary.panelCount} unidades` : "—"}
+              </strong>
             </div>
             <div>
-              <span className="text-muted-foreground font-semibold">Potência calculada:</span>{" "}
-              <strong className="text-slate-900 font-black">{Number(preliminary?.installedKwp || 0).toFixed(2).replace(".", ",")} kWp</strong>
+              <span className="text-slate-400 font-bold uppercase text-[10px] block">Potência calculada</span>
+              <strong className="text-slate-900 font-black text-xs">
+                {Number(preliminary?.installedKwp || 0) > 0 ? `${Number(preliminary.installedKwp).toFixed(2).replace(".", ",")} kWp` : "—"}
+              </strong>
             </div>
             <div>
-              <span className="text-muted-foreground font-semibold">Área estimada:</span>{" "}
-              <strong className="text-slate-700 font-black">{Number(preliminary?.areaM2 || 0).toFixed(1).replace(".", ",")} m²</strong>
+              <span className="text-slate-400 font-bold uppercase text-[10px] block">Área estimada</span>
+              <strong className="text-slate-900 font-black text-xs">
+                {Number(preliminary?.areaM2 || 0) > 0 ? `${Number(preliminary.areaM2).toFixed(1).replace(".", ",")} m²` : "—"}
+              </strong>
             </div>
           </div>
         </div>
       )}
 
       {state.entry_method === "area" && (
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-3.5 rounded-2xl border border-slate-200/90 bg-white p-4.5 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          <div className="grid gap-3.5 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-black text-foreground">Área disponível do telhado (m²)</Label>
+              <Label className="text-xs font-bold text-slate-700">
+                Área disponível do telhado (m²) <span className="text-[#00d8b8] font-bold">*</span>
+              </Label>
               <PtBrNumericInput
                 value={state.available_area_m2}
                 onChange={(v) => setField("available_area_m2", v)}
@@ -528,7 +552,9 @@ export default function StepDadosProjeto({ state, onChange }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-black text-foreground">Potência do módulo (Wp)</Label>
+              <Label className="text-xs font-bold text-slate-700">
+                Potência do módulo (Wp)
+              </Label>
               <PtBrNumericInput
                 value={state.module_wp}
                 onChange={(v) => setField("module_wp", v)}
@@ -539,14 +565,18 @@ export default function StepDadosProjeto({ state, onChange }) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-3.5 text-xs">
             <div>
-              <span className="text-muted-foreground font-semibold">Capacidade estimada:</span>{" "}
-              <strong className="text-foreground font-black">{preliminary?.panelCount || 0} módulos</strong>
+              <span className="text-slate-400 font-bold uppercase text-[10px] block">Capacidade estimada</span>
+              <strong className="text-slate-900 font-black text-xs">
+                {preliminary?.panelCount > 0 ? `${preliminary.panelCount} módulos` : "—"}
+              </strong>
             </div>
             <div>
-              <span className="text-muted-foreground font-semibold">Potência pico:</span>{" "}
-              <strong className="text-slate-900 font-black">{Number(preliminary?.installedKwp || 0).toFixed(2).replace(".", ",")} kWp</strong>
+              <span className="text-slate-400 font-bold uppercase text-[10px] block">Potência pico</span>
+              <strong className="text-slate-900 font-black text-xs">
+                {Number(preliminary?.installedKwp || 0) > 0 ? `${Number(preliminary.installedKwp).toFixed(2).replace(".", ",")} kWp` : "—"}
+              </strong>
             </div>
           </div>
         </div>

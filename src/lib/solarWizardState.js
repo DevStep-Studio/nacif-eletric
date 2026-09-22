@@ -31,8 +31,8 @@ export function defaultWizardState() {
     client_name: "",
     installation_type: "Residencial",
     entry_method: "bill", // "bill" (padrão/recomendado), "power", "area"
-    desired_power_kwp: 11.55,
-    available_area_m2: 60,
+    desired_power_kwp: "",
+    available_area_m2: "",
     system_mode: "on-grid", // "on-grid" | "hibrido" | "off-grid"
     has_battery: false,
     bill_file_name: "",
@@ -86,11 +86,11 @@ export function defaultWizardState() {
     layout_strategy: "max_generation",
 
     // 5. Equipamentos
-    inverter_kw: 5,
+    inverter_kw: "",
     inverter_quantity: 1,
     inverter_manufacturer: "",
     inverter_model: "",
-    module_wp: 550,
+    module_wp: "",
     module_manufacturer: "",
     module_model: "",
     ac_voltage: 220,
@@ -98,20 +98,16 @@ export function defaultWizardState() {
     connection_point: "Quadro de distribuição principal da unidade consumidora",
     connection_location: "Quadro elétrico principal da unidade consumidora",
     entry_standard_location: "Padrão de entrada da unidade consumidora",
-    requested_panel_count: 21,
+    requested_panel_count: "",
     battery_config: {
-      capacity_kwh: "10",
-      model: "Bateria Lítio 48V / 200Ah",
+      capacity_kwh: "",
+      model: "",
       voltage: "48",
       technology: "Íon-lítio",
       depth_of_discharge_pct: 80,
       efficiency_pct: 90,
       desired_autonomy_h: "",
-      priority_loads: [
-        { name: "Geladeira / Freezer", power_w: 250, hours_day: 24 },
-        { name: "Iluminação essencial & Roteador", power_w: 180, hours_day: 12 },
-        { name: "Portão eletrônico / CFTV", power_w: 120, hours_day: 24 },
-      ],
+      priority_loads: [],
     },
 
     // 6. Projeto
@@ -129,14 +125,20 @@ const num = (value, fallback = 0) => {
  */
 export function getPreliminarySizing(state) {
   if (state.entry_method === "area") {
-    return sizeFromAvailableArea(state.available_area_m2, { moduleWp: state.module_wp });
+    if (!state.available_area_m2 || num(state.available_area_m2, 0) <= 0) {
+      return { panelCount: 0, installedKwp: 0, areaM2: 0, effectiveArea: 0, moduleArea: 0 };
+    }
+    return sizeFromAvailableArea(state.available_area_m2, { moduleWp: state.module_wp || 550 });
   }
   if (state.entry_method === "bill" && num(state.monthly_consumption_kwh, 0) > 0) {
     // Estimativa por consumo: kwh / (30 * 4.8 * 0.8)
     const neededKwp = (num(state.monthly_consumption_kwh, 0)) / (30 * 4.8 * 0.8);
-    return sizeFromDesiredPower(neededKwp, state.module_wp);
+    return sizeFromDesiredPower(neededKwp, state.module_wp || 550);
   }
-  return sizeFromDesiredPower(state.desired_power_kwp, state.module_wp);
+  if (!state.desired_power_kwp || num(state.desired_power_kwp, 0) <= 0) {
+    return { panelCount: 0, installedKwp: 0, areaM2: 0, moduleArea: 0 };
+  }
+  return sizeFromDesiredPower(state.desired_power_kwp, state.module_wp || 550);
 }
 
 export function estimateRoofRectangleFromArea(areaM2) {
