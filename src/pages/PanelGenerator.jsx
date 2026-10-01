@@ -4847,8 +4847,8 @@ export default function PanelGenerator() {
                     x={combSettings.labelX ?? (bx + bw / 2)}
                     y={combSettings.labelY ?? (by - 7)}
                     fill={combSettings.labelColor || "#854d0e"}
-                    fontSize={combSettings.fontSize || 6.4}
-                    fontWeight="950"
+                    fontSize={combSettings.fontSize || 8}
+                    fontWeight="900"
                     textAnchor="middle"
                     pointerEvents="none"
                   >
@@ -4932,7 +4932,7 @@ export default function PanelGenerator() {
               {isSelected && (
                 <g>
                   <rect x={bx + Math.max(0, bw - 84)} y={by - 21} width="84" height="16" rx="4" fill="#0f172a" opacity="0.92" />
-                  <text x={bx + Math.max(0, bw - 42)} y={by - 10} fill="#ffffff" fontSize="6.4" fontWeight="950" textAnchor="middle">
+                  <text x={bx + Math.max(0, bw - 42)} y={by - 10} fill="#ffffff" fontSize="7" fontWeight="900" textAnchor="middle">
                     Pente livre
                   </text>
                   <rect
@@ -4981,8 +4981,8 @@ export default function PanelGenerator() {
                   x={combSettings.labelX ?? (bx + bw / 2)}
                   y={combSettings.labelY ?? (by - 7)}
                   fill={combSettings.labelColor || "#854d0e"}
-                  fontSize={combSettings.fontSize || 6.4}
-                  fontWeight="950"
+                  fontSize={combSettings.fontSize || 8}
+                  fontWeight="900"
                   textAnchor="middle"
                   pointerEvents="none"
                 >
@@ -5049,7 +5049,7 @@ export default function PanelGenerator() {
                 </g>
               )}
               {item.label && (
-                <text x={cx} y={by - 5} fill={item.labelColor || "#0f172a"} fontSize="7" fontWeight="950" textAnchor="middle" pointerEvents="none">
+                <text x={cx} y={by - 6} fill={item.labelColor || "#0f172a"} fontSize="8.5" fontWeight="900" textAnchor="middle" pointerEvents="none">
                   {item.label}
                 </text>
               )}
@@ -5114,7 +5114,7 @@ export default function PanelGenerator() {
                 </g>
               )}
               {item.label && (
-                <text x={cx} y={by - 5} fill={item.labelColor || "#475569"} fontSize="7" fontWeight="950" textAnchor="middle" pointerEvents="none">
+                <text x={cx} y={by - 6} fill={item.labelColor || "#334155"} fontSize="8.5" fontWeight="900" textAnchor="middle" pointerEvents="none">
                   {item.label}
                 </text>
               )}
@@ -5195,7 +5195,7 @@ export default function PanelGenerator() {
               <line x1={px+MOD/2} y1={y+BRK_H-14-3} x2={px+MOD/2} y2={y+BRK_H-14+3} stroke="#cbd5e1" strokeWidth="1.2" />
 
               {/* Indicador de fase */}
-              <text x={px+MOD/2} y={y+31} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="bold">
+              <text x={px+MOD/2} y={y+31} fill="#1e293b" fontSize="7.2" textAnchor="middle" fontWeight="900">
                 {polePhaseLabel(c, pi)}
               </text>
 
@@ -5239,33 +5239,33 @@ export default function PanelGenerator() {
         />
         
         {/* Marcações técnicas liga/desliga integradas */}
-        <text x={x+W/2} y={y+37} fill="#64748b" fontSize="5.5" textAnchor="middle" fontWeight="bold">I</text>
-        <text x={x+W/2} y={y+73} fill="#64748b" fontSize="5.5" textAnchor="middle" fontWeight="bold">O</text>
+        <text x={x+W/2} y={y+37} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
+        <text x={x+W/2} y={y+73} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
         
         {/* Indicador visual de estado de cor (Vermelho = Ligado, Verde = Desligado) */}
         <rect x={x + W/2 - (W > MOD ? 16 : 11)} y={y+48} width="4" height="6" rx="0.5" fill={c.status === "ON" ? "#ef4444" : "#22c55e"} stroke="#475569" strokeWidth="0.3" />
 
         {/* Cartão de etiqueta de identificação embutido na face */}
-        <rect x={x+4} y={y+71} width={W-8} height="13" fill="#ffffff" rx="1.5" stroke="#cbd5e1" strokeWidth="0.8" />
+        <rect x={x+3} y={y+68} width={W-6} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
         {c.poles === 1 ? (
-          <text x={x+W/2} y={y+79} fill="#1e293b" fontSize="5.5" fontWeight="bold" textAnchor="middle">
-            {(shortLabel || displayLabel).slice(0, 8)} · {c.current}A
+          <text x={x+W/2} y={y+78.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
+            {(shortLabel || displayLabel).slice(0, 10)} · {c.current}A
           </text>
         ) : (
           <g>
-            <text x={x+W/2} y={y+77} fill="#1e293b" fontSize="5" fontWeight="bold" textAnchor="middle">
+            <text x={x+W/2} y={y+75.5} fill="#0f172a" fontSize="6.5" fontWeight="900" textAnchor="middle">
               {displayLabel.slice(0, 18)}
             </text>
-            <text x={x+W/2} y={y+82} fill="#ef4444" fontSize="4.5" fontWeight="extrabold" textAnchor="middle">
-              {c.current}A/{c.curve} - {c.poles}P
+            <text x={x+W/2} y={y+81.5} fill="#dc2626" fontSize="5.6" fontWeight="950" textAnchor="middle">
+              {c.current}A/{c.curve} · {c.poles}P
             </text>
           </g>
         )}
         
         {/* Norma técnica nos multipolos */}
-        <text x={x+W/2} y={y+28} fill="#94a3b8" fontSize="4.5" fontWeight="black" textAnchor="middle">NBR</text>
+        <text x={x+W/2} y={y+27.5} fill="#64748b" fontSize="5" fontWeight="900" textAnchor="middle">NBR</text>
         {c.poles > 1 && (
-          <text x={x+W/2} y={y+34} fill="#cbd5e1" fontSize="3" fontWeight="bold" textAnchor="middle">IEC 60898-1</text>
+          <text x={x+W/2} y={y+33.5} fill="#94a3b8" fontSize="3.8" fontWeight="bold" textAnchor="middle">IEC 60898-1</text>
         )}
 
         {/* Controles Flutuantes se Selecionado */}
@@ -5311,33 +5311,33 @@ export default function PanelGenerator() {
         <line x1={x+W/2-3} y1={y+BRK_H-14} x2={x+W/2+3} y2={y+BRK_H-14} stroke="#fecaca" strokeWidth="1.2" />
 
         {/* Janela de Status activa (verde/vermelha) */}
-        <rect x={x+4} y={y+26} width={W-8} height="11" rx="1.5" fill="#0f172a" />
+        <rect x={x+4} y={y+25} width={W-8} height="12" rx="2" fill="#0f172a" />
         <rect
           x={x+5}
-          y={y+27}
+          y={y+26}
           width={W-10}
-          height="9"
-          rx="1"
+          height="10"
+          rx="1.5"
           fill={c.dpsStatus === "OK" ? COLORS.dpsGreen : "#ef4444"}
           onClick={toggleStatus}
           className="transition-colors duration-150"
         />
-        <text x={x+W/2} y={y+33} fill="#ffffff" fontSize="5.2" fontWeight="black" textAnchor="middle" pointerEvents="none">
+        <text x={x+W/2} y={y+33.5} fill="#ffffff" fontSize="6.2" fontWeight="950" textAnchor="middle" pointerEvents="none">
           {c.dpsStatus}
         </text>
 
         {/* Raio indicador */}
         <polygon
-          points={`${x+W/2},${y+42} ${x+W/2+4},${y+50} ${x+W/2+1.5},${y+50} ${x+W/2+3},${y+60} ${x+W/2-4},${y+51} ${x+W/2-1.5},${y+51}`}
+          points={`${x+W/2},${y+40} ${x+W/2+4},${y+48} ${x+W/2+1.5},${y+48} ${x+W/2+3},${y+58} ${x+W/2-4},${y+49} ${x+W/2-1.5},${y+49}`}
           fill="#fbbf24"
           stroke="#d97706"
           strokeWidth="0.5"
         />
 
         {/* Cartão de etiqueta embutido */}
-        <rect x={x+3} y={y+68} width={W-6} height="15" fill="#ffffff" rx="1.5" stroke="#7f1d1d" strokeWidth="0.8" />
-        <text x={x+W/2} y={y+74} fill="#1e293b" fontSize="5" fontWeight="bold" textAnchor="middle">DPS-{c.phase}</text>
-        <text x={x+W/2} y={y+80} fill="#b91c1c" fontSize="4.5" fontWeight="extrabold" textAnchor="middle">Uc 275V</text>
+        <rect x={x+3} y={y+67} width={W-6} height="17" fill="#ffffff" rx="2" stroke="#7f1d1d" strokeWidth="0.85" />
+        <text x={x+W/2} y={y+74.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">DPS-{c.phase}</text>
+        <text x={x+W/2} y={y+81} fill="#b91c1c" fontSize="5.6" fontWeight="950" textAnchor="middle">Uc 275V</text>
 
         {/* Pinos interativos de fiação */}
         {(wiringMode || !!wireMoveMode) && (
@@ -5395,7 +5395,7 @@ export default function PanelGenerator() {
               <line x1={px+MOD/2-3} y1={y+BRK_H-14} x2={px+MOD/2+3} y2={y+BRK_H-14} stroke="#cbd5e1" strokeWidth="1.2" />
               <line x1={px+MOD/2} y1={y+BRK_H-14-3} x2={px+MOD/2} y2={y+BRK_H-14+3} stroke="#cbd5e1" strokeWidth="1.2" />
 
-              <text x={px+MOD/2} y={y+31} fill="#64748b" fontSize="6.5" textAnchor="middle" fontWeight="bold">
+              <text x={px+MOD/2} y={y+31} fill="#1e293b" fontSize="7.5" textAnchor="middle" fontWeight="900">
                 {drPoleLabel(c, pi)}
               </text>
 
@@ -5411,8 +5411,8 @@ export default function PanelGenerator() {
         })}
 
         {/* Botão de Teste azul brilhante (com posição corrigida para não sobrepor fiação) */}
-        <rect x={x+6} y={y+36} width="14" height="11" rx="2.5" fill="#00d8b8" stroke="#00d8b8" strokeWidth="0.8" filter="url(#shadow)" />
-        <text x={x+13} y={y+44} fill="#ffffff" fontSize="6.5" fontWeight="black" textAnchor="middle" pointerEvents="none">T</text>
+        <rect x={x+6} y={y+35} width="15" height="12" rx="2.5" fill="#00d8b8" stroke="#0f766e" strokeWidth="0.8" filter="url(#shadow)" />
+        <text x={x+13.5} y={y+43.5} fill="#ffffff" fontSize="7.2" fontWeight="950" textAnchor="middle" pointerEvents="none">T</text>
 
         {/* Cavidade da alavanca */}
         <rect x={x + W/2 - 7} y={y + 39} width="14" height="28" rx="2" fill="#0f172a" stroke="#475569" strokeWidth="0.5" />
@@ -5439,15 +5439,15 @@ export default function PanelGenerator() {
         />
         
         {/* Indicadores de liga/desliga da alavanca */}
-        <text x={x+W/2} y={y+37} fill="#64748b" fontSize="5.5" textAnchor="middle" fontWeight="bold">I</text>
-        <text x={x+W/2} y={y+73} fill="#64748b" fontSize="5.5" textAnchor="middle" fontWeight="bold">O</text>
+        <text x={x+W/2} y={y+37} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
+        <text x={x+W/2} y={y+73} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
 
         {/* Cartão de etiqueta de identificação embutido na face */}
-        <rect x={x+4} y={y+71} width={W-8} height="13" fill="#ffffff" rx="1.5" stroke="#cbd5e1" strokeWidth="0.8" />
-        <text x={x+W/2} y={y+77} fill="#1e293b" fontSize="5.5" fontWeight="bold" textAnchor="middle">
-          {c.label.slice(0, 12)}
+        <rect x={x+3} y={y+68} width={W-6} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
+        <text x={x+W/2} y={y+75.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
+          {c.label.slice(0, 14)}
         </text>
-        <text x={x+W/2} y={y+82} fill="#0284c7" fontSize="4.5" fontWeight="extrabold" textAnchor="middle">
+        <text x={x+W/2} y={y+81.5} fill="#0284c7" fontSize="5.6" fontWeight="950" textAnchor="middle">
           {c.current}A / IΔn 30mA
         </text>
 
@@ -5459,13 +5459,27 @@ export default function PanelGenerator() {
 
   const renderSpacer = (c, x, y) => {
     const W = c.poles * MOD;
+    const badgeW = Math.min(W - 8, Math.max(96, (c.label || "").length * 8.8 + 20));
     return (
       <g key={c.id}>
         <rect x={x+1} y={y} width={W-2} height={BRK_H} rx="4" fill="#f8fafc" fillOpacity="0.08" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="6,4" pointerEvents="none" />
-        <text x={x+W/2} y={y+BRK_H/2-6} fill="#64748b" fontSize="7" fontWeight="bold" textAnchor="middle">
+        {/* Badge de contraste central para manter 100% legível sobre o trilho */}
+        <rect
+          x={x + W/2 - badgeW / 2}
+          y={y + BRK_H/2 - 17}
+          width={badgeW}
+          height="34"
+          rx="6"
+          fill="#ffffff"
+          fillOpacity="0.94"
+          stroke="#cbd5e1"
+          strokeWidth="0.9"
+          pointerEvents="none"
+        />
+        <text x={x+W/2} y={y+BRK_H/2-3} fill="#1e293b" fontSize="9" fontWeight="900" textAnchor="middle" pointerEvents="none">
           {c.label}
         </text>
-        <text x={x+W/2} y={y+BRK_H/2+8} fill="#94a3b8" fontSize="6.5" textAnchor="middle">
+        <text x={x+W/2} y={y+BRK_H/2+10} fill="#475569" fontSize="7.8" fontWeight="800" textAnchor="middle" pointerEvents="none">
           {c.poles} Módulos DIN
         </text>
       </g>
@@ -5514,7 +5528,7 @@ export default function PanelGenerator() {
         <rect x={x+3} y={y+BRK_H-24} width={W-6} height="12" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" rx="1" />
         <circle cx={x+W/2} cy={y+BRK_H-18} r="2.5" fill="#1e293b" />
 
-        <text x={x+W/2} y={y+BRK_H/2+3} fill={textColor} fontSize="6" fontWeight="black" textAnchor="middle" transform={`rotate(-90 ${x+W/2} ${y+BRK_H/2})`}>
+        <text x={x+W/2} y={y+BRK_H/2+3} fill={textColor} fontSize="7" fontWeight="900" textAnchor="middle" transform={`rotate(-90 ${x+W/2} ${y+BRK_H/2})`}>
           {c.label}
         </text>
 
@@ -5598,16 +5612,16 @@ export default function PanelGenerator() {
     if (!anchor) return null;
     if (anchor.length < 58) return null;
 
-    const width = Math.max(36, cleanLabel.length * 4.6 + 10);
-    const height = 13;
+    const width = Math.max(38, cleanLabel.length * 5.2 + 12);
+    const height = 15;
     const x = anchor.x - width / 2;
     const y = anchor.y - height / 2;
     const rotation = anchor.horizontal ? undefined : `rotate(-90 ${anchor.x} ${anchor.y})`;
 
     return (
       <g key={key} transform={rotation} pointerEvents="none">
-        <rect x={x} y={y} width={width} height={height} rx="5" fill="#ffffff" stroke={cableEdgeColor(baseColor)} strokeWidth="0.7" />
-        <text x={anchor.x} y={anchor.y + 3.2} fill="#0f172a" fontSize="6.2" fontWeight="950" textAnchor="middle">
+        <rect x={x} y={y} width={width} height={height} rx="5" fill="#ffffff" stroke={cableEdgeColor(baseColor)} strokeWidth="0.8" />
+        <text x={anchor.x} y={anchor.y + 3.6} fill="#0f172a" fontSize="7.2" fontWeight="950" textAnchor="middle">
           {cleanLabel}
         </text>
       </g>
@@ -5617,16 +5631,16 @@ export default function PanelGenerator() {
   const renderCableTextTag = (point, label, baseColor, key, options = {}) => {
     if (!point || !label) return null;
     const text = String(label).trim();
-    const width = Math.max(20, text.length * 4.6 + 10);
-    const height = 12;
+    const width = Math.max(22, text.length * 5.2 + 12);
+    const height = 14;
     const x = point.x - width / 2;
     const y = point.y - height / 2;
     const rotation = options.rotate ? `rotate(${options.rotate} ${point.x} ${point.y})` : undefined;
 
     return (
       <g key={key} transform={rotation} pointerEvents="none">
-        <rect x={x} y={y} width={width} height={height} rx="4" fill="#ffffff" stroke={cableEdgeColor(baseColor)} strokeWidth="0.75" />
-        <text x={point.x} y={point.y + 3.1} fill="#0f172a" fontSize="6" fontWeight="950" textAnchor="middle">
+        <rect x={x} y={y} width={width} height={height} rx="4" fill="#ffffff" stroke={cableEdgeColor(baseColor)} strokeWidth="0.8" />
+        <text x={point.x} y={point.y + 3.5} fill="#0f172a" fontSize="7" fontWeight="950" textAnchor="middle">
           {text}
         </text>
       </g>
@@ -6881,9 +6895,9 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
   };
 
   const renderWiringLegend = () => {
-    const width = 184;
-    const height = 118;
-    const rowH = 12.6;
+    const width = 196;
+    const height = 126;
+    const rowH = 13.5;
     const x = Math.max(30, Math.min(PANEL_W - width - 30, legendPosition.x));
     const y = Math.max(30, Math.min(panelHeight - height - 30, legendPosition.y));
     const items = [
@@ -6898,13 +6912,13 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     return (
       <g id="wiring-legend">
         <rect x={x + 2} y={y + 3} width={width} height={height} rx="8" fill="#0f172a" fillOpacity="0.13" />
-        <rect x={x} y={y} width={width} height={height} rx="8" fill="#ffffff" fillOpacity="0.97" stroke="#cbd5e1" strokeWidth="0.9" />
+        <rect x={x} y={y} width={width} height={height} rx="8" fill="#ffffff" fillOpacity="0.98" stroke="#cbd5e1" strokeWidth="1" />
         <g className="cursor-move" onPointerDown={startLegendDrag}>
-          <rect x={x} y={y} width={width} height="23" rx="8" fill="#f8fafc" />
-          <rect x={x} y={y + 15} width={width} height="8" fill="#f8fafc" />
-          <line x1={x} y1={y + 23} x2={x + width} y2={y + 23} stroke="#e2e8f0" strokeWidth="0.8" />
-          <circle cx={x + 11} cy={y + 11.5} r="3" fill="#e0f2fe" stroke="#0284c7" strokeWidth="0.75" pointerEvents="none" />
-          <text x={x + 20} y={y + 14.6} fill="#0f172a" fontSize="7.2" fontWeight="950" pointerEvents="none">
+          <rect x={x} y={y} width={width} height="24" rx="8" fill="#f8fafc" />
+          <rect x={x} y={y + 16} width={width} height="8" fill="#f8fafc" />
+          <line x1={x} y1={y + 24} x2={x + width} y2={y + 24} stroke="#e2e8f0" strokeWidth="0.9" />
+          <circle cx={x + 12} cy={y + 12} r="3.2" fill="#e0f2fe" stroke="#0284c7" strokeWidth="0.8" pointerEvents="none" />
+          <text x={x + 22} y={y + 15.5} fill="#0f172a" fontSize="8" fontWeight="900" pointerEvents="none">
             LEGENDA DAS LIGAÇÕES
           </text>
         </g>
@@ -6915,38 +6929,38 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
             setShowLegend(false);
           }}
         >
-          <rect x={x + width - 21} y={y + 5} width="15" height="14" rx="4" fill="#fee2e2" stroke="#fecaca" strokeWidth="0.7" />
-          <text x={x + width - 13.5} y={y + 15} fill="#dc2626" fontSize="8" fontWeight="950" textAnchor="middle" pointerEvents="none">
-            x
+          <rect x={x + width - 22} y={y + 5} width="16" height="15" rx="4" fill="#fee2e2" stroke="#fecaca" strokeWidth="0.7" />
+          <text x={x + width - 14} y={y + 15.5} fill="#dc2626" fontSize="9.5" fontWeight="950" textAnchor="middle" pointerEvents="none">
+            ×
           </text>
         </g>
         {items.map((item, index) => {
-          const lineY = y + 34 + index * rowH;
+          const lineY = y + 36 + index * rowH;
           const isComb = item.code === "PENTE";
           return (
             <g key={item.label}>
               <line
-                x1={x + 11}
+                x1={x + 12}
                 y1={lineY}
-                x2={x + 41}
+                x2={x + 42}
                 y2={lineY}
                 stroke={item.color}
-                strokeWidth={isComb ? 4.8 : 3.6}
+                strokeWidth={isComb ? 5 : 3.8}
                 strokeLinecap="round"
                 pointerEvents="none"
               />
-              <circle cx={x + 11} cy={lineY} r="2.35" fill="#ffffff" stroke={isComb ? "#854d0e" : cableEdgeColor(item.color)} strokeWidth="0.75" pointerEvents="none" />
-              <text x={x + 50} y={lineY + 2.4} fill="#0f172a" fontSize="6.5" fontWeight="950" pointerEvents="none">
+              <circle cx={x + 12} cy={lineY} r="2.5" fill="#ffffff" stroke={isComb ? "#854d0e" : cableEdgeColor(item.color)} strokeWidth="0.8" pointerEvents="none" />
+              <text x={x + 52} y={lineY + 2.8} fill="#0f172a" fontSize="7.5" fontWeight="900" pointerEvents="none">
                 {item.code}
               </text>
-              <text x={x + 78} y={lineY + 2.4} fill="#475569" fontSize="6.35" fontWeight="800" pointerEvents="none">
+              <text x={x + 82} y={lineY + 2.8} fill="#334155" fontSize="7.2" fontWeight="700" pointerEvents="none">
                 {item.label}
               </text>
             </g>
           );
         })}
-        <line x1={x + 11} y1={y + height - 17} x2={x + width - 11} y2={y + height - 17} stroke="#e2e8f0" strokeWidth="0.8" />
-        <text x={x + 11} y={y + height - 6.5} fill="#64748b" fontSize="5.5" fontWeight="800" pointerEvents="none">
+        <line x1={x + 12} y1={y + height - 18} x2={x + width - 12} y2={y + height - 18} stroke="#e2e8f0" strokeWidth="0.8" />
+        <text x={x + 12} y={y + height - 7} fill="#64748b" fontSize="6.2" fontWeight="700" pointerEvents="none">
           Trajetos ortogonais e curvas de 90 graus
         </text>
       </g>
@@ -6954,7 +6968,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
   };
 
   const renderLegendToggle = () => {
-    const x = PANEL_W - 154;
+    const x = PANEL_W - 160;
     const y = 38;
     return (
       <g
@@ -6965,13 +6979,13 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           setShowLegend(true);
         }}
       >
-        <rect x={x + 1} y={y + 2} width="122" height="24" rx="7" fill="#0f172a" fillOpacity="0.12" />
-        <rect x={x} y={y} width="122" height="24" rx="7" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.9" />
-        <circle cx={x + 14} cy={y + 12} r="5.2" fill="#e0f2fe" stroke="#0284c7" strokeWidth="0.8" />
-        <text x={x + 14} y={y + 14.4} fill="#0369a1" fontSize="7" fontWeight="950" textAnchor="middle" pointerEvents="none">
+        <rect x={x + 1} y={y + 2} width={128} height="26" rx="7" fill="#0f172a" fillOpacity="0.12" />
+        <rect x={x} y={y} width={128} height="26" rx="7" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.9" />
+        <circle cx={x + 15} cy={y + 13} r="5.5" fill="#e0f2fe" stroke="#0284c7" strokeWidth="0.8" />
+        <text x={x + 15} y={y + 16} fill="#0369a1" fontSize="8" fontWeight="900" textAnchor="middle" pointerEvents="none">
           i
         </text>
-        <text x={x + 27} y={y + 14.8} fill="#0f172a" fontSize="7" fontWeight="900" pointerEvents="none">
+        <text x={x + 29} y={y + 16.5} fill="#0f172a" fontSize="8" fontWeight="900" pointerEvents="none">
           Mostrar legenda
         </text>
       </g>
@@ -7751,7 +7765,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                         const pinId = `terminal_left_top:${terminal.index}`;
                         return (
                           <g key={pinId}>
-                            <text x={point.x} y={THREE_PHASE_OUTPUT.y + 10.5} fill={terminal.fill} fontSize="6.6" fontWeight="950" textAnchor="middle">
+                            <text x={point.x} y={THREE_PHASE_OUTPUT.y + 11} fill={terminal.fill} fontSize="8" fontWeight="950" textAnchor="middle">
                               {terminal.label}
                             </text>
                             <circle cx={point.x} cy={point.y} r="4.8" fill="#334155" stroke="#e2e8f0" strokeWidth="0.7" />
@@ -7871,18 +7885,32 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               </g>
                             );
                           })}
-                          <text
-                            x={neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 14)}
-                            y={neutralBus.labelY ?? (neutralLayout.y + 12)}
-                            fill={neutralBus.color || "#0f172a"}
-                            fontSize={neutralBus.fontSize || 8}
-                            fontWeight="900"
-                            textAnchor="start"
+                          <g
                             className="cursor-move"
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           >
-                            {neutralBus.label || "N"}
-                          </text>
+                            <rect
+                              x={(neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 12)) - 4}
+                              y={(neutralBus.labelY ?? (neutralLayout.y + 11)) - 11}
+                              width="18"
+                              height="17"
+                              rx="4"
+                              fill="#ffffff"
+                              fillOpacity="0.94"
+                              stroke="#bae6fd"
+                              strokeWidth="0.85"
+                            />
+                            <text
+                              x={neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 17)}
+                              y={neutralBus.labelY ?? (neutralLayout.y + 12)}
+                              fill={neutralBus.color || "#0369a1"}
+                              fontSize={neutralBus.fontSize || 9.5}
+                              fontWeight="900"
+                              textAnchor="middle"
+                            >
+                              {neutralBus.label || "N"}
+                            </text>
+                          </g>
                         </g>
                       );
                     })()}
@@ -7940,18 +7968,40 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               </g>
                             );
                           })}
-                          <text 
-                            x={groundBus.labelX ?? (groundLayout.x + groundLayout.width / 2)} 
-                            y={groundBus.labelY ?? (groundY - 6)} 
-                            fill={groundBus.color || "#16a34a"} 
-                            fontSize={groundBus.fontSize || 7} 
-                            fontWeight="bold" 
-                            textAnchor="middle"
-                            className={`cursor-move ${selectedTextWireId === "ground-bus" ? "stroke-emerald-500 stroke-[0.3]" : ""}`}
-                            onPointerDown={(e) => startInfraTextDrag(e, "ground-bus", groundLayout.x, groundLayout.y)}
-                          >
-                            {groundBus.label || "BARRAMENTO DE PROTEÇÃO TERRA (PE)"}
-                          </text>
+                          {(() => {
+                            const labelText = groundBus.label || "BARRAMENTO DE PROTEÇÃO TERRA (PE)";
+                            const labelXPos = groundBus.labelX ?? (groundLayout.x + groundLayout.width / 2);
+                            const labelYPos = groundBus.labelY ?? (groundY - 8);
+                            const badgeW = labelText.length * 6.5 + 20;
+                            return (
+                              <g
+                                className={`cursor-move ${selectedTextWireId === "ground-bus" ? "stroke-emerald-500 stroke-[0.3]" : ""}`}
+                                onPointerDown={(e) => startInfraTextDrag(e, "ground-bus", groundLayout.x, groundLayout.y)}
+                              >
+                                <rect
+                                  x={labelXPos - badgeW / 2}
+                                  y={labelYPos - 12}
+                                  width={badgeW}
+                                  height="18"
+                                  rx="4.5"
+                                  fill="#ffffff"
+                                  fillOpacity="0.95"
+                                  stroke="#bbf7d0"
+                                  strokeWidth="0.85"
+                                />
+                                <text 
+                                  x={labelXPos} 
+                                  y={labelYPos + 1.2} 
+                                  fill={groundBus.color || "#15803d"} 
+                                  fontSize={groundBus.fontSize || 8.5} 
+                                  fontWeight="900" 
+                                  textAnchor="middle"
+                                >
+                                  {labelText}
+                                </text>
+                              </g>
+                            );
+                          })()}
                         </g>
                       );
                     })()}
@@ -7961,8 +8011,6 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       const railY = 190 + rIdx * 240;
                       return (
                         <g key={r.id}>
-                          {/* Nome do Trilho */}
-                          <text x={160} y={railY - 60} fill="#64748b" fontSize="8.5" fontWeight="950">{r.name.toUpperCase()}</text>
                           {/* Trilho DIN Metálico */}
                           <rect x="140" y={railY - 12} width={PANEL_W - 280} height="24" rx="2" fill="url(#railGrad)" stroke="#475569" strokeWidth="0.8" />
                           <rect x="142" y={railY - 10} width={PANEL_W - 284} height="4" fill="#ffffff" fillOpacity="0.25" />
@@ -7982,6 +8030,38 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       {renderBackbonePath("ground-bus-tie", getGroundBusTieRoute(panelHeight, infrastructure), COLORS.ground, 4.8)}
                       {renderDuctedWiringPlan()}
                     </g>
+
+                    {/* TÍTULOS DOS TRILHOS DIN COM BADGE DE ALTA LEGIBILIDADE */}
+                    {rails.map((r, rIdx) => {
+                      const railY = 190 + rIdx * 240;
+                      const titleText = r.name.toUpperCase();
+                      const titleW = titleText.length * 6.6 + 24;
+                      return (
+                        <g key={`rail-title-${r.id}`} className="pointer-events-none">
+                          <rect
+                            x={152}
+                            y={railY - 73}
+                            width={titleW}
+                            height="20"
+                            rx="5"
+                            fill="#ffffff"
+                            fillOpacity="0.96"
+                            stroke="#cbd5e1"
+                            strokeWidth="0.9"
+                          />
+                          <text
+                            x={164}
+                            y={railY - 59}
+                            fill="#1e293b"
+                            fontSize="9.5"
+                            fontWeight="900"
+                            letterSpacing="0.4"
+                          >
+                            {titleText}
+                          </text>
+                        </g>
+                      );
+                    })}
 
                     {/* 6. RENDERIZAÇÃO DOS COMPONENTES ELÉTRICOS NOS TRILHOS */}
                     {rails.map((r, rIdx) => {
