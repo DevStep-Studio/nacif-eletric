@@ -147,21 +147,24 @@ const AuthenticatedApp = () => {
 };
 
 
-function App() {
+import { ThemeProvider } from '@/lib/ThemeContext';
 
+function App() {
   return (
     <AppErrorBoundary>
-      <AuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <BrandingBoot />
-          <Router>
-            <AuthenticatedApp />
-          </Router>
-          <Toaster />
-        </QueryClientProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <QueryClientProvider client={queryClientInstance}>
+            <BrandingBoot />
+            <Router>
+              <AuthenticatedApp />
+            </Router>
+            <Toaster />
+          </QueryClientProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </AppErrorBoundary>
-  )
+  );
 }
 
-export default App
+export default App;

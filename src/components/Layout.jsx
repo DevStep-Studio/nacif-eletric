@@ -81,6 +81,7 @@ import {
 import { getProjectProgress } from "@/lib/projectProgress";
 import OnboardingModal from "@/components/onboarding/OnboardingModal";
 import ToolsModal from "@/components/navigation/ToolsModal";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const SIDEBAR_STORAGE_KEY = "nacif:sidebar-collapsed";
 
@@ -112,7 +113,7 @@ function BrandLogo({ branding, compact = false, className = "" }) {
       </div>
       {!compact && (
         <div className="flex flex-col text-left">
-          <span className="text-base font-black tracking-tight text-[#0F172A] leading-none">Nacif</span>
+          <span className="text-base font-black tracking-tight text-[#0F172A] dark:text-white leading-none">Nacif</span>
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#00d8b8] mt-0.5 leading-none">Electric</span>
         </div>
       )}
@@ -315,7 +316,7 @@ export default function Layout() {
 
   return (
     <div
-      className={`min-h-screen overflow-x-hidden bg-[#F8FAFC] font-inter text-[#0F172A] transition-[padding] duration-200 ${
+      className={`min-h-screen overflow-x-hidden bg-[#F8FAFC] dark:bg-[#080C14] font-inter text-[#0F172A] dark:text-[#F8FAFC] transition-[padding] duration-200 ${
         sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[256px]"
       }`}
     >
@@ -335,12 +336,12 @@ export default function Layout() {
 
       {/* ── SIDEBAR FIXA (Estilo Shopall com Verde do Projeto) ── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-[#E2E8F0] bg-white transition-[width] duration-200 lg:flex ${
+        className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-[#E2E8F0] dark:border-[#1E293B] bg-white dark:bg-[#0D1322] transition-[width] duration-200 lg:flex ${
           sidebarCollapsed ? "w-[76px]" : "w-[256px]"
         }`}
       >
         {/* Topo da Sidebar: Logo & Collapse Button */}
-        <div className="flex h-16 items-center justify-between px-4 border-b border-[#F1F5F9]">
+        <div className="flex h-16 items-center justify-between px-4 border-b border-[#F1F5F9] dark:border-[#1E293B]">
           <Link
             to="/"
             className={`flex shrink-0 items-center overflow-hidden transition ${
@@ -354,7 +355,7 @@ export default function Layout() {
             type="button"
             aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
             onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
             title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
           >
             {sidebarCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
@@ -368,17 +369,17 @@ export default function Layout() {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between gap-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-2.5 text-left transition hover:border-[#CBD5E1] hover:bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                  className="flex w-full items-center justify-between gap-2.5 rounded-xl border border-[#E2E8F0] dark:border-[#1E293B] bg-[#F8FAFC] dark:bg-[#131D2E] p-2.5 text-left transition hover:border-[#CBD5E1] dark:hover:border-[#334155] hover:bg-white dark:hover:bg-[#1A263D] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#00d8b8] text-white font-black text-xs shadow-sm">
                       {currentProject ? currentProject.name.slice(0, 1).toUpperCase() : "N"}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-black text-[#0F172A]">
+                      <p className="truncate text-xs font-black text-[#0F172A] dark:text-white">
                         {currentProject ? currentProject.name : "Nacif Studio"}
                       </p>
-                      <p className="truncate text-[10px] font-bold text-[#64748B]">
+                      <p className="truncate text-[10px] font-bold text-[#64748B] dark:text-[#94A3B8]">
                         {currentProject ? (currentProject.client_name || "Projeto ativo") : "Workspace principal"}
                       </p>
                     </div>
@@ -386,15 +387,15 @@ export default function Layout() {
                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[232px] rounded-xl border-[#E2E8F0] bg-white p-1.5 shadow-xl">
-                <DropdownMenuLabel className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-[#94A3B8]">
+              <DropdownMenuContent align="start" className="w-[232px] rounded-xl border-[#E2E8F0] dark:border-[#1E293B] bg-white dark:bg-[#0D1322] p-1.5 shadow-xl">
+                <DropdownMenuLabel className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-[#94A3B8] dark:text-[#64748B]">
                   Projetos Recentes
                 </DropdownMenuLabel>
                 {shellProjects.slice(0, 5).map((p) => (
                   <DropdownMenuItem
                     key={p.id}
                     onClick={() => navigate(`/projects/${p.id}`)}
-                    className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs font-bold hover:bg-[#F8FAFC]"
+                    className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs font-bold hover:bg-[#F8FAFC] dark:hover:bg-[#1E293B] text-[#0F172A] dark:text-white"
                   >
                     <span className="truncate">{p.name}</span>
                     {p.id === currentProjectId && (
@@ -402,10 +403,10 @@ export default function Layout() {
                     )}
                   </DropdownMenuItem>
                 ))}
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="dark:bg-[#1E293B]" />
                 <DropdownMenuItem
                   onClick={() => navigate("/projects/new")}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-bold text-[#00d8b8] hover:bg-[#E8FCF8]"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-bold text-[#00d8b8] hover:bg-[#E8FCF8] dark:hover:bg-[#00d8b8]/15"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>Criar novo projeto</span>
@@ -420,7 +421,7 @@ export default function Layout() {
           {/* Grupo 1: General */}
           <div className="space-y-1">
             {!sidebarCollapsed && (
-              <p className="px-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8]">
+              <p className="px-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8] dark:text-[#64748B]">
                 General
               </p>
             )}
@@ -432,12 +433,12 @@ export default function Layout() {
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
                 } ${
                   isItemActive("/")
-                    ? "bg-[#0F172A] text-white font-black shadow-sm"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                    ? "bg-[#0F172A] dark:bg-[#1E293B] text-white font-black shadow-sm"
+                    : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Home className={`h-4 w-4 shrink-0 ${isItemActive("/") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                  <Home className={`h-4 w-4 shrink-0 ${isItemActive("/") ? "text-[#00d8b8]" : "text-[#64748B] dark:text-[#94A3B8]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Dashboard</span>}
                 </div>
               </Link>
@@ -449,16 +450,16 @@ export default function Layout() {
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
                 } ${
                   isItemActive("/projects")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                    ? "bg-[#E8FCF8] dark:bg-[#00d8b8]/15 text-[#0f4f49] dark:text-[#00d8b8] font-black"
+                    : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <FolderOpen className={`h-4 w-4 shrink-0 ${isItemActive("/projects") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                  <FolderOpen className={`h-4 w-4 shrink-0 ${isItemActive("/projects") ? "text-[#00d8b8]" : "text-[#64748B] dark:text-[#94A3B8]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Projetos</span>}
                 </div>
                 {!sidebarCollapsed && shellProjects.length > 0 && (
-                  <span className="rounded-md bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-black text-[#64748B]">
+                  <span className="rounded-md bg-[#F1F5F9] dark:bg-[#1E293B] px-1.5 py-0.5 text-[10px] font-black text-[#64748B] dark:text-[#94A3B8]">
                     {shellProjects.length}
                   </span>
                 )}
@@ -471,12 +472,12 @@ export default function Layout() {
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
                 } ${
                   isItemActive("/planta-ia")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                    ? "bg-[#E8FCF8] dark:bg-[#00d8b8]/15 text-[#0f4f49] dark:text-[#00d8b8] font-black"
+                    : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Compass className={`h-4 w-4 shrink-0 ${isItemActive("/planta-ia") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                  <Compass className={`h-4 w-4 shrink-0 ${isItemActive("/planta-ia") ? "text-[#00d8b8]" : "text-[#64748B] dark:text-[#94A3B8]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Planta Elétrica</span>}
                 </div>
               </Link>
@@ -488,12 +489,12 @@ export default function Layout() {
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
                 } ${
                   isItemActive("/panel-generator")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                    ? "bg-[#E8FCF8] dark:bg-[#00d8b8]/15 text-[#0f4f49] dark:text-[#00d8b8] font-black"
+                    : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <LayoutGrid className={`h-4 w-4 shrink-0 ${isItemActive("/panel-generator") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                  <LayoutGrid className={`h-4 w-4 shrink-0 ${isItemActive("/panel-generator") ? "text-[#00d8b8]" : "text-[#64748B] dark:text-[#94A3B8]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Quadro Elétrico</span>}
                 </div>
               </Link>
@@ -503,7 +504,7 @@ export default function Layout() {
           {/* Grupo 2: Tools */}
           <div className="space-y-1">
             {!sidebarCollapsed && (
-              <p className="px-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8]">
+              <p className="px-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8] dark:text-[#64748B]">
                 Tools
               </p>
             )}
@@ -515,12 +516,12 @@ export default function Layout() {
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
                 } ${
                   isItemActive("/unifilar")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                    ? "bg-[#E8FCF8] dark:bg-[#00d8b8]/15 text-[#0f4f49] dark:text-[#00d8b8] font-black"
+                    : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <GitBranch className={`h-4 w-4 shrink-0 ${isItemActive("/unifilar") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                  <GitBranch className={`h-4 w-4 shrink-0 ${isItemActive("/unifilar") ? "text-[#00d8b8]" : "text-[#64748B] dark:text-[#94A3B8]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Diagrama Unifilar</span>}
                 </div>
               </Link>
@@ -532,12 +533,12 @@ export default function Layout() {
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
                 } ${
                   isItemActive("/calculator")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                    ? "bg-[#E8FCF8] dark:bg-[#00d8b8]/15 text-[#0f4f49] dark:text-[#00d8b8] font-black"
+                    : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Calculator className={`h-4 w-4 shrink-0 ${isItemActive("/calculator") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                  <Calculator className={`h-4 w-4 shrink-0 ${isItemActive("/calculator") ? "text-[#00d8b8]" : "text-[#64748B] dark:text-[#94A3B8]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Calculadora</span>}
                 </div>
               </Link>
@@ -549,12 +550,12 @@ export default function Layout() {
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
                 } ${
                   isItemActive("/ai-assistant")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                    ? "bg-[#E8FCF8] dark:bg-[#00d8b8]/15 text-[#0f4f49] dark:text-[#00d8b8] font-black"
+                    : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Sparkles className={`h-4 w-4 shrink-0 ${isItemActive("/ai-assistant") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                  <Sparkles className={`h-4 w-4 shrink-0 ${isItemActive("/ai-assistant") ? "text-[#00d8b8]" : "text-[#64748B] dark:text-[#94A3B8]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Assistente IA</span>}
                 </div>
               </Link>
@@ -566,12 +567,12 @@ export default function Layout() {
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
                 } ${
                   isItemActive("/nbr-library")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                    ? "bg-[#E8FCF8] dark:bg-[#00d8b8]/15 text-[#0f4f49] dark:text-[#00d8b8] font-black"
+                    : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <BookOpen className={`h-4 w-4 shrink-0 ${isItemActive("/nbr-library") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                  <BookOpen className={`h-4 w-4 shrink-0 ${isItemActive("/nbr-library") ? "text-[#00d8b8]" : "text-[#64748B] dark:text-[#94A3B8]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Biblioteca NBR</span>}
                 </div>
               </Link>
@@ -583,16 +584,16 @@ export default function Layout() {
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
                 } ${
                   isItemActive("/budget")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                    ? "bg-[#E8FCF8] dark:bg-[#00d8b8]/15 text-[#0f4f49] dark:text-[#00d8b8] font-black"
+                    : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <FileSpreadsheet className={`h-4 w-4 shrink-0 ${isItemActive("/budget") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                  <FileSpreadsheet className={`h-4 w-4 shrink-0 ${isItemActive("/budget") ? "text-[#00d8b8]" : "text-[#64748B] dark:text-[#94A3B8]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Orçamento</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className="rounded-md bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-black text-[#64748B]">
+                  <span className="rounded-md bg-[#F1F5F9] dark:bg-[#1E293B] px-1.5 py-0.5 text-[10px] font-black text-[#64748B] dark:text-[#94A3B8]">
                     2
                   </span>
                 )}
@@ -602,7 +603,7 @@ export default function Layout() {
         </nav>
 
         {/* Rodapé da Sidebar: Account & Profile Pill (Exato da referência 'Hecham GAZHI') */}
-        <div className="border-t border-[#F1F5F9] p-3 space-y-2">
+        <div className="border-t border-[#F1F5F9] dark:border-[#1E293B] p-3 space-y-2">
           <div className="space-y-0.5">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -611,11 +612,11 @@ export default function Layout() {
                   title={sidebarCollapsed ? "Notificações" : undefined}
                   className={`flex h-9 w-full items-center rounded-xl text-xs font-bold transition ${
                     sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
-                  } text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]`}
+                  } text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="relative">
-                      <Bell className="h-4 w-4 shrink-0 text-[#64748B]" />
+                      <Bell className="h-4 w-4 shrink-0 text-[#64748B] dark:text-[#94A3B8]" />
                       {unreadCount > 0 && (
                         <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#00d8b8]" />
                       )}
@@ -623,31 +624,31 @@ export default function Layout() {
                     {!sidebarCollapsed && <span className="truncate">Notificações</span>}
                   </div>
                   {!sidebarCollapsed && unreadCount > 0 && (
-                    <span className="rounded-md bg-[#E8FCF8] px-1.5 py-0.5 text-[10px] font-black text-[#00d8b8]">
+                    <span className="rounded-md bg-[#E8FCF8] dark:bg-[#00d8b8]/20 px-1.5 py-0.5 text-[10px] font-black text-[#00d8b8]">
                       {unreadCount}
                     </span>
                   )}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80 rounded-2xl border-[#E2E8F0] bg-white p-0 shadow-2xl">
-                <div className="flex items-center justify-between border-b border-[#F1F5F9] px-4 py-3">
-                  <DropdownMenuLabel className="p-0 text-xs font-black text-[#0F172A]">Notificações</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="w-80 rounded-2xl border-[#E2E8F0] dark:border-[#1E293B] bg-white dark:bg-[#0D1322] p-0 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-[#F1F5F9] dark:border-[#1E293B] px-4 py-3">
+                  <DropdownMenuLabel className="p-0 text-xs font-black text-[#0F172A] dark:text-white">Notificações</DropdownMenuLabel>
                   <button type="button" onClick={markAllRead} className="text-[11px] font-bold text-[#00d8b8] hover:underline">
                     Marcar todas lidas
                   </button>
                 </div>
                 <div className="max-h-72 overflow-y-auto p-2">
                   {notifications.length === 0 ? (
-                    <p className="p-4 text-center text-xs font-medium text-[#64748B]">Nenhuma notificação recente.</p>
+                    <p className="p-4 text-center text-xs font-medium text-[#64748B] dark:text-[#94A3B8]">Nenhuma notificação recente.</p>
                   ) : (
                     notifications.slice(0, 6).map((item) => (
                       <DropdownMenuItem
                         key={item.id}
                         onClick={() => markRead(item.id)}
-                        className="flex flex-col items-start gap-1 p-2.5 rounded-xl cursor-pointer hover:bg-[#F8FAFC]"
+                        className="flex flex-col items-start gap-1 p-2.5 rounded-xl cursor-pointer hover:bg-[#F8FAFC] dark:hover:bg-[#1E293B]"
                       >
-                        <span className="text-xs font-bold text-[#0F172A]">{item.title}</span>
-                        <span className="text-[11px] text-[#64748B] leading-tight line-clamp-2">{item.description}</span>
+                        <span className="text-xs font-bold text-[#0F172A] dark:text-white">{item.title}</span>
+                        <span className="text-[11px] text-[#64748B] dark:text-[#94A3B8] leading-tight line-clamp-2">{item.description}</span>
                       </DropdownMenuItem>
                     ))
                   )}
@@ -660,9 +661,9 @@ export default function Layout() {
               title={sidebarCollapsed ? "Configurações" : undefined}
               className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
                 sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
-              } text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]`}
+              } text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white`}
             >
-              <Settings className="h-4 w-4 shrink-0 text-[#64748B]" />
+              <Settings className="h-4 w-4 shrink-0 text-[#64748B] dark:text-[#94A3B8]" />
               {!sidebarCollapsed && <span className="truncate">Configurações</span>}
             </Link>
 
@@ -672,57 +673,57 @@ export default function Layout() {
               title={sidebarCollapsed ? "Sair" : undefined}
               className={`flex h-9 w-full items-center rounded-xl text-xs font-bold transition ${
                 sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
-              } text-[#475467] hover:bg-red-50 hover:text-red-600`}
+              } text-[#475467] dark:text-[#94A3B8] hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400`}
             >
-              <LogOut className="h-4 w-4 shrink-0 text-[#64748B]" />
+              <LogOut className="h-4 w-4 shrink-0 text-[#64748B] dark:text-[#94A3B8]" />
               {!sidebarCollapsed && <span className="truncate">Sair</span>}
             </button>
           </div>
 
           {/* User Profile Card */}
-          <div className="pt-2 border-t border-[#F1F5F9]">
+          <div className="pt-2 border-t border-[#F1F5F9] dark:border-[#1E293B]">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className={`flex w-full items-center rounded-xl p-1.5 transition hover:bg-[#F1F5F9] ${
+                  className={`flex w-full items-center rounded-xl p-1.5 transition hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] ${
                     sidebarCollapsed ? "justify-center" : "justify-between gap-2.5"
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#CBD5E1] bg-[#E8FCF8] text-xs font-extrabold text-[#0f4f49]">
+                    <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#CBD5E1] dark:border-[#334155] bg-[#E8FCF8] text-xs font-extrabold text-[#0f4f49]">
                       <AvatarDisplay user={activeUser} initials={initials} className="h-full w-full" />
-                      <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border-2 border-white bg-emerald-500" />
+                      <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border-2 border-white dark:border-[#0D1322] bg-emerald-500" />
                     </span>
                     {!sidebarCollapsed && (
                       <div className="min-w-0 text-left">
-                        <p className="truncate text-xs font-black text-[#0F172A]">{displayName}</p>
-                        <p className="truncate text-[10px] font-medium text-[#64748B]">{displayEmail}</p>
+                        <p className="truncate text-xs font-black text-[#0F172A] dark:text-white">{displayName}</p>
+                        <p className="truncate text-[10px] font-medium text-[#64748B] dark:text-[#94A3B8]">{displayEmail}</p>
                       </div>
                     )}
                   </div>
                   {!sidebarCollapsed && <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="top" className="w-60 rounded-2xl border-[#E2E8F0] bg-white p-1.5 shadow-2xl">
-                <div className="p-2 border-b border-[#F1F5F9]">
-                  <p className="text-xs font-black text-[#0F172A] truncate">{displayName}</p>
-                  <p className="text-[10px] text-[#64748B] truncate">{displayEmail}</p>
+              <DropdownMenuContent align="start" side="top" className="w-60 rounded-2xl border-[#E2E8F0] dark:border-[#1E293B] bg-white dark:bg-[#0D1322] p-1.5 shadow-2xl">
+                <div className="p-2 border-b border-[#F1F5F9] dark:border-[#1E293B]">
+                  <p className="text-xs font-black text-[#0F172A] dark:text-white truncate">{displayName}</p>
+                  <p className="text-[10px] text-[#64748B] dark:text-[#94A3B8] truncate">{displayEmail}</p>
                 </div>
                 <DropdownMenuItem asChild>
-                  <Link to="/settings" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold">
+                  <Link to="/settings" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-[#0F172A] dark:text-white hover:bg-[#F8FAFC] dark:hover:bg-[#1E293B]">
                     <UserCircle className="h-4 w-4" /> Minha conta
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link to="/subscription" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold">
+                  <Link to="/subscription" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-[#0F172A] dark:text-white hover:bg-[#F8FAFC] dark:hover:bg-[#1E293B]">
                     <CreditCard className="h-4 w-4" /> Plano ({subscription.plan.name})
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="dark:bg-[#1E293B]" />
                 <DropdownMenuItem
                   onClick={() => logout()}
-                  className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-red-600 focus:text-red-600"
+                  className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                 >
                   <LogOut className="h-4 w-4" /> Sair
                 </DropdownMenuItem>
@@ -774,25 +775,25 @@ export default function Layout() {
           </CommandList>
         </CommandDialog>
 
-        {/* ── Topbar (Exato da referência '< > Pages / Dashboard' + Pill Search + Avatar) ── */}
-        <header className="sticky top-0 z-30 flex h-16 min-w-0 items-center justify-between gap-4 border-b border-[#E2E8F0] bg-white/80 px-4 sm:px-6 lg:px-8 backdrop-blur-md">
+        {/* ── Topbar (Exato da referência '< > Pages / Dashboard' + Pill Search + ThemeToggle + Avatar) ── */}
+        <header className="sticky top-0 z-30 flex h-16 min-w-0 items-center justify-between gap-4 border-b border-[#E2E8F0] dark:border-[#1E293B] bg-white/80 dark:bg-[#0D1322]/85 px-4 sm:px-6 lg:px-8 backdrop-blur-md">
           {/* Lado Esquerdo: Mobile Menu Toggle & Breadcrumbs com '< >' */}
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={() => setMobileDrawerOpen(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-[#475467] hover:bg-[#F1F5F9] lg:hidden"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] lg:hidden"
               aria-label="Abrir menu"
             >
               <Menu className="h-5 w-5" />
             </button>
 
             {/* Setas de navegação '< >' da referência */}
-            <div className="hidden sm:flex items-center gap-1 text-[#94A3B8]">
+            <div className="hidden sm:flex items-center gap-1 text-[#94A3B8] dark:text-[#64748B]">
               <button
                 type="button"
                 onClick={() => navigate(-1)}
-                className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#F1F5F9] hover:text-[#0F172A] transition"
+                className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white transition"
                 title="Voltar página"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -800,7 +801,7 @@ export default function Layout() {
               <button
                 type="button"
                 onClick={() => navigate(1)}
-                className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#F1F5F9] hover:text-[#0F172A] transition"
+                className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white transition"
                 title="Avançar página"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -809,24 +810,24 @@ export default function Layout() {
 
             {/* Breadcrumb Path 'Pages / Dashboard' */}
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="font-semibold text-[#94A3B8]">{breadcrumbInfo.section}</span>
-              <span className="text-[#CBD5E1]">/</span>
-              <h1 className="font-extrabold text-[#0F172A] truncate max-w-[200px] sm:max-w-md text-sm">
+              <span className="font-semibold text-[#94A3B8] dark:text-[#64748B]">{breadcrumbInfo.section}</span>
+              <span className="text-[#CBD5E1] dark:text-[#334155]">/</span>
+              <h1 className="font-extrabold text-[#0F172A] dark:text-white truncate max-w-[200px] sm:max-w-md text-sm">
                 {breadcrumbInfo.page}
               </h1>
             </div>
           </div>
 
-          {/* Lado Direito: Pill Search Bar, Help, Notifications & Avatar */}
+          {/* Lado Direito: Pill Search Bar, Help, ThemeToggle, Notifications & Avatar */}
           <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="flex h-9 items-center gap-2 rounded-full border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 text-xs font-medium text-[#94A3B8] hover:border-[#CBD5E1] hover:bg-white w-44 sm:w-64 transition shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+              className="flex h-9 items-center gap-2 rounded-full border border-[#E2E8F0] dark:border-[#1E293B] bg-[#F8FAFC] dark:bg-[#131D2E] px-3.5 text-xs font-medium text-[#94A3B8] dark:text-[#64748B] hover:border-[#CBD5E1] dark:hover:border-[#334155] hover:bg-white dark:hover:bg-[#1A263D] w-44 sm:w-64 transition shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
             >
-              <Search className="h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />
+              <Search className="h-3.5 w-3.5 shrink-0 text-[#94A3B8] dark:text-[#64748B]" />
               <span className="flex-1 truncate text-left">Buscar no sistema...</span>
-              <span className="hidden sm:inline-block rounded-md border border-[#E2E8F0] bg-white px-1.5 py-0.5 text-[9px] font-extrabold text-[#64748B]">
+              <span className="hidden sm:inline-block rounded-md border border-[#E2E8F0] dark:border-[#1E293B] bg-white dark:bg-[#1E293B] px-1.5 py-0.5 text-[9px] font-extrabold text-[#64748B] dark:text-[#94A3B8]">
                 Ctrl K
               </span>
             </button>
@@ -835,11 +836,14 @@ export default function Layout() {
             <button
               type="button"
               onClick={() => { setToolsModalMode("library"); setToolsModalOpen(true); }}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] transition"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[#64748B] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white transition"
               title="Biblioteca de Normas & Ajuda"
             >
               <HelpCircle className="h-4 w-4" />
             </button>
+
+            {/* Alternância de Tema Sol / Lua */}
+            <ThemeToggle />
 
             {/* Notificações */}
             <DropdownMenu>
@@ -847,7 +851,7 @@ export default function Layout() {
                 <button
                   type="button"
                   aria-label="Notificações"
-                  className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] transition"
+                  className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#64748B] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B] hover:text-[#0F172A] dark:hover:text-white transition"
                 >
                   <Bell className="h-4 w-4" />
                   {unreadCount > 0 && (
@@ -855,25 +859,25 @@ export default function Layout() {
                   )}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80 rounded-2xl border-[#E2E8F0] bg-white p-0 shadow-2xl">
-                <div className="flex items-center justify-between border-b border-[#F1F5F9] px-4 py-3">
-                  <DropdownMenuLabel className="p-0 text-xs font-black text-[#0F172A]">Notificações</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="w-80 rounded-2xl border-[#E2E8F0] dark:border-[#1E293B] bg-white dark:bg-[#0D1322] p-0 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-[#F1F5F9] dark:border-[#1E293B] px-4 py-3">
+                  <DropdownMenuLabel className="p-0 text-xs font-black text-[#0F172A] dark:text-white">Notificações</DropdownMenuLabel>
                   <button type="button" onClick={markAllRead} className="text-[11px] font-bold text-[#00d8b8] hover:underline">
                     Ler tudo
                   </button>
                 </div>
                 <div className="max-h-72 overflow-y-auto p-2">
                   {notifications.length === 0 ? (
-                    <p className="p-4 text-center text-xs font-medium text-[#64748B]">Nenhuma notificação recente.</p>
+                    <p className="p-4 text-center text-xs font-medium text-[#64748B] dark:text-[#94A3B8]">Nenhuma notificação recente.</p>
                   ) : (
                     notifications.slice(0, 6).map((item) => (
                       <DropdownMenuItem
                         key={item.id}
                         onClick={() => markRead(item.id)}
-                        className="flex flex-col items-start gap-1 p-2.5 rounded-xl cursor-pointer hover:bg-[#F8FAFC]"
+                        className="flex flex-col items-start gap-1 p-2.5 rounded-xl cursor-pointer hover:bg-[#F8FAFC] dark:hover:bg-[#1E293B]"
                       >
-                        <span className="text-xs font-bold text-[#0F172A]">{item.title}</span>
-                        <span className="text-[11px] text-[#64748B] leading-tight line-clamp-2">{item.description}</span>
+                        <span className="text-xs font-bold text-[#0F172A] dark:text-white">{item.title}</span>
+                        <span className="text-[11px] text-[#64748B] dark:text-[#94A3B8] leading-tight line-clamp-2">{item.description}</span>
                       </DropdownMenuItem>
                     ))
                   )}
@@ -885,30 +889,30 @@ export default function Layout() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" className="flex items-center rounded-full p-0.5 hover:ring-2 hover:ring-[#00d8b8]/40 transition">
-                  <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[#CBD5E1] bg-[#E8FCF8] text-xs font-extrabold text-[#0f4f49]">
+                  <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[#CBD5E1] dark:border-[#334155] bg-[#E8FCF8] text-xs font-extrabold text-[#0f4f49]">
                     <AvatarDisplay user={activeUser} initials={initials} className="h-full w-full" />
                   </span>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60 rounded-2xl border-[#E2E8F0] bg-white p-1.5 shadow-2xl">
-                <div className="p-2 border-b border-[#F1F5F9]">
-                  <p className="text-xs font-black text-[#0F172A] truncate">{displayName}</p>
-                  <p className="text-[10px] text-[#64748B] truncate">{displayEmail}</p>
+              <DropdownMenuContent align="end" className="w-60 rounded-2xl border-[#E2E8F0] dark:border-[#1E293B] bg-white dark:bg-[#0D1322] p-1.5 shadow-2xl">
+                <div className="p-2 border-b border-[#F1F5F9] dark:border-[#1E293B]">
+                  <p className="text-xs font-black text-[#0F172A] dark:text-white truncate">{displayName}</p>
+                  <p className="text-[10px] text-[#64748B] dark:text-[#94A3B8] truncate">{displayEmail}</p>
                 </div>
                 <DropdownMenuItem asChild>
-                  <Link to="/settings" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold">
+                  <Link to="/settings" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-[#0F172A] dark:text-white hover:bg-[#F8FAFC] dark:hover:bg-[#1E293B]">
                     <UserCircle className="h-4 w-4" /> Minha conta
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link to="/subscription" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold">
+                  <Link to="/subscription" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-[#0F172A] dark:text-white hover:bg-[#F8FAFC] dark:hover:bg-[#1E293B]">
                     <CreditCard className="h-4 w-4" /> Assinatura ({subscription.plan.name})
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="dark:bg-[#1E293B]" />
                 <DropdownMenuItem
                   onClick={() => logout()}
-                  className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-red-600 focus:text-red-600"
+                  className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                 >
                   <LogOut className="h-4 w-4" /> Sair
                 </DropdownMenuItem>
@@ -924,13 +928,13 @@ export default function Layout() {
               className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in"
               onClick={() => setMobileDrawerOpen(false)}
             />
-            <div className="relative flex w-72 max-w-[85vw] flex-col bg-white p-4 shadow-2xl z-10 animate-in slide-in-from-left duration-200">
-              <div className="flex items-center justify-between border-b border-[#EAECF0] pb-3">
+            <div className="relative flex w-72 max-w-[85vw] flex-col bg-white dark:bg-[#0D1322] p-4 shadow-2xl z-10 animate-in slide-in-from-left duration-200 border-r border-transparent dark:border-[#1E293B]">
+              <div className="flex items-center justify-between border-b border-[#EAECF0] dark:border-[#1E293B] pb-3">
                 <BrandLogo branding={branding} />
                 <button
                   type="button"
                   onClick={() => setMobileDrawerOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#F1F5F9]"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[#64748B] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -938,7 +942,7 @@ export default function Layout() {
 
               <nav className="flex-1 overflow-y-auto py-4 space-y-4">
                 <div className="space-y-1">
-                  <p className="px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8]">
+                  <p className="px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8] dark:text-[#64748B]">
                     General
                   </p>
                   <div className="space-y-0.5">
@@ -946,7 +950,7 @@ export default function Layout() {
                       to="/"
                       onClick={() => setMobileDrawerOpen(false)}
                       className={`flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold ${
-                        isItemActive("/") ? "bg-[#0F172A] text-white" : "text-[#475467] hover:bg-[#F1F5F9]"
+                        isItemActive("/") ? "bg-[#0F172A] dark:bg-[#1E293B] text-white" : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]"
                       }`}
                     >
                       <Home className="h-4 w-4" />
@@ -956,7 +960,7 @@ export default function Layout() {
                       to="/projects"
                       onClick={() => setMobileDrawerOpen(false)}
                       className={`flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold ${
-                        isItemActive("/projects") ? "bg-[#E8FCF8] text-[#0f4f49]" : "text-[#475467] hover:bg-[#F1F5F9]"
+                        isItemActive("/projects") ? "bg-[#E8FCF8] dark:bg-[#00d8b8]/15 text-[#0f4f49] dark:text-[#00d8b8]" : "text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]"
                       }`}
                     >
                       <FolderOpen className="h-4 w-4" />
@@ -965,7 +969,7 @@ export default function Layout() {
                     <Link
                       to="/planta-ia"
                       onClick={() => setMobileDrawerOpen(false)}
-                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
+                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]"
                     >
                       <Compass className="h-4 w-4" />
                       <span>Planta Elétrica</span>
@@ -973,7 +977,7 @@ export default function Layout() {
                     <Link
                       to="/panel-generator"
                       onClick={() => setMobileDrawerOpen(false)}
-                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
+                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]"
                     >
                       <LayoutGrid className="h-4 w-4" />
                       <span>Quadro Elétrico</span>
@@ -982,14 +986,14 @@ export default function Layout() {
                 </div>
 
                 <div className="space-y-1">
-                  <p className="px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8]">
+                  <p className="px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8] dark:text-[#64748B]">
                     Tools
                   </p>
                   <div className="space-y-0.5">
                     <Link
                       to="/unifilar"
                       onClick={() => setMobileDrawerOpen(false)}
-                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
+                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]"
                     >
                       <GitBranch className="h-4 w-4" />
                       <span>Diagrama Unifilar</span>
@@ -997,7 +1001,7 @@ export default function Layout() {
                     <Link
                       to="/calculator"
                       onClick={() => setMobileDrawerOpen(false)}
-                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
+                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]"
                     >
                       <Calculator className="h-4 w-4" />
                       <span>Calculadora</span>
@@ -1005,7 +1009,7 @@ export default function Layout() {
                     <Link
                       to="/nbr-library"
                       onClick={() => setMobileDrawerOpen(false)}
-                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
+                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]"
                     >
                       <BookOpen className="h-4 w-4" />
                       <span>Biblioteca NBR</span>
@@ -1014,8 +1018,12 @@ export default function Layout() {
                 </div>
               </nav>
 
-              <div className="border-t border-[#EAECF0] pt-3">
-                <Button asChild variant="outline" className="w-full h-9 text-xs font-bold rounded-xl">
+              <div className="border-t border-[#EAECF0] dark:border-[#1E293B] pt-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-bold text-[#64748B] dark:text-[#94A3B8]">Tema</span>
+                  <ThemeToggle compact />
+                </div>
+                <Button asChild variant="outline" className="w-full h-9 text-xs font-bold rounded-xl dark:border-[#1E293B] dark:bg-[#131D2E] dark:text-white">
                   <Link to="/subscription">Assinatura ({subscription.plan.name})</Link>
                 </Button>
               </div>

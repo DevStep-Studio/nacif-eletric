@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Konva from "konva";
 import { Stage, Layer, Rect, Line, Circle, Text, Group, Image as KonvaImage, Arc } from "react-konva";
+import { useTheme } from "@/lib/ThemeContext";
 
 // Renderiza todo o canvas Konva em pelo menos 2x pixels reais, mesmo em monitor
 // comum (devicePixelRatio = 1): símbolos, textos e traços da planta deixam de
@@ -1584,10 +1585,10 @@ function EditorToolbar({
   const hasSelection = Boolean(selectedElement?.id);
   const normalizedScalePxPerMeter = normalizeScalePxPerMeter(scalePxPerMeter);
   const [scaleInput, setScaleInput] = useState(String(Math.round(normalizedScalePxPerMeter)));
-  const toolButton = "flex h-8 w-8 shrink-0 items-center justify-center border border-[#BCEEE5] bg-white text-[#0f4f49] shadow-sm transition hover:border-[#00d8b8] hover:bg-[#F2FFFC] disabled:cursor-not-allowed disabled:opacity-40";
-  const symbolButton = "flex h-8 w-8 shrink-0 items-center justify-center border border-[#BCEEE5] bg-white shadow-sm transition hover:border-[#00d8b8] hover:bg-[#F2FFFC]";
-  const activeButton = "border-[#00d8b8] bg-[#E6FFFA] text-[#00a58f]";
-  const toolbarGroup = "flex shrink-0 items-center gap-1.5 rounded-[10px] border border-[#CDEFE8] bg-[#F8FBFD] p-1";
+  const toolButton = "flex h-8 w-8 shrink-0 items-center justify-center border border-[#BCEEE5] dark:border-[#1E293B] bg-white dark:bg-[#131D2E] text-[#0f4f49] dark:text-[#94A3B8] shadow-sm transition hover:border-[#00d8b8] dark:hover:border-[#00d8b8] hover:bg-[#F2FFFC] dark:hover:bg-[#1E293B] hover:text-[#00d8b8] dark:hover:text-[#00d8b8] disabled:cursor-not-allowed disabled:opacity-40";
+  const symbolButton = "flex h-8 w-8 shrink-0 items-center justify-center border border-[#BCEEE5] dark:border-[#1E293B] bg-white dark:bg-[#131D2E] shadow-sm transition hover:border-[#00d8b8] dark:hover:border-[#00d8b8] hover:bg-[#F2FFFC] dark:hover:bg-[#1E293B]";
+  const activeButton = "border-[#00d8b8] dark:border-[#00d8b8] bg-[#E6FFFA] dark:bg-[#00d8b8]/20 text-[#00a58f] dark:text-[#00d8b8]";
+  const toolbarGroup = "flex shrink-0 items-center gap-1.5 rounded-[10px] border border-[#CDEFE8] dark:border-[#1E293B] bg-[#F8FBFD] dark:bg-[#0D1322] p-1";
 
   useEffect(() => {
     setScaleInput(String(Math.round(normalizedScalePxPerMeter)));
@@ -1615,7 +1616,7 @@ function EditorToolbar({
   return (
     <div
       data-html2canvas-ignore="true"
-      className="absolute left-3 right-3 top-3 z-20 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-[12px] border border-[#BCEEE5] bg-white/95 p-1.5 shadow-[0_10px_28px_rgba(15,23,42,0.14)] backdrop-blur"
+      className="absolute left-3 right-3 top-3 z-20 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-[12px] border border-[#BCEEE5] dark:border-[#1E293B] bg-white/95 dark:bg-[#0D1322]/95 p-1.5 shadow-[0_10px_28px_rgba(15,23,42,0.14)] dark:shadow-[0_10px_28px_rgba(0,0,0,0.5)] backdrop-blur"
     >
       {onToggleToolsPanel && (
         <button
@@ -1623,7 +1624,7 @@ function EditorToolbar({
           title={toolsPanelOpen ? "Fechar ferramentas" : "Abrir ferramentas"}
           aria-label={toolsPanelOpen ? "Fechar ferramentas" : "Abrir ferramentas"}
           onClick={onToggleToolsPanel}
-          className={`flex h-8 shrink-0 items-center gap-2 rounded-[9px] border px-2.5 text-[11px] font-black shadow-sm transition hover:border-[#00d8b8] hover:bg-[#F2FFFC] ${toolsPanelOpen ? "border-[#00d8b8] bg-[#E6FFFA] text-[#00d8b8]" : "border-[#BCEEE5] bg-white text-[#0f4f49]"
+          className={`flex h-8 shrink-0 items-center gap-2 rounded-[9px] border px-2.5 text-[11px] font-black shadow-sm transition hover:border-[#00d8b8] hover:bg-[#F2FFFC] dark:hover:bg-[#1E293B] ${toolsPanelOpen ? "border-[#00d8b8] bg-[#E6FFFA] dark:bg-[#00d8b8]/20 text-[#00d8b8]" : "border-[#BCEEE5] dark:border-[#1E293B] bg-white dark:bg-[#131D2E] text-[#0f4f49] dark:text-[#94A3B8]"
             }`}
         >
           <Settings2 className="h-4 w-4" />
@@ -1741,7 +1742,7 @@ function EditorToolbar({
         </ButtonIcon>
         <label
           title="Escala geral: pixels por metro"
-          className="flex h-8 shrink-0 items-center gap-1 rounded-[9px] border border-[#BCEEE5] bg-white px-2 text-[#0f4f49] shadow-sm"
+          className="flex h-8 shrink-0 items-center gap-1 rounded-[9px] border border-[#BCEEE5] dark:border-[#1E293B] bg-white dark:bg-[#131D2E] px-2 text-[#0f4f49] dark:text-[#00d8b8] shadow-sm"
         >
           <Ruler className="h-3.5 w-3.5" />
           <span className="sr-only">Escala geral</span>
@@ -1756,9 +1757,9 @@ function EditorToolbar({
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
             }}
-            className="h-6 w-[52px] rounded border-0 bg-transparent px-0 text-center text-[11px] font-black text-[#0f4f49] outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8] focus-visible:ring-offset-1"
+            className="h-6 w-[52px] rounded border-0 bg-transparent px-0 text-center text-[11px] font-black text-[#0f4f49] dark:text-white outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8] focus-visible:ring-offset-1"
           />
-          <span className="text-[10px] font-black text-[#64748B]">px/m</span>
+          <span className="text-[10px] font-black text-[#64748B] dark:text-[#94A3B8]">px/m</span>
         </label>
         <ButtonIcon
           title={showWallDimensions ? "Ocultar cotas" : "Mostrar cotas"}
@@ -2716,6 +2717,7 @@ export default function FloorPlanCanvas({
   const image = useLoadedImage(imageUrl);
   const [hover, setHover] = useState(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const { isDark } = useTheme();
   const [isPanning, setIsPanning] = useState(false);
   const [spacePanActive, setSpacePanActive] = useState(false);
   const [internalHandToolActive, setInternalHandToolActive] = useState(false);
@@ -3422,9 +3424,9 @@ export default function FloorPlanCanvas({
         }}
       >
         <Layer listening={!handToolActive}>
-          <Rect name="viewport-background" width={stageWidth} height={stageHeight} fill="#eceff1" />
+          <Rect name="viewport-background" width={stageWidth} height={stageHeight} fill={isDark ? "#0A101D" : "#eceff1"} />
           <Group x={viewport.x} y={viewport.y} scaleX={scale} scaleY={scale}>
-            <Rect name="surface" width={DESIGN.width} height={DESIGN.height} fill="#ffffff" />
+            <Rect name="surface" width={DESIGN.width} height={DESIGN.height} fill="#ffffff" stroke={isDark ? "#1E293B" : "#d0d7de"} strokeWidth={1} />
             <GridLayer width={DESIGN.width} height={DESIGN.height} />
             <Rect x={DRAWING_FRAME.x} y={DRAWING_FRAME.y} width={DRAWING_FRAME.width} height={DRAWING_FRAME.height} stroke={TECH_BLACK} strokeWidth={1.3} listening={false} />
             {image && (
