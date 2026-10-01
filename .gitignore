@@ -1,1 +1,34 @@
+# Dependencies
 node_modules
+.pnp
+.pnp.js
+
+# Production / Build
+dist
+dist-ssr
+
+# Environment variables & secrets
+.env
+.env.production
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

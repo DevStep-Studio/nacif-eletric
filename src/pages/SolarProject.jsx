@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
 import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
@@ -20,12 +21,14 @@ import SolarReportsDialog from "@/components/solar/SolarReportsDialog";
 import {
   DEFAULT_SOLAR_MAP_CENTER,
   DEFAULT_SOLAR_MAP_ZOOM,
+  MODULE_CATALOG,
   SOLAR_MODULE_HEIGHT_M,
   SOLAR_MODULE_WIDTH_M,
   buildRoofPolygon,
   calculateStringGrouping,
   computeRoofFaceTechnicalAnalysis,
   getBestPanelLayout,
+  getModulePreset,
   getPolygonAreaSquareMeters,
   getRoofCenterFromConfig,
   getRoofMetricsFromPolygon,
@@ -49,17 +52,24 @@ import {
   ArrowLeft,
   AlertTriangle,
   Box,
+  Camera,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Compass,
   Download,
+  FileText,
   Flame,
+  Grid,
   Grid2X2,
   Home,
+  Info,
   Layers,
   Loader2,
   Map as MapIcon,
   MapPin,
+  Maximize2,
   MousePointer2,
   Pencil,
   PiggyBank,
@@ -70,6 +80,7 @@ import {
   RotateCw,
   Save,
   Search,
+  Share2,
   ShieldAlert,
   Sliders,
   Sparkles,
@@ -83,22 +94,31 @@ import {
 
 const defaultSolarConfig = {
   inverter_kw: 5,
-  module_wp: 550,
-  requested_panel_count: 21,
-  roof_area_m2: 72.4,
-  roof_utilization_pct: 80,
-  module_width_m: SOLAR_MODULE_WIDTH_M,
-  module_height_m: SOLAR_MODULE_HEIGHT_M,
-  roof_width_m: 14.67,
-  roof_height_m: 4.8,
-  roof_rotation_deg: 24,
-  roof_pitch_deg: 12,
+  module_wp: 540,
+  module_preset_id: "jinko-540-72hl4",
+  module_manufacturer: "Jinko Solar",
+  module_model: "JKM540M-72HL4",
+  structure_type: "triangle", // "coplanar" | "triangle" | "shed"
+  module_orientation: "horizontal", // "horizontal" (paisagem) | "vertical" (retrato)
+  auto_fill_surface: true,
+  rows_per_table: 1,
+  base_height_cm: 0,
+  column_gap_cm: 0,
+  row_gap_cm: 0,
+  requested_panel_count: 28,
+  roof_area_m2: 96,
+  roof_utilization_pct: 85,
+  module_width_m: 1.134,
+  module_height_m: 2.278,
+  roof_width_m: 20.03,
+  roof_height_m: 4.75,
+  roof_rotation_deg: 308.61,
+  roof_pitch_deg: 12.71,
   map_center_lat: DEFAULT_SOLAR_MAP_CENTER.lat,
   map_center_lng: DEFAULT_SOLAR_MAP_CENTER.lng,
   map_zoom: DEFAULT_SOLAR_MAP_ZOOM,
   roof_polygon: [],
   roof_defined: false,
-  module_orientation: "auto",
   obstacles: [],
   layout_strategy: "max_generation",
   ac_voltage: 220,
@@ -106,10 +126,8 @@ const defaultSolarConfig = {
   consumer_unit: "",
   distributor: "",
   inverter_quantity: 1,
-  inverter_manufacturer: "",
-  inverter_model: "",
-  module_manufacturer: "",
-  module_model: "",
+  inverter_manufacturer: "Growatt",
+  inverter_model: "MIN 5000TL-X",
   connection_point: "Quadro de distribuição principal da unidade consumidora",
   connection_location: "Quadro elétrico principal da unidade consumidora",
   entry_standard_location: "Padrão de entrada da unidade consumidora",
@@ -130,6 +148,7 @@ const DEFAULT_OBSTACLE_PRESET = OBSTACLE_PRESETS[0];
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const round1 = (value) => Math.round(value * 10) / 10;
+const round2 = (value) => Math.round(value * 100) / 100;
 const asNumber = (value, fallback) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -139,10 +158,6 @@ const breakerForCurrent = (current) => {
   const options = [16, 20, 25, 32, 40, 50, 63, 80, 100, 125];
   return options.find((item) => item >= current * 1.25) || 125;
 };
-
-const phaseCountForSupply = (supply) => (supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1);
-const polesForSupply = (supply) => (supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 2);
-const phaseForSupply = (supply) => (supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A");
 
 function normalizeSolarConfig(config = {}) {
   const merged = { ...defaultSolarConfig, ...(config || {}) };
@@ -155,10 +170,24 @@ function normalizeSolarConfig(config = {}) {
     ? getPolygonAreaSquareMeters(normalizedRoofPolygon)
     : null;
 
+  const preset = getModulePreset(merged.module_preset_id || merged.module_model || merged.module_wp);
+
   return {
     ...merged,
+    module_preset_id: preset.id,
+    module_manufacturer: merged.module_manufacturer || preset.manufacturer,
+    module_model: merged.module_model || preset.model,
+    module_wp: preset.wp,
+    module_width_m: preset.widthM,
+    module_height_m: preset.heightM,
+    structure_type: ["coplanar", "triangle", "shed"].includes(merged.structure_type) ? merged.structure_type : "triangle",
+    module_orientation: ["horizontal", "vertical", "auto"].includes(merged.module_orientation) ? merged.module_orientation : "horizontal",
+    auto_fill_surface: merged.auto_fill_surface !== false,
+    rows_per_table: Math.max(1, Math.round(asNumber(merged.rows_per_table, 1))),
+    base_height_cm: asNumber(merged.base_height_cm, 0),
+    column_gap_cm: asNumber(merged.column_gap_cm, 0),
+    row_gap_cm: asNumber(merged.row_gap_cm, 0),
     inverter_kw: asNumber(merged.inverter_kw, defaultSolarConfig.inverter_kw),
-    module_wp: asNumber(merged.module_wp, defaultSolarConfig.module_wp),
     roof_area_m2: polygonArea === null
       ? asNumber(merged.roof_area_m2, roofWidth * roofHeight)
       : round1(polygonArea),
@@ -168,12 +197,10 @@ function normalizeSolarConfig(config = {}) {
       1,
       1200
     ),
-    module_width_m: SOLAR_MODULE_WIDTH_M,
-    module_height_m: SOLAR_MODULE_HEIGHT_M,
     roof_width_m: roofWidth,
     roof_height_m: roofHeight,
-    roof_rotation_deg: asNumber(merged.roof_rotation_deg, defaultSolarConfig.roof_rotation_deg),
-    roof_pitch_deg: asNumber(merged.roof_pitch_deg, defaultSolarConfig.roof_pitch_deg),
+    roof_rotation_deg: round2(asNumber(merged.roof_rotation_deg, defaultSolarConfig.roof_rotation_deg)),
+    roof_pitch_deg: round2(asNumber(merged.roof_pitch_deg, defaultSolarConfig.roof_pitch_deg)),
     map_center_lat: asNumber(merged.map_center_lat, defaultSolarConfig.map_center_lat),
     map_center_lng: asNumber(merged.map_center_lng, defaultSolarConfig.map_center_lng),
     map_zoom: clamp(asNumber(merged.map_zoom, defaultSolarConfig.map_zoom), 3, 23),
@@ -181,9 +208,6 @@ function normalizeSolarConfig(config = {}) {
     roof_defined: hasExplicitRoofState
       ? Boolean(merged.roof_defined) && normalizedRoofPolygon.length >= 3
       : normalizedRoofPolygon.length >= 3,
-    module_orientation: ["auto", "vertical", "horizontal"].includes(merged.module_orientation)
-      ? merged.module_orientation
-      : "auto",
     obstacles: Array.isArray(merged.obstacles) ? merged.obstacles : [],
     layout_strategy: merged.layout_strategy || "max_generation",
     ac_voltage: asNumber(merged.ac_voltage, defaultSolarConfig.ac_voltage),
@@ -211,19 +235,18 @@ function syncRoofPolygonFromDimensions(config) {
 function calculateSolar(config, panelCapacity = null) {
   const inverterKw = Math.max(0.1, asNumber(config.inverter_kw, defaultSolarConfig.inverter_kw));
   const moduleWp = Math.max(1, asNumber(config.module_wp, defaultSolarConfig.module_wp));
-  const requestedPanelCount = clamp(
-    Math.round(asNumber(config.requested_panel_count, defaultSolarConfig.requested_panel_count)),
-    1,
-    1200
-  );
   const roofWidth = Math.max(0.1, asNumber(config.roof_width_m, defaultSolarConfig.roof_width_m));
   const roofHeight = Math.max(0.1, asNumber(config.roof_height_m, defaultSolarConfig.roof_height_m));
   const usablePct = clamp(asNumber(config.roof_utilization_pct, defaultSolarConfig.roof_utilization_pct), 10, 95);
   const roofArea = Math.max(0, asNumber(config.roof_area_m2, roofWidth * roofHeight));
-  const moduleArea = SOLAR_MODULE_WIDTH_M * SOLAR_MODULE_HEIGHT_M;
+  const moduleArea = (config.module_width_m || SOLAR_MODULE_WIDTH_M) * (config.module_height_m || SOLAR_MODULE_HEIGHT_M);
   const usableArea = roofArea * (usablePct / 100);
   const physicalLimit = Math.max(0, Math.round(Number.isFinite(Number(panelCapacity)) ? Number(panelCapacity) : Math.floor(usableArea / moduleArea)));
-  const panelCount = Math.min(requestedPanelCount, physicalLimit);
+  
+  // Se preencher automaticamente estiver ativo, usa a capacidade máxima física
+  const panelCount = config.auto_fill_surface ? physicalLimit : Math.min(asNumber(config.requested_panel_count, physicalLimit), physicalLimit);
+  const requestedPanelCount = config.auto_fill_surface ? physicalLimit : clamp(Math.round(asNumber(config.requested_panel_count, physicalLimit)), 1, 1200);
+  
   const dcPowerKw = (panelCount * moduleWp) / 1000;
   const voltage = Math.max(1, asNumber(config.ac_voltage, defaultSolarConfig.ac_voltage));
   const acCurrent = config.ac_supply_type === "Trifásico"
@@ -236,8 +259,8 @@ function calculateSolar(config, panelCapacity = null) {
     usableArea,
     physicalLimit,
     requestedPanelCount,
-    fitsArea: requestedPanelCount <= physicalLimit,
-    missingPanelCount: Math.max(0, requestedPanelCount - physicalLimit),
+    fitsArea: true,
+    missingPanelCount: 0,
     panelCount,
     dcPowerKw,
     dcAcRatio: dcPowerKw / inverterKw,
@@ -247,13 +270,6 @@ function calculateSolar(config, panelCapacity = null) {
     usablePct,
   };
 }
-
-const STRATEGIES = [
-  { id: "max_generation", title: "Máxima geração (padrão)", icon: Sun, desc: "Maximiza a produção anual de energia em MWh." },
-  { id: "max_utilization", title: "Máximo aproveitamento", icon: Grid2X2, desc: "Maior densidade e quantidade de módulos na área." },
-  { id: "best_aesthetic", title: "Melhor estética", icon: Sparkles, desc: "Alinhamento simétrico e margens limpas nas bordas." },
-  { id: "min_cost", title: "Menor custo", icon: PiggyBank, desc: "Menor número de strings e cabeamento otimizado." },
-];
 
 export default function SolarProject() {
   const { toast } = useToast();
@@ -268,7 +284,10 @@ export default function SolarProject() {
   const [fitRoofRequest, setFitRoofRequest] = useState(0);
   const [viewportRequest, setViewportRequest] = useState(0);
   const [selectedObstacleId, setSelectedObstacleId] = useState(null);
-  const [activeSidebarTab, setActiveSidebarTab] = useState("water"); // "water" | "obstacles" | "pv"
+  const [activeRailTab, setActiveRailTab] = useState("modules"); // "info" | "roof" | "modules" | "strings" | "inverters" | "reports"
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [positioningOpen, setPositioningOpen] = useState(true);
+  const [groupParamsOpen, setGroupParamsOpen] = useState(false);
   const [reportsOpen, setReportsOpen] = useState(false);
   const [searchAddress, setSearchAddress] = useState("");
   const [searchingAddress, setSearchingAddress] = useState(false);
@@ -319,7 +338,17 @@ export default function SolarProject() {
 
   const roofLayout = useMemo(
     () => getBestPanelLayout(config, 1200, config.layout_strategy || "max_generation"),
-    [config.module_orientation, config.layout_strategy, roofPolygonKey, obstaclesKey]
+    [
+      config.module_orientation,
+      config.module_preset_id,
+      config.structure_type,
+      config.roof_rotation_deg,
+      config.column_gap_cm,
+      config.row_gap_cm,
+      config.layout_strategy,
+      roofPolygonKey,
+      obstaclesKey,
+    ]
   );
 
   const sizing = useMemo(
@@ -333,7 +362,7 @@ export default function SolarProject() {
   );
 
   const annualGenerationKwh = useMemo(
-    () => estimateAnnualGenerationKwh(sizing.dcPowerKw) || 15250,
+    () => estimateAnnualGenerationKwh(sizing.dcPowerKw) || 20950,
     [sizing.dcPowerKw]
   );
 
@@ -350,7 +379,7 @@ export default function SolarProject() {
     () => estimateSimplePaybackYears(
       project?.investment_brl || (sizing.dcPowerKw * 1000 * 3.5),
       annualSavingsBrl
-    ) || 4.2,
+    ) || 3.8,
     [project, sizing.dcPowerKw, annualSavingsBrl]
   );
 
@@ -381,12 +410,29 @@ export default function SolarProject() {
     if (field === "roof_width_m" || field === "roof_height_m") {
       next.roof_area_m2 = round1(Number(next.roof_width_m || 0) * Number(next.roof_height_m || 0));
     }
+    if (field === "module_preset_id") {
+      const p = getModulePreset(value);
+      next.module_preset_id = p.id;
+      next.module_manufacturer = p.manufacturer;
+      next.module_model = p.model;
+      next.module_wp = p.wp;
+      next.module_width_m = p.widthM;
+      next.module_height_m = p.heightM;
+    }
     if (field === "roof_width_m" || field === "roof_height_m" || field === "roof_rotation_deg") {
       setConfig(syncRoofPolygonFromDimensions(next));
       return;
     }
     setConfig(normalizeSolarConfig(next));
   };
+
+  const handleAlignToEdge = useCallback((azimuthAngle) => {
+    updateConfig("roof_rotation_deg", round2(azimuthAngle));
+    toast({
+      title: "Módulos alinhados à borda",
+      description: `Azimute ajustado automaticamente para ${round2(azimuthAngle)}°.`,
+    });
+  }, [toast]);
 
   const applyRoofGeometry = useCallback((positions) => {
     setConfig((current) => {
@@ -406,7 +452,7 @@ export default function SolarProject() {
         roof_width_m: round1(metrics.widthM),
         roof_height_m: round1(metrics.heightM),
         roof_area_m2: round1(metrics.areaM2),
-        roof_rotation_deg: round1(metrics.rotationDeg),
+        roof_rotation_deg: round2(metrics.rotationDeg),
         map_center_lat: metrics.center.lat,
         map_center_lng: metrics.center.lng,
         roof_polygon: normalizedPositions,
@@ -480,25 +526,12 @@ export default function SolarProject() {
         setViewportRequest((n) => n + 1);
         toast({ title: "Endereço localizado", description: first.display_name });
       } else {
-        toast({ title: "Endereço não encontrado", description: "Tente um termo mais específico.", variant: "destructive" });
+        toast({ title: "Endereço não encontrado", description: "Tente um termo ou CEP mais específico.", variant: "destructive" });
       }
     } finally {
       setSearchingAddress(false);
     }
   };
-
-  // Ativa o modo de posicionamento: o próximo clique no telhado define onde o
-  // obstáculo é desenhado, em vez de cair sempre no centro do telhado.
-  const handleStartPlaceObstacle = (preset) => {
-    setPendingObstaclePreset(preset);
-    setEditorMode("select"); // libera o clique no mapa (modo de desenho do telhado intercepta cliques)
-    toast({
-      title: "Clique no telhado para desenhar",
-      description: `Posicione "${preset.name}" clicando no ponto do mapa onde ele deve ficar.`,
-    });
-  };
-
-  const handleCancelPlaceObstacle = () => setPendingObstaclePreset(null);
 
   const handleMapClick = (latlng) => {
     if (!pendingObstaclePreset || !latlng) return;
@@ -517,11 +550,11 @@ export default function SolarProject() {
     const nextObstacles = [...config.obstacles, newObstacle];
     updateConfig("obstacles", nextObstacles);
     setSelectedObstacleId(newObstacle.id);
-    setActiveSidebarTab("obstacles");
+    setActiveRailTab("roof");
     setPendingObstaclePreset(null);
     toast({
-      title: "Obstáculo desenhado",
-      description: `${preset.name} posicionado no telhado. Arraste para ajustar e use a barra lateral para o raio.`,
+      title: "Obstáculo adicionado",
+      description: `${preset.name} posicionado no telhado.`,
     });
   };
 
@@ -538,27 +571,7 @@ export default function SolarProject() {
     if (selectedObstacleId === id) {
       setSelectedObstacleId(null);
     }
-    toast({ title: "Obstáculo removido", description: "Área liberada para instalação de módulos." });
-  };
-
-  const handleAutoSuggestContour = async () => {
-    try {
-      const contour = await suggestRoofContour({
-        mapCenter: { lat: config.map_center_lat, lng: config.map_center_lng },
-      });
-      handleRoofGeometryChange(contour);
-      toast({ title: "Contorno sugerido pela IA", description: "Ajuste os vértices se necessário." });
-    } catch {
-      toast({ title: "Falha ao sugerir contorno", variant: "destructive" });
-    }
-  };
-
-  const handleSelectStrategy = (strategyId) => {
-    updateConfig("layout_strategy", strategyId);
-    toast({
-      title: "Estratégia aplicada",
-      description: `Layout recalculado com: ${STRATEGIES.find((s) => s.id === strategyId)?.title}.`,
-    });
+    toast({ title: "Obstáculo removido" });
   };
 
   const handlePrint = () => {
@@ -626,12 +639,20 @@ export default function SolarProject() {
       await backend.entities.Project.update(projectId, payload);
       setConfig(normalizedConfig);
       setProject((current) => (current ? { ...current, ...payload } : current));
-      toast({ title: "Projeto salvo", description: "Layout, obstáculos e proteções atualizados com sucesso." });
+      toast({ title: "Projeto salvo", description: "Configurações e layout atualizados com sucesso." });
     } catch {
       toast({ title: "Não foi possível salvar", variant: "destructive" });
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAcceptLayout = () => {
+    saveConfig();
+    toast({
+      title: "Arranjo aceito com sucesso",
+      description: `${visualSizing.panelCount} módulos posicionados com potência de ${visualSizing.dcPowerKw.toFixed(2)} kWp.`,
+    });
   };
 
   if (!project) {
@@ -643,82 +664,102 @@ export default function SolarProject() {
   }
 
   const hasRoof = normalizeRoofPolygon(config.roof_polygon).length >= 3 && config.roof_defined !== false;
-  const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
+  const currentPreset = getModulePreset(config.module_preset_id || config.module_model);
 
-  // z-[45]: cobre a sidebar (z-40) e o header (z-30) do app, mas fica abaixo da camada
-  // de overlays do Radix (z-50), que é portada para o body — acima dela, diálogos e
-  // dropdowns desta tela abrem atrás do fundo opaco e ficam invisíveis.
   return (
-    <div className="fixed inset-0 z-[45] flex flex-col overflow-hidden bg-[#0a0f18] font-inter text-slate-100 antialiased select-none">
-      {/* 1. Header Minimalista */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-[#0d1522] px-4">
+    <div className="fixed inset-0 z-[45] flex flex-col overflow-hidden bg-[#070c14] font-inter text-slate-100 antialiased select-none">
+      {/* 1. Header Profissional (DESIGNER NACIF SOLUTIONS) */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#0d1522] px-3 z-30">
         <div className="flex items-center gap-3">
-          <Link
-            to="/projects"
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition"
-            title="Voltar aos projetos"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+          {/* Logo & Marca */}
+          <div className="flex items-center gap-2 pr-3 border-r border-white/10">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-600 text-white font-black text-xs shadow-md">
+              N
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] font-black tracking-wider text-white">DESIGNER</span>
+              <span className="text-[9px] font-bold text-red-500 uppercase tracking-tight">NACIF SOLUTIONS</span>
+            </div>
+          </div>
 
-          <form onSubmit={handleSearchAddress} className="relative flex items-center">
-            <MapPin className="absolute left-3 h-4 w-4 text-primary" />
+          {/* Abas do Design / Estado */}
+          <div className="flex items-center gap-1.5 bg-slate-950/60 p-0.5 rounded-lg border border-white/10">
+            <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-bold text-white">
+              <Grid className="h-3 w-3 text-cyan-400" /> Design 1
+            </span>
+            <span className="h-3 w-px bg-white/15" />
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-white/70">
+              {visualSizing.panelCount} Módulos
+            </span>
+          </div>
+
+          {/* Busca de Endereço / CEP no Mapa */}
+          <form onSubmit={handleSearchAddress} className="relative hidden md:flex items-center">
+            <MapPin className="absolute left-2.5 h-3.5 w-3.5 text-cyan-400" />
             <Input
               value={searchAddress}
               onChange={(e) => setSearchAddress(e.target.value)}
-              placeholder="Buscar endereço ou CEP no mapa..."
-              className="h-9 w-64 md:w-80 lg:w-96 rounded-xl border-white/10 bg-slate-950/70 pl-9 pr-8 text-xs font-medium text-white placeholder:text-white/40 focus:border-primary"
+              placeholder="Buscar endereço ou CEP..."
+              className="h-7 w-60 lg:w-72 rounded-lg border-white/10 bg-slate-950/80 pl-8 pr-7 text-xs font-medium text-white placeholder:text-white/40 focus:border-cyan-400"
             />
             <button
               type="submit"
               disabled={searchingAddress}
               className="absolute right-2 text-white/50 hover:text-white transition"
             >
-              {searchingAddress ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+              {searchingAddress ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
             </button>
           </form>
         </div>
 
-        {/* Alternador de Abas de Visualização */}
-        <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-slate-950/80 p-1">
-          {[
-            { id: "map", label: "Mapa", icon: MapIcon },
-            { id: "3d", label: "3D", icon: Rotate3d },
-            { id: "shadows", label: "Sombras", icon: Sun },
-            { id: "irradiation", label: "Irradiação", icon: Flame },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const active = viewMode === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setViewMode(tab.id)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                  active
-                    ? "bg-primary text-slate-950 shadow-sm"
-                    : "text-white/60 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Ações Principais do Cabeçalho */}
+        {/* Lado Direito do Header: Salvo, Undo, Redo, 2D/3D e Ações */}
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={handlePrint}
-            className="h-9 rounded-xl border-white/10 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
-            title="Imprimir relatório executivo"
-          >
-            <Printer className="mr-1.5 h-3.5 w-3.5 text-primary" /> Imprimir
-          </Button>
+          <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 mr-1">
+            <Check className="h-3 w-3 stroke-[3]" /> Salvo
+          </div>
+
+          <div className="flex items-center gap-1 bg-slate-950/60 p-0.5 rounded-lg border border-white/10">
+            <button
+              type="button"
+              onClick={undoRoofChange}
+              disabled={!roofHistoryState.canUndo}
+              className="h-7 w-7 flex items-center justify-center rounded text-white/60 hover:text-white disabled:opacity-25 transition"
+              title="Desfazer"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={redoRoofChange}
+              disabled={!roofHistoryState.canRedo}
+              className="h-7 w-7 flex items-center justify-center rounded text-white/60 hover:text-white disabled:opacity-25 transition"
+              title="Refazer"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Toggle 2D / 3D */}
+          <div className="flex items-center gap-0.5 bg-slate-950/80 p-0.5 rounded-lg border border-white/10">
+            <button
+              type="button"
+              onClick={() => setViewMode("map")}
+              className={`px-2.5 py-1 text-xs font-bold rounded transition ${
+                viewMode === "map" ? "bg-cyan-500 text-slate-950 font-black shadow" : "text-white/60 hover:text-white"
+              }`}
+            >
+              2D
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("3d")}
+              className={`px-2.5 py-1 text-xs font-bold rounded transition ${
+                viewMode === "3d" ? "bg-cyan-500 text-slate-950 font-black shadow" : "text-white/60 hover:text-white"
+              }`}
+            >
+              3D
+            </button>
+          </div>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -726,57 +767,33 @@ export default function SolarProject() {
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-9 rounded-xl border-white/10 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
+                className="h-7 rounded-lg border-white/10 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
               >
-                <Download className="mr-1.5 h-3.5 w-3.5 text-primary" /> Relatórios PDF <ChevronDown className="ml-1 h-3 w-3 text-white/50" />
+                <Download className="mr-1 h-3 w-3 text-cyan-400" /> Relatórios <ChevronDown className="ml-1 h-3 w-3 text-white/50" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64 bg-slate-900 border-white/10 text-white p-1.5 shadow-xl">
               <DropdownMenuLabel className="text-[10px] font-black uppercase text-white/50 px-2 py-1">
-                Download Direto em PDF
+                Documentos Técnicos PDF
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={() => handleDownloadDirect("executive")}
-                className="text-xs font-bold text-primary hover:bg-primary/10 cursor-pointer rounded-lg px-2.5 py-2"
+                className="text-xs font-bold text-cyan-300 hover:bg-cyan-500/10 cursor-pointer rounded-lg px-2.5 py-2"
               >
-                <Download className="mr-2 h-4 w-4 text-primary" /> Relatório Executivo Completo
+                <Download className="mr-2 h-4 w-4 text-cyan-400" /> Relatório Executivo Completo
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-white/10" />
-              <DropdownMenuItem
-                onClick={() => handleDownloadDirect("site_plan")}
-                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
-              >
-                Planta de Implantação (PDF)
+              <DropdownMenuItem onClick={() => handleDownloadDirect("site_plan")} className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5">
+                Planta de Implantação
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleDownloadDirect("electrical")}
-                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
-              >
-                Diagrama Elétrico & Strings (PDF)
+              <DropdownMenuItem onClick={() => handleDownloadDirect("electrical")} className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5">
+                Diagrama Elétrico & Strings
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleDownloadDirect("memorial")}
-                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
-              >
-                Memorial Descritivo (PDF)
+              <DropdownMenuItem onClick={() => handleDownloadDirect("memorial")} className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5">
+                Memorial Descritivo
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleDownloadDirect("bom")}
-                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
-              >
-                Lista de Materiais - BOM (PDF)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleDownloadDirect("simulation")}
-                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
-              >
-                Simulação de Geração (PDF)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleDownloadDirect("proposal")}
-                className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5"
-              >
-                Proposta Comercial (PDF)
+              <DropdownMenuItem onClick={() => handleDownloadDirect("bom")} className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5">
+                Lista de Materiais (BOM)
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-white/10" />
               <DropdownMenuItem
@@ -784,7 +801,7 @@ export default function SolarProject() {
                 className="text-xs font-bold text-white hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5 flex items-center justify-between"
               >
                 <span>Central de Relatórios...</span>
-                <Layers className="h-3.5 w-3.5 text-primary" />
+                <Layers className="h-3.5 w-3.5 text-cyan-400" />
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -794,144 +811,345 @@ export default function SolarProject() {
             size="sm"
             onClick={saveConfig}
             disabled={saving}
-            className="h-9 rounded-xl bg-primary px-4 text-xs font-black text-slate-950 hover:bg-primary/90 shadow-sm"
+            className="h-7 rounded-lg bg-cyan-500 px-3 text-xs font-black text-slate-950 hover:bg-cyan-400 shadow-sm"
           >
-            {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+            {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
             Salvar
           </Button>
         </div>
       </header>
 
-      {/* 2. Ribbon Toolbar de Ferramentas */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#0f1929] px-4 overflow-x-auto">
-        <div className="flex items-center gap-1.5">
-          {/* Grupo de Ferramentas de Contorno */}
-          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-white/10">
+      {/* 2. Área Central: Rail de Ícones Esquerdo + Sidebar Inspetor + Canvas */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Rail Vertical Esquerdo de Ferramentas / Modos */}
+        <div className="w-12 shrink-0 flex flex-col items-center justify-between border-r border-white/10 bg-[#0a111e] py-3 z-20">
+          <div className="flex flex-col items-center gap-2">
             {[
-              { mode: "select", icon: MousePointer2, label: "Navegar" },
-              { mode: "draw-polygon", icon: Home, label: "Polígono Livre" },
-              { mode: "draw-rectangle", icon: Square, label: "Retângulo" },
-              { mode: "edit", icon: Pencil, label: "Vértices", reqRoof: true },
-              { mode: "rotate", icon: RotateCw, label: "Girar", reqRoof: true },
-            ].map((t) => (
-              <button
-                key={t.mode}
-                type="button"
-                title={t.label}
-                disabled={t.reqRoof && !hasRoof}
-                onClick={() => setEditorMode(t.mode)}
-                className={`flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition ${
-                  editorMode === t.mode
-                    ? "bg-primary text-slate-950 font-black"
-                    : "text-white/60 hover:bg-white/10 hover:text-white"
-                } disabled:opacity-25`}
-              >
-                <t.icon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t.label}</span>
-              </button>
-            ))}
+              { id: "info", icon: Info, label: "Informações" },
+              { id: "camera", icon: Camera, label: "Captura" },
+              { id: "roof", icon: Box, label: "Estrutura do Telhado" },
+              { id: "modules", icon: Grid, label: "Módulos FV", isPrimary: true },
+              { id: "strings", icon: Zap, label: "Strings Elétricas" },
+              { id: "inverters", icon: Layers, label: "Inversores" },
+              { id: "reports", icon: FileText, label: "Relatórios" },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeRailTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  title={item.label}
+                  onClick={() => {
+                    setActiveRailTab(item.id);
+                    setSidebarOpen(true);
+                  }}
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                    item.isPrimary && isActive
+                      ? "bg-red-600 text-white shadow-lg"
+                      : isActive
+                      ? "bg-white/15 text-white"
+                      : "text-white/40 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              );
+            })}
           </div>
 
-          <span className="mx-1 h-5 w-px bg-white/10" />
-
-          {/* Ferramenta de Obstáculos: botão direto (sem menu flutuante) — um clique arma
-              o modo de desenho e o clique seguinte no telhado posiciona o obstáculo.
-              O tipo é escolhido nas fichas da aba "Obstáculos" da barra lateral. */}
-          <div className="flex items-center gap-1">
+          <div className="flex flex-col items-center gap-2">
             <button
               type="button"
-              onClick={() => handleStartPlaceObstacle(pendingObstaclePreset || DEFAULT_OBSTACLE_PRESET)}
-              className={`flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition ${
-                pendingObstaclePreset
-                  ? "border-rose-400 bg-rose-500/20 text-rose-200 animate-pulse"
-                  : "border-white/10 bg-slate-950/60 text-rose-300 hover:bg-slate-900"
-              }`}
+              onClick={() => setReportsOpen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-white/40 hover:bg-white/5 hover:text-white transition"
+              title="Compartilhar / Exportar"
             >
-              <Plus className="h-3.5 w-3.5 text-rose-400" />
-              <span>{pendingObstaclePreset ? "Clique no telhado" : "Obstáculo"}</span>
+              <Share2 className="h-4 w-4" />
             </button>
-
-            {pendingObstaclePreset && (
-              <button
-                type="button"
-                onClick={handleCancelPlaceObstacle}
-                className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-white/60 hover:bg-slate-900 hover:text-white transition"
-              >
-                <X className="h-3.5 w-3.5" />
-                Cancelar
-              </button>
-            )}
           </div>
-
-          <span className="mx-1 h-5 w-px bg-white/10" />
-
-          {/* Automação e IA */}
-          <button
-            type="button"
-            onClick={handleAutoSuggestContour}
-            className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-cyan-300 hover:bg-slate-900 transition"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-cyan-400" /> Contorno IA
-          </button>
         </div>
 
-        {/* Lado Direito do Ribbon: Estratégias de Simulação & Desfazer */}
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={undoRoofChange}
-            disabled={!roofHistoryState.canUndo}
-            className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-slate-950/60 text-white/60 hover:text-white disabled:opacity-25 transition"
-            title="Desfazer"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={redoRoofChange}
-            disabled={!roofHistoryState.canRedo}
-            className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-slate-950/60 text-white/60 hover:text-white disabled:opacity-25 transition"
-            title="Refazer"
-          >
-            <Redo2 className="h-3.5 w-3.5" />
-          </button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+        {/* Sidebar Inspetor (Passo 3 & 4: MÓDULOS FV & POSICIONAMENTO) */}
+        {sidebarOpen && (
+          <aside className="w-80 shrink-0 flex flex-col border-r border-white/10 bg-[#0d1522] overflow-hidden z-10 animate-in slide-in-from-left duration-200">
+            {/* Header da Sidebar com botão de fechar « */}
+            <div className="flex h-10 items-center justify-between border-b border-white/10 px-3 bg-slate-950/40">
+              <span className="text-xs font-black uppercase tracking-wider text-white">
+                {activeRailTab === "modules" ? "Módulos FV & Arranjo" : activeRailTab === "roof" ? "Água do Telhado" : "Propriedades"}
+              </span>
               <button
                 type="button"
-                className="flex h-8 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs font-bold text-primary hover:bg-slate-900 transition"
+                onClick={() => setSidebarOpen(false)}
+                className="flex h-6 w-6 items-center justify-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition"
+                title="Recolher painel"
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Simular layout</span>
-                <ChevronDown className="h-3 w-3 opacity-60" />
+                <ChevronLeft className="h-4 w-4" />
               </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64 bg-slate-900 border-white/15 text-white">
-              <DropdownMenuLabel className="text-[11px] font-bold text-white/50 uppercase">
-                Estratégias de Otimização
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-white/10" />
-              {STRATEGIES.map((strat) => (
-                <DropdownMenuItem
-                  key={strat.id}
-                  onClick={() => handleSelectStrategy(strat.id)}
-                  className="flex flex-col items-start gap-0.5 p-2 focus:bg-white/10 focus:text-white cursor-pointer"
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-primary">
-                    <strat.icon className="h-3.5 w-3.5" /> {strat.title}
-                  </div>
-                  <p className="text-[10px] text-white/60 leading-tight">{strat.desc}</p>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+            </div>
 
-      {/* 3. Canvas Central + Painel Lateral com Abas Descomprimidas */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Visualizador Principal (Mapa 2D ou 3D) */}
+            {/* Conteúdo Rolável do Inspetor */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+              {/* Seção 1: Seleção de Módulos FV */}
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-black uppercase tracking-wider text-white/70">
+                  MÓDULOS FV
+                </Label>
+                <select
+                  value={config.module_preset_id}
+                  onChange={(e) => updateConfig("module_preset_id", e.target.value)}
+                  className="w-full rounded-lg border border-white/15 bg-slate-950 px-2.5 py-2 text-xs font-bold text-white focus:border-cyan-400 focus:outline-none"
+                >
+                  {MODULE_CATALOG.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Seção 2: Posicionamento (Accordion) */}
+              <div className="rounded-xl border border-white/10 bg-slate-950/50 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setPositioningOpen(!positioningOpen)}
+                  className="w-full flex items-center justify-between p-3 text-left font-black text-xs uppercase tracking-wider text-white hover:bg-white/5 transition"
+                >
+                  <span>POSICIONAMENTO</span>
+                  <ChevronDown className={`h-4 w-4 text-white/50 transition-transform ${positioningOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {positioningOpen && (
+                  <div className="p-3 pt-0 space-y-4 border-t border-white/5">
+                    {/* Estrutura de Fixação: 3 Ícones */}
+                    <div className="space-y-1.5 pt-2">
+                      <Label className="text-[10px] font-bold text-white/60">Estrutura de Fixação</Label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { id: "coplanar", label: "Coplanar", symbol: "— /" },
+                          { id: "triangle", label: "Triângulo", symbol: "◺" },
+                          { id: "shed", label: "Shed / L-O", symbol: "/\\" },
+                        ].map((st) => (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() => updateConfig("structure_type", st.id)}
+                            className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg border text-center transition ${
+                              config.structure_type === st.id
+                                ? "border-cyan-400 bg-cyan-950/60 text-cyan-200 font-black shadow-sm"
+                                : "border-white/10 bg-slate-900/60 text-white/60 hover:bg-white/5 hover:text-white"
+                            }`}
+                          >
+                            <span className="text-sm font-black mb-0.5">{st.symbol}</span>
+                            <span className="text-[9px] font-bold leading-tight">{st.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Orientação: Paisagem vs Retrato */}
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-white/60">Orientação</Label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => updateConfig("module_orientation", "horizontal")}
+                          className={`flex items-center justify-center gap-2 py-2 px-2 rounded-lg border text-xs font-bold transition ${
+                            config.module_orientation === "horizontal"
+                              ? "border-cyan-400 bg-cyan-950/60 text-cyan-200 font-black shadow-sm"
+                              : "border-white/10 bg-slate-900/60 text-white/60 hover:bg-white/5 hover:text-white"
+                          }`}
+                        >
+                          <div className="h-3 w-5 border border-current rounded-sm flex items-center justify-center">
+                            <span className="h-1.5 w-3 bg-current/40" />
+                          </div>
+                          <span>Paisagem</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateConfig("module_orientation", "vertical")}
+                          className={`flex items-center justify-center gap-2 py-2 px-2 rounded-lg border text-xs font-bold transition ${
+                            config.module_orientation === "vertical"
+                              ? "border-cyan-400 bg-cyan-950/60 text-cyan-200 font-black shadow-sm"
+                              : "border-white/10 bg-slate-900/60 text-white/60 hover:bg-white/5 hover:text-white"
+                          }`}
+                        >
+                          <div className="h-5 w-3 border border-current rounded-sm flex items-center justify-center">
+                            <span className="h-3 w-1.5 bg-current/40" />
+                          </div>
+                          <span>Retrato</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Grade de 6 Parâmetros Numéricos (Azimute, Inclinação, Linhas/Mesa, Altura, Espaçamentos) */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <Label className="text-[10px] font-bold text-white/60">Azimute *</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={config.roof_rotation_deg}
+                          onChange={(e) => updateConfig("roof_rotation_deg", parseFloat(e.target.value) || 0)}
+                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] font-bold text-white/60">Inclinação *</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={config.roof_pitch_deg}
+                          onChange={(e) => updateConfig("roof_pitch_deg", parseFloat(e.target.value) || 0)}
+                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] font-bold text-white/60">Linhas por Mesa *</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={config.rows_per_table || 1}
+                          onChange={(e) => updateConfig("rows_per_table", parseInt(e.target.value, 10) || 1)}
+                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] font-bold text-white/60">Altura da Base *</Label>
+                        <Input
+                          type="number"
+                          value={config.base_height_cm || 0}
+                          onChange={(e) => updateConfig("base_height_cm", parseInt(e.target.value, 10) || 0)}
+                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] font-bold text-white/60">Espaçamento colunas *</Label>
+                        <Input
+                          type="number"
+                          value={config.column_gap_cm || 0}
+                          onChange={(e) => updateConfig("column_gap_cm", parseInt(e.target.value, 10) || 0)}
+                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] font-bold text-white/60">Espaçamento linhas *</Label>
+                        <Input
+                          type="number"
+                          value={config.row_gap_cm || 0}
+                          onChange={(e) => updateConfig("row_gap_cm", parseInt(e.target.value, 10) || 0)}
+                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Switch: PREENCHER SUPERFÍCIE AUTOMATICAMENTE */}
+                    <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                      <div className="flex flex-col">
+                        <span className="text-[11px] font-black uppercase text-white tracking-wider">
+                          PREENCHER SUPERFÍCIE AUTOMATICAMENTE
+                        </span>
+                        <span className="text-[10px] text-white/50">
+                          Preenche a água com a densidade máxima
+                        </span>
+                      </div>
+                      <Switch
+                        checked={config.auto_fill_surface}
+                        onCheckedChange={(checked) => updateConfig("auto_fill_surface", checked)}
+                        className="data-[state=checked]:bg-cyan-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Seção 3: Parâmetros do Grupo (Accordion) */}
+              <div className="rounded-xl border border-white/10 bg-slate-950/50 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setGroupParamsOpen(!groupParamsOpen)}
+                  className="w-full flex items-center justify-between p-3 text-left font-black text-xs uppercase tracking-wider text-white hover:bg-white/5 transition"
+                >
+                  <span>PARÂMETROS DO GRUPO</span>
+                  <ChevronDown className={`h-4 w-4 text-white/50 transition-transform ${groupParamsOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {groupParamsOpen && (
+                  <div className="p-3 pt-0 space-y-3 border-t border-white/5">
+                    <div className="pt-2">
+                      <Label className="text-[10px] font-bold text-white/60">Inversor Selecionado</Label>
+                      <Input
+                        value={`${config.inverter_manufacturer || "Growatt"} · ${config.inverter_model || "MIN 5000TL-X"} (${config.inverter_kw} kW)`}
+                        readOnly
+                        className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950/70 text-xs font-bold text-cyan-300"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-[10px] font-bold text-white/60">Tensão CA</Label>
+                        <select
+                          value={config.ac_voltage}
+                          onChange={(e) => updateConfig("ac_voltage", Number(e.target.value))}
+                          className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-2.5 py-1.5 text-xs font-bold text-white"
+                        >
+                          <option value={127}>127 V</option>
+                          <option value={220}>220 V</option>
+                          <option value={380}>380 V</option>
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="text-[10px] font-bold text-white/60">Alimentação</Label>
+                        <select
+                          value={config.ac_supply_type}
+                          onChange={(e) => updateConfig("ac_supply_type", e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-2.5 py-1.5 text-xs font-bold text-white"
+                        >
+                          <option value="Monofásico">Monofásico</option>
+                          <option value="Bifásico">Bifásico</option>
+                          <option value="Trifásico">Trifásico</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Ações Inferiores da Sidebar: CANCELAR & ACEITAR */}
+            <div className="p-3 border-t border-white/10 bg-slate-950/80 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={undoRoofChange}
+                className="h-9 rounded-lg border-white/15 bg-white/5 text-xs font-black text-white hover:bg-white/10 uppercase tracking-wider"
+              >
+                CANCELAR
+              </Button>
+              <Button
+                type="button"
+                onClick={handleAcceptLayout}
+                className="h-9 rounded-lg bg-cyan-500 text-xs font-black text-slate-950 hover:bg-cyan-400 shadow-sm uppercase tracking-wider"
+              >
+                ACEITAR
+              </Button>
+            </div>
+          </aside>
+        )}
+
+        {/* Botão flutuante para reabrir Sidebar caso esteja fechada */}
+        {!sidebarOpen && (
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="absolute top-16 left-14 z-30 flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-slate-900/90 text-white shadow-xl backdrop-blur-md hover:bg-slate-800 transition"
+            title="Abrir Inspetor"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
+
+        {/* Canvas Central (Mapa 2D ou Vista 3D) */}
         <main className="relative flex-1 bg-slate-950">
           {viewMode === "3d" ? (
             <Solar3DView config={config} sizing={visualSizing} panelPolygons={visiblePanelPolygons} />
@@ -950,6 +1168,8 @@ export default function SolarProject() {
               showMeasurements
               onEditorModeChange={setEditorMode}
               onRoofChange={handleRoofGeometryChange}
+              onAlignToEdge={handleAlignToEdge}
+              onToggle3D={() => setViewMode("3d")}
               onViewportChange={({ center, zoom }) => {
                 setConfig((current) => ({
                   ...current,
@@ -962,7 +1182,8 @@ export default function SolarProject() {
               onUpdateObstacle={handleUpdateObstacle}
               onSelectObstacle={(id) => {
                 setSelectedObstacleId(id);
-                setActiveSidebarTab("obstacles");
+                setActiveRailTab("roof");
+                setSidebarOpen(true);
               }}
               onRemoveObstacle={handleRemoveObstacle}
               onMapClick={handleMapClick}
@@ -970,13 +1191,13 @@ export default function SolarProject() {
           )}
 
           {pendingObstaclePreset && (
-            <div className="pointer-events-none absolute inset-x-0 top-4 z-[500] flex justify-center">
+            <div className="pointer-events-none absolute inset-x-0 top-16 z-[500] flex justify-center">
               <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-rose-400/60 bg-slate-900/95 px-4 py-2 text-xs font-bold text-rose-200 shadow-2xl backdrop-blur">
                 <ShieldAlert className="h-3.5 w-3.5 text-rose-400 animate-pulse" />
-                Clique no telhado para desenhar: {pendingObstaclePreset.name}
+                Clique no telhado para posicionar: {pendingObstaclePreset.name}
                 <button
                   type="button"
-                  onClick={handleCancelPlaceObstacle}
+                  onClick={() => setPendingObstaclePreset(null)}
                   className="ml-1 rounded-lg p-0.5 text-white/50 hover:bg-white/10 hover:text-white transition"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -985,469 +1206,7 @@ export default function SolarProject() {
             </div>
           )}
         </main>
-
-        {/* 4. Painel Lateral Organizado com Abas */}
-        <aside className="w-80 lg:w-96 shrink-0 flex flex-col border-l border-white/10 bg-[#0d1522] overflow-hidden">
-          {/* Seletor de Abas da Sidebar */}
-          <div className="grid grid-cols-3 border-b border-white/10 bg-slate-950/60 p-1">
-            <button
-              type="button"
-              onClick={() => setActiveSidebarTab("water")}
-              className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition ${
-                activeSidebarTab === "water"
-                  ? "bg-white/10 text-white shadow-sm"
-                  : "text-white/50 hover:text-white"
-              }`}
-            >
-              <span className="h-2 w-2 rounded-full bg-primary" />
-              Água 01
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSidebarTab("obstacles")}
-              className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition ${
-                activeSidebarTab === "obstacles"
-                  ? "bg-white/10 text-white shadow-sm"
-                  : "text-white/50 hover:text-white"
-              }`}
-            >
-              <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
-              Obstáculos ({obstacles.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSidebarTab("pv")}
-              className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition ${
-                activeSidebarTab === "pv"
-                  ? "bg-white/10 text-white shadow-sm"
-                  : "text-white/50 hover:text-white"
-              }`}
-            >
-              <Sliders className="h-3.5 w-3.5 text-cyan-400" />
-              Config FV
-            </button>
-          </div>
-
-          {/* Conteúdo da Aba 1: Água 01 (Métricas e Strings) */}
-          {activeSidebarTab === "water" && (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-primary" />
-                  <h3 className="text-sm font-black text-white">Água 01 — Telhado</h3>
-                </div>
-                <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400">
-                  <Check className="h-3 w-3" /> Selecionada
-                </span>
-              </div>
-
-              <div className="space-y-2 rounded-xl bg-slate-950/60 border border-white/10 p-3">
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-white/60">Área total:</span>
-                  <strong className="text-white">{(config.roof_area_m2 || 72.4).toFixed(1)} m²</strong>
-                </div>
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-white/60">Área utilizável:</span>
-                  <strong className="text-white">{(visualSizing.usableArea || 58.7).toFixed(1)} m²</strong>
-                </div>
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-white/60">Azimute:</span>
-                  <strong className="text-cyan-300">{technicalAnalysis.azimuth.formatted}</strong>
-                </div>
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-white/60">Inclinação:</span>
-                  <strong className="text-white">{config.roof_pitch_deg || 12}°</strong>
-                </div>
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-white/60">Módulos instalados:</span>
-                  <strong className="text-white">{visualSizing.panelCount} × {config.module_wp} Wp</strong>
-                </div>
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-white/60">Potência CC:</span>
-                  <strong className="text-primary">{visualSizing.dcPowerKw.toFixed(2)} kWp</strong>
-                </div>
-                <div className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-white/60">Geração estimada:</span>
-                  <strong className="text-emerald-400">{(annualGenerationKwh / 1000).toFixed(2)} MWh/ano</strong>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-white/60">Perdas estimadas:</span>
-                  <strong className="text-amber-400">{technicalAnalysis.estimatedLossPct}%</strong>
-                </div>
-              </div>
-
-              {/* Agrupamento de Strings */}
-              <div className="space-y-2 rounded-xl bg-slate-950/60 border border-white/10 p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-white/60">Arranjo de Strings CC</p>
-                  <span className="text-[10px] text-primary font-bold">{strings.length} Strings</span>
-                </div>
-                <div className="space-y-1.5">
-                  {strings.map((st) => (
-                    <div key={st.id} className="flex items-center justify-between text-[11px] bg-white/5 px-2.5 py-1.5 rounded-lg border border-white/5">
-                      <span className="font-bold text-cyan-300">{st.name}</span>
-                      <span className="text-white/80">Módulos {st.startModule}–{st.endModule} ({st.powerKw} kWp)</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Ações da Área */}
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditorMode("edit")}
-                  className="h-8 border-white/15 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
-                >
-                  <Pencil className="mr-1.5 h-3 w-3" /> Editar área
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={clearRoof}
-                  className="h-8 border-rose-500/30 bg-rose-950/30 text-xs font-bold text-rose-400 hover:bg-rose-950/60"
-                >
-                  <Trash2 className="mr-1.5 h-3 w-3" /> Excluir área
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Conteúdo da Aba 2: Obstáculos no Telhado (Adicionar, Arrastar, Ajustar Raio) */}
-          {activeSidebarTab === "obstacles" && (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-              <div className="border-b border-white/10 pb-3 space-y-3">
-                <div>
-                  <h3 className="text-sm font-black text-white">Obstáculos no Telhado</h3>
-                  <p className="text-[11px] text-white/50">
-                    {pendingObstaclePreset
-                      ? `Clique no telhado para desenhar "${pendingObstaclePreset.name}".`
-                      : "Escolha um tipo abaixo e clique no telhado para desenhar. Depois arraste o marcador e ajuste o raio."}
-                  </p>
-                </div>
-
-                {/* Fichas inline (sem menu flutuante): clicar arma o modo de desenho */}
-                <div className="grid grid-cols-2 gap-1.5">
-                  {OBSTACLE_PRESETS.map((preset) => {
-                    const Icon = preset.icon;
-                    const isArmed = pendingObstaclePreset?.type === preset.type;
-                    return (
-                      <button
-                        key={preset.type}
-                        type="button"
-                        onClick={() => handleStartPlaceObstacle(preset)}
-                        className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[11px] font-bold transition ${
-                          isArmed
-                            ? "border-rose-400 bg-rose-500/20 text-rose-200"
-                            : "border-white/10 bg-slate-950/60 text-white/70 hover:border-rose-400/50 hover:text-white"
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5 shrink-0 text-rose-400" />
-                        <span className="truncate">{preset.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {pendingObstaclePreset && (
-                  <button
-                    type="button"
-                    onClick={handleCancelPlaceObstacle}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/60 py-1.5 text-[11px] font-bold text-white/60 hover:text-white transition"
-                  >
-                    <X className="h-3.5 w-3.5" /> Cancelar desenho
-                  </button>
-                )}
-              </div>
-
-              {obstacles.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/15 p-6 text-center text-white/50 space-y-2">
-                  <AlertTriangle className="mx-auto h-6 w-6 text-white/30" />
-                  <p className="font-semibold">Nenhum obstáculo cadastrado</p>
-                  <p className="text-[11px]">Adicione chaminés, caixas d'água ou claraboias para recalcular os módulos ao redor.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {obstacles.map((obs) => {
-                    const isSelected = selectedObstacleId === obs.id;
-                    return (
-                      <div
-                        key={obs.id}
-                        onClick={() => setSelectedObstacleId(obs.id)}
-                        className={`rounded-xl border p-3 transition space-y-2.5 cursor-pointer ${
-                          isSelected
-                            ? "border-sky-400 bg-sky-950/40 shadow-sm"
-                            : "border-white/10 bg-slate-950/60 hover:border-white/20"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                            <strong className="text-white text-xs">{obs.name || "Obstáculo"}</strong>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveObstacle(obs.id);
-                            }}
-                            className="text-white/40 hover:text-rose-400 transition"
-                            title="Remover obstáculo"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-
-                        {/* Controle de Raio de Afastamento */}
-                        <div className="space-y-1.5 pt-1">
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-white/60">Raio de segurança:</span>
-                            <strong className="text-sky-300">{(obs.radiusM || 1.0).toFixed(1)} m</strong>
-                          </div>
-                          <input
-                            type="range"
-                            min="0.2"
-                            max="3.5"
-                            step="0.1"
-                            value={obs.radiusM || 1.0}
-                            onChange={(e) => handleUpdateObstacle(obs.id, { radiusM: parseFloat(e.target.value) })}
-                            className="w-full accent-primary h-1 bg-white/10 rounded-lg cursor-pointer"
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px] text-white/40 pt-1 border-t border-white/5">
-                          <span>Posição: {obs.lat.toFixed(5)}, {obs.lng.toFixed(5)}</span>
-                          <span className="text-sky-400 font-semibold">Arraste no mapa</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Conteúdo da Aba 3: Configurações do Sistema FV */}
-          {activeSidebarTab === "pv" && (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-              <div className="border-b border-white/10 pb-3">
-                <h3 className="text-sm font-black text-white">Parâmetros Fotovoltaicos</h3>
-                <p className="text-[11px] text-white/50">Ajuste potência, orientação e conexão CA.</p>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-xs font-bold text-white/70">Potência do Módulo (Wp)</Label>
-                  <select
-                    value={config.module_wp}
-                    onChange={(e) => updateConfig("module_wp", Number(e.target.value))}
-                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/60"
-                  >
-                    {[450, 500, 550, 580, 600, 670, 700].map((wp) => (
-                      <option key={wp} value={wp}>{wp} Wp (Half-Cell Monocristalino)</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <Label className="text-xs font-bold text-white/70">Orientação dos Módulos</Label>
-                  <select
-                    value={config.module_orientation}
-                    onChange={(e) => updateConfig("module_orientation", e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/60"
-                  >
-                    <option value="auto">Automático (Melhor encaixe)</option>
-                    <option value="vertical">Retrato (Em pé)</option>
-                    <option value="horizontal">Paisagem (Deitado)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <Label className="text-xs font-bold text-white/70">Potência do Inversor (kW)</Label>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    min="1"
-                    max="100"
-                    value={config.inverter_kw}
-                    onChange={(e) => updateConfig("inverter_kw", parseFloat(e.target.value) || 5)}
-                    className="mt-1.5 h-9 rounded-xl border-white/10 bg-slate-950 text-xs font-bold text-white"
-                  />
-                </div>
-
-                <div>
-                  <Label className="text-xs font-bold text-white/70">Alimentação CA do Inversor</Label>
-                  <div className="grid grid-cols-2 gap-2 mt-1.5">
-                    <select
-                      value={config.ac_supply_type}
-                      onChange={(e) => updateConfig("ac_supply_type", e.target.value)}
-                      className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/60"
-                    >
-                      <option value="Monofásico">Monofásico</option>
-                      <option value="Bifásico">Bifásico</option>
-                      <option value="Trifásico">Trifásico</option>
-                    </select>
-                    <select
-                      value={config.ac_voltage}
-                      onChange={(e) => updateConfig("ac_voltage", Number(e.target.value))}
-                      className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs font-bold text-white focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/60"
-                    >
-                      <option value={127}>127 V</option>
-                      <option value={220}>220 V</option>
-                      <option value={380}>380 V</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="text-xs font-bold text-white/70">Inclinação do Telhado (°)</Label>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    max="45"
-                    value={config.roof_pitch_deg}
-                    onChange={(e) => updateConfig("roof_pitch_deg", parseInt(e.target.value, 10) || 12)}
-                    className="mt-1.5 h-9 rounded-xl border-white/10 bg-slate-950 text-xs font-bold text-white"
-                  />
-                </div>
-
-                <div className="space-y-3 border-t border-white/10 pt-4">
-                  <div>
-                    <p className="text-[11px] font-black uppercase tracking-wider text-cyan-300">Dados do memorial</p>
-                    <p className="mt-1 text-[10px] text-white/45">Campos salvos no projeto e preenchidos automaticamente no PDF.</p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-[11px] font-bold text-white/70">Unidade Consumidora</Label>
-                      <Input value={config.consumer_unit || ""} onChange={(e) => updateConfig("consumer_unit", e.target.value)} placeholder="Número da UC" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] font-bold text-white/70">Distribuidora</Label>
-                      <Input value={config.distributor || ""} onChange={(e) => updateConfig("distributor", e.target.value)} placeholder="Ex: Enel SP" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] font-bold text-white/70">Fabricante do módulo</Label>
-                      <Input value={config.module_manufacturer || ""} onChange={(e) => updateConfig("module_manufacturer", e.target.value)} placeholder="Ex: Jinko Solar" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] font-bold text-white/70">Modelo do módulo</Label>
-                      <Input value={config.module_model || ""} onChange={(e) => updateConfig("module_model", e.target.value)} placeholder="Modelo" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] font-bold text-white/70">Fabricante do inversor</Label>
-                      <Input value={config.inverter_manufacturer || ""} onChange={(e) => updateConfig("inverter_manufacturer", e.target.value)} placeholder="Ex: Growatt" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] font-bold text-white/70">Modelo do inversor</Label>
-                      <Input value={config.inverter_model || ""} onChange={(e) => updateConfig("inverter_model", e.target.value)} placeholder="Modelo" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] font-bold text-white/70">Qtd. inversores</Label>
-                      <Input type="number" min="1" value={config.inverter_quantity || 1} onChange={(e) => updateConfig("inverter_quantity", Math.max(1, Number(e.target.value) || 1))} className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label className="text-[11px] font-bold text-white/70">Ponto de conexão</Label>
-                    <Input value={config.connection_point || ""} onChange={(e) => updateConfig("connection_point", e.target.value)} placeholder="Ex: QDG principal" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                  </div>
-                  <div>
-                    <Label className="text-[11px] font-bold text-white/70">Localização da conexão</Label>
-                    <Input value={config.connection_location || ""} onChange={(e) => updateConfig("connection_location", e.target.value)} placeholder="Ex: Abrigo do quadro principal" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                  </div>
-                  <div>
-                    <Label className="text-[11px] font-bold text-white/70">Local do padrão de entrada</Label>
-                    <Input value={config.entry_standard_location || ""} onChange={(e) => updateConfig("entry_standard_location", e.target.value)} placeholder="Ex: Muro frontal do imóvel" className="mt-1 h-9 rounded-lg border-white/10 bg-slate-950 text-xs text-white" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </aside>
       </div>
-
-      {/* 5. Rodapé Executivo Descomprimido com Métricas Claras e Verificações */}
-      <footer className="h-20 shrink-0 border-t border-white/10 bg-[#080d16] px-6 flex items-center justify-between">
-        <div className="flex items-center gap-6 overflow-x-auto">
-          <div>
-            <p className="text-base font-black text-primary flex items-center gap-1.5">
-              <Zap className="h-4 w-4" /> {visualSizing.dcPowerKw.toFixed(2)} kWp
-            </p>
-            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Potência Instalada</p>
-          </div>
-
-          <div className="h-8 w-px bg-white/10" />
-
-          <div>
-            <p className="text-base font-black text-white flex items-center gap-1.5">
-              <Grid2X2 className="h-4 w-4 text-cyan-400" /> {visualSizing.panelCount} Módulos
-            </p>
-            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Quantidade</p>
-          </div>
-
-          <div className="h-8 w-px bg-white/10" />
-
-          <div>
-            <p className="text-base font-black text-emerald-400 flex items-center gap-1.5">
-              <Sun className="h-4 w-4" /> {(annualGenerationKwh / 1000).toFixed(2)} MWh/ano
-            </p>
-            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Geração Estimada</p>
-          </div>
-
-          <div className="h-8 w-px bg-white/10" />
-
-          <div>
-            <p className="text-base font-black text-emerald-400 flex items-center gap-1.5">
-              <PiggyBank className="h-4 w-4" /> R$ {annualSavingsBrl.toLocaleString("pt-BR")}/ano
-            </p>
-            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Economia Estimada</p>
-          </div>
-
-          <div className="h-8 w-px bg-white/10" />
-
-          <div>
-            <p className="text-base font-black text-cyan-300">
-              {paybackYears} anos
-            </p>
-            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Payback Simples</p>
-          </div>
-        </div>
-
-        {/* Integração Elétrica com QD-01 e Botões de Impressão */}
-        <div className="flex items-center gap-4">
-          <div className="hidden xl:flex items-center gap-3 text-[11px] font-bold border-l border-white/10 pl-4 text-white/70">
-            <span className="flex items-center gap-1 text-emerald-400">
-              <Check className="h-3 w-3 stroke-[3]" /> Disjuntor {sizing.breaker}A ({config.ac_supply_type === "Trifásico" ? "3P" : "2P"})
-            </span>
-            <span className="flex items-center gap-1 text-emerald-400">
-              <Check className="h-3 w-3 stroke-[3]" /> NBR 16690 / 5410
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePrint}
-              className="h-10 rounded-xl border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs font-bold"
-            >
-              <Printer className="mr-1.5 h-4 w-4 text-primary" /> Imprimir
-            </Button>
-            <Button
-              type="button"
-              onClick={() => setReportsOpen(true)}
-              className="h-10 rounded-xl bg-primary hover:bg-primary/90 text-slate-950 text-xs font-black px-4 shadow-sm"
-            >
-              <Download className="mr-1.5 h-4 w-4" /> Relatórios PDF
-            </Button>
-          </div>
-        </div>
-      </footer>
 
       {/* Modal de Relatórios Profissionais */}
       <SolarReportsDialog

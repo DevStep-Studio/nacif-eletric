@@ -1,24 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
-import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   BarChart3,
   Bell,
   BellRing,
   BookOpen,
+  Building2,
   Calculator,
   CheckCheck,
   ChevronDown,
+  ChevronRight,
+  Compass,
   CreditCard,
+  FileSpreadsheet,
   FileText,
   FolderOpen,
   GitBranch,
+  Grid2X2,
   HelpCircle,
   Home,
   Info,
+  Layers,
   LayoutGrid,
   LogOut,
+  Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Palette,
@@ -27,9 +35,13 @@ import {
   ScanLine,
   Search,
   Settings,
+  Share2,
   Shield,
   ShieldCheck,
+  Sparkles,
   UserCircle,
+  Wrench,
+  X,
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
@@ -61,107 +73,11 @@ import {
   getUsageRows,
   normalizeSubscription,
 } from "@/lib/subscriptionPlans";
+import { getProjectProgress } from "@/lib/projectProgress";
+import OnboardingModal from "@/components/onboarding/OnboardingModal";
+import ToolsModal from "@/components/navigation/ToolsModal";
 
-const SIDEBAR_STORAGE_KEY = "voltai:shell-sidebar-collapsed";
-
-const NAV_GROUPS = [
-  {
-    label: "VISÃO GERAL",
-    items: [{ path: "/", icon: Home, label: "Dashboard", fullAccess: true }],
-  },
-  {
-    label: "PROJETOS",
-    items: [
-      { path: "/projects", icon: FolderOpen, label: "Meus projetos", fullAccess: true },
-      { path: "/projects/new", icon: Plus, label: "Novo projeto", fullAccess: true },
-      { path: "/planta-ia", icon: Zap, label: "Editor de planta", fullAccess: false },
-    ],
-  },
-  {
-    label: "FERRAMENTAS",
-    items: [
-      { path: "/circuit-editor", icon: PencilLine, label: "Circuitos", fullAccess: true },
-      { path: "/panel-generator", icon: LayoutGrid, label: "Quadro elétrico", fullAccess: true },
-      { path: "/unifilar", icon: GitBranch, label: "Diagrama unifilar", fullAccess: true },
-      { path: "/phase-balance", icon: Activity, label: "Balanço de fases", fullAccess: true },
-      { path: "/scanner", icon: ScanLine, label: "Scanner IA", fullAccess: true },
-      { path: "/calculator", icon: Calculator, label: "Calculadora", fullAccess: true },
-      { path: "/nbr-library", icon: BookOpen, label: "Biblioteca NBR", fullAccess: true },
-      { path: "/materials", icon: BarChart3, label: "Materiais", fullAccess: true },
-      { path: "/budget", icon: FileText, label: "Orçamento", fullAccess: true },
-      { path: "/memorial", icon: BookOpen, label: "Memorial descritivo", fullAccess: true },
-      { path: "/ai-assistant", icon: Zap, label: "Assistente IA", fullAccess: true },
-    ],
-  },
-  {
-    label: "GESTÃO",
-    items: [
-      { path: "/components-library", icon: Shield, label: "Biblioteca", fullAccess: true },
-    ],
-  },
-  {
-    label: "CONTA",
-    items: [
-      { path: "/subscription", icon: CreditCard, label: "Assinatura e uso", fullAccess: false },
-      { path: "/settings", icon: Settings, label: "Configurações", fullAccess: false },
-    ],
-  },
-];
-
-const QUICK_ACTIONS = [
-  { label: "Criar projeto", description: "Iniciar um novo projeto técnico", icon: Plus, target: "/projects/new" },
-  { label: "Importar planta", description: "Abrir o editor de planta baixa", icon: Zap, target: "/planta-ia" },
-  { label: "Ver assinatura", description: "Planos, limites e uso", icon: CreditCard, target: "/subscription" },
-  { label: "Configurações", description: "Perfil e preferências", icon: Settings, target: "/settings" },
-];
-
-const projectSearchActions = [
-  { key: "overview", label: "Abrir projeto", icon: FolderOpen, href: (id) => `/projects/${id}` },
-  { key: "plant", label: "Planta", icon: Zap, href: (id) => `/planta-ia?project=${id}` },
-  { key: "circuits", label: "Circuitos", icon: PencilLine, href: (id) => `/circuit-editor?project=${id}` },
-  { key: "panel", label: "Quadro", icon: LayoutGrid, href: (id) => `/panel-generator?project=${id}` },
-  { key: "diagram", label: "Diagrama", icon: GitBranch, href: (id) => `/unifilar?project=${id}` },
-  { key: "materials", label: "Materiais", icon: BarChart3, href: (id) => `/materials?project=${id}` },
-  { key: "memorial", label: "Memorial", icon: BookOpen, href: (id) => `/memorial?project=${id}` },
-];
-
-const NAV_ITEM_TONES = {
-  "/": "blue",
-  "/projects": "blue",
-  "/projects/new": "green",
-  "/planta-ia": "cyan",
-  "/circuit-editor": "green",
-  "/panel-generator": "amber",
-  "/unifilar": "indigo",
-  "/phase-balance": "teal",
-  "/scanner": "rose",
-  "/calculator": "slate",
-  "/nbr-library": "blue",
-  "/materials": "green",
-  "/budget": "amber",
-  "/memorial": "blue",
-  "/ai-assistant": "cyan",
-  "/components-library": "indigo",
-  "/subscription": "amber",
-  "/settings": "slate",
-};
-
-const navToneStyles = {
-  blue: { active: "bg-[#E8FCF8] text-[#0f4f49]", icon: "text-[#00d8b8]", rail: "bg-[#00d8b8]" },
-  cyan: { active: "bg-[#E8FCF8] text-[#0f4f49]", icon: "text-[#00d8b8]", rail: "bg-[#00d8b8]" },
-  green: { active: "bg-[#E8FCF8] text-[#0f4f49]", icon: "text-[#00d8b8]", rail: "bg-[#00d8b8]" },
-  amber: { active: "bg-[#E8FCF8] text-[#0f4f49]", icon: "text-[#00d8b8]", rail: "bg-[#00d8b8]" },
-  indigo: { active: "bg-[#E8FCF8] text-[#0f4f49]", icon: "text-[#00d8b8]", rail: "bg-[#00d8b8]" },
-  teal: { active: "bg-[#E8FCF8] text-[#0f4f49]", icon: "text-[#00d8b8]", rail: "bg-[#00d8b8]" },
-  rose: { active: "bg-[#E8FCF8] text-[#0f4f49]", icon: "text-[#00d8b8]", rail: "bg-[#00d8b8]" },
-  slate: { active: "bg-[#E8FCF8] text-[#0f4f49]", icon: "text-[#00d8b8]", rail: "bg-[#00d8b8]" },
-};
-
-const notificationIcon = {
-  info: Info,
-  warning: AlertTriangle,
-  success: ShieldCheck,
-};
+const SIDEBAR_STORAGE_KEY = "nacif:sidebar-collapsed";
 
 const initialsFromUser = (user) => {
   const source = user?.full_name || user?.email || "Admin";
@@ -184,7 +100,19 @@ function BrandLogo({ branding, compact = false, className = "" }) {
     );
   }
 
-  return <Zap className={compact ? "h-5 w-5" : "h-6 w-6"} />;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#00d8b8] text-slate-950 font-black shadow-sm">
+        <Zap className="h-5 w-5 fill-current" />
+      </div>
+      {!compact && (
+        <div className="flex flex-col">
+          <span className="text-sm font-black tracking-tight text-[#101828]">NACIF</span>
+          <span className="text-[10px] font-black uppercase tracking-wider text-[#00d8b8] -mt-1">ELECTRIC</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function AvatarDisplay({ user, initials, className = "" }) {
@@ -203,15 +131,10 @@ function AvatarDisplay({ user, initials, className = "" }) {
   return initials;
 }
 
-function isActivePath(pathname, itemPath) {
-  if (itemPath === "/") return pathname === "/";
-  if (itemPath === "/projects") return pathname === "/projects" || pathname.startsWith("/projects/");
-  return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
-}
-
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const [activeUser, setActiveUser] = useState(user);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -221,11 +144,26 @@ export default function Layout() {
       return false;
     }
   });
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const [toolsModalOpen, setToolsModalOpen] = useState(false);
+  const [toolsModalMode, setToolsModalMode] = useState("tools"); // "tools" | "library"
   const [shellProjects, setShellProjects] = useState([]);
   const [loadingShellProjects, setLoadingShellProjects] = useState(false);
+  const [currentProject, setCurrentProject] = useState(null);
   const { branding } = useBranding();
+
+  // Identifica se estamos dentro de um contexto de projeto
+  const currentProjectId = useMemo(() => {
+    if (location.pathname.startsWith("/projects/") && location.pathname !== "/projects/new") {
+      const parts = location.pathname.split("/");
+      return parts[2] || null;
+    }
+    const queryParam = searchParams.get("project");
+    if (queryParam) return queryParam;
+    return null;
+  }, [location.pathname, searchParams]);
 
   useEffect(() => {
     setActiveUser(user);
@@ -235,23 +173,11 @@ export default function Layout() {
     try {
       window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarCollapsed));
     } catch {
-      // The collapsed state is a convenience only.
+      // Storage fallback
     }
   }, [sidebarCollapsed]);
 
-  useEffect(() => {
-    const refreshUser = async () => {
-      try {
-        setActiveUser(await backend.auth.me());
-      } catch {
-        setActiveUser(user);
-      }
-    };
-
-    window.addEventListener("voltai:user-updated", refreshUser);
-    return () => window.removeEventListener("voltai:user-updated", refreshUser);
-  }, [user]);
-
+  // Carrega a lista de projetos para busca global e contexto
   useEffect(() => {
     let cancelled = false;
 
@@ -273,20 +199,41 @@ export default function Layout() {
     };
   }, []);
 
+  // Busca dados do projeto ativo quando em contexto de projeto
+  useEffect(() => {
+    if (!currentProjectId) {
+      setCurrentProject(null);
+      return;
+    }
+
+    const cached = shellProjects.find((p) => p.id === currentProjectId);
+    if (cached) {
+      setCurrentProject(cached);
+    }
+
+    let cancelled = false;
+    backend.entities.Project.get(currentProjectId)
+      .then((data) => {
+        if (!cancelled && data) setCurrentProject(data);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProjectId, shellProjects]);
+
+  // Fecha o drawer mobile ao mudar de rota
+  useEffect(() => {
+    setMobileDrawerOpen(false);
+  }, [location.pathname, location.search]);
+
+  // Atalhos de teclado (Ctrl+K)
   useEffect(() => {
     const handleShortcut = (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen((open) => !open);
-      }
-
-      if (event.key === "?" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        const tagName = document.activeElement?.tagName?.toLowerCase();
-        if (tagName !== "input" && tagName !== "textarea" && document.activeElement?.isContentEditable !== true) {
-          event.preventDefault();
-          setSearchOpen(true);
-          setSearchValue("atalhos");
-        }
       }
     };
 
@@ -299,148 +246,276 @@ export default function Layout() {
   const initials = initialsFromUser(activeUser);
   const displayName = activeUser?.full_name || "Admin";
   const displayEmail = activeUser?.email || "admin@nacifsolutions.com.br";
-  const accent = branding.primaryColor;
-  const accentSoft = branding.secondaryColor;
-  const logoIconColor = branding.logoIconColor || accent;
-  const logoBackgroundColor = branding.logoBackgroundColor || accentSoft;
   const subscription = normalizeSubscription(activeUser);
   const usage = useMemo(() => buildUsageFromProjects(shellProjects), [shellProjects]);
   const usageRows = useMemo(() => getUsageRows(subscription.plan, usage), [subscription.plan, usage]);
   const projectUsage = usageRows.find((row) => row.key === FEATURE_KEYS.PROJECTS);
 
-  const visibleNavGroups = useMemo(
-    () =>
-      NAV_GROUPS.map((group) => ({
-        ...group,
-        items: group.items.filter((item) => !item.fullAccess || fullAccess),
-      })).filter((group) => group.items.length > 0),
-    [fullAccess],
+  const activeProjectProgress = useMemo(
+    () => (currentProject ? getProjectProgress(currentProject) : null),
+    [currentProject]
   );
 
-  const flatNavItems = useMemo(() => visibleNavGroups.flatMap((group) => group.items), [visibleNavGroups]);
-  const pageResults = useMemo(
-    () => flatNavItems.map((item) => ({ ...item, searchLabel: `${item.label} ${item.path}` })),
-    [flatNavItems],
-  );
-  const activeNav = useMemo(
-    () =>
-      [...flatNavItems]
-        .sort((a, b) => b.path.length - a.path.length)
-        .find((item) => isActivePath(location.pathname, item.path)),
-    [flatNavItems, location.pathname],
-  );
-  const routeTitle =
-    location.pathname === "/projects/new"
-      ? "Novo projeto"
-      : location.pathname === "/subscription" || location.pathname.startsWith("/billing")
-        ? "Assinatura e uso"
-        : activeNav?.label || "Dashboard";
+  // Controla o onboarding de primeiro acesso
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  useEffect(() => {
+    if (activeUser && activeUser.onboarding_completed === false) {
+      setOnboardingOpen(true);
+    }
+  }, [activeUser]);
 
-  const projectResults = useMemo(
-    () =>
-      shellProjects.flatMap((project) => {
-        const baseLabel = `${project.name || ""} ${project.client_name || ""} ${project.project_type || ""}`.trim();
-
-        return projectSearchActions.map((action) => ({
-          id: `${project.id}:${action.key}`,
-          project,
-          actionLabel: action.label,
-          icon: action.icon,
-          target: action.href(project.id),
-          searchLabel: `${baseLabel} ${action.label}`,
-        }));
-      }),
-    [shellProjects],
-  );
-  const notificationResults = useMemo(
-    () =>
-      notifications.slice(0, 12).map((item) => ({
-        ...item,
-        searchLabel: `${item.title || ""} ${item.description || ""} ${item.category || ""}`,
-        icon: notificationIcon[item.tone] || Info,
-        target: item.href || "/",
-      })),
-    [notifications],
-  );
-
-  const handleSearchNavigate = (target) => {
-    setSearchOpen(false);
-    setSearchValue("");
-    navigate(target);
-  };
-
+  // Rotas Imersivas em tela cheia (Projeto Solar e Planta IA quando em tela cheia)
   const isImmersiveSolarRoute = location.pathname.startsWith("/solar-project");
-  const isImmersivePlantRoute = location.pathname.startsWith("/planta-ia");
-
-  if (isImmersiveSolarRoute || isImmersivePlantRoute) {
+  if (isImmersiveSolarRoute) {
     return (
-      <main className={`min-h-screen font-inter text-[#0f1728] ${isImmersiveSolarRoute ? "bg-[#172637]" : "bg-[#F5F7FA]"}`}>
+      <main className="min-h-screen font-inter bg-[#070c14] text-white">
         <Outlet />
       </main>
     );
   }
 
+  // Definição dos Itens de Navegação Contextuais do Projeto
+  const projectNavGroups = [
+    {
+      label: "VISÃO GERAL",
+      items: [
+        { path: `/projects/${currentProjectId}`, icon: Home, label: "Visão geral" },
+      ],
+    },
+    {
+      label: "PROJETO",
+      items: [
+        { path: `/planta-ia?project=${currentProjectId}`, icon: Zap, label: "Planta" },
+        { path: `/circuit-editor?project=${currentProjectId}`, icon: PencilLine, label: "Circuitos" },
+        { path: `/panel-generator?project=${currentProjectId}`, icon: LayoutGrid, label: "Quadro elétrico" },
+      ],
+    },
+    {
+      label: "ANÁLISE",
+      items: [
+        { path: `/phase-balance?project=${currentProjectId}`, icon: Activity, label: "Balanço de fases" },
+      ],
+    },
+    {
+      label: "DOCUMENTAÇÃO",
+      items: [
+        { path: `/unifilar?project=${currentProjectId}`, icon: GitBranch, label: "Diagrama unifilar" },
+        { path: `/memorial?project=${currentProjectId}`, icon: BookOpen, label: "Documentos & Memorial" },
+        { path: `/materials?project=${currentProjectId}`, icon: BarChart3, label: "Lista de materiais" },
+        { path: `/budget?project=${currentProjectId}`, icon: FileText, label: "Orçamento" },
+      ],
+    },
+  ];
+
+  // Definição dos Itens de Navegação Global (Fora do contexto de projeto)
+  const globalNavGroups = [
+    {
+      label: "VISÃO GERAL",
+      items: [
+        { path: "/", icon: Home, label: "Início", fullAccess: true },
+      ],
+    },
+    {
+      label: "PROJETOS",
+      items: [
+        { path: "/projects", icon: FolderOpen, label: "Meus projetos", fullAccess: true },
+        { path: "/projects/new", icon: Plus, label: "Novo projeto", fullAccess: true, isAction: true },
+      ],
+    },
+    {
+      label: "RECURSOS",
+      items: [
+        {
+          id: "tools",
+          icon: Calculator,
+          label: "Ferramentas",
+          onClick: () => {
+            setToolsModalMode("tools");
+            setToolsModalOpen(true);
+          },
+        },
+        {
+          id: "library",
+          icon: BookOpen,
+          label: "Biblioteca",
+          onClick: () => {
+            setToolsModalMode("library");
+            setToolsModalOpen(true);
+          },
+        },
+      ],
+    },
+  ];
+
+  const currentNavGroups = currentProjectId ? projectNavGroups : globalNavGroups;
+
+  const isItemActive = (path) => {
+    if (!path) return false;
+    const [pathBase, pathQuery] = path.split("?");
+    if (pathQuery) {
+      return location.pathname === pathBase && location.search.includes(pathQuery);
+    }
+    return location.pathname === path && !location.search;
+  };
+
+  const routeTitle = useMemo(() => {
+    if (currentProject) {
+      return currentProject.name;
+    }
+    if (location.pathname === "/") return "Dashboard";
+    if (location.pathname === "/projects") return "Meus projetos";
+    if (location.pathname === "/projects/new") return "Novo projeto";
+    if (location.pathname === "/subscription") return "Assinatura e uso";
+    if (location.pathname === "/settings") return "Configurações";
+    return "Nacif Electric";
+  }, [currentProject, location.pathname]);
+
   return (
     <div
       className={`min-h-screen overflow-x-hidden bg-[#F5F7FA] font-inter text-[#101828] transition-[padding] duration-200 ${
-        sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[248px]"
+        sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[260px]"
       }`}
     >
+      {/* Onboarding de Primeiro Acesso */}
+      <OnboardingModal
+        user={activeUser}
+        open={onboardingOpen}
+        onComplete={() => setOnboardingOpen(false)}
+      />
+
+      {/* Modal de Ferramentas & Biblioteca */}
+      <ToolsModal
+        open={toolsModalOpen}
+        onOpenChange={setToolsModalOpen}
+        mode={toolsModalMode}
+      />
+
+      {/* Sidebar Desktop Fixa */}
       <aside
         className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-[#E4E7EC] bg-white transition-[width] duration-200 lg:flex ${
-          sidebarCollapsed ? "w-[72px]" : "w-[248px]"
+          sidebarCollapsed ? "w-[72px]" : "w-[260px]"
         }`}
       >
-        <div className="flex h-16 items-center justify-between border-b border-[#E4E7EC] px-3">
-          <Link
-            to="/"
-            className={`flex shrink-0 items-center overflow-hidden ${
-              sidebarCollapsed ? "h-10 w-10 justify-center" : "h-12 w-[118px] justify-start"
-            }`}
-          >
-            <BrandLogo branding={branding} compact={sidebarCollapsed} className={sidebarCollapsed ? "" : "object-left"} />
-          </Link>
+        {/* Topo da Sidebar: Logo ou Botão Voltar Meus Projetos */}
+        <div className="flex h-16 items-center justify-between border-b border-[#E4E7EC] px-4">
+          {currentProjectId ? (
+            <Link
+              to="/projects"
+              className={`flex items-center gap-2 text-xs font-black text-[#475467] hover:text-[#101828] transition ${
+                sidebarCollapsed ? "justify-center w-full" : ""
+              }`}
+              title="Voltar para Meus Projetos"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#F2F4F7] text-[#344054] hover:bg-[#E4E7EC]">
+                <ArrowLeft className="h-4 w-4" />
+              </div>
+              {!sidebarCollapsed && <span>Meus projetos</span>}
+            </Link>
+          ) : (
+            <Link
+              to="/"
+              className={`flex shrink-0 items-center overflow-hidden ${
+                sidebarCollapsed ? "h-10 w-10 justify-center" : "h-12 justify-start"
+              }`}
+            >
+              <BrandLogo branding={branding} compact={sidebarCollapsed} />
+            </Link>
+          )}
+
           <button
             type="button"
             aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
             onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-[#475467] transition hover:bg-[#F2F4F7] hover:text-[#101828]"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#667085] transition hover:bg-[#F2F4F7] hover:text-[#101828]"
           >
             {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-2 py-4">
-          {visibleNavGroups.map((group) => (
-            <div key={group.label} className="mb-4">
+        {/* Card do Projeto Ativo (Quando em contexto de projeto) */}
+        {currentProjectId && currentProject && !sidebarCollapsed && (
+          <div className="border-b border-[#EAECF0] bg-[#F9FAFB] p-3.5 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-black text-[#101828]">
+                  {currentProject.name}
+                </h3>
+                <p className="truncate text-[11px] font-medium text-[#667085]">
+                  {currentProject.client_name || "Sem cliente"}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-md bg-[#E8FCF8] px-2 py-0.5 text-[10px] font-black text-[#0f4f49]">
+                {currentProject.supply_type || currentProject.project_type || "Bifásico"}
+              </span>
+            </div>
+
+            {activeProjectProgress && (
+              <div className="space-y-1 pt-1">
+                <div className="flex items-center justify-between text-[10px] font-bold text-[#667085]">
+                  <span>Progresso</span>
+                  <span className="text-[#00d8b8] font-black">{activeProjectProgress.percent}%</span>
+                </div>
+                <Progress value={activeProjectProgress.percent} className="h-1.5 bg-[#EAECF0]" />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Lista de Navegação */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+          {currentNavGroups.map((group) => (
+            <div key={group.label} className="space-y-1">
               {!sidebarCollapsed && (
-                <p className="mb-1 px-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#98A2B3]">
+                <p className="px-2 text-[10px] font-black uppercase tracking-[0.08em] text-[#98A2B3]">
                   {group.label}
                 </p>
               )}
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {group.items.map((item) => {
-                  const isActive = isActivePath(location.pathname, item.path);
                   const Icon = item.icon;
-                  const tone = navToneStyles[NAV_ITEM_TONES[item.path]] || navToneStyles.blue;
+                  const isActive = item.path ? isItemActive(item.path) : false;
+
+                  if (item.onClick) {
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={item.onClick}
+                        title={sidebarCollapsed ? item.label : undefined}
+                        className={`w-full flex h-9 items-center rounded-lg text-xs font-bold transition ${
+                          sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
+                        } text-[#344054] hover:bg-[#F2F4F7] hover:text-[#101828]`}
+                      >
+                        <Icon className="h-4 w-4 shrink-0 text-[#667085]" />
+                        {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                      </button>
+                    );
+                  }
 
                   return (
                     <Link
                       key={item.path}
                       to={item.path}
                       title={sidebarCollapsed ? item.label : undefined}
-                      aria-current={isActive ? "page" : undefined}
-                      className={`relative flex h-10 items-center rounded-[8px] text-sm font-semibold transition ${
-                        sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3"
+                      className={`relative flex h-9 items-center rounded-lg text-xs font-bold transition ${
+                        sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
                       } ${
                         isActive
-                          ? tone.active
+                          ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
                           : "text-[#344054] hover:bg-[#F2F4F7] hover:text-[#101828]"
                       }`}
                     >
-                      {isActive && <span className={`absolute left-0 top-2 h-6 w-1 rounded-r-full ${tone.rail}`} />}
-                      <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? "" : tone.icon}`} strokeWidth={isActive ? 2.35 : 2} />
-                      {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                      {isActive && (
+                        <span className="absolute left-0 top-1.5 h-6 w-1 rounded-r-full bg-[#00d8b8]" />
+                      )}
+                      <Icon
+                        className={`h-4 w-4 shrink-0 ${
+                          isActive ? "text-[#00d8b8]" : "text-[#667085]"
+                        }`}
+                      />
+                      {!sidebarCollapsed && (
+                        <span className="truncate">{item.label}</span>
+                      )}
                     </Link>
                   );
                 })}
@@ -449,36 +524,33 @@ export default function Layout() {
           ))}
         </nav>
 
+        {/* Rodapé da Sidebar: Plano & Uso Discreto */}
         <div className="border-t border-[#E4E7EC] p-3">
           {sidebarCollapsed ? (
             <Link
               to="/subscription"
               title="Assinatura e uso"
-              className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-[#E8FCF8] text-[#00d8b8]"
+              className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#E8FCF8] text-[#00d8b8]"
             >
               <CreditCard className="h-4 w-4" />
             </Link>
           ) : (
-            <div className="rounded-[10px] border border-[#E4E7EC] bg-[#F9FAFB] p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-extrabold text-[#101828]">{subscription.plan.name}</p>
-                  <p className="mt-0.5 text-xs font-semibold text-[#667085]">Assinatura e uso</p>
+            <div className="rounded-xl border border-[#EAECF0] bg-[#F9FAFB] p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-black text-[#101828]">{subscription.plan.name}</p>
+                  <p className="text-[10px] font-semibold text-[#667085]">
+                    Projetos: {projectUsage ? `${projectUsage.usedLabel} / ${projectUsage.limitLabel}` : "1 / 50"}
+                  </p>
                 </div>
-                <CreditCard className="h-4 w-4 shrink-0 text-[#00d8b8]" />
+                <CreditCard className="h-4 w-4 text-[#00d8b8]" />
               </div>
+
               {projectUsage && (
-                <div className="mt-3">
-                  <div className="mb-1 flex items-center justify-between text-xs font-semibold text-[#667085]">
-                    <span>Projetos</span>
-                    <span>
-                      {projectUsage.usedLabel} / {projectUsage.limitLabel}
-                    </span>
-                  </div>
-                  <Progress value={projectUsage.percent} className="h-1.5 bg-[#EAECF0]" />
-                </div>
+                <Progress value={projectUsage.percent} className="h-1 bg-[#EAECF0]" />
               )}
-              <Button asChild variant="outline" className="mt-3 h-9 w-full rounded-[8px] border-[#D0D5DD] text-xs font-extrabold">
+
+              <Button asChild variant="outline" size="sm" className="h-7 w-full rounded-lg border-[#D0D5DD] text-[10px] font-black bg-white">
                 <Link to="/subscription">Gerenciar plano</Link>
               </Button>
             </div>
@@ -486,336 +558,243 @@ export default function Layout() {
         </div>
       </aside>
 
+      {/* Conteúdo Principal + Header */}
       <main className="min-h-screen min-w-0">
+        {/* Modal de Busca Global (Ctrl+K) */}
         <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
           <CommandInput
-            placeholder="Buscar páginas, projetos e ações..."
+            placeholder="Buscar páginas, projetos e ferramentas..."
             value={searchValue}
             onValueChange={setSearchValue}
           />
           <CommandList>
-            <CommandEmpty>Nada encontrado.</CommandEmpty>
-
+            <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
             <CommandGroup heading="Ações rápidas">
-              {QUICK_ACTIONS.filter((action) => fullAccess || !["/projects/new"].includes(action.target)).map((action) => (
+              <CommandItem onSelect={() => { setSearchOpen(false); navigate("/projects/new"); }}>
+                <Plus className="mr-2 h-4 w-4 text-[#00d8b8]" /> Novo projeto
+              </CommandItem>
+              <CommandItem onSelect={() => { setSearchOpen(false); navigate("/planta-ia"); }}>
+                <Zap className="mr-2 h-4 w-4 text-[#00d8b8]" /> Editor de planta
+              </CommandItem>
+              <CommandItem onSelect={() => { setSearchOpen(false); setToolsModalMode("tools"); setToolsModalOpen(true); }}>
+                <Calculator className="mr-2 h-4 w-4 text-[#00d8b8]" /> Calculadoras de engenharia
+              </CommandItem>
+              <CommandItem onSelect={() => { setSearchOpen(false); setToolsModalMode("library"); setToolsModalOpen(true); }}>
+                <BookOpen className="mr-2 h-4 w-4 text-[#00d8b8]" /> Biblioteca NBR
+              </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup heading="Projetos recentes">
+              {shellProjects.slice(0, 8).map((p) => (
                 <CommandItem
-                  key={action.target}
-                  value={`${action.label} ${action.description}`}
-                  onSelect={() => handleSearchNavigate(action.target)}
-                  className="flex items-center gap-3 rounded-[8px] px-3 py-3"
+                  key={p.id}
+                  value={`${p.name} ${p.client_name}`}
+                  onSelect={() => { setSearchOpen(false); navigate(`/projects/${p.id}`); }}
                 >
-                  <action.icon className="h-4 w-4 text-[#00d8b8]" />
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold text-[#101828]">{action.label}</span>
-                    <span className="block truncate text-xs font-medium text-[#667085]">{action.description}</span>
-                  </span>
+                  <FolderOpen className="mr-2 h-4 w-4 text-[#00d8b8]" />
+                  <span>{p.name}</span>
+                  <span className="ml-2 text-xs text-[#667085]">{p.client_name || "Sem cliente"}</span>
                 </CommandItem>
               ))}
-            </CommandGroup>
-
-            <CommandSeparator />
-
-            <CommandGroup heading="Páginas">
-              {pageResults.map((item) => (
-                <CommandItem
-                  key={item.path}
-                  value={item.searchLabel}
-                  onSelect={() => handleSearchNavigate(item.path)}
-                  className="flex items-center gap-3 rounded-[8px] px-3 py-3"
-                >
-                  <item.icon className="h-4 w-4 text-[#00d8b8]" />
-                  <span className="font-semibold text-[#101828]">{item.label}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-
-            <CommandSeparator />
-
-            <CommandGroup heading="Projetos">
-              {loadingShellProjects ? (
-                <div className="px-3 py-4 text-sm font-medium text-[#667085]">Carregando projetos...</div>
-              ) : projectResults.length > 0 ? (
-                projectResults.map((result) => (
-                  <CommandItem
-                    key={result.id}
-                    value={result.searchLabel}
-                    onSelect={() => handleSearchNavigate(result.target)}
-                    className="flex items-center gap-3 rounded-[8px] px-3 py-3"
-                  >
-                    <result.icon className="h-4 w-4 text-[#00d8b8]" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold text-[#101828]">{result.project.name}</span>
-                      <span className="block truncate text-xs font-medium text-[#667085]">
-                        {result.actionLabel} - {result.project.client_name || "Sem cliente"}
-                      </span>
-                    </span>
-                  </CommandItem>
-                ))
-              ) : (
-                <div className="px-3 py-4 text-sm font-medium text-[#667085]">Nenhum projeto encontrado.</div>
-              )}
-            </CommandGroup>
-
-            <CommandSeparator />
-
-            <CommandGroup heading="Notificações">
-              {notificationResults.length > 0 ? (
-                notificationResults.map((item) => (
-                  <CommandItem
-                    key={item.id}
-                    value={item.searchLabel}
-                    onSelect={() => {
-                      markRead(item.id);
-                      handleSearchNavigate(item.target);
-                    }}
-                    className="flex items-center gap-3 rounded-[8px] px-3 py-3"
-                  >
-                    <item.icon className="h-4 w-4 text-[#00d8b8]" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold text-[#101828]">{item.title}</span>
-                      <span className="block truncate text-xs font-medium text-[#667085]">
-                        {item.category || "Sistema"}{item.read ? "" : " - Não lida"}
-                      </span>
-                    </span>
-                  </CommandItem>
-                ))
-              ) : (
-                <div className="px-3 py-4 text-sm font-medium text-[#667085]">Nenhuma notificação recente.</div>
-              )}
             </CommandGroup>
           </CommandList>
         </CommandDialog>
 
-        <header className="sticky top-0 z-30 flex h-16 min-w-0 items-center justify-between gap-3 border-b border-[#E4E7EC] bg-white px-4 sm:px-6 lg:px-8">
+        {/* Header Superior Limpo */}
+        <header className="sticky top-0 z-30 flex h-14 min-w-0 items-center justify-between gap-3 border-b border-[#E4E7EC] bg-white px-4 sm:px-6 lg:px-8">
+          {/* Lado Esquerdo: Mobile Menu Toggle & Título/Breadcrumbs */}
           <div className="flex min-w-0 items-center gap-3">
-            <Link to="/" className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] lg:hidden" style={{ backgroundColor: logoBackgroundColor, color: logoIconColor }}>
-              <BrandLogo branding={branding} compact />
-            </Link>
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-[#475467] hover:bg-[#F2F4F7] lg:hidden"
+              aria-label="Abrir menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-xs font-semibold text-[#667085]">
-                <Link to="/" className="transition hover:text-[#00d8b8]">Dashboard</Link>
-                {routeTitle !== "Dashboard" && (
-                  <>
-                    <span>/</span>
-                    <span className="truncate text-[#344054]">{routeTitle}</span>
-                  </>
-                )}
-              </div>
-              <h1 className="truncate text-[18px] font-extrabold leading-6 text-[#101828] sm:text-[20px]">
-                {routeTitle}
-              </h1>
+              {currentProjectId && currentProject ? (
+                <div className="flex items-center gap-2 text-xs">
+                  <Link to="/projects" className="font-bold text-[#667085] hover:text-[#101828] transition">
+                    Meus projetos
+                  </Link>
+                  <span className="text-[#98A2B3]">/</span>
+                  <span className="truncate font-black text-[#101828]">{currentProject.name}</span>
+                </div>
+              ) : (
+                <h1 className="truncate text-base font-black text-[#101828]">
+                  {routeTitle}
+                </h1>
+              )}
             </div>
           </div>
 
-          <div className="ml-auto flex min-w-0 items-center gap-2">
+          {/* Lado Direito: Busca, Notificações e Perfil */}
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="hidden h-10 min-w-0 items-center rounded-[8px] border border-[#D0D5DD] bg-white px-3 text-left text-sm font-medium text-[#667085] transition hover:border-[#98A2B3] md:flex md:w-[260px] xl:w-[340px]"
+              className="hidden h-9 items-center rounded-lg border border-[#D0D5DD] bg-[#F9FAFB] px-3 text-xs font-medium text-[#667085] hover:border-[#98A2B3] md:flex md:w-56 lg:w-64 transition"
             >
-              <Search className="mr-2 h-4 w-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">Buscar no sistema</span>
-              <span className="ml-2 rounded-[6px] border border-[#E4E7EC] bg-[#F9FAFB] px-1.5 py-0.5 text-[11px] font-bold text-[#667085]">
-                Ctrl K
-              </span>
+              <Search className="mr-2 h-3.5 w-3.5 shrink-0" />
+              <span className="flex-1 truncate text-left">Buscar no sistema...</span>
+              <span className="rounded border border-[#E4E7EC] bg-white px-1 py-0.5 text-[10px] font-bold">Ctrl K</span>
             </button>
 
-            {fullAccess && (
-              <Button asChild className="hidden h-10 rounded-[8px] px-3 text-sm font-extrabold sm:inline-flex">
-                <Link to="/projects/new">
-                  <Plus className="h-4 w-4" />
-                  Novo projeto
-                </Link>
-              </Button>
-            )}
-
-            <button
-              type="button"
-              aria-label="Ajuda e atalhos"
-              onClick={() => {
-                setSearchOpen(true);
-                setSearchValue("atalhos");
-              }}
-              className="flex h-10 w-10 items-center justify-center rounded-[8px] text-[#475467] transition hover:bg-[#F2F4F7] hover:text-[#101828]"
-            >
-              <HelpCircle className="h-5 w-5" />
-            </button>
-
+            {/* Notificações */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   aria-label="Notificações"
-                  className="relative flex h-10 w-10 items-center justify-center rounded-[8px] text-[#475467] transition hover:bg-[#F2F4F7] hover:text-[#101828]"
+                  className="relative flex h-9 w-9 items-center justify-center rounded-lg text-[#475467] hover:bg-[#F2F4F7] transition"
                 >
-                  {unreadCount > 0 ? <BellRing className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
+                  {unreadCount > 0 ? <BellRing className="h-4 w-4 text-[#00d8b8]" /> : <Bell className="h-4 w-4" />}
                   {unreadCount > 0 && (
-                    <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#00d8b8] px-1 text-[10px] font-extrabold leading-none text-white ring-2 ring-white">
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
+                    <span className="absolute right-1.5 top-1.5 flex h-2 w-2 rounded-full bg-[#00d8b8]" />
                   )}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] overflow-hidden rounded-[12px] border-[#E4E7EC] bg-white p-0 shadow-[0_16px_40px_rgba(16,24,40,0.12)] sm:w-[380px]">
+              <DropdownMenuContent align="end" className="w-80 rounded-xl border-[#E4E7EC] bg-white p-0 shadow-xl">
                 <div className="flex items-center justify-between border-b border-[#EAECF0] px-4 py-3">
-                  <div>
-                    <DropdownMenuLabel className="p-0 text-sm font-extrabold text-[#101828]">Notificações</DropdownMenuLabel>
-                    <p className="mt-0.5 text-xs font-medium text-[#667085]">
-                      {unreadCount > 0 ? `${unreadCount} pendente${unreadCount > 1 ? "s" : ""}` : "Tudo em dia"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={markAllRead}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[#D0D5DD] px-2.5 text-xs font-extrabold text-[#344054] transition hover:bg-[#F9FAFB]"
-                  >
-                    <CheckCheck className="h-3.5 w-3.5" />
+                  <DropdownMenuLabel className="p-0 text-xs font-black text-[#101828]">Notificações</DropdownMenuLabel>
+                  <button type="button" onClick={markAllRead} className="text-[11px] font-bold text-[#00d8b8] hover:underline">
                     Ler tudo
                   </button>
                 </div>
-
-                <div className="max-h-[365px] overflow-y-auto p-2">
+                <div className="max-h-72 overflow-y-auto p-2">
                   {notifications.length === 0 ? (
-                    <div className="px-4 py-8 text-center">
-                      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#F2F4F7] text-[#475467]">
-                        <Bell className="h-5 w-5" />
-                      </div>
-                      <p className="mt-3 text-sm font-extrabold text-[#101828]">Sem notificações</p>
-                      <p className="mt-1 text-xs font-medium text-[#667085]">Alertas técnicos e avisos administrativos aparecerão aqui.</p>
-                    </div>
+                    <p className="p-4 text-center text-xs font-medium text-[#667085]">Nenhuma notificação recente.</p>
                   ) : (
-                    notifications.slice(0, 8).map((item) => {
-                      const Icon = notificationIcon[item.tone] || Info;
-                      const toneColor = "#00d8b8";
-
-                      return (
-                        <DropdownMenuItem key={item.id} asChild>
-                          <Link
-                            to={item.href || "/"}
-                            onClick={() => markRead(item.id)}
-                            className="flex cursor-pointer items-start gap-3 rounded-[10px] px-3 py-3 outline-none transition hover:bg-[#F9FAFB] focus:bg-[#F9FAFB]"
-                          >
-                            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#F2F4F7]" style={{ color: toneColor }}>
-                              <Icon className="h-[18px] w-[18px]" />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="flex items-center gap-2">
-                                <span className="truncate text-sm font-extrabold text-[#101828]">{item.title}</span>
-                                {!item.read && <span className="h-2 w-2 shrink-0 rounded-full bg-[#00d8b8]" />}
-                              </span>
-                              <span className="mt-1 line-clamp-2 block text-xs font-medium leading-5 text-[#667085]">
-                                {item.description}
-                              </span>
-                              <span className="mt-2 block text-[11px] font-bold uppercase tracking-[0.08em] text-[#98A2B3]">
-                                {item.category || "Sistema"} - {formatNotificationTime(item.createdAt)}
-                              </span>
-                            </span>
-                          </Link>
-                        </DropdownMenuItem>
-                      );
-                    })
+                    notifications.slice(0, 6).map((item) => (
+                      <DropdownMenuItem
+                        key={item.id}
+                        onClick={() => markRead(item.id)}
+                        className="flex flex-col items-start gap-1 p-2.5 rounded-lg cursor-pointer hover:bg-[#F9FAFB]"
+                      >
+                        <span className="text-xs font-bold text-[#101828]">{item.title}</span>
+                        <span className="text-[11px] text-[#667085] leading-tight line-clamp-2">{item.description}</span>
+                      </DropdownMenuItem>
+                    ))
                   )}
                 </div>
-
-                {activeUser?.role === "admin" && (
-                  <div className="border-t border-[#EAECF0] p-3">
-                    <Link
-                      to="/admin"
-                      className="flex h-9 items-center justify-center rounded-[8px] bg-[#E8FCF8] text-sm font-extrabold text-[#00d8b8] transition hover:bg-[#D6E8F3]"
-                    >
-                      Gerenciar notificações
-                    </Link>
-                  </div>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Menu do Usuário */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" className="flex min-w-0 items-center gap-2 rounded-[8px] p-1 transition hover:bg-[#F2F4F7]">
-                  <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-[#D0D5DD] bg-[#F9FAFB] text-xs font-extrabold text-[#101828]">
+                <button type="button" className="flex items-center gap-2 rounded-lg p-1 hover:bg-[#F2F4F7] transition">
+                  <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[#D0D5DD] bg-[#F9FAFB] text-xs font-extrabold text-[#101828]">
                     <AvatarDisplay user={activeUser} initials={initials} className="h-full w-full" />
                   </span>
-                  <ChevronDown className="hidden h-4 w-4 text-[#475467] sm:block" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] rounded-[12px] border-[#E4E7EC] bg-white p-2 shadow-[0_16px_40px_rgba(16,24,40,0.12)] sm:w-72">
-                <div className="flex items-center gap-3 rounded-[10px] bg-[#F9FAFB] p-3">
-                  <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-[#D0D5DD] text-sm font-extrabold text-[#101828]">
-                    <AvatarDisplay user={activeUser} initials={initials} className="h-full w-full" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-extrabold text-[#101828]">{displayName}</p>
-                    <p className="truncate text-xs font-medium text-[#667085]">{displayEmail}</p>
-                  </div>
+              <DropdownMenuContent align="end" className="w-64 rounded-xl border-[#E4E7EC] bg-white p-2 shadow-xl">
+                <div className="p-2 border-b border-[#EAECF0]">
+                  <p className="text-xs font-black text-[#101828] truncate">{displayName}</p>
+                  <p className="text-[11px] text-[#667085] truncate">{displayEmail}</p>
                 </div>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link to="/settings" className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold">
-                    <UserCircle className="h-4 w-4" />
-                    Minha conta
+                  <Link to="/settings" className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold">
+                    <UserCircle className="h-4 w-4" /> Minha conta
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link to="/subscription" className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold">
-                    <CreditCard className="h-4 w-4" />
-                    Assinatura e uso
+                  <Link to="/subscription" className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold">
+                    <CreditCard className="h-4 w-4" /> Assinatura e uso
                   </Link>
                 </DropdownMenuItem>
-                {activeUser?.role === "admin" && (
-                  <>
-                    <DropdownMenuItem asChild>
-                      <Link to="/admin" className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold">
-                        <Settings className="h-4 w-4" />
-                        Painel administrativo
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link to="/admin" className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold">
-                        <Palette className="h-4 w-4" />
-                        Aparência e marca
-                      </Link>
-                    </DropdownMenuItem>
-                  </>
-                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => logout()}
-                  className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold text-red-600 focus:text-red-600"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-red-600 focus:text-red-600"
                 >
-                  <LogOut className="h-4 w-4" />
-                  Sair
+                  <LogOut className="h-4 w-4" /> Sair
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </header>
 
-        <nav className="sticky top-16 z-20 border-b border-[#E4E7EC] bg-white lg:hidden">
-          <div className="flex gap-2 overflow-x-auto px-4 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden">
-            {flatNavItems.map((item) => {
-              const isActive = isActivePath(location.pathname, item.path);
-              const tone = navToneStyles[NAV_ITEM_TONES[item.path]] || navToneStyles.blue;
-
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-[8px] border px-3 text-xs font-bold transition ${
-                    isActive
-                      ? `${tone.active} border-transparent`
-                      : "border-[#E4E7EC] bg-white text-[#344054]"
-                  }`}
+        {/* Drawer Mobile da Sidebar */}
+        {mobileDrawerOpen && (
+          <div className="fixed inset-0 z-50 flex lg:hidden">
+            <div
+              className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in"
+              onClick={() => setMobileDrawerOpen(false)}
+            />
+            <div className="relative flex w-72 max-w-[85vw] flex-col bg-white p-4 shadow-2xl z-10 animate-in slide-in-from-left duration-200">
+              <div className="flex items-center justify-between border-b border-[#EAECF0] pb-3">
+                <BrandLogo branding={branding} />
+                <button
+                  type="button"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[#667085] hover:bg-[#F2F4F7]"
                 >
-                  <item.icon className={`h-4 w-4 ${isActive ? "" : tone.icon}`} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
-        <div key={location.pathname} className="app-page-enter min-w-0 overflow-x-hidden px-4 pb-10 pt-6 sm:px-6 lg:px-8">
+              <nav className="flex-1 overflow-y-auto py-4 space-y-4">
+                {currentNavGroups.map((group) => (
+                  <div key={group.label} className="space-y-1">
+                    <p className="px-2 text-[10px] font-black uppercase tracking-[0.08em] text-[#98A2B3]">
+                      {group.label}
+                    </p>
+                    <div className="space-y-0.5">
+                      {group.items.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = item.path ? isItemActive(item.path) : false;
+
+                        if (item.onClick) {
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setMobileDrawerOpen(false);
+                                item.onClick();
+                              }}
+                              className="w-full flex h-10 items-center gap-3 rounded-lg px-3 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
+                            >
+                              <Icon className="h-4 w-4 text-[#667085]" />
+                              <span>{item.label}</span>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <Link
+                            key={item.path}
+                            to={item.path}
+                            onClick={() => setMobileDrawerOpen(false)}
+                            className={`flex h-10 items-center gap-3 rounded-lg px-3 text-xs font-bold ${
+                              isActive ? "bg-[#E8FCF8] text-[#0f4f49] font-black" : "text-[#344054] hover:bg-[#F2F4F7]"
+                            }`}
+                          >
+                            <Icon className={`h-4 w-4 ${isActive ? "text-[#00d8b8]" : "text-[#667085]"}`} />
+                            <span>{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </nav>
+
+              <div className="border-t border-[#EAECF0] pt-3">
+                <Button asChild variant="outline" className="w-full h-9 text-xs font-bold">
+                  <Link to="/subscription">Assinatura ({subscription.plan.name})</Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Viewport da Página */}
+        <div key={`${location.pathname}${location.search}`} className="app-page-enter min-w-0 overflow-x-hidden px-4 pb-12 pt-6 sm:px-6 lg:px-8">
           <Outlet />
         </div>
       </main>

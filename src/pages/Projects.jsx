@@ -26,6 +26,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import PageHeader from "@/components/PageHeader";
+import ProjectProgress from "@/components/navigation/ProjectProgress";
 
 const statusStyles = {
   Rascunho: "border-[#BCEEE5] bg-[#E8FCF8] text-[#0f4f49]",
@@ -440,7 +441,11 @@ function ProjectCard({ project, selected, onSelect, onDelete }) {
         />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-semibold text-[#667085]">
+      <div className="mt-3">
+        <ProjectProgress project={project} variant="compact" />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold text-[#667085]">
         <InfoPill label="Tipo" value={project.project_type || "Elétrico"} />
         <InfoPill label="Circuitos" value={circuitCount} />
         <InfoPill label="Alimentação" value={project.supply_type || "Não definida"} />
