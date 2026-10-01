@@ -270,22 +270,18 @@ export default function Home() {
   return (
     <TooltipProvider>
       <div className="w-full max-w-7xl mx-auto space-y-6 pb-12">
-        {/* ── 1. Top Announcement / Upgrade Banner (Estilo Shopall com Verde Gradiente) ── */}
-        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#00d8b8] via-[#00bda1] to-[#0f4f49] p-5 sm:p-6 text-white shadow-[0_8px_30px_rgba(0,216,184,0.22)]">
-          {/* Decorative glowing background elements */}
-          <div className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-          <div className="absolute right-1/3 -bottom-10 h-32 w-32 rounded-full bg-[#00d8b8]/20 blur-xl pointer-events-none" />
-
+        {/* ── 1. Top Announcement / Upgrade Banner (Cor Sólida sem Gradiente) ── */}
+        <section className="relative overflow-hidden rounded-2xl border border-[#00bda1]/20 bg-[#00d8b8] p-5 sm:p-6 text-slate-950 shadow-sm">
           <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1.5 max-w-2xl">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-black uppercase tracking-wider backdrop-blur-md">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-950/10 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-950">
                 <Sparkles className="h-3.5 w-3.5 fill-current" />
                 <span>Recursos Pro & Inteligência NBR 5410</span>
               </div>
-              <h2 className="text-lg sm:text-xl font-black tracking-tight text-white">
+              <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-950">
                 Dimensionamento elétrico profissional e instantâneo
               </h2>
-              <p className="text-xs sm:text-sm font-medium text-white/90 leading-relaxed">
+              <p className="text-xs sm:text-sm font-medium text-slate-900/80 leading-relaxed">
                 Crie projetos elétricos completos, plantas inteligentes, quadros de distribuição e memoriais descritivos conforme as normas vigentes.
               </p>
             </div>
@@ -293,7 +289,7 @@ export default function Home() {
             <div className="shrink-0 flex items-center gap-2">
               <Button
                 asChild
-                className="h-10 rounded-full bg-white px-5 text-xs font-black text-[#0f4f49] shadow-md hover:bg-white/90 hover:scale-[1.02] transition-all"
+                className="h-10 rounded-full bg-slate-950 px-5 text-xs font-black text-white shadow-sm hover:bg-slate-900 hover:scale-[1.02] transition-all"
               >
                 <Link to="/projects/new">
                   <Plus className="mr-1.5 h-4 w-4 text-[#00d8b8]" />
@@ -539,12 +535,6 @@ export default function Home() {
             <div className="h-56 w-full pt-4">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={lineChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorGreenGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#00d8b8" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#00d8b8" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
                   <Tooltip content={<CustomAreaTooltip />} />
                   <Area
                     type="monotone"
@@ -552,7 +542,7 @@ export default function Home() {
                     stroke="#00d8b8"
                     strokeWidth={2.5}
                     fillOpacity={1}
-                    fill="url(#colorGreenGrad)"
+                    fill="rgba(0, 216, 184, 0.12)"
                     dot={{ r: 4, fill: "#ffffff", stroke: "#00d8b8", strokeWidth: 2 }}
                     activeDot={{ r: 6, fill: "#00d8b8", stroke: "#ffffff", strokeWidth: 2 }}
                   />

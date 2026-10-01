@@ -269,6 +269,32 @@ export default function Layout() {
     }
   }, [activeUser]);
 
+  // Breadcrumb Title Generation
+  const breadcrumbInfo = useMemo(() => {
+    if (currentProject) {
+      return { section: "Projetos", page: currentProject.name };
+    }
+    if (location.pathname === "/") return { section: "Pages", page: "Dashboard" };
+    if (location.pathname === "/projects") return { section: "Pages", page: "Meus Projetos" };
+    if (location.pathname === "/projects/new") return { section: "Projetos", page: "Novo Projeto" };
+    if (location.pathname === "/calculator") return { section: "Ferramentas", page: "Calculadora" };
+    if (location.pathname === "/ai-assistant") return { section: "Ferramentas", page: "Assistente IA" };
+    if (location.pathname === "/nbr-library") return { section: "Biblioteca", page: "Normas NBR" };
+    if (location.pathname === "/budget") return { section: "Relatórios", page: "Orçamento & Materiais" };
+    if (location.pathname === "/subscription") return { section: "Conta", page: "Assinatura e Uso" };
+    if (location.pathname === "/settings") return { section: "Conta", page: "Configurações" };
+    return { section: "Pages", page: "Nacif Electric" };
+  }, [currentProject, location.pathname]);
+
+  const isItemActive = (path) => {
+    if (!path) return false;
+    const [pathBase, pathQuery] = path.split("?");
+    if (pathQuery) {
+      return location.pathname === pathBase && location.search.includes(pathQuery);
+    }
+    return location.pathname === path && !location.search;
+  };
+
   const isImmersiveStudioRoute = location.pathname === "/planta-ia" || location.pathname === "/panel-generator";
   if (isImmersiveStudioRoute) {
     return (
@@ -286,32 +312,6 @@ export default function Layout() {
       </main>
     );
   }
-
-  const isItemActive = (path) => {
-    if (!path) return false;
-    const [pathBase, pathQuery] = path.split("?");
-    if (pathQuery) {
-      return location.pathname === pathBase && location.search.includes(pathQuery);
-    }
-    return location.pathname === path && !location.search;
-  };
-
-  // Breadcrumb Title Generation
-  const breadcrumbInfo = useMemo(() => {
-    if (currentProject) {
-      return { section: "Projetos", page: currentProject.name };
-    }
-    if (location.pathname === "/") return { section: "Pages", page: "Dashboard" };
-    if (location.pathname === "/projects") return { section: "Pages", page: "Meus Projetos" };
-    if (location.pathname === "/projects/new") return { section: "Projetos", page: "Novo Projeto" };
-    if (location.pathname === "/calculator") return { section: "Ferramentas", page: "Calculadora" };
-    if (location.pathname === "/ai-assistant") return { section: "Ferramentas", page: "Assistente IA" };
-    if (location.pathname === "/nbr-library") return { section: "Biblioteca", page: "Normas NBR" };
-    if (location.pathname === "/budget") return { section: "Relatórios", page: "Orçamento & Materiais" };
-    if (location.pathname === "/subscription") return { section: "Conta", page: "Assinatura e Uso" };
-    if (location.pathname === "/settings") return { section: "Conta", page: "Configurações" };
-    return { section: "Pages", page: "Nacif Electric" };
-  }, [currentProject, location.pathname]);
 
   return (
     <div
