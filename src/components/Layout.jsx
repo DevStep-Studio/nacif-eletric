@@ -108,7 +108,7 @@ function BrandLogo({ branding, compact = false, className = "" }) {
 
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#00bda1] to-[#00d8b8] text-white font-black shadow-[0_2px_8px_rgba(0,216,184,0.35)]">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#00d8b8] text-slate-950 font-black shadow-sm">
         <Zap className="h-5 w-5 fill-current" />
       </div>
       {!compact && (

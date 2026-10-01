@@ -12,7 +12,7 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
   const sunPositionX = ((sunTime - 6) / 12) * 80 + 10;
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-gradient-to-b from-[#0e1726] via-[#1a273a] to-[#0d1522] flex flex-col items-center justify-center p-6 text-white select-none">
+    <div className="relative h-full w-full overflow-hidden bg-[#0B101D] flex flex-col items-center justify-center p-6 text-white select-none">
       {/* Controles de visualização 3D no topo */}
       <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 bg-slate-900/80 backdrop-blur border border-white/10 p-2 rounded-xl text-xs">
         <div className="flex items-center gap-2 px-2">
@@ -91,7 +91,7 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
             height: "220px",
             boxShadow: "0 30px 60px rgba(0,0,0,0.8), inset 0 2px 4px rgba(255,255,255,0.15)",
           }}
-          className="relative rounded-2xl bg-gradient-to-tr from-[#3b2b1b] via-[#523d29] to-[#6d5138] border-4 border-[#8c6b4d]/60 flex flex-wrap content-start p-3.5 gap-1.5 overflow-hidden"
+          className="relative rounded-2xl bg-[#3B2B1B] border-4 border-[#8c6b4d]/60 flex flex-wrap content-start p-3.5 gap-1.5 overflow-hidden"
         >
           {/* Textura de telhas cerâmicas */}
           <div className="absolute inset-0 opacity-15 pointer-events-none bg-[repeating-linear-gradient(0deg,#000_0px,#000_4px,transparent_4px,transparent_16px)]" />
@@ -100,7 +100,7 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
           {Array.from({ length: Math.min(36, sizing?.panelCount || 21) }).map((_, i) => (
             <div
               key={i}
-              className="relative h-12 w-8 rounded-sm bg-gradient-to-b from-[#194b8e] to-[#0c2a54] border border-[#7ca6dc]/70 shadow-md flex flex-col justify-between p-0.5 overflow-hidden group hover:border-cyan-300 transition"
+              className="relative h-12 w-8 rounded-sm bg-[#133E75] border border-[#7ca6dc]/70 shadow-md flex flex-col justify-between p-0.5 overflow-hidden group hover:border-cyan-300 transition"
               style={{
                 boxShadow: "0 2px 5px rgba(0,0,0,0.5)",
               }}
@@ -111,13 +111,12 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
                   <div key={c} className="bg-[#1e58a4]/60 rounded-[0.5px]" />
                 ))}
               </div>
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none" />
             </div>
           ))}
 
           {/* Obstáculo simulado em 3D (ex: Caixa d'água) */}
           <div
-            className="absolute right-5 bottom-5 h-14 w-14 rounded-lg bg-gradient-to-b from-[#334155] to-[#1e293b] border-2 border-slate-400 shadow-[0_12px_24px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center text-[8px] font-black text-slate-200"
+            className="absolute right-5 bottom-5 h-14 w-14 rounded-lg bg-[#1E293B] border-2 border-slate-400 shadow-[0_12px_24px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center text-[8px] font-black text-slate-200"
             style={{
               transform: "translateZ(30px)",
             }}

@@ -7446,15 +7446,15 @@ export default function PlantaIA() {
             {activeRightTab === "bom" && (
               <div className="space-y-4">
                 {/* Estimated Pricing Card */}
-                <div className="rounded-md border border-[#C9E0EF] bg-gradient-to-br from-[#00d8b8] to-[#004270] p-4 text-white shadow-[0_4px_12px_rgba(0,100,166,0.15)]">
+                <div className="rounded-xl border border-[#00bda1]/30 dark:border-[#1E293B] bg-[#00d8b8] dark:bg-[#131D2E] p-4 text-slate-950 dark:text-white shadow-sm">
                   <div className="flex items-center justify-between mb-1 opacity-90">
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em]">Custo Est. Materiais</span>
-                    <Coins className="h-4 w-4" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-900 dark:text-[#5EEAD4]">Custo Est. Materiais</span>
+                    <Coins className="h-4 w-4 text-slate-950 dark:text-[#5EEAD4]" />
                   </div>
-                  <p className="text-xl font-black">
+                  <p className="text-xl font-black text-slate-950 dark:text-white">
                     R$ {telemetry.bom.totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
-                  <div className="mt-2 flex justify-between items-center text-[9px] font-bold bg-white/10 px-2 py-1 rounded">
+                  <div className="mt-2 flex justify-between items-center text-[9px] font-bold bg-slate-950/10 dark:bg-[#0D1322] px-2 py-1 rounded text-slate-900 dark:text-slate-200">
                     <span>Instalação:</span>
                     <span className="font-black uppercase">{infraType}</span>
                   </div>
