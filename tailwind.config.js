@@ -5,10 +5,8 @@ module.exports = {
   theme: {
   	extend: {
   		fontFamily: {
-  			sans: ['Poppins', 'var(--font-sans)', 'sans-serif'],
-  			poppins: ['Poppins', 'var(--font-sans)', 'sans-serif'],
-  			inter: ['Poppins', 'var(--font-sans)', 'sans-serif'],
-  			mono: ['JetBrains Mono', 'var(--font-mono)', 'monospace'],
+  			inter: ['var(--font-inter)'],
+  			mono: ['var(--font-mono)'],
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

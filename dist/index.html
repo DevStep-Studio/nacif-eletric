@@ -1,34 +1,18 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="theme-color" content="#00d8b8" />
+    <meta name="theme-color" content="#051917" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="manifest" href="/manifest.json" />
     <title>NACIF Solutions Eletric — Gerador de Quadros Elétricos NBR 5410</title>
     <meta name="description" content="Geração automática de quadros elétricos, balanceamento de fases, diagrama unifilar e orçamento profissional conforme NBR 5410." />
-    <script>
-      (function() {
-        try {
-          const theme = localStorage.getItem('nacif:theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-          if (theme === 'dark') {
-            document.documentElement.classList.add('dark');
-            document.documentElement.style.colorScheme = 'dark';
-          } else {
-            document.documentElement.classList.remove('dark');
-            document.documentElement.style.colorScheme = 'light';
-          }
-        } catch (e) {}
-      })();
-    </script>
-    <script type="module" crossorigin src="/assets/app.js?v=eda815a63e"></script>
-    <link rel="stylesheet" crossorigin href="/assets/app.css?v=962f828dd2">
+    <script type="module" crossorigin src="/assets/app.js?v=38826305cb"></script>
+    <link rel="stylesheet" crossorigin href="/assets/app.css?v=7b5d2abc45">
   </head>
-  <body class="bg-background text-foreground transition-colors duration-200">
-    <div id="root"></div>
+  <body>
+    <div id="root"></div>
   </body>
 </html>

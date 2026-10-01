@@ -21,7 +21,6 @@ import {
   AlertCircle, CheckCircle2, Coins, Calculator, ScanLine, Loader2, Save
 } from "lucide-react";
 import FloorPlanCanvas, { createKonvaHouseTemplate } from "@/components/planta/FloorPlanCanvas";
-import ThemeToggle from "@/components/ThemeToggle";
 import { createDefaultLayerState, layerVisibilityForLegacyCanvas, normalizeLayerState } from "@/editor/layers/defaultLayers";
 import { normalizePlantDocument } from "@/editor/schemas/plantDocument";
 import { normalizeSnapSettings } from "@/editor/snapping/snapEngine";
@@ -4949,35 +4948,35 @@ export default function PlantaIA() {
   }, [routeToolActive, routeDraft, selectedElement, selectedRoute, selectedRoutePointIndex, undoDesign, redoDesign, deleteSelected]);
 
   return (
-    <div className="flex h-screen w-screen min-h-screen flex-col overflow-hidden bg-[#F2FFFC] dark:bg-[#080C14]">
+    <div className="flex h-screen w-screen min-h-screen flex-col overflow-hidden bg-[#F2FFFC]">
       {/* ── Studio Top Bar (Compact & Sleek) ── */}
-      <div className="z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[#CDEFE8] dark:border-[#1E293B] bg-white dark:bg-[#0D1322] px-3 shadow-sm">
+      <div className="z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[#CDEFE8] bg-white px-3 shadow-sm">
         {/* Esquerda: Botão Voltar para a Home & Seletor de Projeto */}
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => navigate("/")}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] dark:border-[#1E293B] bg-[#E8FCF8] dark:bg-[#00d8b8]/15 px-2.5 text-xs font-black text-[#0f4f49] dark:text-[#00d8b8] transition hover:bg-[#00d8b8] hover:text-white dark:hover:bg-[#00d8b8] dark:hover:text-[#080C14]"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] bg-[#E8FCF8] px-2.5 text-xs font-black text-[#0f4f49] transition hover:bg-[#00d8b8] hover:text-white"
             title="Voltar para a Home"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Voltar para a Home</span>
           </Button>
 
-          <div className="h-5 w-px bg-[#CDEFE8] dark:bg-[#1E293B] mx-1" />
+          <div className="h-5 w-px bg-[#CDEFE8] mx-1" />
 
           <Select value={selectedProject} onValueChange={setSelectedProject} onOpenChange={open => { if (open) loadProjects(); }}>
-            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] dark:border-[#1E293B] bg-[#F8FBFD] dark:bg-[#131D2E] text-xs font-bold dark:text-white shadow-none">
+            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none">
               <SelectValue placeholder="Selecionar projeto..." />
             </SelectTrigger>
-            <SelectContent className="dark:border-[#1E293B] dark:bg-[#0D1322] dark:text-white">
+            <SelectContent>
               {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
 
           {selectedProjectName && (
-            <span className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] dark:bg-[#00d8b8]/15 px-2 py-0.5 text-[11px] font-bold text-[#0f4f49] dark:text-[#00d8b8] md:flex">
+            <span className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] px-2 py-0.5 text-[11px] font-bold text-[#0f4f49] md:flex">
               <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
               <span className="truncate max-w-[140px]">{selectedProjectName}</span>
             </span>
@@ -4989,7 +4988,7 @@ export default function PlantaIA() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] dark:text-[#94A3B8] hover:bg-[#F2F4F7] dark:hover:bg-[#1E293B] dark:hover:text-white"
+            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
             onClick={loadHouseTemplate}
             title="Carregar Modelo Casa"
           >
@@ -5000,7 +4999,7 @@ export default function PlantaIA() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] dark:text-[#94A3B8] hover:bg-[#F2F4F7] dark:hover:bg-[#1E293B] dark:hover:text-white"
+            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
             onClick={startBlankArchitecturalPlan}
             title="Limpar e desenhar do zero"
           >
@@ -5011,7 +5010,7 @@ export default function PlantaIA() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] dark:text-[#94A3B8] hover:bg-[#F2F4F7] dark:hover:bg-[#1E293B] dark:hover:text-white"
+            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
             onClick={() => fileInputRef.current?.click()}
             title="Importar imagem ou PDF de planta"
           >
@@ -5034,7 +5033,7 @@ export default function PlantaIA() {
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-lg border-[#BCEEE5] dark:border-[#1E293B] px-2.5 text-xs font-extrabold text-[#0f4f49] dark:text-[#00d8b8] hover:bg-[#E8FCF8] dark:hover:bg-[#1E293B]"
+            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
             onClick={exportFloorPlanPdf}
             disabled={exporting}
             title="Exportar planta em prancha A0"
@@ -5047,7 +5046,7 @@ export default function PlantaIA() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 rounded-lg border-[#CDEFE8] dark:border-[#1E293B] px-2.5 text-xs font-bold text-[#0f4f49] dark:text-[#00d8b8] hover:bg-[#E8FCF8] dark:hover:bg-[#1E293B]"
+              className="h-8 rounded-lg border-[#CDEFE8] px-2.5 text-xs font-bold text-[#0f4f49]"
               onClick={() => navigate(selectedProject ? `/unifilar?project=${selectedProject}` : "/unifilar")}
               title="Ver Diagrama Unifilar"
             >
@@ -5055,9 +5054,6 @@ export default function PlantaIA() {
               <span className="hidden md:inline">Diagrama</span>
             </Button>
           )}
-
-          {/* Botão de Tema Sol/Lua no Estúdio */}
-          <ThemeToggle compact />
         </div>
       </div>
 
@@ -7446,15 +7442,15 @@ export default function PlantaIA() {
             {activeRightTab === "bom" && (
               <div className="space-y-4">
                 {/* Estimated Pricing Card */}
-                <div className="rounded-xl border border-[#00bda1]/30 dark:border-[#1E293B] bg-[#00d8b8] dark:bg-[#131D2E] p-4 text-slate-950 dark:text-white shadow-sm">
+                <div className="rounded-md border border-[#C9E0EF] bg-gradient-to-br from-[#00d8b8] to-[#004270] p-4 text-white shadow-[0_4px_12px_rgba(0,100,166,0.15)]">
                   <div className="flex items-center justify-between mb-1 opacity-90">
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-900 dark:text-[#5EEAD4]">Custo Est. Materiais</span>
-                    <Coins className="h-4 w-4 text-slate-950 dark:text-[#5EEAD4]" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em]">Custo Est. Materiais</span>
+                    <Coins className="h-4 w-4" />
                   </div>
-                  <p className="text-xl font-black text-slate-950 dark:text-white">
+                  <p className="text-xl font-black">
                     R$ {telemetry.bom.totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
-                  <div className="mt-2 flex justify-between items-center text-[9px] font-bold bg-slate-950/10 dark:bg-[#0D1322] px-2 py-1 rounded text-slate-900 dark:text-slate-200">
+                  <div className="mt-2 flex justify-between items-center text-[9px] font-bold bg-white/10 px-2 py-1 rounded">
                     <span>Instalação:</span>
                     <span className="font-black uppercase">{infraType}</span>
                   </div>

@@ -66,7 +66,8 @@ export default function AuthLayout({ icon: Icon, title, subtitle, footer, childr
           aria-hidden="true"
           className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-[#031211]/80" />
+        <div className="absolute inset-0 bg-[#031211]/72" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_55%_45%,rgba(0,216,184,0.30),rgba(3,18,17,0.18)_34%,rgba(3,18,17,0.82)_78%)]" />
         <div className="absolute inset-0 flex items-center justify-center px-16">
           <div className="flex w-full max-w-[430px] items-center justify-center">
             {heroLogo ? (
