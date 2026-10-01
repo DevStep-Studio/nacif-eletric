@@ -45,7 +45,6 @@ import {
   CheckCircle2
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
-import ThemeToggle from "@/components/ThemeToggle";
 
 // ─── CONSTANTES DE DIMENSIONAMENTO DO PAINEL ───────────────────────────────────
 const PANEL_W = 850;
@@ -7401,26 +7400,26 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
   };
 
   return (
-    <div className="flex h-screen w-screen min-h-screen flex-col overflow-y-auto bg-[#F5F7FA] dark:bg-[#080C14]">
+    <div className="flex h-screen w-screen min-h-screen flex-col overflow-y-auto bg-[#F5F7FA]">
       {/* ── Studio Top Bar (Compact & Sleek) ── */}
-      <div className="sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[#CDEFE8] dark:border-[#1E293B] bg-white dark:bg-[#0D1322] px-3 shadow-sm">
+      <div className="sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[#CDEFE8] bg-white px-3 shadow-sm">
         {/* Esquerda: Botão Voltar para a Home & Seletor de Projeto */}
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => navigate("/")}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] dark:border-[#1E293B] bg-[#E8FCF8] dark:bg-[#131D2E] px-2.5 text-xs font-black text-[#0f4f49] dark:text-[#5EEAD4] transition hover:bg-[#00d8b8] hover:text-white dark:hover:bg-[#00d8b8] dark:hover:text-[#080C14]"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] bg-[#E8FCF8] px-2.5 text-xs font-black text-[#0f4f49] transition hover:bg-[#00d8b8] hover:text-white"
             title="Voltar para a Home"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Voltar para a Home</span>
           </Button>
 
-          <div className="h-5 w-px bg-[#CDEFE8] dark:bg-[#1E293B] mx-1" />
+          <div className="h-5 w-px bg-[#CDEFE8] mx-1" />
 
           <Select value={selectedId} onValueChange={setSelectedId}>
-            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] dark:border-[#1E293B] bg-[#F8FBFD] dark:bg-[#131D2E] text-xs font-bold text-slate-800 dark:text-slate-200 shadow-none">
+            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none">
               <SelectValue placeholder="Selecionar projeto..." />
             </SelectTrigger>
             <SelectContent>
@@ -7429,7 +7428,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           </Select>
 
           {project?.name && (
-            <span className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] dark:bg-[#131D2E] px-2 py-0.5 text-[11px] font-bold text-[#0f4f49] dark:text-[#5EEAD4] md:flex">
+            <span className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] px-2 py-0.5 text-[11px] font-bold text-[#0f4f49] md:flex">
               <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
               <span className="truncate max-w-[140px]">{project.name}</span>
             </span>
@@ -7438,8 +7437,6 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
         {/* Direita: Ações Rápidas do Quadro */}
         <div className="flex items-center gap-1.5">
-          <ThemeToggle compact />
-
           <Button
             size="sm"
             className="h-8 rounded-lg bg-[#00d8b8] px-3 text-xs font-black text-white hover:bg-[#00bda1] shadow-sm"
@@ -7454,7 +7451,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-lg border-[#BCEEE5] dark:border-[#1E293B] dark:bg-[#131D2E] px-2.5 text-xs font-extrabold text-[#0f4f49] dark:text-slate-200"
+            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
             onClick={handleExportSvg}
             title="Exportar Imagem do Quadro"
           >
@@ -7465,7 +7462,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           <Button
             size="sm"
             variant="outline"
-            className="h-8 rounded-lg border-[#CDEFE8] dark:border-[#1E293B] dark:bg-[#131D2E] px-2.5 text-xs font-bold text-[#0f4f49] dark:text-slate-200"
+            className="h-8 rounded-lg border-[#CDEFE8] px-2.5 text-xs font-bold text-[#0f4f49]"
             onClick={() => navigate(selectedId ? `/planta-ia?project=${selectedId}` : "/planta-ia")}
             title="Abrir Planta Elétrica"
           >
@@ -7478,15 +7475,15 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       <div className="flex-1 p-3 md:p-4 space-y-4">
 
       {project && (
-        <section className="overflow-hidden rounded-2xl border border-[#CDEFE8] dark:border-[#1E293B] bg-white dark:bg-[#0D1322] shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-100 dark:border-[#1E293B] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <section className="overflow-hidden rounded-2xl border border-[#CDEFE8] bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EAF4FB] dark:bg-[#131D2E] text-primary">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EAF4FB] text-primary">
                 <PanelTop className="h-4 w-4" />
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">Quadros do projeto</h3>
-                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{panelBoards.length} cadastrado(s)</p>
+                <h3 className="text-sm font-extrabold text-slate-900">Quadros do projeto</h3>
+                <p className="text-[11px] font-bold text-slate-500">{panelBoards.length} cadastrado(s)</p>
               </div>
             </div>
 
@@ -7501,14 +7498,14 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                 <LayoutGrid className="h-3.5 w-3.5" />
                 Gerar QGBT
               </Button>
-              <Button variant="outline" size="sm" className="h-9 rounded-lg px-3 text-xs font-extrabold dark:border-[#1E293B] dark:bg-[#131D2E] dark:text-slate-200" onClick={handleAddBoard}>
+              <Button variant="outline" size="sm" className="h-9 rounded-lg px-3 text-xs font-extrabold" onClick={handleAddBoard}>
                 <Plus className="h-3.5 w-3.5" />
                 Novo
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 rounded-lg border-red-200 dark:border-red-900/50 px-3 text-xs font-extrabold text-red-600 hover:text-red-700 dark:bg-[#131D2E]"
+                className="h-9 rounded-lg border-red-200 px-3 text-xs font-extrabold text-red-600 hover:text-red-700"
                 onClick={handleDeleteActiveBoard}
                 disabled={panelBoards.length <= 1}
               >
@@ -7519,7 +7516,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           </div>
 
           <div className="grid gap-0 lg:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="border-b border-slate-100 dark:border-[#1E293B] bg-slate-50/60 dark:bg-[#090E1A] p-3 lg:border-b-0 lg:border-r">
+            <div className="border-b border-slate-100 bg-slate-50/60 p-3 lg:border-b-0 lg:border-r">
               <div className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
                 {panelBoards.map((board) => {
                   const isActive = board.id === activeBoardId;
@@ -7532,8 +7529,8 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       onClick={() => handleSelectBoard(board.id)}
                       className={`flex min-w-[210px] items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition lg:min-w-0 ${
                         isActive
-                          ? "border-primary bg-white dark:bg-[#131D2E] text-primary shadow-sm"
-                          : "border-slate-200 dark:border-[#1E293B] bg-white dark:bg-[#0D1322] text-slate-700 dark:text-slate-300 hover:border-[#BCEEE5] dark:hover:border-[#00d8b8]/40 hover:bg-[#F8FBFD] dark:hover:bg-[#131D2E]"
+                          ? "border-primary bg-white text-primary shadow-sm"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-[#BCEEE5] hover:bg-[#F8FBFD]"
                       }`}
                     >
                       <span className="min-w-0">
@@ -7556,35 +7553,35 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
               </div>
             </div>
 
-            <div className="p-4 bg-white dark:bg-[#0D1322]">
+            <div className="p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Quadro ativo</p>
-                  <h4 className="text-lg font-extrabold text-slate-950 dark:text-slate-100">{activeBoard?.name || "Quadro"}</h4>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Quadro ativo</p>
+                  <h4 className="text-lg font-extrabold text-slate-950">{activeBoard?.name || "Quadro"}</h4>
                 </div>
-                <div className="flex gap-2 text-[11px] font-extrabold text-slate-600 dark:text-slate-300">
-                  <span className="rounded-md bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 text-emerald-700 dark:text-emerald-300">{rails.length} trilhos</span>
-                  <span className="rounded-md bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 text-emerald-700 dark:text-emerald-300">{getBoardUsedModules(activeBoard)} DIN</span>
-                  <span className="rounded-md bg-slate-100 dark:bg-[#1E293B] px-2 py-1 text-slate-700 dark:text-slate-300">{visibleWires.length} cabos</span>
+                <div className="flex gap-2 text-[11px] font-extrabold text-slate-600">
+                  <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">{rails.length} trilhos</span>
+                  <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">{getBoardUsedModules(activeBoard)} DIN</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-1">{visibleWires.length} cabos</span>
                 </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Nome</Label>
+                  <Label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Nome</Label>
                   <Input
                     value={activeBoard?.name || ""}
                     onChange={(event) => handleUpdateActiveBoard("name", event.target.value)}
-                    className="h-10 rounded-lg bg-white dark:bg-[#131D2E] dark:border-[#1E293B] dark:text-slate-100 text-sm font-extrabold"
+                    className="h-10 rounded-lg bg-white text-sm font-extrabold"
                     placeholder="Ex: QD-01 Principal"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Local</Label>
+                  <Label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Local</Label>
                   <Input
                     value={activeBoard?.location || ""}
                     onChange={(event) => handleUpdateActiveBoard("location", event.target.value)}
-                    className="h-10 rounded-lg bg-white dark:bg-[#131D2E] dark:border-[#1E293B] dark:text-slate-100 text-sm font-bold"
+                    className="h-10 rounded-lg bg-white text-sm font-bold"
                     placeholder="Ex: Pavimento térreo"
                   />
                 </div>
@@ -7595,10 +7592,10 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       )}
 
       {!project ? (
-        <div className="p-24 rounded-2xl bg-white dark:bg-[#0D1322] border-2 border-dashed border-[#BCEEE5] dark:border-[#1E293B] text-center max-w-4xl mx-auto shadow-sm">
+        <div className="p-24 rounded-2xl bg-white border-2 border-dashed border-[#BCEEE5] text-center max-w-4xl mx-auto shadow-sm">
           <LayoutGrid className="w-16 h-16 mx-auto text-primary/30 mb-5 animate-pulse" />
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Nenhum projeto selecionado</h3>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 max-w-md mx-auto">Selecione um projeto no topo para carregar o editor visual do quadro de distribuição elétrico.</p>
+          <h3 className="text-lg font-bold text-slate-800">Nenhum projeto selecionado</h3>
+          <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">Selecione um projeto no topo para carregar o editor visual do quadro de distribuição elétrico.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
@@ -7606,25 +7603,25 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           <div className="xl:col-span-8 space-y-4" ref={containerRef}>
             
             {/* TOOLBAR DO QUADRO */}
-            <div className="rounded-xl border border-slate-200 dark:border-[#1E293B] bg-white dark:bg-[#0D1322] p-3 shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={wiringMode ? "destructive" : "secondary"} className="h-8 rounded-lg px-3 text-xs font-bold uppercase">
                       {wiringMode ? "Modo Conexão" : "Modo Navegação"}
                     </Badge>
-                    <span className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+                    <span className="truncate text-xs font-medium text-slate-500">
                       {wiringMode ? "Clique em dois bornes para ligar o cabo" : activeBoard?.name || "Quadro ativo"}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center rounded-lg border border-slate-200 dark:border-[#1E293B] bg-slate-50 dark:bg-[#131D2E] p-1">
+                  <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={() => setScale(s => clampPanelScale(+((s ?? fitScale) - 0.1).toFixed(2)))} aria-label="Diminuir zoom" title="Diminuir zoom">
                       <ZoomOut className="h-4 w-4" />
                     </Button>
-                    <span className="flex h-8 min-w-14 items-center justify-center text-xs font-extrabold text-slate-600 dark:text-slate-300">
+                    <span className="flex h-8 min-w-14 items-center justify-center text-xs font-extrabold text-slate-600">
                       {Math.round(activeScale * 100)}%
                     </span>
                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={() => setScale(s => clampPanelScale(+((s ?? fitScale) + 0.1).toFixed(2)))} aria-label="Aumentar zoom" title="Aumentar zoom">
@@ -7632,13 +7629,13 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     </Button>
                   </div>
 
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg dark:border-[#1E293B] dark:bg-[#131D2E]" onClick={handleFitViewport} aria-label="Ajustar ao quadro" title="Ajustar ao quadro">
+                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={handleFitViewport} aria-label="Ajustar ao quadro" title="Ajustar ao quadro">
                     <Maximize2 className="h-4 w-4" />
                   </Button>
                   <Button
                     variant={showLegend ? "secondary" : "outline"}
                     size="icon"
-                    className="h-9 w-9 rounded-lg dark:border-[#1E293B] dark:bg-[#131D2E]"
+                    className="h-9 w-9 rounded-lg"
                     onClick={() => setShowLegend((current) => !current)}
                     aria-label={showLegend ? "Ocultar legenda" : "Mostrar legenda"}
                     title={showLegend ? "Ocultar legenda" : "Mostrar legenda"}
@@ -7661,17 +7658,17 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 rounded-lg border-emerald-200 dark:border-emerald-800/60 dark:bg-[#131D2E] px-3 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 hover:text-emerald-800"
+                    className="h-9 rounded-lg border-emerald-200 px-3 text-xs font-extrabold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
                     onClick={handleSavePanelLayout}
                     disabled={!selectedId || savingLayout}
                   >
                     {savingLayout ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : savedLayout ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
                     {savingLayout ? "Salvando" : savedLayout ? "Salvo" : "Salvar"}
                   </Button>
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg dark:border-[#1E293B] dark:bg-[#131D2E]" onClick={handleExportSvg} aria-label="Exportar SVG" title="Exportar SVG">
+                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={handleExportSvg} aria-label="Exportar SVG" title="Exportar SVG">
                     <Download className="h-4 w-4" />
                   </Button>
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg border-red-200 dark:border-red-900/50 dark:bg-[#131D2E] text-red-500" onClick={handleClearWires} aria-label="Limpar fiação" title="Limpar fiação">
+                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg border-red-200 text-red-500" onClick={handleClearWires} aria-label="Limpar fiação" title="Limpar fiação">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -7679,7 +7676,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
             </div>
 
             {/* PAINEL DE DESENHO VETORIAL */}
-            <div ref={panelViewportRef} className="overflow-auto rounded-2xl border border-slate-200 dark:border-[#1E293B] bg-[#eef2f6] dark:bg-[#070B12] p-6 shadow-lg min-h-[600px] flex items-center justify-center">
+            <div ref={panelViewportRef} className="overflow-auto rounded-2xl border border-slate-200 bg-[#eef2f6] p-6 shadow-lg min-h-[600px] flex items-center justify-center">
               <div
                 style={{
                   width: PANEL_W * activeScale,
@@ -8240,7 +8237,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           <div className="xl:col-span-4 space-y-6">
             
             {/* TABS DE ALTERNÂNCIA */}
-            <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-[#131D2E] border border-slate-200 dark:border-[#1E293B]">
+            <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200">
               {[
                 { id: "components", label: "Componentes" },
                 { id: "wiring", label: "Fiação / Cabos" },
@@ -8251,7 +8248,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`py-2 rounded-lg text-xs font-bold transition-all ${
-                    activeTab === tab.id ? "bg-white dark:bg-[#0D1322] text-slate-800 dark:text-slate-100 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                    activeTab === tab.id ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   {tab.label}
