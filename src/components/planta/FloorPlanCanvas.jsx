@@ -1631,16 +1631,17 @@ function EditorToolbar({
         </button>
       )}
 
+      {/* 1º Quadrante (Esquerda): Ferramentas de navegação e arquitetura */}
       <div className={toolbarGroup}>
         <ButtonIcon
-          title="Selecionar"
+          title="Selecionar (Cursor)"
           active={!handToolActive && !activeTool && !architectureTool && !routeToolActive}
           onClick={onSelectMode}
         >
           <MousePointer2 className="h-4 w-4" />
         </ButtonIcon>
         <ButtonIcon
-          title="Mão (Mover canvas / Pan)"
+          title="Mão (Mover tela / Pan do canvas)"
           active={handToolActive}
           onClick={onToggleHandTool}
         >
@@ -1666,7 +1667,7 @@ function EditorToolbar({
         </ButtonIcon>
       </div>
 
-
+      {/* 2º Quadrante: Símbolos elétricos */}
       <div className={toolbarGroup}>
         {TOOLBAR_SYMBOLS.map((toolId) => {
           const tool = TOOL_TYPES.find((item) => item.id === toolId);
@@ -1685,6 +1686,7 @@ function EditorToolbar({
         })}
       </div>
 
+      {/* 3º Quadrante: Histórico (Desfazer / Refazer) */}
       <div className={toolbarGroup}>
         <ButtonIcon title="Desfazer" disabled={!canUndo} onClick={onUndo}>
           <Undo2 className="h-4 w-4" />
@@ -1694,9 +1696,10 @@ function EditorToolbar({
         </ButtonIcon>
       </div>
 
+      {/* 4º Quadrante: Zoom e Medições */}
       <div className={toolbarGroup}>
         <ButtonIcon
-          title={zoomLocked ? "Zoom bloqueado" : "Zoom -"}
+          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado à direita)" : "Zoom -"}
           disabled={zoomLocked}
           onClick={() => !zoomLocked && onZoomChange?.(Math.max(0.45, zoom - 0.15))}
         >
@@ -1706,27 +1709,19 @@ function EditorToolbar({
           className={`min-w-12 shrink-0 px-1 text-center text-[11px] font-black transition-colors ${
             zoomLocked ? "text-amber-600 font-extrabold" : "text-[#0f4f49]"
           }`}
-          title={zoomLocked ? `Zoom bloqueado em ${Math.round(zoom * 100)}%` : `Zoom: ${Math.round(zoom * 100)}%`}
+          title={zoomLocked ? `Zoom bloqueado em ${Math.round(zoom * 100)}%` : `Zoom atual: ${Math.round(zoom * 100)}%`}
         >
           {Math.round(zoom * 100)}%
         </span>
         <ButtonIcon
-          title={zoomLocked ? "Zoom bloqueado" : "Zoom +"}
+          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado à direita)" : "Zoom +"}
           disabled={zoomLocked}
           onClick={() => !zoomLocked && onZoomChange?.(Math.min(2.6, zoom + 0.15))}
         >
           <ZoomIn className="h-4 w-4" />
         </ButtonIcon>
         <ButtonIcon
-          title={zoomLocked ? "Zoom bloqueado (clique para desbloquear)" : "Bloquear zoom atual (clique para travar)"}
-          active={zoomLocked}
-          onClick={onToggleZoomLock}
-          className={zoomLocked ? "border-amber-500 bg-amber-50 text-amber-600 hover:border-amber-600 hover:bg-amber-100" : ""}
-        >
-          {zoomLocked ? <Lock className="h-4 w-4 text-amber-600" /> : <LockOpen className="h-4 w-4 text-[#0f4f49]" />}
-        </ButtonIcon>
-        <ButtonIcon
-          title={zoomLocked ? "Zoom bloqueado (desbloqueie para enquadrar)" : "Enquadrar"}
+          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado para enquadrar)" : "Enquadrar"}
           disabled={zoomLocked}
           onClick={() => !zoomLocked && onFit?.()}
         >
@@ -1780,6 +1775,7 @@ function EditorToolbar({
         </ButtonIcon>
       </div>
 
+      {/* 5º Quadrante: Ações da seleção */}
       <div className={toolbarGroup}>
         <ButtonIcon title="Girar anti-horário" disabled={!hasSelection} onClick={() => onRotateSelected(-15)}>
           <RotateCcw className="h-4 w-4" />
@@ -1792,6 +1788,18 @@ function EditorToolbar({
         </ButtonIcon>
         <ButtonIcon title="Remover" disabled={!hasSelection} onClick={onDeleteSelected}>
           <Trash2 className="h-4 w-4" />
+        </ButtonIcon>
+      </div>
+
+      {/* 6º Quadrante (Último da Direita): Bloqueio de Zoom */}
+      <div className={toolbarGroup}>
+        <ButtonIcon
+          title={zoomLocked ? `Zoom bloqueado em ${Math.round(zoom * 100)}% (clique para destravar o zoom)` : `Bloquear nível de zoom atual (${Math.round(zoom * 100)}%)`}
+          active={zoomLocked}
+          onClick={onToggleZoomLock}
+          className={zoomLocked ? "!border-amber-500 !bg-amber-100 !text-amber-700 font-extrabold shadow-sm" : ""}
+        >
+          {zoomLocked ? <Lock className="h-4 w-4 text-amber-600" /> : <LockOpen className="h-4 w-4 text-[#0f4f49]" />}
         </ButtonIcon>
       </div>
     </div>
@@ -2696,7 +2704,7 @@ export default function FloorPlanCanvas({
 }) {
   const wrapperRef = useRef(null);
   const stageRef = useRef(null);
-  const lastPointerRef = useRef(null);
+  const panStartRef = useRef({ startX: 0, startY: 0, initialPanX: 0, initialPanY: 0 });
   const importedPlanElements = useMemo(() => normalizeImportedPlanElements(rawImportedPlanElements), [rawImportedPlanElements]);
   const points = useMemo(() => normalizeCanvasPoints(rawPoints), [rawPoints]);
   const walls = useMemo(() => asArray(rawWalls), [rawWalls]);
@@ -2760,6 +2768,38 @@ export default function FloorPlanCanvas({
     setHandToolActive(false);
     onAddRoom?.();
   };
+
+  // Window-level pointer and touch tracking while panning ensures zero event drops
+  useEffect(() => {
+    if (!isPanning) return;
+    const handleWindowPointerMove = (e) => {
+      const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+      const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+      const dx = clientX - panStartRef.current.startX;
+      const dy = clientY - panStartRef.current.startY;
+      setPan({
+        x: panStartRef.current.initialPanX + dx,
+        y: panStartRef.current.initialPanY + dy,
+      });
+    };
+    const handleWindowPointerUp = () => {
+      setIsPanning(false);
+    };
+    window.addEventListener("pointermove", handleWindowPointerMove, { passive: true });
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerUp);
+    window.addEventListener("touchmove", handleWindowPointerMove, { passive: true });
+    window.addEventListener("touchend", handleWindowPointerUp);
+    window.addEventListener("touchcancel", handleWindowPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", handleWindowPointerUp);
+      window.removeEventListener("touchmove", handleWindowPointerMove);
+      window.removeEventListener("touchend", handleWindowPointerUp);
+      window.removeEventListener("touchcancel", handleWindowPointerUp);
+    };
+  }, [isPanning]);
 
   const [routePreview, setRoutePreview] = useState(null);
   const [wallDraftStart, setWallDraftStart] = useState(null);
@@ -2999,10 +3039,18 @@ export default function FloorPlanCanvas({
     const targetName = event.target.name();
     const parentName = event.target.getParent?.()?.name?.();
     const isMiddleButton = event.evt?.button === 1;
-    if (isMiddleButton || spacePanActive || handToolActive) {
+    const isPrimaryButton = event.evt?.button === 0 || event.evt?.button === undefined;
+    if (isMiddleButton || spacePanActive || (handToolActive && isPrimaryButton)) {
       event.evt?.preventDefault?.();
+      const clientX = event.evt?.clientX ?? (event.evt?.touches?.[0]?.clientX ?? 0);
+      const clientY = event.evt?.clientY ?? (event.evt?.touches?.[0]?.clientY ?? 0);
+      panStartRef.current = {
+        startX: clientX,
+        startY: clientY,
+        initialPanX: pan.x,
+        initialPanY: pan.y,
+      };
       setIsPanning(true);
-      lastPointerRef.current = stageRef.current?.getPointerPosition() || null;
       return;
     }
     if (architectureTool) {
@@ -3167,31 +3215,21 @@ export default function FloorPlanCanvas({
         });
       }
     }
-
-    if (!isPanning) return;
-    const pointer = stageRef.current?.getPointerPosition();
-    const lastPointer = lastPointerRef.current;
-    if (!pointer || !lastPointer) return;
-    setPan((current) => ({
-      x: current.x + pointer.x - lastPointer.x,
-      y: current.y + pointer.y - lastPointer.y,
-    }));
-    lastPointerRef.current = pointer;
   };
 
   const stopPanning = () => {
     setIsPanning(false);
-    lastPointerRef.current = null;
   };
 
   const handleWheel = (event) => {
-    event.evt.preventDefault();
+    event.evt?.preventDefault?.();
     if (zoomLocked) return;
     const stage = stageRef.current;
     const pointer = stage?.getPointerPosition();
     if (!pointer || !onZoomChange) return;
 
-    const direction = event.evt.deltaY > 0 ? -1 : 1;
+    const delta = event.evt?.deltaY ?? event.deltaY ?? 0;
+    const direction = delta > 0 ? -1 : 1;
     const nextViewport = zoomAtPoint({
       pointer,
       zoom,
@@ -3275,7 +3313,42 @@ export default function FloorPlanCanvas({
   return (
     <div
       ref={wrapperRef}
-      className="relative flex h-full min-h-[560px] w-full items-center justify-center overflow-hidden bg-[#eceff1]"
+      className="relative flex h-full min-h-[560px] w-full items-center justify-center overflow-hidden bg-[#eceff1] select-none"
+      onPointerDown={(event) => {
+        if (event.target.closest("button, input, select, textarea, [data-html2canvas-ignore='true']")) return;
+        const isMiddleButton = event.button === 1;
+        const isPrimaryButton = event.button === 0;
+        if (isMiddleButton || spacePanActive || (handToolActive && isPrimaryButton)) {
+          event.preventDefault();
+          panStartRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            initialPanX: pan.x,
+            initialPanY: pan.y,
+          };
+          setIsPanning(true);
+        }
+      }}
+      onTouchStart={(event) => {
+        if (event.target.closest("button, input, select, textarea, [data-html2canvas-ignore='true']")) return;
+        if (handToolActive || spacePanActive) {
+          const touch = event.touches?.[0];
+          if (touch) {
+            panStartRef.current = {
+              startX: touch.clientX,
+              startY: touch.clientY,
+              initialPanX: pan.x,
+              initialPanY: pan.y,
+            };
+            setIsPanning(true);
+          }
+        }
+      }}
+      onWheel={(event) => {
+        if (zoomLocked) {
+          event.preventDefault();
+        }
+      }}
       style={{
         cursor: isPanning
           ? "grabbing"
@@ -3333,7 +3406,6 @@ export default function FloorPlanCanvas({
         onMouseMove={handleStageMouseMove}
         onMouseUp={stopPanning}
         onMouseLeave={() => {
-          stopPanning();
           clearAlignment();
           setPlacementPreview(null);
         }}
@@ -3349,7 +3421,7 @@ export default function FloorPlanCanvas({
           clearAlignment();
         }}
       >
-        <Layer>
+        <Layer listening={!handToolActive}>
           <Rect name="viewport-background" width={stageWidth} height={stageHeight} fill="#eceff1" />
           <Group x={viewport.x} y={viewport.y} scaleX={scale} scaleY={scale}>
             <Rect name="surface" width={DESIGN.width} height={DESIGN.height} fill="#ffffff" />
@@ -3546,7 +3618,7 @@ export default function FloorPlanCanvas({
           </Layer>
         )}
 
-        <Layer>
+        <Layer listening={!handToolActive}>
           <Group x={viewport.x + contentOffset.x * scale} y={viewport.y + contentOffset.y * scale} scaleX={scale} scaleY={scale}>
             {visiblePoints.map((point) => (
               <ElectricalPoint
