@@ -1,7 +1,92 @@
 export const DEFAULT_SOLAR_MAP_CENTER = { lat: -23.55052, lng: -46.63331 };
 export const DEFAULT_SOLAR_MAP_ZOOM = 20;
-export const SOLAR_MODULE_WIDTH_M = 1.14;
-export const SOLAR_MODULE_HEIGHT_M = 2.4;
+export const SOLAR_MODULE_WIDTH_M = 1.134;
+export const SOLAR_MODULE_HEIGHT_M = 2.278;
+
+export const MODULE_CATALOG = [
+  {
+    id: "jinko-540-72hl4",
+    manufacturer: "Jinko Solar",
+    model: "JKM540M-72HL4",
+    label: "Jinko | JKM540M-72HL4",
+    fullTitle: "Jinko Solar · JKM540M-72HL4 (540 Wp)",
+    wp: 540,
+    widthM: 1.134,
+    heightM: 2.278,
+    vmpV: 40.7,
+    vocV: 49.42,
+    impA: 13.27,
+    iscA: 13.85,
+  },
+  {
+    id: "canadian-550-hiku6",
+    manufacturer: "Canadian Solar",
+    model: "CS6W-550MS",
+    label: "Canadian | CS6W-550MS",
+    fullTitle: "Canadian Solar · CS6W-550MS (550 Wp)",
+    wp: 550,
+    widthM: 1.134,
+    heightM: 2.278,
+    vmpV: 41.7,
+    vocV: 49.8,
+    impA: 13.20,
+    iscA: 14.00,
+  },
+  {
+    id: "longi-545-hbd",
+    manufacturer: "LONGi Solar",
+    model: "LR5-72HBD-545M",
+    label: "LONGi | LR5-72HBD-545M",
+    fullTitle: "LONGi Solar · LR5-72HBD-545M (545 Wp)",
+    wp: 545,
+    widthM: 1.133,
+    heightM: 2.256,
+    vmpV: 41.8,
+    vocV: 49.65,
+    impA: 13.04,
+    iscA: 13.92,
+  },
+  {
+    id: "trina-670-deg21c",
+    manufacturer: "Trina Solar",
+    model: "TSM-DEG21C.20",
+    label: "Trina | TSM-DEG21C.20",
+    fullTitle: "Trina Solar · Vertex TSM-670W (670 Wp)",
+    wp: 670,
+    widthM: 1.303,
+    heightM: 2.384,
+    vmpV: 38.2,
+    vocV: 45.9,
+    impA: 17.55,
+    iscA: 18.62,
+  },
+  {
+    id: "generic-550",
+    manufacturer: "Padrão Tier-1",
+    model: "Mono Half-Cell 550W",
+    label: "Módulo FV 550Wp Padrão",
+    fullTitle: "Painel Fotovoltaico Monocristalino (550 Wp)",
+    wp: 550,
+    widthM: 1.134,
+    heightM: 2.278,
+    vmpV: 41.5,
+    vocV: 49.8,
+    impA: 13.25,
+    iscA: 14.10,
+  },
+];
+
+export function getModulePreset(idOrWp) {
+  if (!idOrWp) return MODULE_CATALOG[0];
+  const byId = MODULE_CATALOG.find((m) => m.id === idOrWp || m.model === idOrWp);
+  if (byId) return byId;
+  const numWp = Number(idOrWp);
+  if (Number.isFinite(numWp)) {
+    const byWp = MODULE_CATALOG.find((m) => m.wp === numWp);
+    if (byWp) return byWp;
+  }
+  return MODULE_CATALOG[0];
+}
 
 const METERS_PER_DEGREE_LAT = 111_320;
 const COORD_PRECISION = 10_000_000;
@@ -204,7 +289,44 @@ export function edgeRotationDegrees(a, b) {
   return normalizeRotationDeg((Math.atan2(end.north - start.north, end.east - start.east) * 180) / Math.PI);
 }
 
+/**
+ * Retorna as arestas do polígono com ponto médio, comprimento e azimute de alinhamento
+ */
+export function getPolygonEdges(points) {
+  const polygon = normalizeRoofPolygon(points);
+  if (polygon.length < 2) return [];
+
+  return polygon.map((point, index) => {
+    const next = polygon[(index + 1) % polygon.length];
+    const length = distanceMeters(point, next);
+    const rawRotation = edgeRotationDegrees(point, next);
+    // Azimute da aresta normalizado 0..360
+    let azimuth = rawRotation < 0 ? rawRotation + 360 : rawRotation;
+    let readableRotation = rawRotation > 90 || rawRotation < -90 ? rawRotation + 180 : rawRotation;
+    
+    const midpoint = {
+      lat: (point.lat + next.lat) / 2,
+      lng: (point.lng + next.lng) / 2,
+    };
+
+    return {
+      id: `edge-${index}`,
+      index,
+      start: point,
+      end: next,
+      midpoint,
+      length,
+      rotation: readableRotation,
+      azimuth: Math.round(azimuth * 100) / 100,
+      label: `${length.toFixed(length >= 10 ? 2 : 1)} m`,
+    };
+  });
+}
+
 export function getDominantRoofRotation(points, fallbackRotation = 0) {
+  if (Number.isFinite(Number(fallbackRotation)) && fallbackRotation !== 0) {
+    return normalizeRotationDeg(fallbackRotation);
+  }
   const polygon = normalizeRoofPolygon(points);
   if (polygon.length < 2) return normalizeRotationDeg(fallbackRotation);
 
@@ -341,7 +463,8 @@ function panelCollidesWithObstacle(panelCorners, centerPoint, localObstacles) {
  * Constrói polígonos de módulos considerando obstáculos, afastamentos e a estratégia de simulação
  */
 export function buildPanelPolygons(config = {}, sizing = {}, options = {}) {
-  const gapM = typeof options === "number" ? options : (options?.gapM ?? 0.08);
+  const columnGapM = Math.max(0.01, (finiteNumber(config.column_gap_cm, 2) / 100) || 0.02);
+  const rowGapM = Math.max(0.01, (finiteNumber(config.row_gap_cm, 2) / 100) || 0.02);
   const strategy = (typeof options === "object" ? options?.strategy : null) || config.layout_strategy || "max_generation";
   const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
 
@@ -351,11 +474,20 @@ export function buildPanelPolygons(config = {}, sizing = {}, options = {}) {
   const center = getPolygonCentroid(roofPolygon) || getRoofCenterFromConfig(config);
   const metrics = getRoofMetricsFromPolygon(roofPolygon, config);
   const panelCount = Math.max(0, Math.min(1200, Math.round(finiteNumber(sizing.panelCount, 0))));
-  const moduleWidth = SOLAR_MODULE_WIDTH_M;
-  const moduleHeight = SOLAR_MODULE_HEIGHT_M;
-  const panelWidth = sizing.orientation === "horizontal" ? moduleHeight : moduleWidth;
-  const panelHeight = sizing.orientation === "horizontal" ? moduleWidth : moduleHeight;
-  const rotation = getDominantRoofRotation(roofPolygon, config.roof_rotation_deg ?? metrics.rotationDeg);
+
+  const preset = getModulePreset(config.module_preset_id || config.module_model || config.module_wp);
+  const moduleWidth = preset.widthM || SOLAR_MODULE_WIDTH_M;
+  const moduleHeight = preset.heightM || SOLAR_MODULE_HEIGHT_M;
+  
+  const orientation = sizing.orientation || config.module_orientation || "vertical";
+  const isLandscape = orientation === "horizontal" || orientation === "landscape";
+  const panelWidth = isLandscape ? moduleHeight : moduleWidth;
+  const panelHeight = isLandscape ? moduleWidth : moduleHeight;
+
+  // Rotação: usa o azimute configurado ou rotação dominante
+  const rotation = Number.isFinite(Number(config.roof_rotation_deg))
+    ? normalizeRotationDeg(config.roof_rotation_deg)
+    : getDominantRoofRotation(roofPolygon, metrics.rotationDeg);
 
   const localRoof = roofPolygon.map((point) => {
     const meters = latLngToMeters(point, center);
@@ -379,15 +511,20 @@ export function buildPanelPolygons(config = {}, sizing = {}, options = {}) {
   const minNorth = Math.min(...northValues);
   const maxNorth = Math.max(...northValues);
 
-  // Ajusta margens / setbacks dependendo da estratégia escolhida
+  // Setback perimetral do telhado (margem de segurança das bordas)
   const setbackM = strategy === "best_aesthetic" ? 0.35 : 0.15;
   const effectiveMinEast = minEast + setbackM;
   const effectiveMaxEast = maxEast - setbackM;
   const effectiveMinNorth = minNorth + setbackM;
   const effectiveMaxNorth = maxNorth - setbackM;
 
-  const columnPitch = panelWidth + gapM;
-  const rowPitch = panelHeight + gapM;
+  // Fator de espaçamento entre fileiras para estruturas inclinadas (Triângulo/Shed)
+  const isTriangleStructure = config.structure_type === "triangle" || config.structure_type === "shed";
+  const tiltDeg = finiteNumber(config.roof_pitch_deg, 12);
+  const tiltShadingExtra = isTriangleStructure ? Math.sin((tiltDeg * Math.PI) / 180) * panelHeight * 0.9 : 0;
+
+  const columnPitch = panelWidth + columnGapM;
+  const rowPitch = panelHeight + rowGapM + tiltShadingExtra;
   const columns = Math.max(1, Math.min(80, Math.ceil((effectiveMaxEast - effectiveMinEast) / columnPitch) + 1));
   const rows = Math.max(1, Math.min(80, Math.ceil((effectiveMaxNorth - effectiveMinNorth) / rowPitch) + 1));
 
@@ -438,7 +575,7 @@ export function buildPanelPolygons(config = {}, sizing = {}, options = {}) {
     }
   }
 
-  // Ordena os painéis para agrupar esteticamente ou por facilidade de cabeamento
+  // Ordena os painéis para agrupar esteticamente
   if (strategy === "best_aesthetic") {
     bestLocalPanels.sort((a, b) => b[0].north - a[0].north || a[0].east - b[0].east);
   }

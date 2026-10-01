@@ -4,7 +4,22 @@ import { Circle, MapContainer, Marker, Pane, Polygon, Polyline, TileLayer, useMa
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
-import { AlertTriangle, Compass, Flame, Maximize2, Minus, Move3D, Plus, RotateCw, Sun, Trash2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Compass,
+  Flame,
+  Layers,
+  Maximize2,
+  Minus,
+  Move3D,
+  Plus,
+  RotateCw,
+  Sun,
+  Sparkles,
+  Trash2,
+  X,
+  Zap,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DEFAULT_SOLAR_MAP_CENTER,
@@ -14,6 +29,9 @@ import {
   edgeRotationDegrees,
   getAzimuthWithCardinal,
   getMapCenterFromConfig,
+  getPolygonCentroid,
+  getPolygonEdges,
+  getRoofMetricsFromPolygon,
   getRoofPolygonFromConfig,
   normalizeRoofPolygon,
 } from "@/lib/solarDesignerGeometry";
@@ -79,44 +97,90 @@ function ViewportController({ center, zoom, viewportRequest = 0 }) {
 }
 
 function MeasurementLabels({ roofPolygon }) {
-  const labels = useMemo(() => {
-    const points = normalizeRoofPolygon(roofPolygon);
-    if (points.length < 2) return [];
+  const edges = useMemo(() => getPolygonEdges(roofPolygon), [roofPolygon]);
 
-    return points.map((point, index) => {
-      const next = points[(index + 1) % points.length];
-      const distance = distanceMeters(point, next);
-      if (distance < 1.2) return null;
-
-      const rawRotation = edgeRotationDegrees(point, next);
-      const readableRotation = rawRotation > 90 || rawRotation < -90 ? rawRotation + 180 : rawRotation;
-      const midpoint = {
-        lat: (point.lat + next.lat) / 2,
-        lng: (point.lng + next.lng) / 2,
-      };
-
-      return {
-        id: `measure-${index}`,
-        midpoint,
-        rotation: readableRotation,
-        label: `${distance.toFixed(distance >= 10 ? 2 : 1)} m`,
-      };
-    }).filter(Boolean);
-  }, [roofPolygon]);
-
-  return labels.map((item) => (
+  return edges.map((item) => (
     <Marker
       key={item.id}
       position={[item.midpoint.lat, item.midpoint.lng]}
       interactive={false}
       icon={L.divIcon({
         className: "solar-measure-label",
-        html: `<span class="bg-slate-900/90 text-white border border-white/20 px-1.5 py-0.5 rounded text-[10px] font-bold shadow-md whitespace-nowrap" style="transform: rotate(${item.rotation}deg); display: inline-block;">${item.label}</span>`,
-        iconSize: [80, 20],
-        iconAnchor: [40, 10],
+        html: `<span class="bg-slate-950/85 text-white border border-white/30 px-1.5 py-0.5 rounded text-[10px] font-bold shadow-lg whitespace-nowrap backdrop-blur-sm" style="transform: rotate(${item.rotation}deg); display: inline-block;">${item.label}</span>`,
+        iconSize: [70, 18],
+        iconAnchor: [35, 9],
       })}
     />
   ));
+}
+
+/**
+ * Passo 2: Vértice / Borda de alinhamento com tooltip interativo "Alinhar os módulos a esta borda."
+ */
+function EdgeAlignmentLayer({ roofPolygon, onAlignToEdge }) {
+  const edges = useMemo(() => getPolygonEdges(roofPolygon), [roofPolygon]);
+
+  if (edges.length < 2) return null;
+
+  return edges.map((edge) => (
+    <Marker
+      key={`align-${edge.id}`}
+      position={[edge.midpoint.lat, edge.midpoint.lng]}
+      eventHandlers={{
+        click: (e) => {
+          L.DomEvent.stopPropagation(e);
+          onAlignToEdge?.(edge.azimuth);
+        },
+      }}
+      icon={L.divIcon({
+        className: "solar-edge-align-handle",
+        html: `
+          <div class="group relative flex items-center justify-center cursor-pointer pointer-events-auto">
+            <div class="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/90 text-slate-950 shadow-lg border-2 border-white ring-2 ring-cyan-500/40 transform hover:scale-125 transition-all">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+              </svg>
+            </div>
+            <div class="absolute bottom-full mb-1.5 opacity-90 group-hover:opacity-100 whitespace-nowrap rounded-md bg-slate-950/95 px-2.5 py-1 text-[11px] font-bold text-cyan-200 border border-cyan-400/80 shadow-2xl backdrop-blur-md pointer-events-none transition-all scale-95 group-hover:scale-100 flex items-center gap-1">
+              <span>Alinhar os módulos a esta borda.</span>
+            </div>
+          </div>
+        `,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      })}
+    />
+  ));
+}
+
+/**
+ * Badge flutuante de quantidade de módulos no centro do telhado
+ */
+function ArrayCountBadge({ panelPolygons }) {
+  const centroid = useMemo(() => {
+    if (!panelPolygons.length) return null;
+    const allPoints = panelPolygons.flat();
+    return getPolygonCentroid(allPoints);
+  }, [panelPolygons]);
+
+  if (!centroid || !panelPolygons.length) return null;
+
+  return (
+    <Marker
+      position={[centroid.lat, centroid.lng]}
+      interactive={false}
+      icon={L.divIcon({
+        className: "solar-array-count-badge",
+        html: `
+          <div class="bg-slate-950/90 border border-white/25 text-white px-2.5 py-1 rounded-md text-[11px] font-bold shadow-xl backdrop-blur-md whitespace-nowrap flex items-center gap-1.5 -translate-x-1/2 -translate-y-1/2">
+            <span class="h-2 w-2 rounded-full bg-cyan-400 animate-pulse"></span>
+            <span>Módulos FV: ${panelPolygons.length}</span>
+          </div>
+        `,
+        iconSize: [0, 0],
+      })}
+    />
+  );
 }
 
 function MapViewportEvents({ onViewportChange, onMapClick, isDrawing }) {
@@ -162,7 +226,7 @@ function MapFitController({ roofPolygon, request }) {
   return null;
 }
 
-function FloatingMapControls({ onFitRoof, hasRoof }) {
+function FloatingMapControls({ onFitRoof, hasRoof, onToggle3D }) {
   const map = useMap();
 
   return (
@@ -195,6 +259,16 @@ function FloatingMapControls({ onFitRoof, hasRoof }) {
             <Maximize2 className="h-4 w-4" />
           </button>
         </>
+      )}
+      {onToggle3D && (
+        <button
+          type="button"
+          title="Alternar Vista 3D"
+          onClick={onToggle3D}
+          className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-white/15 active:bg-white/25 transition text-amber-300"
+        >
+          <Move3D className="h-4 w-4" />
+        </button>
       )}
     </div>
   );
@@ -334,8 +408,10 @@ export default function SolarDesignerMap({
   panelPolygons: controlledPanelPolygons,
   onEditorModeChange,
   onRoofChange,
+  onAlignToEdge,
   onViewportChange,
   onFitRoof,
+  onToggle3D,
   onUpdateObstacle,
   onSelectObstacle,
   onRemoveObstacle,
@@ -361,11 +437,41 @@ export default function SolarDesignerMap({
   const azimuthInfo = useMemo(() => getAzimuthWithCardinal(config.roof_rotation_deg || 24), [config.roof_rotation_deg]);
   const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
   const hasRoof = roofPolygon.length >= 3;
-
   const isDrawing = editorMode === "draw-polygon" || editorMode === "draw-rectangle";
+
+  const roofMetrics = useMemo(() => getRoofMetricsFromPolygon(roofPolygon, config), [roofPolygon, config]);
+  const roofArea = roofMetrics.areaM2 || config.roof_area_m2 || 96;
+  const panelCount = panelPolygons.length;
+  const moduleWp = config.module_wp || 540;
+  const dcPowerKw = (panelCount * moduleWp) / 1000;
+  const annualMwh = (dcPowerKw * 1.36);
 
   return (
     <div className={`relative overflow-hidden bg-slate-950 ${className}`}>
+      {/* Top Banner de Notificação & Instruções (Conforme Passo 2 da Imagem) */}
+      <div className="absolute top-3 inset-x-4 z-[500] pointer-events-none flex items-center justify-between">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/90 px-3.5 py-1.5 text-xs text-white/90 shadow-2xl backdrop-blur-md">
+          <Sun className="h-4 w-4 text-cyan-400" />
+          <span className="font-medium hidden md:inline">
+            Clique em uma água do telhado para posicionar módulos ou para editar as propriedades dos módulos.
+          </span>
+          <span className="font-medium md:hidden">Clique para posicionar módulos.</span>
+        </div>
+
+        <div className="pointer-events-auto flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/90 px-3 py-1.5 text-xs font-bold text-white shadow-2xl backdrop-blur-md">
+            <span className="text-white/60">◬ {config.roof_pitch_deg || 0}°</span>
+            <span className="h-3 w-px bg-white/15" />
+            <span className="text-cyan-300">{Math.round(roofArea)} m²</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-950/80 px-3 py-1.5 text-xs font-black text-cyan-300 shadow-2xl backdrop-blur-md">
+            <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+            <span>Auto FV BETA</span>
+          </div>
+        </div>
+      </div>
+
       <MapContainer
         attributionControl={false}
         center={initialCenter}
@@ -383,7 +489,7 @@ export default function SolarDesignerMap({
         <ViewportController center={mapCenter} zoom={mapZoom} viewportRequest={viewportRequest} />
         <MapFitController roofPolygon={roofPolygon} request={fitRoofRequest} />
         <MapViewportEvents onViewportChange={onViewportChange} onMapClick={onMapClick} isDrawing={isDrawing} />
-        <FloatingMapControls onFitRoof={onFitRoof} hasRoof={hasRoof} />
+        <FloatingMapControls onFitRoof={onFitRoof} hasRoof={hasRoof} onToggle3D={onToggle3D} />
         
         <RoofEditorLayer
           positions={roofPolygon}
@@ -392,6 +498,8 @@ export default function SolarDesignerMap({
           onModeChange={onEditorModeChange}
         />
         {showMeasurements && <MeasurementLabels roofPolygon={roofPolygon} />}
+        {hasRoof && onAlignToEdge && <EdgeAlignmentLayer roofPolygon={roofPolygon} onAlignToEdge={onAlignToEdge} />}
+        {panelPolygons.length > 0 && <ArrayCountBadge panelPolygons={panelPolygons} />}
 
         {/* Camada de Módulos Fotovoltaicos */}
         <Pane name="solar-panels-pane" style={{ zIndex: 440, pointerEvents: "none" }}>
@@ -402,11 +510,11 @@ export default function SolarDesignerMap({
               interactive={false}
               pmIgnore
               pathOptions={{
-                color: "#99d1ff",
+                color: "#7dd3fc",
                 className: "solar-panel-shape",
-                fillColor: viewMode === "irradiation" ? "#00c853" : "#0d3b82",
-                fillOpacity: 0.96,
-                opacity: 0.88,
+                fillColor: viewMode === "irradiation" ? "#00c853" : "#0284c7",
+                fillOpacity: 0.95,
+                opacity: 0.9,
                 weight: 0.8,
               }}
             />
@@ -417,16 +525,16 @@ export default function SolarDesignerMap({
               interactive={false}
               pmIgnore
               pathOptions={{
-                color: "#93b9eb",
+                color: "#e0f2fe",
                 className: "solar-panel-cell-lines",
-                opacity: 0.35,
-                weight: 0.4,
+                opacity: 0.45,
+                weight: 0.5,
               }}
             />
           )}
         </Pane>
 
-        {/* Camada de Obstáculos Interativos (com suporte a arrasto e ajuste) */}
+        {/* Camada de Obstáculos Interativos */}
         <Pane name="solar-obstacles-pane" style={{ zIndex: 450 }}>
           {obstacles.map((obs) => {
             const isSelected = selectedObstacleId === obs.id;
@@ -434,7 +542,7 @@ export default function SolarDesignerMap({
               <Circle
                 key={`zone-${obs.id}`}
                 center={[obs.lat, obs.lng]}
-                radius={(obs.radiusM || 1.0) + 0.3} // Margem de segurança de 0.30m
+                radius={(obs.radiusM || 1.0) + 0.3}
                 pathOptions={{
                   color: isSelected ? "#38bdf8" : "#f43f5e",
                   fillColor: isSelected ? "#38bdf8" : "#f43f5e",
@@ -493,71 +601,77 @@ export default function SolarDesignerMap({
       </MapContainer>
 
       {/* Rosa dos Ventos / Compass Overlay Minimalista */}
-      <div className="absolute top-4 right-4 z-[500] flex flex-col items-center gap-1 rounded-xl border border-white/15 bg-slate-900/90 p-2.5 shadow-2xl backdrop-blur-md select-none text-white">
-        <div className="relative flex h-12 w-12 items-center justify-center">
-          <span className="absolute top-0 text-[9px] font-black text-rose-400">N</span>
-          <span className="absolute right-0 text-[9px] font-bold text-white/60">L</span>
-          <span className="absolute bottom-0 text-[9px] font-bold text-white/60">S</span>
-          <span className="absolute left-0 text-[9px] font-bold text-white/60">O</span>
+      <div className="absolute top-16 right-4 z-[500] flex flex-col items-center gap-1 rounded-xl border border-white/15 bg-slate-900/90 p-2.5 shadow-2xl backdrop-blur-md select-none text-white">
+        <div className="relative flex h-10 w-10 items-center justify-center">
+          <span className="absolute top-0 text-[8px] font-black text-rose-400">N</span>
+          <span className="absolute right-0 text-[8px] font-bold text-white/60">L</span>
+          <span className="absolute bottom-0 text-[8px] font-bold text-white/60">S</span>
+          <span className="absolute left-0 text-[8px] font-bold text-white/60">O</span>
           <div
-            className="flex h-8 w-8 items-center justify-center transition-transform duration-500"
+            className="flex h-7 w-7 items-center justify-center transition-transform duration-500"
             style={{ transform: `rotate(${-azimuthInfo.degrees}deg)` }}
           >
-            <Compass className="h-6 w-6 text-primary" />
+            <Compass className="h-5 w-5 text-cyan-400" />
           </div>
         </div>
-        <span className="text-[10px] font-bold text-primary">{azimuthInfo.formatted}</span>
+        <span className="text-[9px] font-bold text-cyan-300">{azimuthInfo.formatted}</span>
       </div>
 
-      {/* Trajetória Solar no modo "Sombras" */}
-      {viewMode === "shadows" && (
-        <div className="pointer-events-none absolute inset-x-8 top-6 z-[500] flex items-center justify-between">
-          <div className="flex items-center gap-1.5 rounded-lg bg-slate-900/90 px-3 py-1.5 text-xs font-bold text-amber-300 border border-amber-500/30 shadow-lg backdrop-blur">
-            <Sun className="h-3.5 w-3.5" /> 06:00 (Nascente L)
-          </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-black text-slate-950 shadow-lg animate-pulse">
-            <Sun className="h-3.5 w-3.5" /> 12:00 (Zênite Solar)
-          </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-slate-900/90 px-3 py-1.5 text-xs font-bold text-amber-300 border border-amber-500/30 shadow-lg backdrop-blur">
-            <Sun className="h-3.5 w-3.5" /> 18:00 (Poente O)
+      {/* Miniaturas de Camadas no Canto Inferior Esquerdo (Satélite / Irradiância) */}
+      <div className="absolute bottom-6 left-6 z-[500] flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => {}}
+          className="flex flex-col items-center justify-center h-14 w-14 rounded-xl border-2 border-cyan-400/80 bg-slate-900/90 shadow-2xl backdrop-blur p-1 text-[9px] font-black text-white hover:border-cyan-300 transition"
+        >
+          <Layers className="h-5 w-5 text-cyan-400 mb-0.5" />
+          <span>Satélite</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {}}
+          className="flex flex-col items-center justify-center h-14 w-14 rounded-xl border border-white/20 bg-slate-900/90 shadow-2xl backdrop-blur p-1 text-[9px] font-bold text-white/80 hover:border-white/50 transition"
+        >
+          <Flame className="h-5 w-5 text-amber-400 mb-0.5" />
+          <span>Irradiância</span>
+        </button>
+      </div>
+
+      {/* HUD Flutuante Inferior Dark (Conforme Imagem 2, 3 e 4) */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-6 rounded-xl border border-white/15 bg-[#0a111e]/95 px-6 py-2.5 text-white shadow-2xl backdrop-blur-md">
+        {/* Coluna 1: Módulos FV Total/Facet */}
+        <div className="flex flex-col items-center min-w-[130px]">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-white/50">MÓDULOS FV TOTAL/FACET</span>
+          <span className="text-sm font-black text-white">
+            {panelCount} <span className="text-white/40">/ {panelCount}</span>
+          </span>
+          <div className="mt-1 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+            <div className="h-full bg-emerald-400 rounded-full" style={{ width: panelCount > 0 ? "100%" : "0%" }} />
           </div>
         </div>
-      )}
 
-      {/* Legenda de Irradiação no modo "Irradiação" */}
-      {viewMode === "irradiation" && (
-        <div className="absolute bottom-6 left-6 z-[500] rounded-xl border border-white/15 bg-slate-900/90 p-3 text-white shadow-2xl backdrop-blur-md">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-white/70 flex items-center gap-1">
-            <Flame className="h-3.5 w-3.5 text-amber-400" /> Irradiação anual (kWh/m²)
-          </p>
-          <div className="space-y-1 text-xs font-bold">
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-3.5 rounded bg-[#ef4444]" />
-              <span>1.800 (melhor)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-3.5 rounded bg-[#f97316]" />
-              <span>1.600</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-3.5 rounded bg-[#eab308]" />
-              <span>1.400</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-3.5 rounded bg-[#22c55e]" />
-              <span>1.200</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-3.5 rounded bg-[#3b82f6]" />
-              <span>1.000 (menor)</span>
-            </div>
+        <div className="h-8 w-px bg-white/10" />
+
+        {/* Coluna 2: Potência CC Total/Facet */}
+        <div className="flex flex-col items-center min-w-[130px]">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-white/50">POTÊNCIA CC TOTAL/FACET</span>
+          <span className="text-sm font-black text-white">
+            {dcPowerKw.toFixed(1)} <span className="text-white/40">/ {dcPowerKw.toFixed(1)} kWp</span>
+          </span>
+          <div className="mt-1 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+            <div className="h-full bg-emerald-400 rounded-full" style={{ width: panelCount > 0 ? "100%" : "0%" }} />
           </div>
         </div>
-      )}
 
-      {/* Attribution */}
-      <div className="pointer-events-none absolute bottom-0 left-0 z-[500] rounded-tr-md bg-slate-900/80 px-2 py-0.5 text-[9px] font-semibold text-white/50">
-        Google Maps Satélite · VOLTAI Solar
+        <div className="h-8 w-px bg-white/10" />
+
+        {/* Coluna 3: Produção/Consumo Anual Est. */}
+        <div className="flex flex-col items-center min-w-[140px]">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-white/50">PRODUÇÃO/CONS. ANUAL EST.</span>
+          <span className="text-sm font-black text-cyan-300">
+            {annualMwh.toFixed(2)} MWh
+          </span>
+        </div>
       </div>
     </div>
   );
