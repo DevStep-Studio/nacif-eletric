@@ -22,6 +22,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import CircuitFormDialog from "@/components/CircuitFormDialog";
 import PageHeader from "@/components/PageHeader";
+import NextStepCard from "@/components/navigation/NextStepCard";
+import ProjectProgress from "@/components/navigation/ProjectProgress";
 import { autoBalancePhases, buildProjectElectricalSyncPayload, calcCircuit, calcProjectMetrics } from "@/lib/electricalEngine";
 
 const formatNumber = (value, suffix = "") =>
@@ -348,6 +350,12 @@ export default function ProjectDetail() {
           </div>
         }
       />
+
+      {/* Card Contextual de Próxima Etapa (Modo Guiado) */}
+      <NextStepCard project={project} />
+
+      {/* Progresso Geral do Projeto */}
+      <ProjectProgress project={project} variant="card" />
 
       <section className="rounded-[18px] border border-[#BCEEE5] bg-[#F7FBFE] p-2 shadow-[0_16px_44px_rgba(0,100,166,0.06)]">
         <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
