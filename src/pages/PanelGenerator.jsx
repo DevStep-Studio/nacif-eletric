@@ -4,7 +4,7 @@
  * NBR 5410:2004 · NR10 · IEC 60715 (DIN 35mm)
  */
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
 import {
   buildPanelBoardsWithLayout,
@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
+  ArrowLeft,
   LayoutGrid,
   Download,
   ZoomIn,
@@ -1639,6 +1640,7 @@ const getPinCoords = (pinId, rails, panelH, infrastructure = []) => {
 };
 
 export default function PanelGenerator() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(searchParams.get("project") || "");
@@ -7398,21 +7400,79 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
   };
 
   return (
-    <div className="w-full max-w-none space-y-6 pb-20 app-page-enter">
-      <PageHeader
-        icon={LayoutGrid}
-        title="Quadro Elétrico"
-        subtitle="Construa, dimensione e organize visualmente os disjuntores, barramentos e cabeamentos do seu quadro."
-      >
-        <Select value={selectedId} onValueChange={setSelectedId}>
-          <SelectTrigger className="h-12 min-w-[220px] rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-md">
-            <SelectValue placeholder="Selecionar projeto..." />
-          </SelectTrigger>
-          <SelectContent>
-            {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </PageHeader>
+    <div className="flex h-screen w-screen min-h-screen flex-col overflow-y-auto bg-[#F5F7FA]">
+      {/* ── Studio Top Bar (Compact & Sleek) ── */}
+      <div className="sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[#CDEFE8] bg-white px-3 shadow-sm">
+        {/* Esquerda: Botão Voltar para a Home & Seletor de Projeto */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/")}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] bg-[#E8FCF8] px-2.5 text-xs font-black text-[#0f4f49] transition hover:bg-[#00d8b8] hover:text-white"
+            title="Voltar para a Home"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Voltar para a Home</span>
+          </Button>
+
+          <div className="h-5 w-px bg-[#CDEFE8] mx-1" />
+
+          <Select value={selectedId} onValueChange={setSelectedId}>
+            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none">
+              <SelectValue placeholder="Selecionar projeto..." />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {project?.name && (
+            <span className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] px-2 py-0.5 text-[11px] font-bold text-[#0f4f49] md:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
+              <span className="truncate max-w-[140px]">{project.name}</span>
+            </span>
+          )}
+        </div>
+
+        {/* Direita: Ações Rápidas do Quadro */}
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            className="h-8 rounded-lg bg-[#00d8b8] px-3 text-xs font-black text-white hover:bg-[#00bda1] shadow-sm"
+            onClick={handleSavePanelLayout}
+            disabled={!selectedId || savingLayout}
+            title="Salvar alterações no projeto"
+          >
+            {savingLayout ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : savedLayout ? <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-white" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+            <span>{savingLayout ? "Salvando..." : savedLayout ? "Salvo" : "Salvar"}</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
+            onClick={handleExportSvg}
+            title="Exportar Imagem do Quadro"
+          >
+            <Download className="mr-1 h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Exportar</span>
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 rounded-lg border-[#CDEFE8] px-2.5 text-xs font-bold text-[#0f4f49]"
+            onClick={() => navigate(selectedId ? `/planta-ia?project=${selectedId}` : "/planta-ia")}
+            title="Abrir Planta Elétrica"
+          >
+            <LayoutGrid className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+            <span className="hidden md:inline">Planta IA</span>
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex-1 p-3 md:p-4 space-y-4">
 
       {project && (
         <section className="overflow-hidden rounded-2xl border border-[#CDEFE8] bg-white shadow-sm">
@@ -9926,6 +9986,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

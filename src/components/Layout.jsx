@@ -370,6 +370,16 @@ export default function Layout() {
     return "Nacif Electric";
   }, [currentProject, location.pathname]);
 
+  const isImmersiveStudioRoute = location.pathname === "/planta-ia" || location.pathname === "/panel-generator";
+
+  if (isImmersiveStudioRoute) {
+    return (
+      <div className="h-screen w-screen min-h-screen overflow-hidden bg-background">
+        <Outlet />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`min-h-screen overflow-x-hidden bg-[#F5F7FA] font-inter text-[#101828] transition-[padding] duration-200 ${

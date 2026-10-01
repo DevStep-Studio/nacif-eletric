@@ -4948,135 +4948,113 @@ export default function PlantaIA() {
   }, [routeToolActive, routeDraft, selectedElement, selectedRoute, selectedRoutePointIndex, undoDesign, redoDesign, deleteSelected]);
 
   return (
-    <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-[#F2FFFC] pt-3">
-      {/* ── Topbar ── */}
-      <div className="shrink-0 border-b border-[#CDEFE8] bg-white px-3 py-2">
-        <PageHeader
-          icon={Cpu}
-          title="Planta Elétrica IA"
-          subtitle="Desenho arquitetônico livre + projeto elétrico · paredes retas/curvas, aberturas e simbologia ABNT."
-          actions={
-            <div className="col-span-full grid w-full min-w-0 gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] 2xl:grid-cols-[auto_auto_minmax(0,1fr)]">
-              <div className={HEADER_ACTION_GROUP_CLASS}>
-                <span className={HEADER_ACTION_LABEL_CLASS}>Projeto</span>
-                <Button variant="outline" className="h-11 rounded-[12px] font-extrabold" onClick={() => navigate("/")}>
-                  <ArrowLeft className="h-4 w-4" />
-                  Home
-                </Button>
-                <Button variant="outline" className="h-11 rounded-[12px] font-extrabold" onClick={loadHouseTemplate}>
-                  <House className="h-4 w-4" />
-                  Modelo Casa
-                </Button>
-                <Button className="h-11 rounded-[12px] bg-[#00d8b8] font-extrabold hover:bg-[#00558D]" onClick={startBlankArchitecturalPlan}>
-                  <Minus className="h-4 w-4" />
-                  Desenhar do zero
-                </Button>
-              </div>
+    <div className="flex h-screen w-screen min-h-screen flex-col overflow-hidden bg-[#F2FFFC]">
+      {/* ── Studio Top Bar (Compact & Sleek) ── */}
+      <div className="z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[#CDEFE8] bg-white px-3 shadow-sm">
+        {/* Esquerda: Botão Voltar para a Home & Seletor de Projeto */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/")}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] bg-[#E8FCF8] px-2.5 text-xs font-black text-[#0f4f49] transition hover:bg-[#00d8b8] hover:text-white"
+            title="Voltar para a Home"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Voltar para a Home</span>
+          </Button>
 
-              <div className={HEADER_ACTION_GROUP_CLASS}>
-                <span className={HEADER_ACTION_LABEL_CLASS}>Criar</span>
-                <Button variant="outline" className="h-11 rounded-[12px] font-extrabold" onClick={addRoom}>
-                  <SquarePlus className="h-4 w-4" />
-                  Cômodo
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-11 rounded-[12px] border-[#BCEEE5] font-extrabold text-[#0f4f49]"
-                  onClick={applyNBRRequirementsToPlant}
-                  disabled={rooms.length === 0 || saving}
-                >
-                  <Calculator className="h-4 w-4 text-[#00d8b8]" />
-                  Aplicar NBR
-                  {roomNBRMissingTotal > 0 && (
-                    <span className="ml-1 rounded-md bg-[#E5F3FC] px-1.5 py-0.5 text-[10px] font-black text-[#00d8b8]">
-                      {roomNBRMissingTotal}
-                    </span>
-                  )}
-                </Button>
-                <Button
-                  className="h-11 rounded-[12px] bg-[#0F172A] font-extrabold text-white hover:bg-[#1E293B]"
-                  onClick={buildCompleteProfessionalProject}
-                  disabled={rooms.length === 0 || saving}
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                  Projeto completo
-                </Button>
-                <Button variant="outline" className="h-11 rounded-[12px] font-extrabold" onClick={() => fileInputRef.current?.click()}>
-                  <Upload className="h-4 w-4" />
-                  {importedFileName ? "Trocar Planta" : "Importar Planta"}
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-11 rounded-[12px] border-[#0F172A] font-extrabold text-[#0F172A]"
-                  onClick={() => { setSidebar("ai"); setLeftPanelOpen(true); }}
-                >
-                  <ScanLine className="h-4 w-4" />
-                  Scanner IA
-                </Button>
-                <input ref={fileInputRef} type="file" className="hidden" accept={IMPORTABLE_PLAN_TYPES} onChange={handleFileUpload} />
-                {importedFileName && (
-                  <div className="hidden max-w-[320px] items-center gap-2 rounded-[12px] border border-[#CDEFE8] bg-white px-3 py-2 text-left xl:flex">
-                    {imageUrl ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> : <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />}
-                    <div className="min-w-0">
-                      <p className="truncate text-[11px] font-black text-[#0F172A]">{importedFileName}</p>
-                      <p className="truncate text-[10px] font-bold text-[#64748B]">{importStatus || "Planta importada."}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
+          <div className="h-5 w-px bg-[#CDEFE8] mx-1" />
 
-              <div className={HEADER_ACTION_GROUP_CLASS}>
-                <span className={HEADER_ACTION_LABEL_CLASS}>Saída</span>
-                <Button
-                  variant="outline"
-                  className="h-11 rounded-[12px] border-[#00d8b8] font-extrabold text-[#0f4f49]"
-                  onClick={handleSavePlantDesign}
-                  disabled={!selectedProject || saving}
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Save className="h-4 w-4" />}
-                  {saving ? "Salvando..." : saved ? "Salvo" : "Salvar"}
-                </Button>
-                <Button variant="outline" className="h-11 rounded-[12px] font-extrabold" onClick={() => { setZoom(1); setSelectedElement(null); setFitRequest(value => value + 1); }}>
-                  <MousePointer2 className="h-4 w-4" />
-                  Enquadrar
-                </Button>
-                <Button variant="ghost" className="h-11 rounded-[12px] font-extrabold text-destructive hover:text-destructive" onClick={clearAll}>
-                  <Trash2 className="h-4 w-4" />
-                  Limpar
-                </Button>
-                {generatedCircuits.length > 0 && (
-                  <Button className="h-11 rounded-[12px] font-extrabold" onClick={() => navigate(selectedProject ? `/unifilar?project=${selectedProject}` : "/unifilar")}>
-                    <GitBranch className="h-4 w-4" />
-                    Ver Diagrama
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                )}
-                <Button variant="outline" className="h-11 rounded-[12px] font-extrabold" onClick={exportFloorPlanPdf} disabled={exporting}>
-                  <Download className="h-4 w-4" />
-                  {exporting ? "Gerando..." : "Baixar A0"}
-                </Button>
-              </div>
-            </div>
-          }
-        >
-          <div className="grid w-full min-w-0 gap-2 lg:grid-cols-[minmax(260px,420px)_minmax(0,1fr)]">
-            <Select value={selectedProject} onValueChange={setSelectedProject} onOpenChange={open => { if (open) loadProjects(); }}>
-              <SelectTrigger className="h-10 min-w-0 rounded-[12px] border-[#BCEEE5] bg-white text-sm font-bold shadow-none">
-                <SelectValue placeholder="Selecionar projeto para sincronizar..." />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <div className="flex min-h-10 min-w-0 flex-wrap items-center gap-2 rounded-[12px] border border-[#CDEFE8] bg-[#F8FBFD] px-3 text-xs font-bold text-[#526173]">
-              <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.18em] text-[#00d8b8]">Projeto ativo</span>
-              <span className="min-w-0 truncate text-[#0F172A]">{selectedProjectName || "Nenhum projeto selecionado"}</span>
-              <span className="ml-auto rounded-md bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#0f4f49]">
-                {panelBoards.length} quadro{panelBoards.length === 1 ? "" : "s"}
-              </span>
-            </div>
-          </div>
-        </PageHeader>
+          <Select value={selectedProject} onValueChange={setSelectedProject} onOpenChange={open => { if (open) loadProjects(); }}>
+            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none">
+              <SelectValue placeholder="Selecionar projeto..." />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {selectedProjectName && (
+            <span className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] px-2 py-0.5 text-[11px] font-bold text-[#0f4f49] md:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
+              <span className="truncate max-w-[140px]">{selectedProjectName}</span>
+            </span>
+          )}
+        </div>
+
+        {/* Direita: Ações Rápidas do Estúdio */}
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
+            onClick={loadHouseTemplate}
+            title="Carregar Modelo Casa"
+          >
+            <House className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+            <span className="hidden sm:inline">Modelo Casa</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
+            onClick={startBlankArchitecturalPlan}
+            title="Limpar e desenhar do zero"
+          >
+            <Minus className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+            <span className="hidden sm:inline">Desenhar do zero</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
+            onClick={() => fileInputRef.current?.click()}
+            title="Importar imagem ou PDF de planta"
+          >
+            <Upload className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+            <span className="hidden sm:inline">{importedFileName ? "Trocar Planta" : "Importar"}</span>
+          </Button>
+          <input ref={fileInputRef} type="file" className="hidden" accept={IMPORTABLE_PLAN_TYPES} onChange={handleFileUpload} />
+
+          <Button
+            size="sm"
+            className="h-8 rounded-lg bg-[#00d8b8] px-3 text-xs font-black text-white hover:bg-[#00bda1] shadow-sm"
+            onClick={handleSavePlantDesign}
+            disabled={!selectedProject || saving}
+            title="Salvar alterações no projeto"
+          >
+            {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : saved ? <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-white" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+            <span>{saving ? "Salvando..." : saved ? "Salvo" : "Salvar"}</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
+            onClick={exportFloorPlanPdf}
+            disabled={exporting}
+            title="Exportar planta em prancha A0"
+          >
+            <Download className="mr-1 h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Baixar A0</span>
+          </Button>
+
+          {generatedCircuits.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 rounded-lg border-[#CDEFE8] px-2.5 text-xs font-bold text-[#0f4f49]"
+              onClick={() => navigate(selectedProject ? `/unifilar?project=${selectedProject}` : "/unifilar")}
+              title="Ver Diagrama Unifilar"
+            >
+              <GitBranch className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+              <span className="hidden md:inline">Diagrama</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ── Main layout ── */}
