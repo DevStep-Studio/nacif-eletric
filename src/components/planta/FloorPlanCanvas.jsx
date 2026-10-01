@@ -1696,10 +1696,10 @@ function EditorToolbar({
         </ButtonIcon>
       </div>
 
-      {/* 4º Quadrante: Zoom e Medições */}
+      {/* 4º Quadrante: Zoom */}
       <div className={toolbarGroup}>
         <ButtonIcon
-          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado à direita)" : "Zoom -"}
+          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado)" : "Zoom -"}
           disabled={zoomLocked}
           onClick={() => !zoomLocked && onZoomChange?.(Math.max(0.45, zoom - 0.15))}
         >
@@ -1714,7 +1714,7 @@ function EditorToolbar({
           {Math.round(zoom * 100)}%
         </span>
         <ButtonIcon
-          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado à direita)" : "Zoom +"}
+          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado)" : "Zoom +"}
           disabled={zoomLocked}
           onClick={() => !zoomLocked && onZoomChange?.(Math.min(2.6, zoom + 0.15))}
         >
@@ -1726,6 +1726,18 @@ function EditorToolbar({
           onClick={() => !zoomLocked && onFit?.()}
         >
           <Maximize2 className="h-4 w-4" />
+        </ButtonIcon>
+      </div>
+
+      {/* 5º Quadrante (Círculo Vermelho): Bloqueio de Zoom, Escala e Cotas */}
+      <div className={toolbarGroup}>
+        <ButtonIcon
+          title={zoomLocked ? `Zoom bloqueado em ${Math.round(zoom * 100)}% (clique para destravar o zoom)` : `Bloquear nível de zoom atual (${Math.round(zoom * 100)}%)`}
+          active={zoomLocked}
+          onClick={onToggleZoomLock}
+          className={zoomLocked ? "!border-amber-500 !bg-amber-100 !text-amber-700 font-extrabold shadow-sm" : ""}
+        >
+          {zoomLocked ? <Lock className="h-4 w-4 text-amber-600" /> : <LockOpen className="h-4 w-4 text-[#0f4f49]" />}
         </ButtonIcon>
         <label
           title="Escala geral: pixels por metro"
@@ -1775,7 +1787,7 @@ function EditorToolbar({
         </ButtonIcon>
       </div>
 
-      {/* 5º Quadrante: Ações da seleção */}
+      {/* 6º Quadrante: Ações da seleção */}
       <div className={toolbarGroup}>
         <ButtonIcon title="Girar anti-horário" disabled={!hasSelection} onClick={() => onRotateSelected(-15)}>
           <RotateCcw className="h-4 w-4" />
@@ -1788,18 +1800,6 @@ function EditorToolbar({
         </ButtonIcon>
         <ButtonIcon title="Remover" disabled={!hasSelection} onClick={onDeleteSelected}>
           <Trash2 className="h-4 w-4" />
-        </ButtonIcon>
-      </div>
-
-      {/* 6º Quadrante (Último da Direita): Bloqueio de Zoom */}
-      <div className={toolbarGroup}>
-        <ButtonIcon
-          title={zoomLocked ? `Zoom bloqueado em ${Math.round(zoom * 100)}% (clique para destravar o zoom)` : `Bloquear nível de zoom atual (${Math.round(zoom * 100)}%)`}
-          active={zoomLocked}
-          onClick={onToggleZoomLock}
-          className={zoomLocked ? "!border-amber-500 !bg-amber-100 !text-amber-700 font-extrabold shadow-sm" : ""}
-        >
-          {zoomLocked ? <Lock className="h-4 w-4 text-amber-600" /> : <LockOpen className="h-4 w-4 text-[#0f4f49]" />}
         </ButtonIcon>
       </div>
     </div>
