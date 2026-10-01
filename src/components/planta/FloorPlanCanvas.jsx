@@ -13,6 +13,9 @@ import {
   DoorOpen,
   Eye,
   EyeOff,
+  Hand,
+  Lock,
+  LockOpen,
   Maximize2,
   Minus,
   MousePointer2,
@@ -1129,6 +1132,7 @@ function ElectricalPoint({
   height,
   active,
   routeToolActive = false,
+  handToolActive = false,
   routeStart = false,
   onSelect,
   onRoutePointClick,
@@ -1201,8 +1205,9 @@ function ElectricalPoint({
       x={x}
       y={y}
       rotation={point.rotation || 0}
-      draggable={!routeToolActive}
+      draggable={!routeToolActive && !handToolActive}
       onClick={(event) => {
+        if (handToolActive) return;
         event.cancelBubble = true;
         if (routeToolActive) {
           onRoutePointClick?.(point);
@@ -1211,6 +1216,7 @@ function ElectricalPoint({
         onSelect?.({ type: "point", id: point.id });
       }}
       onTap={(event) => {
+        if (handToolActive) return;
         event.cancelBubble = true;
         if (routeToolActive) {
           onRoutePointClick?.(point);
@@ -1219,21 +1225,25 @@ function ElectricalPoint({
         onSelect?.({ type: "point", id: point.id });
       }}
       onDragStart={() => {
+        if (handToolActive) return;
         if (!routeToolActive) onSelect?.({ type: "point", id: point.id });
       }}
-      onMouseEnter={() => onHover(point.id)}
-      onMouseLeave={() => onHover(null)}
+      onMouseEnter={() => { if (!handToolActive) onHover(point.id); }}
+      onMouseLeave={() => { if (!handToolActive) onHover(null); }}
       onDblClick={(event) => {
+        if (handToolActive) return;
         event.cancelBubble = true;
         if (routeToolActive) return;
         onPointDoubleClick?.(point.id);
       }}
       onDblTap={(event) => {
+        if (handToolActive) return;
         event.cancelBubble = true;
         if (routeToolActive) return;
         onPointDoubleClick?.(point.id);
       }}
       onDragEnd={(event) => {
+        if (handToolActive) return;
         onClearAlignment?.();
         onMovePoint?.(point.id, {
           x: pxToPct(event.target.x(), width),
@@ -1241,6 +1251,7 @@ function ElectricalPoint({
         });
       }}
       onDragMove={(event) => {
+        if (handToolActive) return;
         const aligned = onAlignPosition?.({
           x: event.target.x(),
           y: event.target.y(),
@@ -1250,7 +1261,7 @@ function ElectricalPoint({
         if (aligned) event.target.position(aligned);
       }}
     >
-      {(active || routeStart) && (
+      {(active || routeStart) && !handToolActive && (
         <Rect
           x={selected ? -23 : -18}
           y={selected ? -23 : -18}
@@ -1262,7 +1273,7 @@ function ElectricalPoint({
           dash={routeStart ? [3, 3] : selected ? [8, 5] : [4, 4]}
         />
       )}
-      {selected && !routeToolActive && (
+      {selected && !routeToolActive && !handToolActive && (
         <>
           {[[-23, -23], [19, -23], [19, 19], [-23, 19]].map(([hx, hy], index) => (
             <Rect
@@ -1281,18 +1292,20 @@ function ElectricalPoint({
       <PlantSymbolKonva type={point.type} point={point} />
       {showLabel && (
         <Group
-          onMouseDown={(event) => { event.cancelBubble = true; }}
-          onTouchStart={(event) => { event.cancelBubble = true; }}
+          onMouseDown={(event) => { if (!handToolActive) event.cancelBubble = true; }}
+          onTouchStart={(event) => { if (!handToolActive) event.cancelBubble = true; }}
           onClick={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onPointLabelSelect?.(point.id);
           }}
           onTap={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onPointLabelSelect?.(point.id);
           }}
         >
-          {selectedTextField === "label" && (
+          {selectedTextField === "label" && !handToolActive && (
             <Rect
               x={11}
               y={-24}
@@ -1320,26 +1333,30 @@ function ElectricalPoint({
           x={point.circuit_dx ?? 14}
           y={point.circuit_dy ?? -35}
           rotation={-pointRotation}
-          draggable={!routeToolActive}
+          draggable={!routeToolActive && !handToolActive}
           onMouseDown={(event) => {
-            event.cancelBubble = true;
+            if (!handToolActive) event.cancelBubble = true;
           }}
           onTouchStart={(event) => {
-            event.cancelBubble = true;
+            if (!handToolActive) event.cancelBubble = true;
           }}
           onClick={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onCircuitLabelSelect?.(point.id);
           }}
           onTap={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onCircuitLabelSelect?.(point.id);
           }}
           onDragStart={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onCircuitLabelSelect?.(point.id);
           }}
           onDragEnd={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             onMovePoint?.(point.id, {
               circuit_dx: event.target.x(),
@@ -1347,9 +1364,10 @@ function ElectricalPoint({
             });
           }}
           onDragMove={(event) => {
-            event.cancelBubble = true;
+            if (!handToolActive) event.cancelBubble = true;
           }}
           onDblClick={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (routeToolActive) return;
             if (onCircuitDoubleClick) {
@@ -1359,6 +1377,7 @@ function ElectricalPoint({
             }
           }}
           onDblTap={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (routeToolActive) return;
             if (onCircuitDoubleClick) {
@@ -1368,7 +1387,7 @@ function ElectricalPoint({
             }
           }}
         >
-          {selectedTextField === "circuitLabel" && (
+          {selectedTextField === "circuitLabel" && !handToolActive && (
             <Rect
               x={-3}
               y={-3}
@@ -1398,29 +1417,33 @@ function ElectricalPoint({
           x={powerLabelX}
           y={powerLabelY}
           rotation={-pointRotation}
-          draggable={!routeToolActive}
+          draggable={!routeToolActive && !handToolActive}
           onMouseDown={(event) => {
-            event.cancelBubble = true;
+            if (!handToolActive) event.cancelBubble = true;
           }}
           onTouchStart={(event) => {
-            event.cancelBubble = true;
+            if (!handToolActive) event.cancelBubble = true;
           }}
           onClick={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onPowerLabelSelect?.(point.id);
           }}
           onTap={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onPowerLabelSelect?.(point.id);
           }}
           onDragStart={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onPowerLabelSelect?.(point.id);
           }}
           onDragMove={(event) => {
-            event.cancelBubble = true;
+            if (!handToolActive) event.cancelBubble = true;
           }}
           onDragEnd={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (routeToolActive) return;
             onMovePoint?.(point.id, {
@@ -1429,7 +1452,7 @@ function ElectricalPoint({
             });
           }}
         >
-          {selectedTextField === "powerLabel" && (
+          {selectedTextField === "powerLabel" && !handToolActive && (
             <Rect
               x={-3}
               y={-3}
@@ -1460,29 +1483,33 @@ function ElectricalPoint({
           x={positionLabelX}
           y={positionLabelY}
           rotation={-pointRotation}
-          draggable={!routeToolActive}
+          draggable={!routeToolActive && !handToolActive}
           onMouseDown={(event) => {
-            event.cancelBubble = true;
+            if (!handToolActive) event.cancelBubble = true;
           }}
           onTouchStart={(event) => {
-            event.cancelBubble = true;
+            if (!handToolActive) event.cancelBubble = true;
           }}
           onClick={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onPositionLabelSelect?.(point.id);
           }}
           onTap={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onPositionLabelSelect?.(point.id);
           }}
           onDragStart={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (!routeToolActive) onPositionLabelSelect?.(point.id);
           }}
           onDragMove={(event) => {
-            event.cancelBubble = true;
+            if (!handToolActive) event.cancelBubble = true;
           }}
           onDragEnd={(event) => {
+            if (handToolActive) return;
             event.cancelBubble = true;
             if (routeToolActive) return;
             onMovePoint?.(point.id, {
@@ -1524,6 +1551,8 @@ function EditorToolbar({
   activeTool,
   architectureTool = "",
   routeToolActive = false,
+  handToolActive = false,
+  zoomLocked = false,
   selectedElement,
   zoom,
   scalePxPerMeter,
@@ -1535,6 +1564,8 @@ function EditorToolbar({
   onSelectTool,
   onSelectArchitectureTool,
   onSelectMode,
+  onToggleHandTool,
+  onToggleZoomLock,
   onAddRoom,
   toolsPanelOpen = false,
   onToggleToolsPanel,
@@ -1568,14 +1599,14 @@ function EditorToolbar({
     onScalePxPerMeterChange?.(nextScale);
   };
 
-  const ButtonIcon = ({ title, disabled = false, active = false, onClick, children }) => (
+  const ButtonIcon = ({ title, disabled = false, active = false, onClick, children, className = "" }) => (
     <button
       type="button"
       title={title}
       aria-label={title}
       disabled={disabled}
       onClick={onClick}
-      className={`${toolButton} ${active ? activeButton : ""}`}
+      className={`${toolButton} ${active ? activeButton : ""} ${className}`}
     >
       {children}
     </button>
@@ -1601,8 +1632,19 @@ function EditorToolbar({
       )}
 
       <div className={toolbarGroup}>
-        <ButtonIcon title="Selecionar" active={!activeTool && !architectureTool && !routeToolActive} onClick={onSelectMode}>
+        <ButtonIcon
+          title="Selecionar"
+          active={!handToolActive && !activeTool && !architectureTool && !routeToolActive}
+          onClick={onSelectMode}
+        >
           <MousePointer2 className="h-4 w-4" />
+        </ButtonIcon>
+        <ButtonIcon
+          title="Mão (Mover canvas / Pan)"
+          active={handToolActive}
+          onClick={onToggleHandTool}
+        >
+          <Hand className="h-4 w-4" />
         </ButtonIcon>
         <ButtonIcon title="Adicionar cômodo" onClick={onAddRoom}>
           <SquarePlus className="h-4 w-4" />
@@ -1653,14 +1695,41 @@ function EditorToolbar({
       </div>
 
       <div className={toolbarGroup}>
-        <ButtonIcon title="Zoom -" onClick={() => onZoomChange(Math.max(0.45, zoom - 0.15))}>
+        <ButtonIcon
+          title={zoomLocked ? "Zoom bloqueado" : "Zoom -"}
+          disabled={zoomLocked}
+          onClick={() => !zoomLocked && onZoomChange?.(Math.max(0.45, zoom - 0.15))}
+        >
           <ZoomOut className="h-4 w-4" />
         </ButtonIcon>
-        <span className="min-w-12 shrink-0 px-1 text-center text-[11px] font-black text-[#0f4f49]">{Math.round(zoom * 100)}%</span>
-        <ButtonIcon title="Zoom +" onClick={() => onZoomChange(Math.min(2.6, zoom + 0.15))}>
+        <span
+          className={`min-w-12 shrink-0 px-1 text-center text-[11px] font-black transition-colors ${
+            zoomLocked ? "text-amber-600 font-extrabold" : "text-[#0f4f49]"
+          }`}
+          title={zoomLocked ? `Zoom bloqueado em ${Math.round(zoom * 100)}%` : `Zoom: ${Math.round(zoom * 100)}%`}
+        >
+          {Math.round(zoom * 100)}%
+        </span>
+        <ButtonIcon
+          title={zoomLocked ? "Zoom bloqueado" : "Zoom +"}
+          disabled={zoomLocked}
+          onClick={() => !zoomLocked && onZoomChange?.(Math.min(2.6, zoom + 0.15))}
+        >
           <ZoomIn className="h-4 w-4" />
         </ButtonIcon>
-        <ButtonIcon title="Enquadrar" onClick={onFit}>
+        <ButtonIcon
+          title={zoomLocked ? "Zoom bloqueado (clique para desbloquear)" : "Bloquear zoom atual (clique para travar)"}
+          active={zoomLocked}
+          onClick={onToggleZoomLock}
+          className={zoomLocked ? "border-amber-500 bg-amber-50 text-amber-600 hover:border-amber-600 hover:bg-amber-100" : ""}
+        >
+          {zoomLocked ? <Lock className="h-4 w-4 text-amber-600" /> : <LockOpen className="h-4 w-4 text-[#0f4f49]" />}
+        </ButtonIcon>
+        <ButtonIcon
+          title={zoomLocked ? "Zoom bloqueado (desbloqueie para enquadrar)" : "Enquadrar"}
+          disabled={zoomLocked}
+          onClick={() => !zoomLocked && onFit?.()}
+        >
           <Maximize2 className="h-4 w-4" />
         </ButtonIcon>
         <label
@@ -2620,6 +2689,10 @@ export default function FloorPlanCanvas({
   onToggleWallDimensions,
   onEditWallDimension,
   fitRequest = 0,
+  handToolActive: controlledHandToolActive,
+  onToggleHandTool: controlledOnToggleHandTool,
+  zoomLocked: controlledZoomLocked,
+  onToggleZoomLock: controlledOnToggleZoomLock,
 }) {
   const wrapperRef = useRef(null);
   const stageRef = useRef(null);
@@ -2637,6 +2710,57 @@ export default function FloorPlanCanvas({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [spacePanActive, setSpacePanActive] = useState(false);
+  const [internalHandToolActive, setInternalHandToolActive] = useState(false);
+  const handToolActive = controlledHandToolActive !== undefined ? controlledHandToolActive : internalHandToolActive;
+  const setHandToolActive = (val) => {
+    const nextVal = typeof val === "function" ? val(handToolActive) : val;
+    setInternalHandToolActive(nextVal);
+    controlledOnToggleHandTool?.(nextVal);
+  };
+
+  const [internalZoomLocked, setInternalZoomLocked] = useState(false);
+  const zoomLocked = controlledZoomLocked !== undefined ? controlledZoomLocked : internalZoomLocked;
+  const setZoomLocked = (val) => {
+    const nextVal = typeof val === "function" ? val(zoomLocked) : val;
+    setInternalZoomLocked(nextVal);
+    controlledOnToggleZoomLock?.(nextVal);
+  };
+
+  const handleSelectTool = (tool) => {
+    setHandToolActive(false);
+    onSelectTool?.(tool);
+  };
+
+  const handleSelectArchitectureTool = (tool) => {
+    setHandToolActive(false);
+    onSelectArchitectureTool?.(tool);
+  };
+
+  const handleSelectMode = () => {
+    setHandToolActive(false);
+    onSelectTool?.("");
+    onSelectArchitectureTool?.("");
+  };
+
+  const handleToggleHandTool = () => {
+    const next = !handToolActive;
+    setHandToolActive(next);
+    if (next) {
+      onSelectTool?.("");
+      onSelectArchitectureTool?.("");
+      onSelectElement?.(null);
+    }
+  };
+
+  const handleToggleZoomLock = () => {
+    setZoomLocked((prev) => !prev);
+  };
+
+  const handleAddRoom = () => {
+    setHandToolActive(false);
+    onAddRoom?.();
+  };
+
   const [routePreview, setRoutePreview] = useState(null);
   const [wallDraftStart, setWallDraftStart] = useState(null);
   const [curveDraftEnd, setCurveDraftEnd] = useState(null);
@@ -2875,7 +2999,7 @@ export default function FloorPlanCanvas({
     const targetName = event.target.name();
     const parentName = event.target.getParent?.()?.name?.();
     const isMiddleButton = event.evt?.button === 1;
-    if (isMiddleButton || spacePanActive) {
+    if (isMiddleButton || spacePanActive || handToolActive) {
       event.evt?.preventDefault?.();
       setIsPanning(true);
       lastPointerRef.current = stageRef.current?.getPointerPosition() || null;
@@ -3062,6 +3186,7 @@ export default function FloorPlanCanvas({
 
   const handleWheel = (event) => {
     event.evt.preventDefault();
+    if (zoomLocked) return;
     const stage = stageRef.current;
     const pointer = stage?.getPointerPosition();
     if (!pointer || !onZoomChange) return;
@@ -3083,6 +3208,7 @@ export default function FloorPlanCanvas({
   };
 
   const fitViewport = () => {
+    if (zoomLocked) return;
     setPan({ x: 0, y: 0 });
     onFit?.();
   };
@@ -3097,7 +3223,7 @@ export default function FloorPlanCanvas({
         setSpacePanActive(true);
         return;
       }
-      if (!onZoomChange) return;
+      if (!onZoomChange || zoomLocked) return;
       if (command && event.key === "0") {
         event.preventDefault();
         fitViewport();
@@ -3130,7 +3256,7 @@ export default function FloorPlanCanvas({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [fitViewport, onZoomChange, zoom]);
+  }, [fitViewport, onZoomChange, zoom, zoomLocked]);
 
   const handleStageDoubleClick = (event) => {
     if (!routeToolActive) return;
@@ -3150,12 +3276,22 @@ export default function FloorPlanCanvas({
     <div
       ref={wrapperRef}
       className="relative flex h-full min-h-[560px] w-full items-center justify-center overflow-hidden bg-[#eceff1]"
-      style={{ cursor: isPanning ? "grabbing" : spacePanActive ? "grab" : activeTool || architectureTool || routeToolActive ? "crosshair" : "default" }}
+      style={{
+        cursor: isPanning
+          ? "grabbing"
+          : handToolActive || spacePanActive
+          ? "grab"
+          : activeTool || architectureTool || routeToolActive
+          ? "crosshair"
+          : "default",
+      }}
     >
       <EditorToolbar
         activeTool={activeTool}
         architectureTool={architectureTool}
         routeToolActive={routeToolActive}
+        handToolActive={handToolActive}
+        zoomLocked={zoomLocked}
         selectedElement={selectedElement}
         zoom={zoom}
         scalePxPerMeter={measurementScale}
@@ -3164,13 +3300,12 @@ export default function FloorPlanCanvas({
         showPositionLabels={showPositionLabels}
         canUndo={canUndo}
         canRedo={canRedo}
-        onSelectTool={onSelectTool}
-        onSelectArchitectureTool={onSelectArchitectureTool}
-        onSelectMode={() => {
-          onSelectTool?.("");
-          onSelectArchitectureTool?.("");
-        }}
-        onAddRoom={onAddRoom}
+        onSelectTool={handleSelectTool}
+        onSelectArchitectureTool={handleSelectArchitectureTool}
+        onSelectMode={handleSelectMode}
+        onToggleHandTool={handleToggleHandTool}
+        onToggleZoomLock={handleToggleZoomLock}
+        onAddRoom={handleAddRoom}
         toolsPanelOpen={toolsPanelOpen}
         onToggleToolsPanel={onToggleToolsPanel}
         onZoomChange={onZoomChange}
@@ -3266,11 +3401,11 @@ export default function FloorPlanCanvas({
                   width={DESIGN.width}
                   height={DESIGN.height}
                   active={selectedElement?.type === "room" && selectedElement.id === room.id}
-                  onSelect={routeToolActive ? null : onSelectElement}
+                  onSelect={routeToolActive || handToolActive ? null : onSelectElement}
                   onUpdateRoom={onUpdateRoom}
                   onAlignPosition={alignPosition}
                   onClearAlignment={clearAlignment}
-                  draggable={!routeToolActive}
+                  draggable={!routeToolActive && !handToolActive}
                 />
               ))}
               {rooms.map((room) => (
@@ -3284,7 +3419,7 @@ export default function FloorPlanCanvas({
               <ArchitecturalWallLayer
                 walls={walls}
                 selectedElement={selectedElement}
-                disabled={Boolean(routeToolActive)}
+                disabled={Boolean(routeToolActive || handToolActive)}
                 scalePxPerMeter={measurementScale}
                 showWallDimensions={showWallDimensions}
                 onSelectElement={onSelectElement}
@@ -3297,7 +3432,7 @@ export default function FloorPlanCanvas({
                 openings={openings}
                 walls={walls}
                 selectedElement={selectedElement}
-                disabled={Boolean(routeToolActive)}
+                disabled={Boolean(routeToolActive || handToolActive)}
                 scalePxPerMeter={measurementScale}
                 onSelectElement={onSelectElement}
                 onUpdateOpening={onUpdateOpening}
@@ -3309,7 +3444,7 @@ export default function FloorPlanCanvas({
                   selectedElement={selectedElement}
                   selectedRoutePointIndex={selectedRoutePointIndex}
                   routeEditMode={routeEditMode}
-                  disabled={Boolean(routeToolActive)}
+                  disabled={Boolean(routeToolActive || handToolActive)}
                   getPointerDesignPosition={getPointerDesignPosition}
                   onSelectRoute={onSelectElement}
                   onSelectRoutePoint={onSelectRoutePoint}
@@ -3326,7 +3461,7 @@ export default function FloorPlanCanvas({
               <ArchitecturalRoomLabelLayer
                 roomLabels={roomLabels}
                 selectedElement={selectedElement}
-                disabled={Boolean(routeToolActive)}
+                disabled={Boolean(routeToolActive || handToolActive)}
                 onSelectElement={onSelectElement}
                 onUpdateRoomLabel={onUpdateRoomLabel}
                 onAlignPosition={alignPosition}
@@ -3424,6 +3559,7 @@ export default function FloorPlanCanvas({
                 selectedTextField={selectedElement?.type === "pointText" && sameId(selectedElement.id, point.id) ? selectedElement.field : ""}
                 showPositionLabels={showPositionLabels}
                 routeToolActive={routeToolActive}
+                handToolActive={handToolActive}
                 routeStart={sameId(routeStartId, point.id)}
                 onSelect={onSelectElement}
                 onRoutePointClick={onRoutePointClick}
@@ -3476,7 +3612,7 @@ export default function FloorPlanCanvas({
           </Layer>
         )}
         {showDeviceDimensions && visiblePoints.length > 0 && (
-          <Layer listening={!routeToolActive}>
+          <Layer listening={!routeToolActive && !handToolActive}>
             <Group x={viewport.x + contentOffset.x * scale} y={viewport.y + contentOffset.y * scale} scaleX={scale} scaleY={scale}>
               <DeviceDimensionsLayer
                 points={visiblePoints}
