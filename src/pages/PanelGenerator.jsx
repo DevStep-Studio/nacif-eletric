@@ -11,6 +11,8 @@ import {
   calcMainProtection,
   calcProjectMetrics,
   generateDefaultPanelLayout,
+  generateDefaultPanelWires,
+  generateAllPanelWires,
   getPrimaryPanelBoard,
   isDedicatedSolarBoard,
   isSolarProject,
@@ -18,6 +20,7 @@ import {
   nextBusbarIndex,
   remapBusbarIndices,
 } from "@/lib/electricalEngine";
+import { useToast } from "@/components/ui/use-toast";
 import {
   calculateOrthogonalRoute,
   normalizeSavedBoard,
@@ -1620,12 +1623,15 @@ export default function PanelGenerator() {
   const [autoRepeatInsert, setAutoRepeatInsert] = useState(false);
 
   // NOVO: CIRCUIT TRACKING & ISOLATION & DIAGNOSTICS & INSPECTOR STATE
+  const { toast } = useToast();
   const [tracedCircuitId, setTracedCircuitId] = useState(null);
   const [isIsolatedView, setIsIsolatedView] = useState(false);
   const [deviceInspectorTab, setDeviceInspectorTab] = useState("geral"); // geral | eletrica | montagem | conexoes
   const [wireInteractionMode, setWireInteractionMode] = useState("select"); // select | edit_route
   const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
   const [showDiagnosticsDetail, setShowDiagnosticsDetail] = useState(false);
+  const [showClearWiresModal, setShowClearWiresModal] = useState(false);
+  const [showAutoConnectModal, setShowAutoConnectModal] = useState(false);
   const [wireFilterType, setWireFilterType] = useState("all"); // all | phase | neutral | ground
 
   const svgRef = useRef(null);
@@ -1634,27 +1640,53 @@ export default function PanelGenerator() {
   const activeBoard = panelBoards.find((board) => board.id === activeBoardId) || panelBoards[0];
   const activeSupplyType = activeBoard?.supply_type || project?.supply_type || "Monofásico";
   const isPrincipalBoard = activeBoard === getPrimaryCircuitBoard(panelBoards);
+
+  // Fiação visível: inicia limpa em novos quadros e preserva cabos reais criados ou salvos
   const visibleWires = useMemo(() => {
-    const allWires = [...wires];
-    const backbones = [
-      { id: "ground-main", name: "Aterramento Principal", color: "green", gauge: "16mm²" },
-      { id: "ground-bus-tie", name: "Interligação PE", color: "green", gauge: "10mm²" }
-    ];
-    for (const bb of backbones) {
-      if (!allWires.some(w => w.id === bb.id)) {
-        allWires.push({
-          id: bb.id,
-          name: bb.name,
-          color: bb.color,
-          gauge: bb.gauge,
-          source: `backbone_${bb.id.split("-")[0]}:start`,
-          target: `backbone_${bb.id.split("-")[0]}:end`,
-        });
-      }
-    }
-    return allWires.filter((w) => !w.deleted && isCableVisible(w) && !w.visual_only && w.source && w.target && !w.id.includes("-ground-") && !w.id.includes("-neutral-"));
+    return (wires || []).filter((w) => !w.deleted && isCableVisible(w) && !w.visual_only && w.source && w.target && !w.id.includes("-ground-") && !w.id.includes("-neutral-"));
   }, [wires]);
   const qgbtSourceCount = panelBoards.filter((board) => board.type !== "qgbt").length;
+
+  const autoConnectPreview = useMemo(() => {
+    if (!project) return { phaseCount: 0, neutralCount: 0, groundCount: 0, total: 0, wires: [] };
+    const simulatedWires = generateAllPanelWires(project, { forceDistribution: activeBoard?.type !== "qgbt" });
+    const phaseCount = simulatedWires.filter((w) => w.conductorType === "phase" || (!w.color?.includes("green") && !w.color?.includes("blue"))).length;
+    const neutralCount = simulatedWires.filter((w) => w.conductorType === "neutral" || w.color?.includes("blue")).length;
+    const groundCount = simulatedWires.filter((w) => w.conductorType === "ground" || w.color?.includes("green")).length;
+    return {
+      phaseCount,
+      neutralCount,
+      groundCount,
+      total: simulatedWires.length,
+      wires: simulatedWires,
+    };
+  }, [project, activeBoard?.type]);
+
+  const handleClearWiresConfirm = () => {
+    updateWires([]);
+    setSelectedWireId("");
+    setSelectedRoutePoint(null);
+    setWiringMode(false);
+    setWiringStart("");
+    setWireEndpointDrag(null);
+    setShowClearWiresModal(false);
+    toast({
+      title: "Fiação limpa com sucesso",
+      description: "As ligações visuais foram removidas. Componentes, trilhos e parâmetros elétricos foram 100% preservados.",
+    });
+  };
+
+  const handleAutoConnectConfirm = () => {
+    const nextWires = autoConnectPreview.wires.length > 0
+      ? autoConnectPreview.wires
+      : generateAllPanelWires(project, { forceDistribution: activeBoard?.type !== "qgbt" });
+    updateWires(nextWires);
+    setShowAutoConnectModal(false);
+    toast({
+      title: "Ligações criadas com sucesso",
+      description: `${nextWires.length} condutores foram conectados e organizados conforme o projeto.`,
+    });
+  };
 
   const [infrastructure, setInfrastructure] = useState([]);
   const [selectedInfrastructureId, setSelectedInfrastructureId] = useState("");
@@ -5020,9 +5052,7 @@ export default function PanelGenerator() {
   };
 
   const handleClearWires = () => {
-    if (window.confirm("Excluir toda a fiação?")) {
-      updateWires([]);
-    }
+    setShowClearWiresModal(true);
   };
 
   // Helper para atualizar propriedades do fio selecionado
@@ -8935,13 +8965,15 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     })}
 
                     {/* 5. CABEAMENTO PROFISSIONAL ATRÁS DOS DISJUNTORES */}
-                    <g id="professional-wiring-under-devices">
-                      {showNeutralBackbone && renderBackbonePath("neutral-main", getNeutralBackboneRoute(panelHeight, neutralBackboneEndY), COLORS.neutral, 5.6)}
-                      {showNeutralBackbone && renderBackbonePath("neutral-bus-tie", getNeutralBusTieRoute(infrastructure), COLORS.neutral, 4.8)}
-                      {renderBackbonePath("ground-main", getGroundBackboneRoute(panelHeight, infrastructure), COLORS.ground, 5.8)}
-                      {renderBackbonePath("ground-bus-tie", getGroundBusTieRoute(panelHeight, infrastructure), COLORS.ground, 4.8)}
-                      {renderDuctedWiringPlan()}
-                    </g>
+                    {visibleWires.length > 0 && (
+                      <g id="professional-wiring-under-devices">
+                        {showNeutralBackbone && visibleWires.some(w => w.id === "neutral-main") && renderBackbonePath("neutral-main", getNeutralBackboneRoute(panelHeight, neutralBackboneEndY), COLORS.neutral, 5.6)}
+                        {showNeutralBackbone && visibleWires.some(w => w.id === "neutral-bus-tie") && renderBackbonePath("neutral-bus-tie", getNeutralBusTieRoute(infrastructure), COLORS.neutral, 4.8)}
+                        {visibleWires.some(w => w.id === "ground-main" || (w.conductorType === "ground" && w.source?.includes("terminal_left_top:0"))) && renderBackbonePath("ground-main", getGroundBackboneRoute(panelHeight, infrastructure), COLORS.ground, 5.8)}
+                        {visibleWires.some(w => w.id === "ground-bus-tie") && renderBackbonePath("ground-bus-tie", getGroundBusTieRoute(panelHeight, infrastructure), COLORS.ground, 4.8)}
+                        {renderDuctedWiringPlan()}
+                      </g>
+                    )}
 
                     {/* TÍTULOS DOS TRILHOS DIN COM BADGE DE ALTA LEGIBILIDADE */}
                     {rails.map((r, rIdx) => {
@@ -9990,83 +10022,145 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       </div>
                     );
                   })()
-                ) : (
-                  <>
-                    {/* AUDITORIA DE CONEXÕES & DIAGNÓSTICO */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3 text-xs">
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                        <div>
-                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Auditoria de Ligações</span>
-                          <h3 className="text-xs font-extrabold text-slate-800">Conexões do Quadro</h3>
-                        </div>
-                        <Badge variant="outline" className="text-[10px] font-black text-emerald-700 bg-emerald-50 border-emerald-200">
-                          {panelDiagnostics.validCount} OK
+                ) : visibleWires.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4 text-center">
+                    <div className="mx-auto w-12 h-12 rounded-2xl bg-slate-50 text-slate-600 flex items-center justify-center border border-slate-200/80 shadow-inner">
+                      <Cable className="w-6 h-6 text-slate-500" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-center gap-2">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">CONEXÕES</h3>
+                        <Badge variant="outline" className="text-[9px] font-extrabold text-slate-500 bg-slate-50 border-slate-200">
+                          0 ligações
                         </Badge>
                       </div>
-
-                      <div className="grid grid-cols-3 gap-1.5 text-center text-[10px]">
-                        <div className="p-2 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-100">
-                          <span className="block text-xs font-black">{panelDiagnostics.validCount}</span>
-                          <span className="text-[9px]">Corretas</span>
-                        </div>
-                        <div className="p-2 rounded-lg bg-amber-50 text-amber-800 font-bold border border-amber-100">
-                          <span className="block text-xs font-black">{panelDiagnostics.warningCount}</span>
-                          <span className="text-[9px]">Atenção</span>
-                        </div>
-                        <div className="p-2 rounded-lg bg-slate-50 text-slate-700 font-bold border border-slate-200">
-                          <span className="block text-xs font-black">{panelDiagnostics.freePinsCount}</span>
-                          <span className="text-[9px]">Livres</span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 rounded-xl text-[10px] font-extrabold border-slate-300 hover:bg-slate-50"
-                          onClick={() => setShowDiagnosticsModal(true)}
-                        >
-                          <Activity className="w-3.5 h-3.5 mr-1 text-primary" />
-                          Auditar Quadro
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="h-8 rounded-xl text-[10px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-                          onClick={handleAutoOrganizeAllWires}
-                        >
-                          <Zap className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                          Auto Organizar
-                        </Button>
-                      </div>
+                      <p className="mt-1.5 text-xs text-slate-500 leading-relaxed font-medium">
+                        Nenhuma ligação criada. A estrutura e os circuitos estão prontos para montagem.
+                      </p>
                     </div>
 
-                    {/* BANNER FIAÇÃO RÁPIDA */}
-                    <div className={`p-3 rounded-2xl border transition-all ${
-                      wiringMode
-                        ? "bg-primary/10 border-primary/40 shadow-sm"
-                        : "bg-slate-50 border-slate-200"
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-800">
-                            {wiringMode ? "⚡ Modo Fiação Ativo" : "Fiação Rápida"}
-                          </div>
-                          <p className="text-[9.5px] font-medium text-slate-500 mt-0.5 leading-tight">
-                            {wiringMode ? "Clique no primeiro e depois no segundo borne para conectar." : "Ligue terminais clicando em dois pontos."}
-                          </p>
+                    <div className="space-y-2 pt-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="w-full h-9 rounded-xl text-xs font-extrabold bg-primary hover:bg-primary/90 text-white shadow-sm"
+                        onClick={() => {
+                          setWiringMode(true);
+                          setWiringStart("");
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />
+                        + Nova ligação
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="w-full h-9 rounded-xl text-xs font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/70"
+                        onClick={() => setShowAutoConnectModal(true)}
+                      >
+                        <Zap className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+                        Auto conectar
+                      </Button>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-left text-[10px] text-slate-500 space-y-1">
+                      <span className="font-bold text-slate-700 block">💡 Como desenhar ligações:</span>
+                      <p>1. Clique em <strong>+ Nova ligação</strong> para visualizar os bornes interativos.</p>
+                      <p>2. Selecione o borne de origem e em seguida o borne de destino.</p>
+                      <p>3. Ou use <strong>Auto conectar</strong> para rotear tudo automaticamente.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* BARRA SUPERIOR DE AÇÕES DE CONEXÕES */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-800">CONEXÕES</span>
+                          <Badge variant="outline" className="text-[9.5px] font-extrabold text-primary bg-primary/5 border-primary/20">
+                            {visibleWires.length} ligações
+                          </Badge>
                         </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[10px] font-bold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                          onClick={() => setShowClearWiresModal(true)}
+                        >
+                          <Trash2 className="w-3 h-3 mr-1 text-red-500" />
+                          Limpar fiação
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
                         <Button
                           size="sm"
                           variant={wiringMode ? "destructive" : "default"}
-                          className="h-7 text-[10px] font-extrabold rounded-lg shrink-0 ml-2"
+                          className="h-8 rounded-xl text-[10px] font-extrabold"
                           onClick={() => {
                             setWiringMode(!wiringMode);
                             setWiringStart("");
                           }}
                         >
-                          <Cable className="w-3 h-3 mr-1" />
-                          {wiringMode ? "Cancelar" : "Ativar"}
+                          <Cable className="w-3.5 h-3.5 mr-1" />
+                          {wiringMode ? "Cancelar Modo" : "+ Nova ligação"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 rounded-xl text-[10px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60"
+                          onClick={() => setShowAutoConnectModal(true)}
+                        >
+                          <Zap className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                          Auto conectar
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* AUDITORIA DE CONEXÕES & DIAGNÓSTICO */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Diagnóstico de Bornes</span>
+                        <Badge variant="outline" className="text-[9px] font-black text-emerald-700 bg-emerald-50 border-emerald-200">
+                          {panelDiagnostics.validCount} OK
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1 text-center text-[10px]">
+                        <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-100">
+                          <span className="block text-xs font-black">{panelDiagnostics.validCount}</span>
+                          <span className="text-[8.5px]">Corretas</span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-amber-50 text-amber-800 font-bold border border-amber-100">
+                          <span className="block text-xs font-black">{panelDiagnostics.warningCount}</span>
+                          <span className="text-[8.5px]">Atenção</span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-slate-50 text-slate-700 font-bold border border-slate-200">
+                          <span className="block text-xs font-black">{panelDiagnostics.freePinsCount}</span>
+                          <span className="text-[8.5px]">Livres</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-lg text-[9.5px] font-extrabold border-slate-200 hover:bg-slate-50"
+                          onClick={() => setShowDiagnosticsModal(true)}
+                        >
+                          <Activity className="w-3 h-3 mr-1 text-primary" />
+                          Auditar Quadro
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-lg text-[9.5px] font-extrabold text-slate-700 hover:bg-slate-50 border-slate-200"
+                          onClick={handleAutoOrganizeAllWires}
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1 text-slate-500" />
+                          Reorganizar
                         </Button>
                       </div>
                     </div>
@@ -10880,14 +10974,13 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       Gerar / Atualizar QGBT
                     </Button>
                   </div>
-                  <Button variant="outline" className="w-full rounded-xl text-xs font-bold text-slate-700 h-9" onClick={() => {
-                    const rawLayout = generateDefaultPanelLayout(project, { forceDistribution: activeBoard?.type !== "qgbt" });
-                    const def = isPrincipalBoard
-                      ? mergeSolarLayoutIntoPrincipal(project, { ...rawLayout, infrastructure }, { forceRegenerate: true })
-                      : { ...rawLayout, infrastructure };
-                    updateWires(def.wires);
-                  }}>
-                    Auto-gerar Cabeamento Recomendado
+                  <Button
+                    variant="outline"
+                    className="w-full rounded-xl text-xs font-bold text-slate-700 h-9"
+                    onClick={() => setShowAutoConnectModal(true)}
+                  >
+                    <Zap className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+                    Auto Conectar Fiação Recomendada
                   </Button>
                   <Button
                     variant="outline"
@@ -10901,6 +10994,106 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO: LIMPAR FIAÇÃO DO QUADRO */}
+      {showClearWiresModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 text-center space-y-4">
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center border border-red-100 shadow-inner">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Limpar fiação do quadro?</h3>
+                <p className="mt-2 text-xs text-slate-600 leading-relaxed font-medium">
+                  As ligações visuais serão removidas. Os componentes, circuitos e configurações elétricas serão preservados.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 bg-slate-50 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl text-xs font-bold"
+                onClick={() => setShowClearWiresModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="rounded-xl text-xs font-extrabold bg-red-600 hover:bg-red-700 text-white shadow-sm"
+                onClick={handleClearWiresConfirm}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                Limpar fiação
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO: AUTO CONECTAR LIGAÇÕES */}
+      {showAutoConnectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-inner shrink-0">
+                  <Zap className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Auto Conectar Ligações</h3>
+                  <p className="text-xs text-slate-500 font-semibold">Geração automática de rotas conforme projeto elétrico</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 space-y-3 text-xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Resumo das ligações calculadas:
+                </span>
+                <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-bold">
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                    <span className="block text-sm font-black text-slate-800">{autoConnectPreview.phaseCount}</span>
+                    <span className="text-slate-500">Fases</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-blue-50/80 border border-blue-100 text-blue-900 shadow-2xs">
+                    <span className="block text-sm font-black text-blue-700">{autoConnectPreview.neutralCount}</span>
+                    <span className="text-blue-600">Neutros</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-100 text-emerald-900 shadow-2xs">
+                    <span className="block text-sm font-black text-emerald-700">{autoConnectPreview.groundCount}</span>
+                    <span className="text-emerald-600">PE (Terra)</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 font-medium space-y-1 pt-1 border-t border-slate-200/60 leading-normal">
+                  <p>• Alimentação geral e proteção (DPS / IDR).</p>
+                  <p>• Distribuição para disjuntores e bornes de carga dos circuitos.</p>
+                  <p>• Barramentos de Neutro e Aterramento PE integrados.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 bg-slate-50 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl text-xs font-bold"
+                onClick={() => setShowAutoConnectModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                onClick={handleAutoConnectConfirm}
+              >
+                <Zap className="w-3.5 h-3.5 mr-1.5" />
+                Criar ligações
+              </Button>
+            </div>
           </div>
         </div>
       )}
