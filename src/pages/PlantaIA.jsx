@@ -18,7 +18,8 @@ import {
   Trash2, Settings2, Download, House, SquarePlus, Minus, RotateCcw,
   DoorOpen, PanelTop, Cable, MousePointer2, Spline, Type,
   Zap, Lightbulb, Network, ShieldCheck,
-  AlertCircle, CheckCircle2, Coins, Calculator, ScanLine, Loader2, Save
+  AlertCircle, CheckCircle2, Coins, Calculator, ScanLine, Loader2, Save,
+  Search, X, ChevronDown, ChevronUp, Sparkles, Plus, Check
 } from "lucide-react";
 import FloorPlanCanvas, { createKonvaHouseTemplate } from "@/components/planta/FloorPlanCanvas";
 import { createDefaultLayerState, layerVisibilityForLegacyCanvas, normalizeLayerState } from "@/editor/layers/defaultLayers";
@@ -1962,6 +1963,16 @@ export default function PlantaIA() {
   const [openings, setOpenings]     = useState([]);
   const [roomLabels, setRoomLabels] = useState([]);
   const [sidebar, setSidebar]       = useState("tools");
+  const [sidebarSearch, setSidebarSearch] = useState("");
+  const [collapsedSections, setCollapsedSections] = useState({
+    entrega: false,
+    nbr: false,
+    arquitetura: false,
+    infra: false,
+    quadros: false,
+    simbolos: false,
+  });
+  const toggleSection = (key) => setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   const [generatedCircuits, setGeneratedCircuits] = useState([]);
   const [routes, setRoutes]         = useState([]);
   const [projects, setProjects]     = useState([]);
@@ -3146,6 +3157,37 @@ export default function PlantaIA() {
   };
 
   const toolsById = TOOL_DEFINITIONS_BY_ID;
+
+  const filteredArchitectureTools = useMemo(() => {
+    if (!sidebarSearch.trim()) return architectureTools;
+    const q = sidebarSearch.toLowerCase().trim();
+    return architectureTools.filter(
+      (t) => t.label.toLowerCase().includes(q) || (t.detail && t.detail.toLowerCase().includes(q))
+    );
+  }, [sidebarSearch, architectureTools]);
+
+  const filteredElectricalTools = useMemo(() => {
+    if (!sidebarSearch.trim()) return null;
+    const q = sidebarSearch.toLowerCase().trim();
+    const results = [];
+    CAD_TOOL_GROUPS.forEach((group) => {
+      group.tools.forEach((toolId) => {
+        const tool = toolsById[toolId];
+        if (!tool) return;
+        const detail = TOOL_DETAIL[tool.id] || "";
+        const cat = CATEGORY_LABELS[tool.category] || "";
+        if (
+          tool.label.toLowerCase().includes(q) ||
+          tool.id.toLowerCase().includes(q) ||
+          detail.toLowerCase().includes(q) ||
+          cat.toLowerCase().includes(q)
+        ) {
+          results.push(tool);
+        }
+      });
+    });
+    return results;
+  }, [sidebarSearch, toolsById]);
 
   const routePointLabel = (point = {}) => {
     if (!point || typeof point !== "object") return "Ponto sem identificação";
@@ -5068,60 +5110,96 @@ export default function PlantaIA() {
           }`}
         >
           {/* Sidebar tabs */}
-          <div className="flex items-stretch border-b border-[#CDEFE8] bg-white">
-            <div className="flex min-w-0 flex-1">
+          <div className="flex items-center justify-between border-b border-[#CDEFE8] bg-white px-2.5 py-1.5">
+            <div className="flex items-center gap-1 rounded-lg bg-[#F0FAF7] p-0.5">
               {[
-                { id: "tools",  icon: Settings2, label: "Criar" },
-                { id: "ai",     icon: Cpu,       label: "IA" },
+                { id: "tools", icon: Settings2, label: "Criar" },
+                { id: "ai", icon: Cpu, label: "IA" },
               ].map(tab => (
-                <button key={tab.id} onClick={() => setSidebar(tab.id)}
-                  className={`flex-1 py-3 text-[11px] font-black flex flex-col items-center gap-1 transition-colors
-                    ${sidebar === tab.id ? "text-[#00d8b8] border-b-[3px] border-[#00d8b8]" : "text-[#64748B] hover:text-[#0F172A]"}`}
+                <button
+                  key={tab.id}
+                  onClick={() => setSidebar(tab.id)}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-black transition-all ${
+                    sidebar === tab.id
+                      ? "bg-white text-[#00a98e] shadow-xs"
+                      : "text-[#64748B] hover:text-[#0F172A]"
+                  }`}
                 >
-                  <tab.icon className="h-4 w-4" />
-                  {tab.label}
+                  <tab.icon className="h-3.5 w-3.5" />
+                  <span>{tab.label}</span>
                 </button>
               ))}
             </div>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setLeftPanelOpen(false)}
-              className="flex w-12 items-center justify-center border-l border-[#CDEFE8] text-[#0f4f49] transition hover:bg-[#E6FFFA]"
-              aria-label="Fechar ferramentas"
-              title="Fechar ferramentas"
+              className="h-7 w-7 rounded-md text-[#64748B] hover:bg-[#E6FFFA] hover:text-[#0f4f49]"
+              aria-label="Recolher painel"
+              title="Recolher painel"
             >
               <ChevronRight className="h-4 w-4 rotate-180" />
-            </button>
+            </Button>
           </div>
+
+          {/* Search bar & quick chips */}
+          {sidebar === "tools" && (
+            <div className="border-b border-[#CDEFE8] bg-white px-3 py-2 space-y-1.5">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-[#94A3B8]" />
+                <Input
+                  placeholder="Buscar ferramenta, ponto ou cômodo..."
+                  value={sidebarSearch}
+                  onChange={(e) => setSidebarSearch(e.target.value)}
+                  className="h-8 pl-8 pr-7 text-xs rounded-md border-[#CDEFE8] bg-[#F8FBFD] placeholder:text-[#94A3B8] focus-visible:ring-1 focus-visible:ring-[#00d8b8]"
+                />
+                {sidebarSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setSidebarSearch("")}
+                    className="absolute right-2 top-2 text-[#94A3B8] hover:text-[#0F172A]"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {!sidebarSearch && (
+                <div className="flex items-center gap-1 overflow-x-auto pb-0.5 text-[10px] font-extrabold scrollbar-none">
+                  <span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-[#94A3B8] mr-0.5">Atalhos:</span>
+                  {[
+                    { id: "room", label: "Cômodo", icon: SquarePlus, onClick: addRoom },
+                    { id: "wall", label: "Parede", icon: Minus, onClick: () => selectArchitectureTool(architectureTool === "wall" ? "" : "wall"), active: architectureTool === "wall" },
+                    { id: "door", label: "Porta", icon: DoorOpen, onClick: () => selectArchitectureTool(architectureTool === "door" ? "" : "door"), active: architectureTool === "door" },
+                    { id: "window", label: "Janela", icon: PanelTop, onClick: () => selectArchitectureTool(architectureTool === "window" ? "" : "window"), active: architectureTool === "window" },
+                    { id: "tomada-baixa", label: "Tomada", onClick: () => insertElectricalTool(toolsById["tomada-baixa"]), active: activeTool === "tomada-baixa" },
+                    { id: "luminaria", label: "Lâmpada", onClick: () => insertElectricalTool(toolsById["luminaria"]), active: activeTool === "luminaria" },
+                    { id: "interruptor", label: "Interruptor", onClick: () => insertElectricalTool(toolsById["interruptor"]), active: activeTool === "interruptor" },
+                    { id: "cabo", label: "Cabo", icon: Cable, onClick: addConduitRoute, active: routeToolActive },
+                  ].map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={chip.onClick}
+                      className={`shrink-0 flex items-center gap-1 rounded-md border px-2 py-1 transition ${
+                        chip.active
+                          ? "border-[#00d8b8] bg-[#E6FFFA] text-[#00a98e] font-black"
+                          : "border-[#E2EEF6] bg-[#F8FBFD] text-[#526173] hover:border-[#00d8b8] hover:bg-white"
+                      }`}
+                    >
+                      {chip.icon && <chip.icon className="h-3 w-3" />}
+                      <span>{chip.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto p-3">
             {sidebar === "tools" && (
-              <div className="space-y-4">
-                <div className="rounded-md border border-[#CDEFE8] bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#00d8b8]">Entrega completa</p>
-                      <h3 className="mt-1 text-sm font-black leading-tight text-[#0F172A]">Planta, elétrica, impressão e orçamento</h3>
-                    </div>
-                    <Badge variant="outline" className="rounded-md border-[#CDEFE8] bg-[#F8FBFD] text-[9px] font-black text-[#0f4f49]">
-                      Pro
-                    </Badge>
-                  </div>
-                  <div className="mt-3 grid gap-1.5 text-[10px] font-bold leading-snug text-[#526173]">
-                    <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-[#10B981]" />Cômodos com medidas reais, portas e janelas</span>
-                    <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-[#10B981]" />Pontos, circuitos, disjuntores e cabos pela NBR 5410</span>
-                    <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-[#10B981]" />Rotas de infraestrutura, materiais e orçamento</span>
-                  </div>
-                  <Button
-                    type="button"
-                    className="mt-3 h-9 w-full rounded-md bg-[#0F172A] text-xs font-black text-white hover:bg-[#1E293B]"
-                    onClick={buildCompleteProfessionalProject}
-                    disabled={rooms.length === 0 || saving}
-                  >
-                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                    Gerar projeto completo
-                  </Button>
-                </div>
+              <div className="space-y-3">
 
                 {selectedWallDimension && (
                   <div className="space-y-3 rounded-md border border-[#FECACA] bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
@@ -6347,586 +6425,745 @@ export default function PlantaIA() {
 	                  </div>
 	                )}
 
-                <div className="space-y-2 rounded-md border border-[#C9E0EF] bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
-                  <div className="flex items-start justify-between gap-2 border-b border-[#E2EEF6] pb-2">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#00d8b8]">NBR por cômodo</p>
-                      <p className="mt-1 text-[10px] font-bold leading-snug text-[#64748B]">
-                        Iluminação, tomadas e carga mínima pela escala do ambiente.
-                      </p>
-                    </div>
-                    <Badge variant="outline" className={`h-6 shrink-0 rounded-md px-2 text-[9px] font-black ${
-                      roomNBRMissingTotal > 0
-                        ? "border-amber-200 bg-amber-50 text-amber-700"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    }`}>
-                      {rooms.length === 0 ? "Sem cômodo" : roomNBRMissingTotal > 0 ? `${roomNBRMissingTotal} faltam` : "OK"}
-                    </Badge>
-                  </div>
-
-                  {rooms.length === 0 ? (
-                    <p className="text-[10px] font-bold leading-snug text-[#64748B]">
-                      Desenhe ou insira cômodos para calcular os mínimos residenciais da NBR 5410.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-3 gap-1.5 text-center">
-                        <span className="rounded-md bg-[#F8FBFD] px-1.5 py-2 text-[9px] font-black uppercase tracking-wide text-[#0f4f49]">
-                          {roomNBRSummary.lighting} luz
-                        </span>
-                        <span className="rounded-md bg-[#F8FBFD] px-1.5 py-2 text-[9px] font-black uppercase tracking-wide text-[#0f4f49]">
-                          {roomNBRSummary.tugs} TUG
-                        </span>
-                        <span className="rounded-md bg-[#F8FBFD] px-1.5 py-2 text-[9px] font-black uppercase tracking-wide text-[#0f4f49]">
-                          {formatPtNumber(roomNBRSummary.lightingPowerVa + roomNBRSummary.tugPowerVa, 0)} VA
-                        </span>
-                      </div>
-
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-9 w-full rounded-md bg-[#00d8b8] text-xs font-black hover:bg-[#00a98e]"
-                        onClick={applyNBRRequirementsToPlant}
-                        disabled={saving}
-                      >
-                        <Calculator className="h-3.5 w-3.5" />
-                        {roomNBRMissingTotal > 0 ? "Inserir pontos faltantes" : "Atualizar circuitos NBR"}
-                      </Button>
-
-                      <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
-                        {roomNBRAnalysis.map((item) => (
-                          <div key={item.roomId || item.roomName} className="rounded-md border border-[#E2EEF6] bg-[#F8FBFD] p-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="truncate text-[10px] font-black text-[#0F172A]">{item.roomName}</p>
-                                <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-[#64748B]">
-                                  {formatPtNumber(item.metrics.areaM2, 2)} m² · {formatPtNumber(item.metrics.perimeterM, 1)} m
-                                </p>
-                              </div>
-                              {item.status === "pass" ? (
-                                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                              ) : (
-                                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                              )}
-                            </div>
-                            <div className="mt-1.5 grid grid-cols-2 gap-1 text-[9px] font-bold text-[#526173]">
-                              <span>Luz: <strong className="text-[#0F172A]">{item.lightingPointCount}</strong> / {item.lightingPowerVa} VA</span>
-                              <span>TUG: <strong className="text-[#0F172A]">{item.tugCount}</strong> / {item.tugPowerVa} VA</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#5F6B7A]">Arquitetura</p>
-                    <Badge variant="outline" className="h-5 rounded-md border-[#CDEFE8] px-1.5 text-[9px] font-bold text-[#0f4f49]">CAD</Badge>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {architectureTools.map((tool) => (
+                {/* ── Search Results View ── */}
+                {sidebarSearch.trim() ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between pb-1 border-b border-[#E2EEF6]">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-[#64748B]">
+                        Resultados ({filteredArchitectureTools.length + (filteredElectricalTools?.length || 0)})
+                      </span>
                       <button
-                        key={tool.label}
-                        onClick={tool.onClick}
-                        className={`flex min-h-[74px] flex-col items-start justify-between rounded-md border p-2.5 text-left shadow-[0_1px_0_rgba(15,23,42,0.04)] transition hover:border-[#00d8b8] hover:bg-[#F2FFFC] ${
-                          tool.tool && architectureTool === tool.tool
-                            ? "border-[#00d8b8] bg-[#E6FFFA] ring-1 ring-[#00d8b8]/20"
-                            : "border-[#C9E0EF] bg-white"
-                        }`}
+                        type="button"
+                        onClick={() => setSidebarSearch("")}
+                        className="text-[9px] font-bold text-[#00a98e] hover:underline"
                       >
-                        <tool.icon className="h-4 w-4 text-[#00d8b8]" />
-                        <span className="text-[12px] font-black leading-tight text-[#111827]">{tool.label}</span>
-                        <span className="text-[9px] font-bold uppercase tracking-wide text-[#64748B]">{tool.detail}</span>
+                        Limpar busca
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#5F6B7A]">Infraestrutura</p>
-                    <Badge variant="outline" className="h-5 rounded-md border-[#CDEFE8] px-1.5 text-[9px] font-black text-[#0f4f49]">
-                      {routes.length} rota{routes.length === 1 ? "" : "s"}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-2.5 rounded-md border border-[#C9E0EF] bg-white p-2.5 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
-                    <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#00d8b8]">Circuito ativo</p>
-                        <p className="mt-0.5 truncate text-[10px] font-bold text-[#64748B]">Opcional para cabos criados manualmente.</p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-md border-[#CDEFE8] px-2 text-[10px] font-black text-[#0f4f49]"
-                        onClick={() => {
-                          setRouteCircuitId("auto");
-                          setRouteStartId("");
-                        }}
-                      >
-                        Auto
-                      </Button>
                     </div>
 
-                    <Select value={routeCircuitId} onValueChange={setRouteCircuitId}>
-                      <SelectTrigger disabled={!hasProjectCircuits} className="h-9 rounded-md border-[#CDEFE8] bg-[#F8FBFD] text-xs font-extrabold">
-                        <SelectValue placeholder="Escolher circuito" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="auto" className="text-xs">Automático por tipo do ponto</SelectItem>
-                        {circuitOptions.map((circuit) => (
-                          <SelectItem key={circuit.id} value={circuit.id} className="text-xs">
-                            {circuit.name}{circuit.phase ? ` · Fase ${circuit.phase}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    {!canRouteToBoard && (
-                      <div className="rounded-md border border-[#CDEFE8] bg-[#F8FBFD] p-2 text-[10px] font-bold leading-snug text-[#526173]">
-                        O cabeamento manual não exige quadro ou circuito. As opções automáticas de QD ficam disponíveis quando houver circuitos e quadro posicionados.
+                    {filteredArchitectureTools.length === 0 && (!filteredElectricalTools || filteredElectricalTools.length === 0) && (
+                      <div className="rounded-md border border-dashed border-[#CDEFE8] bg-white p-4 text-center text-xs font-bold text-[#64748B]">
+                        Nenhuma ferramenta encontrada para "{sidebarSearch}".
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="block space-y-1">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-[#64748B]">Sistema</span>
-                        <Select value={routeSystem} onValueChange={setRouteSystem}>
-                          <SelectTrigger className="h-8 rounded-md border-[#CDEFE8] bg-[#F8FBFD] text-[11px] font-extrabold">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="eletrica" className="text-xs font-bold text-black">Elétrica</SelectItem>
-                            <SelectItem value="telecom" className="text-xs font-bold text-blue-600">Telecom</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </label>
-
-                      <label className="block space-y-1">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-[#64748B]">Eletroduto</span>
-                        <Select
-                          value={normalizeConduitDiameter(routeConduitDiameter, DEFAULT_CONDUIT_DIAMETER)}
-                          onValueChange={(value) => setRouteConduitDiameter(normalizeConduitDiameter(value, DEFAULT_CONDUIT_DIAMETER))}
-                        >
-                          <SelectTrigger className="h-8 rounded-md border-[#CDEFE8] bg-[#F8FBFD] text-[11px] font-extrabold">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {CONDUIT_DIAMETER_OPTIONS.map((diameter) => (
-                              <SelectItem key={diameter} value={diameter} className="text-xs font-bold">{diameter}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </label>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-                      {ROUTE_INSTALLATION_OPTIONS.map((mode) => (
-                        <button
-                          key={mode.id}
-                          type="button"
-                          onClick={() => setRouteMode(mode.id)}
-                          className={`h-8 rounded-md border px-1 text-[9px] font-black uppercase tracking-wide transition ${
-                            routeMode === mode.id
-                              ? "border-[#00d8b8] bg-[#E6FFFA] text-[#00d8b8]"
-                              : "border-[#CDEFE8] bg-[#F8FBFD] text-[#526173] hover:border-[#00d8b8]"
-                          }`}
-                        >
-                          {mode.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className={`h-10 rounded-md text-xs font-extrabold ${
-                          routeToolActive
-                            ? "bg-[#0F172A] hover:bg-[#111827]"
-                            : "bg-[#00d8b8] hover:bg-[#00a98e]"
-                        }`}
-                        onClick={addConduitRoute}
-                      >
-                        <Cable className="h-3.5 w-3.5" />
-                        {routeToolActive ? "Criando..." : "Adicionar cabo"}
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className={`h-10 rounded-md border-[#CDEFE8] text-xs font-extrabold text-[#0f4f49] ${(!canRouteToBoard || points.length < 2) ? 'opacity-50' : ''}`}
-                        onClick={() => {
-                          if (points.length < 2) {
-                            alert("Adicione pelo menos 2 pontos na planta para conectar.");
-                            return;
-                          }
-                          if (!hasProjectCircuits) {
-                            alert("Por favor, gere os circuitos primeiro na aba lateral de Circuitos (ícone de raio) antes de conectar a infraestrutura.");
-                            return;
-                          }
-                          if (!hasPositionedBoard) {
-                            alert("Por favor, adicione um Quadro (QE ou QGBT) na planta para que a infraestrutura possa ser conectada a ele.");
-                            return;
-                          }
-                          autoConnectFromBoard();
-                        }}
-                        disabled={saving}
-                      >
-                        <Network className="h-3.5 w-3.5" />
-                        Auto QD
-                      </Button>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={`h-10 w-full rounded-md border-[#CDEFE8] text-xs font-extrabold text-[#0f4f49] ${!canRouteToBoard ? 'opacity-50' : ''}`}
-                      onClick={() => {
-                        if (!hasProjectCircuits) {
-                          alert("Por favor, gere os circuitos primeiro na aba lateral de Circuitos (ícone de raio) antes de gerar o quadro e a infraestrutura.");
-                          return;
-                        }
-                        if (!hasPositionedBoard) {
-                          alert("Por favor, adicione um Quadro (QE ou QGBT) na planta para usar como referência.");
-                          return;
-                        }
-                        setInfraPromptAction("panel-routes");
-                      }}
-                      disabled={saving}
-                    >
-                      <PanelTop className="h-3.5 w-3.5" />
-                      Gerar quadro e infraestrutura da planta
-                    </Button>
-
-                    {routeToolActive && (
-                      <div className="rounded-md border border-[#CDEFE8] bg-[#F8FBFD] p-2 text-[10px] font-bold leading-snug text-[#0f4f49]">
-                        {routeDraft?.source ? (
-                          <>
-                            Origem definida. Clique no canvas para pontos intermediários, clique em um terminal para destino ou pressione Enter para finalizar.
-                          </>
-                        ) : (
-                          "Clique em um terminal ou em qualquer ponto livre do canvas para definir a origem."
-                        )}
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-md border-[#CDEFE8] text-[10px] font-extrabold text-[#0f4f49]"
-                        onClick={() => {
-                          setRouteToolActive(false);
-                          setRouteStartId("");
-                          setRouteDraft(null);
-                        }}
-                        disabled={!routeToolActive && !routeStartId}
-                      >
-                        Cancelar ligação
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-md border-[#FECACA] text-[10px] font-extrabold text-[#B91C1C]"
-                        onClick={clearRoutes}
-                        disabled={routes.length === 0}
-                      >
-                        Limpar cabos
-                      </Button>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 w-full rounded-md border-[#CDEFE8] text-[10px] font-extrabold text-[#0f4f49]"
-                      onClick={verifyCableConnections}
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Verificar ligações
-                    </Button>
-
-                    {cableValidationIssues.length > 0 && (
-                      <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50 p-2">
-                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-800">Avisos de ligação</p>
-                        {cableValidationIssues.slice(0, 6).map((issue, index) => (
-                          <button
-                            key={`${issue.type}-${issue.cableId}-${index}`}
-                            type="button"
-                            onClick={() => {
-                              if (issue.cableId) {
-                                setSelectedElement({ type: "route", id: issue.cableId });
-                                setRouteEditMode("editPath");
-                              }
-                            }}
-                            className="w-full rounded border border-amber-200 bg-white px-2 py-1 text-left text-[9px] font-bold leading-snug text-amber-900 transition hover:border-amber-400"
-                          >
-                            <span className="block font-black">{issue.type}</span>
-                            <span>{issue.description}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {selectedElement?.type === "point" && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-full rounded-md border-[#CDEFE8] text-[10px] font-extrabold text-[#0f4f49]"
-                        onClick={() => {
-                          setActiveTool("");
-                          setRouteToolActive(true);
-                          const point = points.find((item) => sameId(item.id, selectedElement.id));
-                          if (point) startCableDraft(pointToTerminal(point));
-                        }}
-                      >
-                        Usar selecionado como origem
-                      </Button>
-                    )}
-
-                    {routes.length > 0 && (
-                      <div className="space-y-1.5 border-t border-[#E2EEF6] pt-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#64748B]">Cabos criados</p>
-                          <span className="text-[9px] font-black text-[#00d8b8]">{routes.length}</span>
-                        </div>
-                        <div className="max-h-32 space-y-1 overflow-y-auto pr-1">
-                          {routes.slice().reverse().map((route) => (
-                            <div
-                              key={route.id}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => selectCanvasElement({ type: "route", id: route.id })}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === " ") selectCanvasElement({ type: "route", id: route.id });
-                              }}
-                              className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-2 py-1.5 transition hover:border-[#00d8b8] hover:bg-[#F2FFFC] ${
-                                selectedElement?.type === "route" && sameId(selectedElement.id, route.id)
-                                  ? "border-[#00d8b8] bg-[#E6FFFA]"
-                                  : "border-[#E2EEF6] bg-[#F8FBFD]"
+                    {filteredArchitectureTools.length > 0 && (
+                      <div className="space-y-1">
+                        <span className="text-[8px] font-black uppercase tracking-wider text-[#00a98e]">Arquitetura</span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {filteredArchitectureTools.map((tool) => (
+                            <button
+                              key={tool.label}
+                              onClick={tool.onClick}
+                              className={`flex min-h-[54px] flex-col items-start justify-between rounded-md border p-2 text-left transition ${
+                                tool.tool && architectureTool === tool.tool
+                                  ? "border-[#00d8b8] bg-[#E6FFFA] ring-1 ring-[#00d8b8]/20"
+                                  : "border-[#E2EEF6] bg-white hover:border-[#00d8b8] hover:bg-[#F2FFFC]"
                               }`}
                             >
-                              <div className="min-w-0">
-                                <p className="truncate text-[10px] font-black text-[#0F172A]">{route.description || route.label || "Eletroduto"}</p>
-                                <p className="truncate text-[9px] font-bold uppercase tracking-wide text-[#64748B]">
-                                  {routeModeLabel(route.mode)} · {normalizeRouteSystem(route.systemType || route.type) === "telecom" ? "Telecom" : "Elétrica"} · {normalizeConduitDiameter(route.conduit_diameter || route.gauge, DEFAULT_CONDUIT_DIAMETER)}
-                                </p>
+                              <tool.icon className="h-3.5 w-3.5 text-[#00a98e]" />
+                              <div>
+                                <span className="block text-[11px] font-black leading-tight text-[#0F172A]">{tool.label}</span>
+                                <span className="block text-[8px] font-bold uppercase tracking-wide text-[#64748B]">{tool.detail}</span>
                               </div>
-                              <button
-                                type="button"
-                                title="Remover cabo"
-                                aria-label="Remover cabo"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  removeRoute(route.id);
-                                }}
-                                className="flex h-7 w-7 items-center justify-center rounded-md border border-[#FECACA] bg-white text-[#B91C1C] transition hover:bg-[#FEF2F2]"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
                     )}
-                  </div>
-                </div>
 
-                <div>
-                  <div className="mb-2 flex items-center gap-2">
-                    <PanelTop className="h-3.5 w-3.5 text-[#00d8b8]" />
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#5F6B7A]">Quadros do projeto</p>
-                    <div className="h-px flex-1 bg-[#D6E8F3]" />
-                  </div>
-
-                  {!selectedProject ? (
-                    <div className="rounded-md border border-dashed border-[#C9E0EF] bg-white p-3 text-[11px] font-bold text-[#64748B]">
-                      Selecione um projeto no topo para carregar os quadros elétricos.
-                    </div>
-                  ) : panelBoards.length === 0 ? (
-                    <div className="space-y-2 rounded-md border border-dashed border-[#C9E0EF] bg-white p-3">
-                      <p className="text-[11px] font-bold text-[#64748B]">Nenhum quadro criado para este projeto.</p>
-	                      <Button
-	                        type="button"
-	                        size="sm"
-	                        className="h-9 w-full rounded-md bg-[#00d8b8] text-xs font-extrabold hover:bg-[#00a98e]"
-	                        onClick={() => setInfraPromptAction("panel")}
-		                        disabled={!hasProjectCircuits || !hasPositionedBoard || saving}
-	                      >
-	                        <PanelTop className="h-3.5 w-3.5" />
-	                        Gerar quadro pela planta
-	                      </Button>
-		                      {(!hasProjectCircuits || !hasPositionedBoard) && (
-		                        <p className="text-[10px] font-bold leading-snug text-amber-700">
-		                          {!hasProjectCircuits
-		                            ? "Puxe os circuitos do editor antes de gerar o quadro pela planta."
-		                            : "Insira e posicione um QD na planta antes de gerar o quadro."}
-		                        </p>
-	                      )}
-	                    </div>
-                  ) : (
-                    <div className="space-y-2 rounded-md border border-[#C9E0EF] bg-white p-2.5 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#00d8b8]">Inserir quadro</span>
-                        <Badge variant="outline" className="h-5 rounded-md border-[#CDEFE8] px-1.5 text-[9px] font-black text-[#0f4f49]">
-                          {panelBoards.length}
-                        </Badge>
+                    {filteredElectricalTools && filteredElectricalTools.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <span className="text-[8px] font-black uppercase tracking-wider text-[#00a98e]">Símbolos Elétricos</span>
+                        <div className="grid gap-1">
+                          {filteredElectricalTools.map((tool) => {
+                            const categoryStyle = CATEGORY_STYLES[tool.category] || {};
+                            const active = activeTool === tool.id;
+                            return (
+                              <button
+                                key={tool.id}
+                                onClick={() => insertElectricalTool(tool)}
+                                className="group flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition"
+                                style={{
+                                  borderColor: active ? categoryStyle.color : "#E2EEF6",
+                                  backgroundColor: active ? categoryStyle.surface : "#ffffff",
+                                }}
+                              >
+                                <span
+                                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded border"
+                                  style={{
+                                    borderColor: active ? categoryStyle.color : "#E2EEF6",
+                                    backgroundColor: active ? "#ffffff" : categoryStyle.surface,
+                                  }}
+                                >
+                                  <ElectricalSymbol type={tool.id} size={20} color={tool.color} />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-[11px] font-black leading-tight text-[#0F172A]">{tool.label}</span>
+                                  <span className="block truncate text-[8px] font-bold uppercase tracking-wide text-[#64748B]">{TOOL_DETAIL[tool.id]}</span>
+                                </span>
+                                <Badge
+                                  variant="secondary"
+                                  className="h-5 shrink-0 rounded px-1.5 text-[8px] font-black"
+                                  style={{
+                                    backgroundColor: categoryStyle.soft,
+                                    color: categoryStyle.text,
+                                  }}
+                                >
+                                  {CATEGORY_LABELS[tool.category]}
+                                </Badge>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-
-                      <Select value={selectedPanelBoard?.id || ""} onValueChange={setSelectedPanelBoardId}>
-                        <SelectTrigger className="h-9 rounded-md border-[#CDEFE8] bg-[#F8FBFD] text-xs font-extrabold">
-                          <SelectValue placeholder="Escolher quadro" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {panelBoards.map((board) => (
-                            <SelectItem key={board.id} value={board.id} className="text-xs">
-                              {board.name} · {board.location || "Distribuição"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      <Input
-                        value={targetRoomName}
-                        onChange={(event) => setTargetRoomName(event.target.value)}
-                        placeholder="Cômodo ou local: cozinha, sala..."
-                        className="h-9 rounded-md border-[#CDEFE8] bg-white text-xs font-bold"
-                      />
-
-                      {selectedPanelBoard && (
-                        <div className="grid grid-cols-2 gap-1.5 text-[9px] font-black uppercase tracking-wide text-[#526173]">
-                          <span className="rounded bg-[#F8FBFD] px-2 py-1.5">
-                            {selectedPanelBoard.layout?.rails?.length || 0} trilhos
-                          </span>
-                          <span className="rounded bg-[#F8FBFD] px-2 py-1.5">
-                            {getBoardUsedModules(selectedPanelBoard)} DIN
-                          </span>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* ── Seção: Entrega Completa ── */}
+                    <div className="rounded-md border border-[#CDEFE8] bg-white shadow-xs overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection("entrega")}
+                        className="flex w-full items-center justify-between p-2.5 text-left transition hover:bg-[#F8FBFD]"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown className={`h-3.5 w-3.5 text-[#00a98e] transition-transform duration-150 ${collapsedSections.entrega ? "-rotate-90" : ""}`} />
+                          <span className="text-[11px] font-black uppercase tracking-wider text-[#0F172A]">Entrega Completa</span>
+                        </div>
+                        <Badge variant="outline" className="h-5 rounded-md border-[#CDEFE8] bg-[#E8FCF8] px-1.5 text-[9px] font-black text-[#0f4f49]">
+                          Pro
+                        </Badge>
+                      </button>
+                      {!collapsedSections.entrega && (
+                        <div className="border-t border-[#E2EEF6] p-2.5 bg-[#FCFDFE] space-y-2">
+                          <p className="text-[10px] font-bold text-[#64748B] leading-tight">
+                            Geração automatizada de planta, elétrica NBR 5410 e lista de materiais.
+                          </p>
+                          <div className="grid gap-1 text-[9px] font-bold text-[#526173]">
+                            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-[#10B981]" />Cômodos com cotas, portas e janelas</span>
+                            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-[#10B981]" />Pontos, circuitos e cabos pela NBR 5410</span>
+                            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-[#10B981]" />Rotas de infraestrutura e materiais</span>
+                          </div>
+                          <Button
+                            type="button"
+                            className="h-8 w-full rounded-md bg-[#0F172A] text-xs font-black text-white hover:bg-[#1E293B]"
+                            onClick={buildCompleteProfessionalProject}
+                            disabled={rooms.length === 0 || saving}
+                          >
+                            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 text-[#00d8b8]" />}
+                            <span>Gerar projeto completo</span>
+                          </Button>
                         </div>
                       )}
+                    </div>
 
-                      <Button
+                    {/* ── Seção: NBR por Cômodo ── */}
+                    <div className="rounded-md border border-[#CDEFE8] bg-white shadow-xs overflow-hidden">
+                      <button
                         type="button"
-                        size="sm"
-                        className="h-9 w-full rounded-md bg-[#00d8b8] text-xs font-extrabold hover:bg-[#00a98e]"
-                        onClick={insertSelectedPanelBoard}
-                        disabled={!selectedPanelBoard}
+                        onClick={() => toggleSection("nbr")}
+                        className="flex w-full items-center justify-between p-2.5 text-left transition hover:bg-[#F8FBFD]"
                       >
-                        <PanelTop className="h-3.5 w-3.5" />
-                        Inserir no cômodo
-                      </Button>
+                        <div className="flex items-center gap-2">
+                          <ChevronDown className={`h-3.5 w-3.5 text-[#00a98e] transition-transform duration-150 ${collapsedSections.nbr ? "-rotate-90" : ""}`} />
+                          <span className="text-[11px] font-black uppercase tracking-wider text-[#0F172A]">NBR 5410 por Cômodo</span>
+                        </div>
+                        <Badge variant="outline" className={`h-5 rounded-md px-1.5 text-[9px] font-black ${
+                          roomNBRMissingTotal > 0
+                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        }`}>
+                          {rooms.length === 0 ? "Sem cômodo" : roomNBRMissingTotal > 0 ? `${roomNBRMissingTotal} faltam` : "OK"}
+                        </Badge>
+                      </button>
+                      {!collapsedSections.nbr && (
+                        <div className="border-t border-[#E2EEF6] p-2.5 bg-[#FCFDFE] space-y-2">
+                          {rooms.length === 0 ? (
+                            <p className="text-[10px] font-bold leading-snug text-[#64748B]">
+                              Desenhe ou insira cômodos para calcular os mínimos residenciais da NBR 5410.
+                            </p>
+                          ) : (
+                            <>
+                              <div className="grid grid-cols-3 gap-1.5 text-center">
+                                <span className="rounded-md bg-[#F0FAF7] px-1 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#0f4f49]">
+                                  {roomNBRSummary.lighting} luz
+                                </span>
+                                <span className="rounded-md bg-[#F0FAF7] px-1 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#0f4f49]">
+                                  {roomNBRSummary.tugs} TUG
+                                </span>
+                                <span className="rounded-md bg-[#F0FAF7] px-1 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#0f4f49]">
+                                  {formatPtNumber(roomNBRSummary.lightingPowerVa + roomNBRSummary.tugPowerVa, 0)} VA
+                                </span>
+                              </div>
 
-	                      <Button
-	                        type="button"
-	                        variant="outline"
-	                        size="sm"
-	                        className="h-8 w-full rounded-md border-[#CDEFE8] text-xs font-extrabold text-[#0f4f49]"
-	                        onClick={insertAllPanelBoards}
-	                      >
-	                        Inserir todos os quadros
-	                      </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 w-full rounded-md bg-[#00d8b8] text-xs font-black text-[#0f4f49] hover:bg-[#00bda1] hover:text-white"
+                                onClick={applyNBRRequirementsToPlant}
+                                disabled={saving}
+                              >
+                                <Calculator className="h-3.5 w-3.5" />
+                                <span>{roomNBRMissingTotal > 0 ? "Inserir pontos faltantes" : "Atualizar circuitos NBR"}</span>
+                              </Button>
 
-	                      <Button
-	                        type="button"
-	                        variant="outline"
-	                        size="sm"
-	                        className="h-8 w-full rounded-md border-[#CDEFE8] text-xs font-extrabold text-[#0f4f49]"
-	                        onClick={() => setInfraPromptAction("panel")}
-		                        disabled={!hasProjectCircuits || !hasPositionedBoard || saving}
-	                      >
-	                        Gerar quadro pela planta
-	                      </Button>
-	                    </div>
-                  )}
-                </div>
+                              <div className="max-h-40 space-y-1 overflow-y-auto pr-0.5">
+                                {roomNBRAnalysis.map((item) => (
+                                  <div key={item.roomId || item.roomName} className="rounded-md border border-[#E2EEF6] bg-white p-2 text-[9px]">
+                                    <div className="flex items-start justify-between gap-1.5">
+                                      <div className="min-w-0">
+                                        <p className="truncate font-black text-[#0F172A]">{item.roomName}</p>
+                                        <p className="font-bold text-[#64748B]">
+                                          {formatPtNumber(item.metrics.areaM2, 2)} m² · {formatPtNumber(item.metrics.perimeterM, 1)} m
+                                        </p>
+                                      </div>
+                                      {item.status === "pass" ? (
+                                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                      ) : (
+                                        <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                                      )}
+                                    </div>
+                                    <div className="mt-1 grid grid-cols-2 gap-1 font-bold text-[#526173]">
+                                      <span>Luz: <strong className="text-[#0F172A]">{item.lightingPointCount}</strong> ({item.lightingPowerVa}VA)</span>
+                                      <span>TUG: <strong className="text-[#0F172A]">{item.tugCount}</strong> ({item.tugPowerVa}VA)</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
 
-                {CAD_TOOL_GROUPS.map((group) => {
-                  const GroupIcon = group.icon;
-                  const groupStyle = CATEGORY_STYLES[group.id] || CATEGORY_STYLES.extra || {};
-                  return (
-                    <div key={group.id}>
-                      <div className="mb-2 flex items-center gap-2">
-                        <GroupIcon className="h-3.5 w-3.5" style={{ color: groupStyle.color }} />
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em]" style={{ color: groupStyle.text }}>{group.title}</p>
-                        <div className="h-px flex-1" style={{ backgroundColor: groupStyle.border }} />
-                      </div>
-                      <div className="space-y-1.5">
-                        {group.tools.map((toolId) => {
-                          const tool = toolsById[toolId];
-                          if (!tool) return null;
-                          const categoryStyle = CATEGORY_STYLES[tool.category] || {};
-                          const active = activeTool === tool.id;
-                          return (
-                            <button
-                              key={tool.id}
-                              onClick={() => insertElectricalTool(tool)}
-                              className="group flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left shadow-[0_1px_0_rgba(15,23,42,0.04)] transition"
-                              style={{
-                                borderColor: active ? categoryStyle.color : categoryStyle.border,
-                                backgroundColor: active ? categoryStyle.surface : "#ffffff",
+                    {/* ── Seção: Arquitetura (CAD) ── */}
+                    <div className="rounded-md border border-[#CDEFE8] bg-white shadow-xs overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection("arquitetura")}
+                        className="flex w-full items-center justify-between p-2.5 text-left transition hover:bg-[#F8FBFD]"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown className={`h-3.5 w-3.5 text-[#00a98e] transition-transform duration-150 ${collapsedSections.arquitetura ? "-rotate-90" : ""}`} />
+                          <span className="text-[11px] font-black uppercase tracking-wider text-[#0F172A]">Arquitetura</span>
+                        </div>
+                        <Badge variant="outline" className="h-5 rounded-md border-[#CDEFE8] bg-[#E8FCF8] px-1.5 text-[9px] font-bold text-[#0f4f49]">
+                          CAD
+                        </Badge>
+                      </button>
+                      {!collapsedSections.arquitetura && (
+                        <div className="border-t border-[#E2EEF6] p-2.5 bg-[#FCFDFE]">
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {architectureTools.map((tool) => (
+                              <button
+                                key={tool.label}
+                                onClick={tool.onClick}
+                                className={`flex min-h-[54px] flex-col items-start justify-between rounded-md border p-2 text-left transition ${
+                                  tool.tool && architectureTool === tool.tool
+                                    ? "border-[#00d8b8] bg-[#E6FFFA] ring-1 ring-[#00d8b8]/20"
+                                    : "border-[#E2EEF6] bg-white hover:border-[#00d8b8] hover:bg-[#F2FFFC]"
+                                }`}
+                              >
+                                <tool.icon className="h-3.5 w-3.5 text-[#00a98e]" />
+                                <div>
+                                  <span className="block text-[11px] font-black leading-tight text-[#0F172A]">{tool.label}</span>
+                                  <span className="block text-[8px] font-bold uppercase tracking-wide text-[#64748B]">{tool.detail}</span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Seção: Infraestrutura & Cabos ── */}
+                    <div className="rounded-md border border-[#CDEFE8] bg-white shadow-xs overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection("infra")}
+                        className="flex w-full items-center justify-between p-2.5 text-left transition hover:bg-[#F8FBFD]"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown className={`h-3.5 w-3.5 text-[#00a98e] transition-transform duration-150 ${collapsedSections.infra ? "-rotate-90" : ""}`} />
+                          <span className="text-[11px] font-black uppercase tracking-wider text-[#0F172A]">Infraestrutura & Cabos</span>
+                        </div>
+                        <Badge variant="outline" className="h-5 rounded-md border-[#CDEFE8] bg-[#E8FCF8] px-1.5 text-[9px] font-black text-[#0f4f49]">
+                          {routes.length} rota{routes.length === 1 ? "" : "s"}
+                        </Badge>
+                      </button>
+                      {!collapsedSections.infra && (
+                        <div className="border-t border-[#E2EEF6] p-2.5 bg-[#FCFDFE] space-y-2">
+                          {/* Circuito ativo */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black uppercase tracking-wider text-[#64748B]">Circuito ativo</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 px-1.5 text-[9px] font-black text-[#00a98e] hover:bg-[#E6FFFA]"
+                                onClick={() => {
+                                  setRouteCircuitId("auto");
+                                  setRouteStartId("");
+                                }}
+                              >
+                                Auto
+                              </Button>
+                            </div>
+                            <Select value={routeCircuitId} onValueChange={setRouteCircuitId}>
+                              <SelectTrigger disabled={!hasProjectCircuits} className="h-8 rounded-md border-[#CDEFE8] bg-white text-xs font-bold">
+                                <SelectValue placeholder="Escolher circuito" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="auto" className="text-xs">Automático por tipo do ponto</SelectItem>
+                                {circuitOptions.map((circuit) => (
+                                  <SelectItem key={circuit.id} value={circuit.id} className="text-xs">
+                                    {circuit.name}{circuit.phase ? ` · Fase ${circuit.phase}` : ""}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Sistema e Eletroduto */}
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <label className="block space-y-1">
+                              <span className="text-[8px] font-black uppercase tracking-wider text-[#64748B]">Sistema</span>
+                              <Select value={routeSystem} onValueChange={setRouteSystem}>
+                                <SelectTrigger className="h-8 rounded-md border-[#CDEFE8] bg-white text-xs font-bold">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="eletrica" className="text-xs font-bold text-black">Elétrica</SelectItem>
+                                  <SelectItem value="telecom" className="text-xs font-bold text-blue-600">Telecom</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[8px] font-black uppercase tracking-wider text-[#64748B]">Eletroduto</span>
+                              <Select
+                                value={normalizeConduitDiameter(routeConduitDiameter, DEFAULT_CONDUIT_DIAMETER)}
+                                onValueChange={(value) => setRouteConduitDiameter(normalizeConduitDiameter(value, DEFAULT_CONDUIT_DIAMETER))}
+                              >
+                                <SelectTrigger className="h-8 rounded-md border-[#CDEFE8] bg-white text-xs font-bold">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {CONDUIT_DIAMETER_OPTIONS.map((diameter) => (
+                                    <SelectItem key={diameter} value={diameter} className="text-xs font-bold">{diameter}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </label>
+                          </div>
+
+                          {/* Modo de instalação */}
+                          <div className="grid grid-cols-3 gap-1">
+                            {ROUTE_INSTALLATION_OPTIONS.map((mode) => (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                onClick={() => setRouteMode(mode.id)}
+                                className={`h-7 rounded-md border px-1 text-[8px] font-black uppercase tracking-wide transition ${
+                                  routeMode === mode.id
+                                    ? "border-[#00d8b8] bg-[#E6FFFA] text-[#00a98e]"
+                                    : "border-[#E2EEF6] bg-white text-[#526173] hover:border-[#00d8b8]"
+                                }`}
+                              >
+                                {mode.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Primary Actions */}
+                          <div className="grid grid-cols-2 gap-1.5 pt-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className={`h-8 rounded-md text-xs font-black transition ${
+                                routeToolActive
+                                  ? "bg-[#0F172A] text-white hover:bg-[#1E293B]"
+                                  : "bg-[#00d8b8] text-[#0f4f49] hover:bg-[#00bda1] hover:text-white"
+                              }`}
+                              onClick={addConduitRoute}
+                            >
+                              <Cable className="h-3.5 w-3.5" />
+                              <span>{routeToolActive ? "Criando cabo..." : "Adicionar cabo"}</span>
+                            </Button>
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className={`h-8 rounded-md border-[#CDEFE8] bg-white text-xs font-bold text-[#0f4f49] hover:bg-[#E8FCF8] ${(!canRouteToBoard || points.length < 2) ? 'opacity-50' : ''}`}
+                              onClick={() => {
+                                if (points.length < 2) {
+                                  alert("Adicione pelo menos 2 pontos na planta para conectar.");
+                                  return;
+                                }
+                                if (!hasProjectCircuits) {
+                                  alert("Por favor, gere os circuitos primeiro na aba lateral de Circuitos (ícone de raio) antes de conectar a infraestrutura.");
+                                  return;
+                                }
+                                if (!hasPositionedBoard) {
+                                  alert("Por favor, adicione um Quadro (QE ou QGBT) na planta para que a infraestrutura possa ser conectada a ele.");
+                                  return;
+                                }
+                                autoConnectFromBoard();
                               }}
-                              onMouseEnter={(event) => {
-                                if (active) return;
-                                event.currentTarget.style.borderColor = categoryStyle.color || "#00d8b8";
-                                event.currentTarget.style.backgroundColor = categoryStyle.surface || "#F4F9FD";
+                              disabled={saving}
+                            >
+                              <Network className="h-3.5 w-3.5 text-[#00a98e]" />
+                              <span>Auto QD</span>
+                            </Button>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className={`h-8 w-full rounded-md border-[#CDEFE8] bg-white text-xs font-bold text-[#0f4f49] hover:bg-[#E8FCF8] ${!canRouteToBoard ? 'opacity-50' : ''}`}
+                            onClick={() => {
+                              if (!hasProjectCircuits) {
+                                alert("Por favor, gere os circuitos primeiro na aba lateral de Circuitos (ícone de raio) antes de gerar o quadro e a infraestrutura.");
+                                return;
+                              }
+                              if (!hasPositionedBoard) {
+                                alert("Por favor, adicione um Quadro (QE ou QGBT) na planta para usar como referência.");
+                                return;
+                              }
+                              setInfraPromptAction("panel-routes");
+                            }}
+                            disabled={saving}
+                          >
+                            <PanelTop className="h-3.5 w-3.5 text-[#00a98e]" />
+                            <span>Gerar quadro e infraestrutura</span>
+                          </Button>
+
+                          {routeToolActive && (
+                            <div className="rounded-md border border-[#00d8b8] bg-[#E6FFFA] p-2 text-[10px] font-bold leading-snug text-[#0f4f49]">
+                              {routeDraft?.source
+                                ? "Origem definida. Clique no canvas para adicionar pontos intermediários ou clique em um terminal para concluir."
+                                : "Clique em um terminal ou ponto livre do canvas para iniciar o traçado."}
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 rounded-md text-[9px] font-extrabold text-[#64748B] hover:bg-[#F2F4F7]"
+                              onClick={() => {
+                                setRouteToolActive(false);
+                                setRouteStartId("");
+                                setRouteDraft(null);
                               }}
-                              onMouseLeave={(event) => {
-                                if (active) return;
-                                event.currentTarget.style.borderColor = categoryStyle.border || "#D6E8F3";
-                                event.currentTarget.style.backgroundColor = "#ffffff";
+                              disabled={!routeToolActive && !routeStartId}
+                            >
+                              Cancelar ligação
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 rounded-md text-[9px] font-extrabold text-[#B91C1C] hover:bg-[#FEF2F2]"
+                              onClick={clearRoutes}
+                              disabled={routes.length === 0}
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              Limpar cabos
+                            </Button>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 w-full rounded-md border-[#CDEFE8] text-[9px] font-bold text-[#0f4f49] hover:bg-[#E8FCF8]"
+                            onClick={verifyCableConnections}
+                          >
+                            <CheckCircle2 className="h-3 w-3 text-[#00a98e]" />
+                            <span>Verificar ligações</span>
+                          </Button>
+
+                          {cableValidationIssues.length > 0 && (
+                            <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-2">
+                              <p className="text-[8px] font-black uppercase tracking-wider text-amber-800">Avisos de ligação</p>
+                              {cableValidationIssues.slice(0, 4).map((issue, index) => (
+                                <button
+                                  key={`${issue.type}-${issue.cableId}-${index}`}
+                                  type="button"
+                                  onClick={() => {
+                                    if (issue.cableId) {
+                                      setSelectedElement({ type: "route", id: issue.cableId });
+                                      setRouteEditMode("editPath");
+                                    }
+                                  }}
+                                  className="w-full rounded border border-amber-200 bg-white p-1 text-left text-[8px] font-bold text-amber-900 transition hover:border-amber-400"
+                                >
+                                  <span className="block font-black">{issue.type}</span>
+                                  <span className="truncate block">{issue.description}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {selectedElement?.type === "point" && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 w-full rounded-md border-[#00d8b8] bg-[#E6FFFA] text-[9px] font-bold text-[#0f4f49]"
+                              onClick={() => {
+                                setActiveTool("");
+                                setRouteToolActive(true);
+                                const point = points.find((item) => sameId(item.id, selectedElement.id));
+                                if (point) startCableDraft(pointToTerminal(point));
                               }}
                             >
-                              <span
-                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border"
-                                style={{
-                                  borderColor: active ? categoryStyle.color : categoryStyle.border,
-                                  backgroundColor: active ? "#ffffff" : categoryStyle.surface,
-                                }}
+                              Usar ponto selecionado como origem
+                            </Button>
+                          )}
+
+                          {routes.length > 0 && (
+                            <div className="space-y-1 border-t border-[#E2EEF6] pt-1.5">
+                              <span className="text-[8px] font-black uppercase tracking-wider text-[#64748B]">Cabos Criados ({routes.length})</span>
+                              <div className="max-h-28 space-y-1 overflow-y-auto pr-0.5">
+                                {routes.slice().reverse().map((route) => (
+                                  <div
+                                    key={route.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => selectCanvasElement({ type: "route", id: route.id })}
+                                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") selectCanvasElement({ type: "route", id: route.id }); }}
+                                    className={`flex items-center justify-between rounded-md border px-2 py-1 text-left transition cursor-pointer ${
+                                      selectedElement?.type === "route" && sameId(selectedElement.id, route.id)
+                                        ? "border-[#00d8b8] bg-[#E6FFFA]"
+                                        : "border-[#E2EEF6] bg-white hover:border-[#00d8b8]"
+                                    }`}
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-[10px] font-black text-[#0F172A]">{route.description || route.label || "Eletroduto"}</p>
+                                      <p className="truncate text-[8px] font-bold text-[#64748B]">
+                                        {routeModeLabel(route.mode)} · {normalizeRouteSystem(route.systemType || route.type) === "telecom" ? "Telecom" : "Elétrica"} · {normalizeConduitDiameter(route.conduit_diameter || route.gauge, DEFAULT_CONDUIT_DIAMETER)}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeRoute(route.id);
+                                      }}
+                                      className="h-5 w-5 ml-1 flex items-center justify-center rounded text-[#B91C1C] hover:bg-[#FEE2E2]"
+                                      title="Remover cabo"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Seção: Quadros do Projeto ── */}
+                    <div className="rounded-md border border-[#CDEFE8] bg-white shadow-xs overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection("quadros")}
+                        className="flex w-full items-center justify-between p-2.5 text-left transition hover:bg-[#F8FBFD]"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown className={`h-3.5 w-3.5 text-[#00a98e] transition-transform duration-150 ${collapsedSections.quadros ? "-rotate-90" : ""}`} />
+                          <span className="text-[11px] font-black uppercase tracking-wider text-[#0F172A]">Quadros do Projeto</span>
+                        </div>
+                        <Badge variant="outline" className="h-5 rounded-md border-[#CDEFE8] bg-[#E8FCF8] px-1.5 text-[9px] font-black text-[#0f4f49]">
+                          {panelBoards.length}
+                        </Badge>
+                      </button>
+                      {!collapsedSections.quadros && (
+                        <div className="border-t border-[#E2EEF6] p-2.5 bg-[#FCFDFE] space-y-2">
+                          {!selectedProject ? (
+                            <p className="text-[10px] font-bold text-[#64748B]">
+                              Selecione um projeto no topo para gerenciar os quadros elétricos.
+                            </p>
+                          ) : panelBoards.length === 0 ? (
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-bold text-[#64748B]">Nenhum quadro configurado neste projeto.</p>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 w-full rounded-md bg-[#00d8b8] text-xs font-black text-[#0f4f49] hover:bg-[#00bda1] hover:text-white"
+                                onClick={() => setInfraPromptAction("panel")}
+                                disabled={!hasProjectCircuits || !hasPositionedBoard || saving}
                               >
-                                <ElectricalSymbol type={tool.id} size={25} color={tool.color} />
-                              </span>
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-[12px] font-black leading-tight text-[#0F172A]">{tool.label}</span>
-                                <span className="block truncate text-[9px] font-bold uppercase tracking-wide text-[#64748B]">{TOOL_DETAIL[tool.id]}</span>
-                              </span>
-                              <Badge
-                                variant="secondary"
-                                className="h-6 shrink-0 rounded-md px-2 text-[9px] font-black"
-                                style={{
-                                  backgroundColor: categoryStyle.soft,
-                                  color: categoryStyle.text,
-                                }}
+                                <PanelTop className="h-3.5 w-3.5" />
+                                <span>Gerar quadro pela planta</span>
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <Select value={selectedPanelBoard?.id || ""} onValueChange={setSelectedPanelBoardId}>
+                                <SelectTrigger className="h-8 rounded-md border-[#CDEFE8] bg-white text-xs font-bold">
+                                  <SelectValue placeholder="Escolher quadro" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {panelBoards.map((board) => (
+                                    <SelectItem key={board.id} value={board.id} className="text-xs">
+                                      {board.name} · {board.location || "Distribuição"}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              <Input
+                                value={targetRoomName}
+                                onChange={(e) => setTargetRoomName(e.target.value)}
+                                placeholder="Local: Cozinha, Garagem..."
+                                className="h-8 rounded-md border-[#CDEFE8] bg-white text-xs font-bold"
+                              />
+
+                              {selectedPanelBoard && (
+                                <div className="grid grid-cols-2 gap-1 text-[8px] font-black uppercase tracking-wider text-[#526173]">
+                                  <span className="rounded bg-white border border-[#E2EEF6] px-1.5 py-1 text-center">
+                                    {selectedPanelBoard.layout?.rails?.length || 0} trilhos
+                                  </span>
+                                  <span className="rounded bg-white border border-[#E2EEF6] px-1.5 py-1 text-center">
+                                    {getBoardUsedModules(selectedPanelBoard)} DIN
+                                  </span>
+                                </div>
+                              )}
+
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 w-full rounded-md bg-[#00d8b8] text-xs font-black text-[#0f4f49] hover:bg-[#00bda1] hover:text-white"
+                                onClick={insertSelectedPanelBoard}
+                                disabled={!selectedPanelBoard}
                               >
-                                {CATEGORY_LABELS[tool.category]}
-                              </Badge>
-                            </button>
-                          );
-                        })}
+                                <PanelTop className="h-3.5 w-3.5" />
+                                <span>Inserir no cômodo</span>
+                              </Button>
+
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 rounded-md border-[#CDEFE8] bg-white text-[9px] font-bold text-[#0f4f49]"
+                                  onClick={insertAllPanelBoards}
+                                >
+                                  Inserir todos
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 rounded-md border-[#CDEFE8] bg-white text-[9px] font-bold text-[#0f4f49]"
+                                  onClick={() => setInfraPromptAction("panel")}
+                                  disabled={!hasProjectCircuits || !hasPositionedBoard || saving}
+                                >
+                                  Gerar quadro
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Seção: Símbolos Elétricos ── */}
+                    <div className="rounded-md border border-[#CDEFE8] bg-white shadow-xs overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection("simbolos")}
+                        className="flex w-full items-center justify-between p-2.5 text-left transition hover:bg-[#F8FBFD]"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown className={`h-3.5 w-3.5 text-[#00a98e] transition-transform duration-150 ${collapsedSections.simbolos ? "-rotate-90" : ""}`} />
+                          <span className="text-[11px] font-black uppercase tracking-wider text-[#0F172A]">Símbolos Elétricos</span>
+                        </div>
+                        <Badge variant="outline" className="h-5 rounded-md border-[#CDEFE8] bg-[#E8FCF8] px-1.5 text-[9px] font-black text-[#0f4f49]">
+                          NBR 5444
+                        </Badge>
+                      </button>
+                      {!collapsedSections.simbolos && (
+                        <div className="border-t border-[#E2EEF6] p-2.5 bg-[#FCFDFE] space-y-3">
+                          {CAD_TOOL_GROUPS.map((group) => {
+                            const GroupIcon = group.icon;
+                            const groupStyle = CATEGORY_STYLES[group.id] || CATEGORY_STYLES.extra || {};
+                            return (
+                              <div key={group.id} className="space-y-1.5">
+                                <div className="flex items-center gap-1.5 pb-0.5">
+                                  <GroupIcon className="h-3 w-3" style={{ color: groupStyle.color }} />
+                                  <span className="text-[9px] font-black uppercase tracking-wider" style={{ color: groupStyle.text }}>{group.title}</span>
+                                  <div className="h-px flex-1" style={{ backgroundColor: groupStyle.border }} />
+                                </div>
+                                <div className="grid gap-1">
+                                  {group.tools.map((toolId) => {
+                                    const tool = toolsById[toolId];
+                                    if (!tool) return null;
+                                    const categoryStyle = CATEGORY_STYLES[tool.category] || {};
+                                    const active = activeTool === tool.id;
+                                    return (
+                                      <button
+                                        key={tool.id}
+                                        onClick={() => insertElectricalTool(tool)}
+                                        className="group flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition"
+                                        style={{
+                                          borderColor: active ? categoryStyle.color : "#E2EEF6",
+                                          backgroundColor: active ? categoryStyle.surface : "#ffffff",
+                                        }}
+                                      >
+                                        <span
+                                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded border"
+                                          style={{
+                                            borderColor: active ? categoryStyle.color : "#E2EEF6",
+                                            backgroundColor: active ? "#ffffff" : categoryStyle.surface,
+                                          }}
+                                        >
+                                          <ElectricalSymbol type={tool.id} size={20} color={tool.color} />
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block truncate text-[11px] font-black leading-tight text-[#0F172A]">{tool.label}</span>
+                                          <span className="block truncate text-[8px] font-bold uppercase tracking-wide text-[#64748B]">{TOOL_DETAIL[tool.id]}</span>
+                                        </span>
+                                        <Badge
+                                          variant="secondary"
+                                          className="h-5 shrink-0 rounded px-1.5 text-[8px] font-black"
+                                          style={{
+                                            backgroundColor: categoryStyle.soft,
+                                            color: categoryStyle.text,
+                                          }}
+                                        >
+                                          {CATEGORY_LABELS[tool.category]}
+                                        </Badge>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Rodapé: Normas ── */}
+                    <div className="rounded-md border border-[#CDEFE8] bg-white p-2 text-center">
+                      <div className="flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider text-[#0f4f49]">
+                        <ShieldCheck className="h-3.5 w-3.5 text-[#00a98e]" />
+                        <span>NBR 5410 · NBR 5444 · Layers CAD</span>
                       </div>
                     </div>
-                  );
-                })}
-
-                <div className="rounded-md border border-[#CDEFE8] bg-white p-2.5">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-[#00d8b8]" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#5F6B7A]">Padrao</span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-3 gap-1 text-center text-[9px] font-black uppercase tracking-wide text-[#0f4f49]">
-                    <span className="rounded bg-[#EEF7FC] px-1.5 py-1">NBR 5410</span>
-                    <span className="rounded bg-[#EEF7FC] px-1.5 py-1">NBR 5444</span>
-                    <span className="rounded bg-[#EEF7FC] px-1.5 py-1">Layers</span>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
             )}
 

@@ -1584,10 +1584,11 @@ function EditorToolbar({
   const hasSelection = Boolean(selectedElement?.id);
   const normalizedScalePxPerMeter = normalizeScalePxPerMeter(scalePxPerMeter);
   const [scaleInput, setScaleInput] = useState(String(Math.round(normalizedScalePxPerMeter)));
-  const toolButton = "flex h-8 w-8 shrink-0 items-center justify-center border border-[#BCEEE5] bg-white text-[#0f4f49] shadow-sm transition hover:border-[#00d8b8] hover:bg-[#F2FFFC] disabled:cursor-not-allowed disabled:opacity-40";
-  const symbolButton = "flex h-8 w-8 shrink-0 items-center justify-center border border-[#BCEEE5] bg-white shadow-sm transition hover:border-[#00d8b8] hover:bg-[#F2FFFC]";
-  const activeButton = "border-[#00d8b8] bg-[#E6FFFA] text-[#00a58f]";
-  const toolbarGroup = "flex shrink-0 items-center gap-1.5 rounded-[10px] border border-[#CDEFE8] bg-[#F8FBFD] p-1";
+
+  const toolbarGroup = "flex shrink-0 items-center gap-1 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-0.5";
+  const toolButton = "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent text-[#475569] transition hover:border-[#BCEEE5] hover:bg-white hover:text-[#0f4f49] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-transparent disabled:hover:bg-transparent";
+  const symbolButton = "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent transition hover:border-[#BCEEE5] hover:bg-white";
+  const activeButton = "!border-[#00d8b8] !bg-[#E8FCF8] !text-[#0f4f49] shadow-xs";
 
   useEffect(() => {
     setScaleInput(String(Math.round(normalizedScalePxPerMeter)));
@@ -1615,59 +1616,65 @@ function EditorToolbar({
   return (
     <div
       data-html2canvas-ignore="true"
-      className="absolute left-3 right-3 top-3 z-20 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-[12px] border border-[#BCEEE5] bg-white/95 p-1.5 shadow-[0_10px_28px_rgba(15,23,42,0.14)] backdrop-blur"
+      className="absolute left-3 right-3 top-2.5 z-20 flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-xl border border-[#CDEFE8] bg-white/95 p-1 shadow-[0_8px_24px_rgba(15,23,42,0.10)] backdrop-blur no-scrollbar"
     >
+      {/* Botão de Toggle do Painel Lateral */}
       {onToggleToolsPanel && (
         <button
           type="button"
-          title={toolsPanelOpen ? "Fechar ferramentas" : "Abrir ferramentas"}
-          aria-label={toolsPanelOpen ? "Fechar ferramentas" : "Abrir ferramentas"}
+          title={toolsPanelOpen ? "Recolher painel de ferramentas" : "Expandir painel de ferramentas"}
+          aria-label={toolsPanelOpen ? "Recolher painel de ferramentas" : "Expandir painel de ferramentas"}
           onClick={onToggleToolsPanel}
-          className={`flex h-8 shrink-0 items-center gap-2 rounded-[9px] border px-2.5 text-[11px] font-black shadow-sm transition hover:border-[#00d8b8] hover:bg-[#F2FFFC] ${toolsPanelOpen ? "border-[#00d8b8] bg-[#E6FFFA] text-[#00d8b8]" : "border-[#BCEEE5] bg-white text-[#0f4f49]"
-            }`}
+          className={`flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-[11px] font-extrabold shadow-xs transition hover:border-[#00d8b8] hover:bg-[#F2FFFC] ${
+            toolsPanelOpen ? "border-[#00d8b8] bg-[#E8FCF8] text-[#0f4f49]" : "border-[#E2E8F0] bg-white text-[#475569]"
+          }`}
         >
-          <Settings2 className="h-4 w-4" />
+          <Settings2 className="h-3.5 w-3.5 text-[#00d8b8]" />
           <span>Ferramentas</span>
         </button>
       )}
 
-      {/* 1º Quadrante (Esquerda): Ferramentas de navegação e arquitetura */}
+      {/* GRUPO 1: Seleção e Navegação (Cursor / Pan) */}
       <div className={toolbarGroup}>
         <ButtonIcon
           title="Selecionar (Cursor)"
           active={!handToolActive && !activeTool && !architectureTool && !routeToolActive}
           onClick={onSelectMode}
         >
-          <MousePointer2 className="h-4 w-4" />
+          <MousePointer2 className="h-3.5 w-3.5" />
         </ButtonIcon>
         <ButtonIcon
           title="Mão (Mover tela / Pan do canvas)"
           active={handToolActive}
           onClick={onToggleHandTool}
         >
-          <Hand className="h-4 w-4" />
-        </ButtonIcon>
-        <ButtonIcon title="Adicionar cômodo" onClick={onAddRoom}>
-          <SquarePlus className="h-4 w-4" />
-        </ButtonIcon>
-        <ButtonIcon title="Desenhar paredes" active={architectureTool === "wall"} onClick={() => onSelectArchitectureTool(architectureTool === "wall" ? "" : "wall")}>
-          <Minus className="h-4 w-4" />
-        </ButtonIcon>
-        <ButtonIcon title="Desenhar parede curva" active={architectureTool === "curve"} onClick={() => onSelectArchitectureTool(architectureTool === "curve" ? "" : "curve")}>
-          <Spline className="h-4 w-4" />
-        </ButtonIcon>
-        <ButtonIcon title="Nomear cômodo" active={architectureTool === "label"} onClick={() => onSelectArchitectureTool(architectureTool === "label" ? "" : "label")}>
-          <Type className="h-4 w-4" />
-        </ButtonIcon>
-        <ButtonIcon title="Inserir porta na parede" active={architectureTool === "door"} onClick={() => onSelectArchitectureTool(architectureTool === "door" ? "" : "door")}>
-          <DoorOpen className="h-4 w-4" />
-        </ButtonIcon>
-        <ButtonIcon title="Inserir janela na parede" active={architectureTool === "window"} onClick={() => onSelectArchitectureTool(architectureTool === "window" ? "" : "window")}>
-          <PanelTop className="h-4 w-4" />
+          <Hand className="h-3.5 w-3.5" />
         </ButtonIcon>
       </div>
 
-      {/* 2º Quadrante: Símbolos elétricos */}
+      {/* GRUPO 2: Desenho Arquitetônico */}
+      <div className={toolbarGroup}>
+        <ButtonIcon title="Adicionar cômodo" onClick={onAddRoom}>
+          <SquarePlus className="h-3.5 w-3.5 text-[#00d8b8]" />
+        </ButtonIcon>
+        <ButtonIcon title="Desenhar paredes retas" active={architectureTool === "wall"} onClick={() => onSelectArchitectureTool(architectureTool === "wall" ? "" : "wall")}>
+          <Minus className="h-3.5 w-3.5" />
+        </ButtonIcon>
+        <ButtonIcon title="Desenhar parede curva (arco 3 pontos)" active={architectureTool === "curve"} onClick={() => onSelectArchitectureTool(architectureTool === "curve" ? "" : "curve")}>
+          <Spline className="h-3.5 w-3.5" />
+        </ButtonIcon>
+        <ButtonIcon title="Nomear cômodo (etiqueta de texto)" active={architectureTool === "label"} onClick={() => onSelectArchitectureTool(architectureTool === "label" ? "" : "label")}>
+          <Type className="h-3.5 w-3.5" />
+        </ButtonIcon>
+        <ButtonIcon title="Inserir porta na parede" active={architectureTool === "door"} onClick={() => onSelectArchitectureTool(architectureTool === "door" ? "" : "door")}>
+          <DoorOpen className="h-3.5 w-3.5" />
+        </ButtonIcon>
+        <ButtonIcon title="Inserir janela na parede" active={architectureTool === "window"} onClick={() => onSelectArchitectureTool(architectureTool === "window" ? "" : "window")}>
+          <PanelTop className="h-3.5 w-3.5" />
+        </ButtonIcon>
+      </div>
+
+      {/* GRUPO 3: Símbolos Elétricos mais Utilizados */}
       <div className={toolbarGroup}>
         {TOOLBAR_SYMBOLS.map((toolId) => {
           const tool = TOOL_TYPES.find((item) => item.id === toolId);
@@ -1680,70 +1687,83 @@ function EditorToolbar({
               onClick={() => onSelectTool(activeTool === toolId ? "" : toolId)}
               className={`${symbolButton} ${activeTool === toolId ? activeButton : ""}`}
             >
-              <ElectricalSymbol type={toolId} size={21} color={tool?.color} />
+              <ElectricalSymbol type={toolId} size={19} color={tool?.color} />
             </button>
           );
         })}
       </div>
 
-      {/* 3º Quadrante: Histórico (Desfazer / Refazer) */}
+      {/* GRUPO 4: Histórico & Ações de Seleção */}
       <div className={toolbarGroup}>
-        <ButtonIcon title="Desfazer" disabled={!canUndo} onClick={onUndo}>
-          <Undo2 className="h-4 w-4" />
+        <ButtonIcon title="Desfazer (Ctrl+Z)" disabled={!canUndo} onClick={onUndo}>
+          <Undo2 className="h-3.5 w-3.5" />
         </ButtonIcon>
-        <ButtonIcon title="Refazer" disabled={!canRedo} onClick={onRedo}>
-          <Redo2 className="h-4 w-4" />
+        <ButtonIcon title="Refazer (Ctrl+Shift+Z)" disabled={!canRedo} onClick={onRedo}>
+          <Redo2 className="h-3.5 w-3.5" />
+        </ButtonIcon>
+        <div className="h-4 w-px bg-[#E2E8F0] mx-0.5" />
+        <ButtonIcon title="Girar -15° (anti-horário)" disabled={!hasSelection} onClick={() => onRotateSelected(-15)}>
+          <RotateCcw className="h-3.5 w-3.5" />
+        </ButtonIcon>
+        <ButtonIcon title="Girar +15° (horário)" disabled={!hasSelection} onClick={() => onRotateSelected(15)}>
+          <RotateCw className="h-3.5 w-3.5" />
+        </ButtonIcon>
+        <ButtonIcon title="Duplicar elemento (Ctrl+D)" disabled={!hasSelection} onClick={onDuplicateSelected}>
+          <Copy className="h-3.5 w-3.5" />
+        </ButtonIcon>
+        <ButtonIcon title="Excluir elemento selecionado (Del)" disabled={!hasSelection} onClick={onDeleteSelected}>
+          <Trash2 className="h-3.5 w-3.5 text-red-500" />
         </ButtonIcon>
       </div>
 
-      {/* 4º Quadrante: Zoom */}
+      {/* GRUPO 5: Zoom & Enquadramento */}
       <div className={toolbarGroup}>
         <ButtonIcon
-          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado)" : "Zoom -"}
+          title={zoomLocked ? "Zoom bloqueado (destrave no cadeado)" : "Reduzir zoom (-)"}
           disabled={zoomLocked}
           onClick={() => !zoomLocked && onZoomChange?.(Math.max(0.45, zoom - 0.15))}
         >
-          <ZoomOut className="h-4 w-4" />
+          <ZoomOut className="h-3.5 w-3.5" />
         </ButtonIcon>
         <span
-          className={`min-w-12 shrink-0 px-1 text-center text-[11px] font-black transition-colors ${
+          className={`min-w-10 shrink-0 px-0.5 text-center text-[10px] font-black transition-colors ${
             zoomLocked ? "text-amber-600 font-extrabold" : "text-[#0f4f49]"
           }`}
-          title={zoomLocked ? `Zoom bloqueado em ${Math.round(zoom * 100)}%` : `Zoom atual: ${Math.round(zoom * 100)}%`}
+          title={zoomLocked ? `Zoom travado em ${Math.round(zoom * 100)}%` : `Zoom atual: ${Math.round(zoom * 100)}%`}
         >
           {Math.round(zoom * 100)}%
         </span>
         <ButtonIcon
-          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado)" : "Zoom +"}
+          title={zoomLocked ? "Zoom bloqueado (destrave no cadeado)" : "Ampliar zoom (+)"}
           disabled={zoomLocked}
           onClick={() => !zoomLocked && onZoomChange?.(Math.min(2.6, zoom + 0.15))}
         >
-          <ZoomIn className="h-4 w-4" />
+          <ZoomIn className="h-3.5 w-3.5" />
         </ButtonIcon>
         <ButtonIcon
-          title={zoomLocked ? "Zoom bloqueado (desbloqueie no cadeado para enquadrar)" : "Enquadrar"}
+          title={zoomLocked ? "Zoom bloqueado (destrave no cadeado para enquadrar)" : "Ajustar à tela / Enquadrar"}
           disabled={zoomLocked}
           onClick={() => !zoomLocked && onFit?.()}
         >
-          <Maximize2 className="h-4 w-4" />
+          <Maximize2 className="h-3.5 w-3.5" />
         </ButtonIcon>
       </div>
 
-      {/* 5º Quadrante (Círculo Vermelho): Bloqueio de Zoom, Escala e Cotas */}
+      {/* GRUPO 6: Escala, Bloqueio & Cotas */}
       <div className={toolbarGroup}>
         <ButtonIcon
-          title={zoomLocked ? `Zoom bloqueado em ${Math.round(zoom * 100)}% (clique para destravar o zoom)` : `Bloquear nível de zoom atual (${Math.round(zoom * 100)}%)`}
+          title={zoomLocked ? `Zoom bloqueado em ${Math.round(zoom * 100)}% (clique para destravar)` : `Bloquear nível de zoom atual (${Math.round(zoom * 100)}%)`}
           active={zoomLocked}
           onClick={onToggleZoomLock}
-          className={zoomLocked ? "!border-amber-500 !bg-amber-100 !text-amber-700 font-extrabold shadow-sm" : ""}
+          className={zoomLocked ? "!border-amber-400 !bg-amber-100 !text-amber-700 shadow-xs" : ""}
         >
-          {zoomLocked ? <Lock className="h-4 w-4 text-amber-600" /> : <LockOpen className="h-4 w-4 text-[#0f4f49]" />}
+          {zoomLocked ? <Lock className="h-3.5 w-3.5 text-amber-600" /> : <LockOpen className="h-3.5 w-3.5 text-[#475569]" />}
         </ButtonIcon>
         <label
-          title="Escala geral: pixels por metro"
-          className="flex h-8 shrink-0 items-center gap-1 rounded-[9px] border border-[#BCEEE5] bg-white px-2 text-[#0f4f49] shadow-sm"
+          title="Escala geral da planta: pixels por metro linear"
+          className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-transparent bg-white px-1.5 text-[#0f4f49] shadow-2xs hover:border-[#BCEEE5]"
         >
-          <Ruler className="h-3.5 w-3.5" />
+          <Ruler className="h-3 w-3 text-[#00d8b8]" />
           <span className="sr-only">Escala geral</span>
           <input
             type="number"
@@ -1756,50 +1776,34 @@ function EditorToolbar({
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
             }}
-            className="h-6 w-[52px] rounded border-0 bg-transparent px-0 text-center text-[11px] font-black text-[#0f4f49] outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8] focus-visible:ring-offset-1"
+            className="h-5 w-[42px] rounded border-0 bg-transparent px-0 text-center text-[10.5px] font-black text-[#0f4f49] outline-none focus-visible:ring-1 focus-visible:ring-[#00d8b8]"
           />
-          <span className="text-[10px] font-black text-[#64748B]">px/m</span>
+          <span className="text-[9px] font-bold text-[#64748B]">px/m</span>
         </label>
         <ButtonIcon
-          title={showWallDimensions ? "Ocultar cotas" : "Mostrar cotas"}
+          title={showWallDimensions ? "Ocultar cotas das paredes" : "Mostrar cotas das paredes"}
           active={showWallDimensions}
           onClick={onToggleWallDimensions}
         >
-          <Ruler className="h-4 w-4" />
+          <Ruler className="h-3.5 w-3.5" />
         </ButtonIcon>
         <ButtonIcon
-          title={showDeviceDimensions ? "Ocultar cotas elétricas dos dispositivos (vermelho)" : "Mostrar cotas elétricas dos dispositivos (vermelho)"}
+          title={showDeviceDimensions ? "Ocultar cotas elétricas dos dispositivos" : "Mostrar cotas elétricas dos dispositivos"}
           active={showDeviceDimensions}
           onClick={onToggleDeviceDimensions}
         >
-          <Crosshair className="h-4 w-4 text-red-600" />
+          <Crosshair className="h-3.5 w-3.5 text-red-500" />
         </ButtonIcon>
         <ButtonIcon
-          title={showPositionLabels ? "Ocultar textos vermelhos de altura" : "Mostrar textos vermelhos de altura"}
+          title={showPositionLabels ? "Ocultar rótulos de altura" : "Mostrar rótulos de altura"}
           active={showPositionLabels}
           onClick={onTogglePositionLabels}
         >
           {showPositionLabels ? (
-            <Eye className="h-4 w-4 text-red-600" />
+            <Eye className="h-3.5 w-3.5 text-emerald-600" />
           ) : (
-            <EyeOff className="h-4 w-4 text-red-600" />
+            <EyeOff className="h-3.5 w-3.5 text-slate-400" />
           )}
-        </ButtonIcon>
-      </div>
-
-      {/* 6º Quadrante: Ações da seleção */}
-      <div className={toolbarGroup}>
-        <ButtonIcon title="Girar anti-horário" disabled={!hasSelection} onClick={() => onRotateSelected(-15)}>
-          <RotateCcw className="h-4 w-4" />
-        </ButtonIcon>
-        <ButtonIcon title="Girar horário" disabled={!hasSelection} onClick={() => onRotateSelected(15)}>
-          <RotateCw className="h-4 w-4" />
-        </ButtonIcon>
-        <ButtonIcon title="Duplicar" disabled={!hasSelection} onClick={onDuplicateSelected}>
-          <Copy className="h-4 w-4" />
-        </ButtonIcon>
-        <ButtonIcon title="Remover" disabled={!hasSelection} onClick={onDeleteSelected}>
-          <Trash2 className="h-4 w-4" />
         </ButtonIcon>
       </div>
     </div>
