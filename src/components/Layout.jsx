@@ -81,6 +81,7 @@ import {
 import { getProjectProgress } from "@/lib/projectProgress";
 import OnboardingModal from "@/components/onboarding/OnboardingModal";
 import ToolsModal from "@/components/navigation/ToolsModal";
+import PublicFooter from "@/components/system/PublicFooter";
 
 const SIDEBAR_STORAGE_KEY = "nacif:sidebar-collapsed";
 
@@ -1027,6 +1028,9 @@ export default function Layout() {
         <div key={`${location.pathname}${location.search}`} className="app-page-enter flex-1 min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8">
           <Outlet />
         </div>
+
+        {/* Public Institutional & Legal Footer */}
+        <PublicFooter className="mt-auto" />
       </main>
     </div>
   );

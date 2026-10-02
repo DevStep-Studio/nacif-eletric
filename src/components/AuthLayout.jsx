@@ -53,8 +53,8 @@ export default function AuthLayout({ icon: Icon, title, subtitle, footer, childr
         <footer className="flex flex-wrap items-center justify-between gap-3 text-[11px] font-medium text-slate-400">
           <span>© {currentYear} {brandName}</span>
           <span className="flex items-center gap-5">
-            <span>Privacidade</span>
-            <span>Termos</span>
+            <a href="/privacidade" className="hover:text-slate-600 transition">Privacidade</a>
+            <a href="/termos" className="hover:text-slate-600 transition">Termos</a>
           </span>
         </footer>
       </section>
