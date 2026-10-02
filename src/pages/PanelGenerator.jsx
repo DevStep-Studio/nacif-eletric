@@ -175,6 +175,62 @@ const WIRE_COLOR_OPTIONS = [
 const WIRE_COLOR_VALUES = WIRE_COLOR_OPTIONS.map((option) => option.value);
 const WIRE_COLOR_HEX = WIRE_COLOR_OPTIONS.reduce((acc, option) => ({ ...acc, [option.value]: option.hex }), {});
 
+export function wireDisplayColor(displayColor) {
+  return (
+    displayColor === "black" ? COLORS.phaseA :
+    displayColor === "red" ? COLORS.phaseB :
+    displayColor === "brown" ? COLORS.phaseC :
+    displayColor === "orange" ? WIRE_COLOR_HEX.orange :
+    displayColor === "blue" ? COLORS.neutral :
+    displayColor === "yellow" ? COLORS.returnWire :
+    displayColor === "gray" ? COLORS.parallel :
+    displayColor === "white" ? WIRE_COLOR_HEX.white :
+    displayColor === "purple" ? WIRE_COLOR_HEX.purple :
+    displayColor === "pink" ? WIRE_COLOR_HEX.pink :
+    COLORS.ground
+  );
+}
+
+export function cableEdgeColor(baseColor) {
+  if (baseColor === COLORS.neutral) return "#075985";
+  if (baseColor === COLORS.ground) return "#166534";
+  if (baseColor === COLORS.phaseB) return "#7f1d1d";
+  if (baseColor === COLORS.phaseC) return "#431407";
+  if (baseColor === WIRE_COLOR_HEX.orange) return "#9a3412";
+  if (baseColor === COLORS.returnWire) return "#854d0e";
+  if (baseColor === COLORS.parallel) return "#475569";
+  if (baseColor === WIRE_COLOR_HEX.white) return "#64748b";
+  if (baseColor === WIRE_COLOR_HEX.purple) return "#4c1d95";
+  if (baseColor === WIRE_COLOR_HEX.pink) return "#831843";
+  return "#020617";
+}
+
+export function cableHighlightColor(baseColor) {
+  return baseColor === COLORS.phaseA || baseColor === COLORS.phaseC ? "#ffffff" : "#f8fafc";
+}
+
+export function isValidWirePoint(point) {
+  return Boolean(point && Number.isFinite(point.x) && Number.isFinite(point.y) && (point.x !== 0 || point.y !== 0));
+}
+
+export function findComponentPlacement(componentId, sourceRails = []) {
+  const id = String(componentId || "");
+  if (!id || !Array.isArray(sourceRails)) return null;
+  for (let railIndex = 0; railIndex < sourceRails.length; railIndex += 1) {
+    const rail = sourceRails[railIndex];
+    const componentIndex = (rail?.components || []).findIndex((item) => String(item.id) === id);
+    if (componentIndex >= 0) {
+      return {
+        component: rail.components[componentIndex],
+        rail,
+        railId: rail.id,
+        railIndex,
+        componentIndex,
+      };
+    }
+  }
+  return null;
+}
 const WIRE_THICKNESS_OPTIONS = [
   { value: "auto", label: "Automática" },
   { value: "1.2", label: "Muito fino" },
@@ -549,6 +605,50 @@ const phaseTypeConfig = {
 
 const phaseWireColor = (poleIndex = 0) => ["black", "red", "brown"][poleIndex] || "black";
 
+const pinPoleIndex = (pinId = "") => {
+  const match = String(pinId).match(/^comp:[^:]+:(?:top|bottom):(\d+)$/);
+  return match ? Number(match[1]) : null;
+};
+
+const normalizedWireColor = (wire = {}) => {
+  const id = String(wire.id || "").toLowerCase();
+  const source = String(wire.source || "");
+  const target = String(wire.target || "");
+  const lowerTarget = target.toLowerCase();
+  const explicitColor = String(wire.color || "").toLowerCase();
+
+  if (WIRE_COLOR_VALUES.includes(explicitColor)) return explicitColor;
+
+  if (
+    id.includes("neutral") ||
+    id.includes("_n_") ||
+    source.startsWith("busbar_neutral:") ||
+    target.startsWith("busbar_neutral:") ||
+    lowerTarget.endsWith(":neutral")
+  ) {
+    return "blue";
+  }
+
+  if (
+    id.includes("ground") ||
+    id.includes("_g_") ||
+    source.startsWith("busbar_ground:") ||
+    target.startsWith("busbar_ground:") ||
+    lowerTarget.endsWith(":ground")
+  ) {
+    return "green";
+  }
+
+  const idPhase = id.match(/(?:solar_dps_phase|solar_phase_feed|solar_phase_feeder_to_service|solar_phase_service_to_inverter|solar_phase_load|phase_feed|phase_to_dps|phase_gen_to_dr|qgbt_phase_to_dps)_(\d+)/);
+  if (idPhase) return phaseWireColor(Number(idPhase[1]));
+
+  const pole = pinPoleIndex(target) ?? pinPoleIndex(source);
+  if (pole !== null && pole !== undefined) return phaseWireColor(pole);
+
+  return phaseWireColor(0);
+};
+
+
 const supplyTypeFromBreaker = (component = {}) => {
   if (component.supply_type) return component.supply_type;
   if (component.phase === "ABC" || Number(component.poles) >= 3) return "Trifásico";
@@ -651,48 +751,6 @@ const drPoleLabel = (component = {}, poleIndex = 0) => {
   return `L${poleIndex + 1}`;
 };
 
-const pinPoleIndex = (pinId = "") => {
-  const match = String(pinId).match(/^comp:[^:]+:(?:top|bottom):(\d+)$/);
-  return match ? Number(match[1]) : null;
-};
-
-const normalizedWireColor = (wire = {}) => {
-  const id = String(wire.id || "").toLowerCase();
-  const source = String(wire.source || "");
-  const target = String(wire.target || "");
-  const lowerTarget = target.toLowerCase();
-  const explicitColor = String(wire.color || "").toLowerCase();
-
-  if (WIRE_COLOR_VALUES.includes(explicitColor)) return explicitColor;
-
-  if (
-    id.includes("neutral") ||
-    id.includes("_n_") ||
-    source.startsWith("busbar_neutral:") ||
-    target.startsWith("busbar_neutral:") ||
-    lowerTarget.endsWith(":neutral")
-  ) {
-    return "blue";
-  }
-
-  if (
-    id.includes("ground") ||
-    id.includes("_g_") ||
-    source.startsWith("busbar_ground:") ||
-    target.startsWith("busbar_ground:") ||
-    lowerTarget.endsWith(":ground")
-  ) {
-    return "green";
-  }
-
-  const idPhase = id.match(/(?:solar_dps_phase|solar_phase_feed|solar_phase_feeder_to_service|solar_phase_service_to_inverter|solar_phase_load|phase_feed|phase_to_dps|phase_gen_to_dr|qgbt_phase_to_dps)_(\d+)/);
-  if (idPhase) return phaseWireColor(Number(idPhase[1]));
-
-  const pole = pinPoleIndex(target) ?? pinPoleIndex(source);
-  if (pole !== null && pole !== undefined) return phaseWireColor(pole);
-
-  return phaseWireColor(0);
-};
 
 const getBoardGeneralBreaker = (board) => {
   const components = (board?.layout?.rails || []).flatMap((rail) => rail.components || []);
@@ -2969,7 +3027,7 @@ export default function PanelGenerator() {
     if (point) setEndpointDragCoords({ x: point.x, y: point.y });
   };
 
-  const setWireRoutePoints = (wireId, routePoints, options = {}) => {
+  function setWireRoutePoints(wireId, routePoints, options = {}) {
     if (!options.force && isCableLocked(getEditableWire(wireId))) return;
     const cleanedPoints = normalizeWireRoutePoints(routePoints);
     const nextRouteMode = options.routeMode || (cleanedPoints.length ? "manual" : "automatic");
@@ -4422,25 +4480,6 @@ export default function PanelGenerator() {
   };
 
   // AÇÕES DO COMPONENTE SELECIONADO
-  const findComponentPlacement = (componentId, sourceRails = rails) => {
-    const id = String(componentId || "");
-    if (!id) return null;
-    for (let railIndex = 0; railIndex < sourceRails.length; railIndex += 1) {
-      const rail = sourceRails[railIndex];
-      const componentIndex = (rail.components || []).findIndex((item) => String(item.id) === id);
-      if (componentIndex >= 0) {
-        return {
-          component: rail.components[componentIndex],
-          rail,
-          railId: rail.id,
-          railIndex,
-          componentIndex,
-        };
-      }
-    }
-    return null;
-  };
-
   const getSelectedComponent = () => findComponentPlacement(selectedComponentId);
 
   const handleUpdateComponent = (field, value, options = {}) => {
@@ -4493,7 +4532,7 @@ export default function PanelGenerator() {
     }
   };
 
-  const handleDeleteComponent = (componentId = selectedComponentId) => {
+  function handleDeleteComponent(componentId = selectedComponentId) {
     const targetId = String(componentId || "");
     if (!targetId) return false;
     const placement = findComponentPlacement(targetId);
@@ -4825,7 +4864,7 @@ export default function PanelGenerator() {
   };
 
   // WIRING INTERATIVO
-  const handlePinClick = (pinId) => {
+  function handlePinClick(pinId) {
     if (wireMoveMode === "source" && selectedWireId) {
       if (isCableLocked(getEditableWire(selectedWireId))) return;
       commitWireEndpointMove(selectedWireId, "source", pinId);
@@ -6233,38 +6272,6 @@ export default function PanelGenerator() {
     );
   };
 
-  const wireDisplayColor = (displayColor) => (
-    displayColor === "black" ? COLORS.phaseA :
-    displayColor === "red" ? COLORS.phaseB :
-    displayColor === "brown" ? COLORS.phaseC :
-    displayColor === "orange" ? WIRE_COLOR_HEX.orange :
-    displayColor === "blue" ? COLORS.neutral :
-    displayColor === "yellow" ? COLORS.returnWire :
-    displayColor === "gray" ? COLORS.parallel :
-    displayColor === "white" ? WIRE_COLOR_HEX.white :
-    displayColor === "purple" ? WIRE_COLOR_HEX.purple :
-    displayColor === "pink" ? WIRE_COLOR_HEX.pink :
-    COLORS.ground
-  );
-
-  const cableEdgeColor = (baseColor) => {
-    if (baseColor === COLORS.neutral) return "#075985";
-    if (baseColor === COLORS.ground) return "#166534";
-    if (baseColor === COLORS.phaseB) return "#7f1d1d";
-    if (baseColor === COLORS.phaseC) return "#431407";
-    if (baseColor === WIRE_COLOR_HEX.orange) return "#9a3412";
-    if (baseColor === COLORS.returnWire) return "#854d0e";
-    if (baseColor === COLORS.parallel) return "#475569";
-    if (baseColor === WIRE_COLOR_HEX.white) return "#64748b";
-    if (baseColor === WIRE_COLOR_HEX.purple) return "#4c1d95";
-    if (baseColor === WIRE_COLOR_HEX.pink) return "#831843";
-    return "#020617";
-  };
-
-  const cableHighlightColor = (baseColor) => (
-    baseColor === COLORS.phaseA || baseColor === COLORS.phaseC ? "#ffffff" : "#f8fafc"
-  );
-
   const getCableLabelAnchor = (routePoints = []) => {
     if (!routePoints || routePoints.length < 2) return null;
 
@@ -6436,7 +6443,7 @@ export default function PanelGenerator() {
     );
   };
 
-  const destinationCircuitLabel = (wire = {}) => {
+  function destinationCircuitLabel(wire = {}) {
     const raw = `${wire.source || ""}:${wire.target || ""}`;
     const circuit = getWireCircuit(wire);
     if (circuit) {
@@ -7241,10 +7248,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
   const getSolarReferenceComponent = (predicate) => getSolarComponents().find(predicate);
 
-  const isValidWirePoint = (point) => (
-    point && Number.isFinite(point.x) && Number.isFinite(point.y) && (point.x !== 0 || point.y !== 0)
-  );
-
+  
   const getSolarPinPoint = (componentId, term, poleIndex = 0) => (
     getPinCoords(`comp:${componentId}:${term}:${poleIndex}`, rails, panelHeight, infrastructure)
   );
@@ -7283,7 +7287,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     );
   };
 
-  const renderReferenceRoute = (id, routePoints, baseColor, thickness = 4.7, options = {}) => {
+  function renderReferenceRoute(id, routePoints, baseColor, thickness = 4.7, options = {}) {
     let fallbackPoints = cleanRoutePoints(routePoints);
     if (fallbackPoints.length < 2) return null;
     const radius = options.radius ?? 6;
@@ -7655,7 +7659,8 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     );
   };
 
-  const renderDuctedWiringPlan = () => (
+  function renderDuctedWiringPlan() {
+    return (
     <g id="ducted-wiring-plan">
       {ductedWiringPlan.solarIncomingPhaseGroups.map(renderSolarIncomingPhaseGroup)}
       {ductedWiringPlan.servicePower.map(renderPowerServiceWire)}
@@ -7666,7 +7671,8 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       {ductedWiringPlan.neutralBranches.map(renderNeutralBranchWire)}
       {ductedWiringPlan.groundBranches.map(renderGroundBranchWire)}
     </g>
-  );
+    );
+  }
 
   const connectionPinColor = (pin = {}) => {
     if (pin.kind === "neutral" || pin.kind === "blue") return COLORS.neutral;
