@@ -18,6 +18,20 @@ import {
   nextBusbarIndex,
   remapBusbarIndices,
 } from "@/lib/electricalEngine";
+import {
+  calculateOrthogonalRoute,
+  normalizeSavedBoard,
+  extractPanelObstacles,
+  resolvePinPosition,
+  inferTerminalDirection,
+  simplifyOrthogonalPoints,
+  isOrthogonalPath,
+  ROUTING_GRID_SIZE,
+  PORT_EXIT_OFFSET,
+  OBSTACLE_PADDING,
+  WIRE_SPACING,
+  DEFAULT_CORNER_RADIUS,
+} from "@/lib/orthogonalRouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -255,22 +269,29 @@ const reconcileMainProtection = (parsed, project, options = {}) => {
 
 const parsePanelLayout = (layout, project = null, options = {}) => {
   if (layout && typeof layout === "object") {
-    return reconcileMainProtection({
+    const reconciled = reconcileMainProtection({
       rails: Array.isArray(layout.rails) ? layout.rails : [],
       wires: Array.isArray(layout.wires) ? layout.wires : [],
       infrastructure: Array.isArray(layout.infrastructure) ? layout.infrastructure : [],
+      meta: layout.meta || {},
     }, project, options);
+    const normalizedBoard = normalizeSavedBoard({ layout: reconciled }, project, options);
+    return normalizedBoard?.layout || reconciled;
   }
 
   if (layout && typeof layout === "string") {
     try {
       return parsePanelLayout(JSON.parse(layout), project, options);
     } catch {
-      return generateDefaultPanelLayout(project, options);
+      const def = generateDefaultPanelLayout(project, options);
+      const normalizedBoard = normalizeSavedBoard({ layout: def }, project, options);
+      return normalizedBoard?.layout || def;
     }
   }
 
-  return generateDefaultPanelLayout(project, options);
+  const def = generateDefaultPanelLayout(project, options);
+  const normalizedBoard = normalizeSavedBoard({ layout: def }, project, options);
+  return normalizedBoard?.layout || def;
 };
 
 // A geração/mesclagem da proteção CA do inversor solar agora vem de uma fonte
@@ -283,7 +304,7 @@ const createPanelBoard = (project, index = 1, layout = null) => {
   const parsedLayout = parsePanelLayout(layout, project, { forceDistribution: true });
   const supply = project?.supply_type || "Monofásico";
 
-  return {
+  const rawBoard = {
     id: `board_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name: index === 1 ? "QD-01 Principal" : `QD-${String(index).padStart(2, "0")}`,
     location: index === 1 ? "Entrada / Distribuição" : "Distribuição",
@@ -291,6 +312,8 @@ const createPanelBoard = (project, index = 1, layout = null) => {
     supply_type: supply,
     layout: index === 1 ? mergeSolarLayoutIntoPrincipal(project, parsedLayout) : parsedLayout,
   };
+
+  return normalizeSavedBoard(rawBoard, project) || rawBoard;
 };
 
 const normalizePanelBoards = (project) => {
@@ -339,7 +362,7 @@ const normalizePanelBoards = (project) => {
       }
     }
 
-    return {
+    const rawBoard = {
       id: board.id || `board_${index + 1}`,
       name: (board.name && !isDedicatedSolarBoard(board)) ? board.name : (index === 0 ? "QD-01 Principal" : `QD-${String(index + 1).padStart(2, "0")}`),
       location: board.location || (index === 0 ? "Entrada / Distribuição" : "Distribuição"),
@@ -347,6 +370,8 @@ const normalizePanelBoards = (project) => {
       supply_type: supply,
       layout,
     };
+
+    return normalizeSavedBoard(rawBoard, project) || rawBoard;
   });
 };
 
@@ -476,6 +501,9 @@ const panelLayoutNeedsCircuitSync = (project, boards, calculatedCircuits = null)
   const layout = primaryBoard?.layout || project?.panel_layout || {};
   const layoutMeta = getPanelLayoutMeta(layout);
   if (layoutMeta.manualDeviceEdits) return false;
+  if (Array.isArray(layout.rails) && layout.rails.some((r) => (r.components || []).some((c) => c.type !== "spacer"))) {
+    return false;
+  }
 
   const deletedCircuitRefs = new Set((layoutMeta.deletedCircuitRefs || []).map(String));
   const activeCircuits = circuits.filter((circuit, index) => !deletedCircuitRefs.has(circuitRefForSync(circuit, index)));
@@ -2054,10 +2082,63 @@ export default function PanelGenerator() {
     pendingEditHistoryRef.current = null;
   };
 
+  const enrichWiresWithComputedRoutes = useCallback((currentWires, currentRails, currentInfra) => {
+    const obstacles = extractPanelObstacles(currentRails, currentInfra);
+    const pHeight = 180 + currentRails.length * 240 + 100;
+
+    return currentWires.map((wire, wireIndex) => {
+      if (wire.deleted) return wire;
+      const p1 = resolvePinPosition(wire.source, currentRails, pHeight, currentInfra);
+      const p2 = resolvePinPosition(wire.target, currentRails, pHeight, currentInfra);
+
+      const savedRoute = Array.isArray(wire.route?.points) && wire.route.points.length >= 2
+        ? wire.route.points
+        : Array.isArray(wire.route_points) && wire.route_points.length >= 2
+          ? wire.route_points
+          : wirePathsRef.current[wire.id] || wireRouteMetaRef.current[wire.id]?.routePoints;
+
+      let points = savedRoute;
+      if (!points || points.length < 2) {
+        const sourceSide = inferTerminalDirection(wire.source, p1, currentRails, pHeight);
+        const targetSide = inferTerminalDirection(wire.target, p2, currentRails, pHeight);
+        const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+        points = calculateOrthogonalRoute(p1, p2, obstacles, {
+          sourceSide,
+          targetSide,
+          laneOffset,
+          sourcePin: wire.source,
+          targetPin: wire.target,
+        });
+      }
+
+      const cleanPoints = simplifyOrthogonalPoints(points);
+      const waypointsOnly = cleanPoints.length > 2 ? cleanPoints.slice(1, -1) : [];
+
+      return {
+        ...wire,
+        route: {
+          mode: "orthogonal",
+          points: cleanPoints,
+        },
+        route_points: waypointsOnly,
+      };
+    });
+  }, []);
+
   // Salvar automaticamente no banco de dados local ao alterar trilhos/fiação
   const saveLayoutToDb = async (updatedRails, updatedWires, updatedInfra = infrastructure, options = {}) => {
     if (!selectedId) return;
-    const layoutObj = { rails: updatedRails, wires: updatedWires, infrastructure: updatedInfra };
+    const enrichedWires = enrichWiresWithComputedRoutes(updatedWires, updatedRails, updatedInfra);
+    const layoutObj = {
+      rails: updatedRails,
+      wires: enrichedWires,
+      infrastructure: updatedInfra,
+      meta: {
+        manualDeviceEdits: true,
+        savedAt: new Date().toISOString(),
+        version: "2.0-orthogonal",
+      },
+    };
     if (options.history !== false && !restoringLayoutRef.current) {
       const before = makeLayoutSnapshot();
       const after = makeLayoutSnapshot(layoutObj);
@@ -2076,7 +2157,17 @@ export default function PanelGenerator() {
   const panelBoardsWithCurrentLayout = () => {
     const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
     const activeId = activeBoardId || currentBoards[0]?.id || "";
-    const layoutObj = { rails, wires, infrastructure };
+    const enrichedWires = enrichWiresWithComputedRoutes(wires, rails, infrastructure);
+    const layoutObj = {
+      rails,
+      wires: enrichedWires,
+      infrastructure,
+      meta: {
+        manualDeviceEdits: true,
+        savedAt: new Date().toISOString(),
+        version: "2.0-orthogonal",
+      },
+    };
     return {
       activeId,
       boards: currentBoards.map((board) => (
@@ -3703,11 +3794,38 @@ export default function PanelGenerator() {
       dinSize: movedWidth,
       poles: movedWidth,
     });
-    const nextRails = withoutComponent.map((rail, index) => (
-      index === targetRailIndex ? { ...rail, components: nextComponents } : rail
-    ));
+    const normalizedRails = normalizeRailsLayout(nextRails);
+    const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
+    const pHeight = 180 + normalizedRails.length * 240 + 100;
 
-    updateRails(nextRails);
+    const nextWires = wires.map((wire) => {
+      const isSourceAffected = String(wire.source || "").includes(componentId) || String(wire.sourceComponentId || "") === componentId;
+      const isTargetAffected = String(wire.target || "").includes(componentId) || String(wire.targetComponentId || "") === componentId;
+      if (!isSourceAffected && !isTargetAffected) {
+        return wire;
+      }
+      const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
+      const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
+      const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
+      const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
+      const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+      const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin: wire.source,
+        targetPin: wire.target,
+      });
+      return {
+        ...wire,
+        route: { mode: "orthogonal", points: newRoute },
+        route_points: newRoute.length > 2 ? newRoute.slice(1, -1) : [],
+      };
+    });
+
+    setRails(normalizedRails);
+    setWires(nextWires);
+    saveLayoutToDb(normalizedRails, nextWires, infrastructure);
     setSelectedComponentId(componentId);
     setSelectedWireId("");
     setActiveTab("components");
@@ -6020,14 +6138,16 @@ export default function PanelGenerator() {
       ? getEffectiveWireThickness(activeWire, fallbackThickness)
       : fallbackThickness;
     const hasCustomRoute = Boolean(
-      storedWire?.route_points?.length
+      storedWire?.route?.points?.length
+      || storedWire?.route_points?.length
       || getCableControlPoints(storedWire || {}).length
+      || activeWire.route?.points?.length
       || activeWire.route_points?.length
       || getCableControlPoints(activeWire).length
     );
     const baseRoutePoints = hasCustomRoute
-      ? routePoints
-      : cleanRoutePoints([routePoints[0], routePoints[routePoints.length - 1]]);
+      ? (storedWire?.route?.points || (storedWire?.route_points?.length ? [routePoints[0], ...storedWire.route_points, routePoints[routePoints.length - 1]] : null) || activeWire.route?.points || (activeWire.route_points?.length ? [routePoints[0], ...activeWire.route_points, routePoints[routePoints.length - 1]] : null) || routePoints)
+      : routePoints;
     const registeredRoutePoints = registerWireRoute(activeWire, baseRoutePoints, {
       descriptor,
       color: baseColor,
@@ -6333,6 +6453,7 @@ export default function PanelGenerator() {
     if (!descriptors.length) return null;
 
     const color = wireDisplayColor(group.color);
+    const obstacles = extractPanelObstacles(rails, infrastructure);
 
     return (
       <g
@@ -6340,15 +6461,27 @@ export default function PanelGenerator() {
         className="cursor-pointer"
         data-wire-bundle="phase-distribution"
       >
-        {descriptors.map((descriptor) => {
-          const routePoints = cleanRoutePoints([
-            descriptor.p1,
-            descriptor.p2,
-          ]);
+        {descriptors.map((descriptor, descriptorIndex) => {
+          const storedWire = getStoredWire(descriptor.wire.id);
+          const savedRoute = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2
+            ? storedWire.route.points
+            : Array.isArray(storedWire?.route_points) && storedWire.route_points.length >= 2
+              ? [descriptor.p1, ...storedWire.route_points, descriptor.p2]
+              : null;
+
+          const laneOffset = (descriptorIndex - (descriptors.length - 1) / 2) * WIRE_SPACING;
+          const routePoints = savedRoute || calculateOrthogonalRoute(descriptor.p1, descriptor.p2, obstacles, {
+            sourceSide: descriptor.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
+            targetSide: descriptor.targetMeta?.term === "bottom" ? "DOWN" : "UP",
+            laneOffset,
+            sourcePin: descriptor.wire?.source,
+            targetPin: descriptor.wire?.target,
+          });
+
           return renderDescriptorPath(descriptor, routePoints, `${descriptor.wire.id}-distribution-independent`, {
             color,
             thickness: descriptor.thickness,
-            radius: 1,
+            radius: DEFAULT_CORNER_RADIUS,
             startTerminal: true,
             endTerminal: true,
           });
@@ -6643,14 +6776,21 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       fallbackPoints = cleanRoutePoints(anchoredPoints);
     }
     const hasCustomRoute = Boolean(
-      storedWire?.route_points?.length
+      storedWire?.route?.points?.length
+      || storedWire?.route_points?.length
       || getCableControlPoints(storedWire || {}).length
+      || activeWire.route?.points?.length
       || activeWire.route_points?.length
       || getCableControlPoints(activeWire).length
     );
-    if (wireId && !hasCustomRoute && fallbackPoints.length >= 2) {
-      fallbackPoints = cleanRoutePoints([fallbackPoints[0], fallbackPoints[fallbackPoints.length - 1]]);
-    }
+    const effectiveRoutePoints = (
+      storedWire?.route?.points
+      || (storedWire?.route_points?.length ? [fallbackPoints[0], ...storedWire.route_points, fallbackPoints[fallbackPoints.length - 1]] : null)
+      || activeWire.route?.points
+      || (activeWire.route_points?.length ? [fallbackPoints[0], ...activeWire.route_points, fallbackPoints[fallbackPoints.length - 1]] : null)
+      || fallbackPoints
+    );
+    fallbackPoints = cleanRoutePoints(effectiveRoutePoints);
     const baseDisplayColor = storedWire?.color
       ? wireDisplayColor(normalizedWireColor(storedWire))
       : baseColor;
