@@ -2973,42 +2973,107 @@ export default function PanelGenerator() {
 
   const commitWireEndpointMove = (wireId, endpoint, pinId) => {
     if (!wireId || !endpoint || !pinId) return;
-    if (isCableLocked(getEditableWire(wireId))) return;
+    const currentWire = getEditableWire(wireId);
+    if (isCableLocked(currentWire)) return;
+
+    captureEditHistoryStart(`wire-endpoint:${wireId}`);
+
+    // Limpa referências cacheadas do cabo para forçar reconstrução imediata
+    delete wirePathsRef.current[wireId];
+    delete wireRouteMetaRef.current[wireId];
+
     const endpointPoint = getPinCoords(pinId, rails, panelHeight, infrastructure);
-    const currentRoute = getCurrentVisualWireRoute(wireId);
-    const routeWithEndpoint = currentRoute.length >= 2 && isValidWirePoint(endpointPoint)
-      ? currentRoute.map((point, index, list) => (
-          (endpoint === "source" && index === 0) || (endpoint === "target" && index === list.length - 1)
-            ? endpointPoint
-            : point
-        ))
-      : currentRoute;
+    if (!isValidWirePoint(endpointPoint)) {
+      setWireMoveMode("");
+      setWireEndpointDrag(null);
+      setEndpointDragCoords(null);
+      setHoveredPinId("");
+      return;
+    }
+
+    const otherEndpoint = endpoint === "source" ? "target" : "source";
+    const otherPinId = currentWire[otherEndpoint] || (endpoint === "source" ? currentWire.target : currentWire.source) || "";
+    const otherPoint = otherPinId ? getPinCoords(otherPinId, rails, panelHeight, infrastructure) : null;
+
+    const sourcePoint = endpoint === "source" ? endpointPoint : otherPoint;
+    const targetPoint = endpoint === "target" ? endpointPoint : otherPoint;
+    const sourcePin = endpoint === "source" ? pinId : otherPinId;
+    const targetPin = endpoint === "target" ? pinId : otherPinId;
+
+    let cleanRoute = [];
+    if (isValidWirePoint(sourcePoint) && isValidWirePoint(targetPoint)) {
+      const obstacles = extractPanelObstacles(rails, infrastructure);
+      const sourceSide = inferTerminalDirection(sourcePin, sourcePoint, rails, panelHeight);
+      const targetSide = inferTerminalDirection(targetPin, targetPoint, rails, panelHeight);
+      const color = normalizedWireColor(currentWire);
+      const laneOffset = color === "black" ? -WIRE_SPACING : color === "brown" || color === "orange" ? WIRE_SPACING : 0;
+
+      const ortho = calculateOrthogonalRoute(sourcePoint, targetPoint, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin,
+        targetPin,
+      });
+      cleanRoute = simplifyOrthogonalPoints(ortho);
+    } else {
+      cleanRoute = [sourcePoint, targetPoint].filter(isValidWirePoint);
+    }
+
+    const nextBends = cleanRoute.length > 2 ? cleanRoute.slice(1, -1) : [];
+    const fullRoute = cleanRoute.length >= 2 ? cleanRoute : [sourcePoint, targetPoint].filter(isValidWirePoint);
+
     let found = false;
     const nextWires = wires.map((wire) => {
       if (wire.id === wireId) {
         found = true;
-        return buildWireRecordFromVisual(wireId, {
+        return {
           ...wire,
-          [endpoint]: pinId,
-          [`${endpoint}PortId`]: pinId,
-          [`${endpoint}ComponentId`]: getCableComponentId(pinId),
-          points: buildCablePointList(routeWithEndpoint, wire.points),
-        });
+          source: sourcePin,
+          target: targetPin,
+          sourceComponentId: getCableComponentId(sourcePin),
+          sourcePortId: sourcePin,
+          targetComponentId: getCableComponentId(targetPin),
+          targetPortId: targetPin,
+          originId: sourcePin,
+          destinationId: targetPin,
+          route_points: nextBends,
+          route: { mode: "orthogonal", points: fullRoute },
+          routeMode: "automatic",
+          routingMode: "automatic",
+          points: buildCablePointList(fullRoute, wire.points),
+        };
       }
       return wire;
     });
+
     if (!found) {
-       nextWires.push(buildWireRecordFromVisual(wireId, {
-         [endpoint]: pinId,
-         [`${endpoint}PortId`]: pinId,
-         [`${endpoint}ComponentId`]: getCableComponentId(pinId),
-         points: buildCablePointList(routeWithEndpoint),
-       }));
+      const baseRecord = buildWireRecordFromVisual(wireId, {
+        ...currentWire,
+        id: wireId,
+        source: sourcePin,
+        target: targetPin,
+        sourceComponentId: getCableComponentId(sourcePin),
+        sourcePortId: sourcePin,
+        targetComponentId: getCableComponentId(targetPin),
+        targetPortId: targetPin,
+        originId: sourcePin,
+        destinationId: targetPin,
+        route_points: nextBends,
+        route: { mode: "orthogonal", points: fullRoute },
+        routeMode: "automatic",
+        routingMode: "automatic",
+        points: buildCablePointList(fullRoute),
+      });
+      nextWires.push(baseRecord);
     }
+
+    commitEditHistory(`wire-endpoint:${wireId}`);
     updateWires(nextWires);
     setSelectedWireId(wireId);
     setWireMoveMode("");
     setWireEndpointDrag(null);
+    setEndpointDragCoords(null);
     setHoveredPinId("");
   };
 
@@ -3017,14 +3082,14 @@ export default function PanelGenerator() {
     if (isCableLocked(getEditableWire(selectedWireId))) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     ensureWireRecord(selectedWireId);
     setActiveTab("wiring");
     setWireMoveMode(endpoint);
     setWireEndpointDrag({ wireId: selectedWireId, endpoint });
     const point = getSvgCursorPoint(event);
     setHoveredPinId(findNearestConnectionPin(point)?.id || "");
-    if (point) setEndpointDragCoords({ x: point.x, y: point.y });
+    if (point) setEndpointDragCoords({ x: Math.round(point.x), y: Math.round(point.y) });
   };
 
   function setWireRoutePoints(wireId, routePoints, options = {}) {
@@ -3526,7 +3591,7 @@ export default function PanelGenerator() {
       setSelectedRoutePoint(null);
       return;
     }
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`wire-route:${wireId}`);
     setSelectedWireId(wireId);
     setSelectedComponentId("");
@@ -3565,7 +3630,7 @@ export default function PanelGenerator() {
 
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`wire-route:${wireId}`);
     selectEditableWire(wireId);
     setWireRoutePointDrag(null);
@@ -3634,7 +3699,7 @@ export default function PanelGenerator() {
     if (wiringMode || wireMoveMode) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`infra:${infraId}`);
     selectInfrastructure(infraId);
     const pt = getSvgCursorPoint(event);
@@ -3652,7 +3717,7 @@ export default function PanelGenerator() {
     event.preventDefault();
     const pt = getSvgCursorPoint(event);
     if (!pt) return;
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`infra:${infraId}`);
     selectInfrastructure(infraId);
     setTextDrag(null);
@@ -3692,7 +3757,7 @@ export default function PanelGenerator() {
     if (!wireId) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`wire-label:${wireId}`);
     setSelectedTextWireId(wireId);
     setSelectedAnnotationId("");
@@ -3715,7 +3780,7 @@ export default function PanelGenerator() {
     if (wiringMode || wireMoveMode) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`annotation:${annotationId}`);
     setSelectedAnnotationId(annotationId);
     setSelectedTextWireId("");
@@ -3740,7 +3805,7 @@ export default function PanelGenerator() {
     if (wiringMode || wireMoveMode) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(historyKey);
     onSelect?.();
     const point = getSvgCursorPoint(event);
@@ -4002,7 +4067,7 @@ export default function PanelGenerator() {
     if (event.button !== 0 || wiringMode || wireMoveMode || wireEndpointDrag || wireRoutePointDrag || wireSegmentDrag || infraResizeDrag) return;
     const point = getSvgCursorPoint(event);
     if (!point) return;
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`component:${componentId}:move`);
     setComponentDrag({
       componentId,
@@ -4019,7 +4084,7 @@ export default function PanelGenerator() {
     event.preventDefault();
     const point = getSvgCursorPoint(event);
     if (!point) return;
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     setLegendDrag({
       offsetX: point.x - legendPosition.x,
       offsetY: point.y - legendPosition.y,
@@ -4092,6 +4157,12 @@ export default function PanelGenerator() {
   };
 
   const handleSvgPointerUp = (event) => {
+    try {
+      if (event.pointerId && svgRef.current?.hasPointerCapture?.(event.pointerId)) {
+        svgRef.current?.releasePointerCapture?.(event.pointerId);
+      }
+    } catch (_) {}
+
     const point = getSvgCursorPoint(event);
 
     if (legendDrag) {
@@ -4199,6 +4270,10 @@ export default function PanelGenerator() {
     event.stopPropagation();
     if (wireEndpointDrag) {
       commitWireEndpointMove(wireEndpointDrag.wireId, wireEndpointDrag.endpoint, pinId);
+      return;
+    }
+    if (wireMoveMode && selectedWireId) {
+      commitWireEndpointMove(selectedWireId, wireMoveMode, pinId);
       return;
     }
     handlePinClick(pinId);
@@ -7784,85 +7859,40 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
   };
 
   const renderSelectedWireEndpointHandles = () => {
-    const visualMeta = wireRouteMetaRef.current[selectedWireId];
     const selectedWire = getEditableWire(selectedWireId);
     if (!isCableVisible(selectedWire) || isCableLocked(selectedWire)) return null;
-
-    if (visualMeta?.routePoints?.length >= 2) {
-      const sourcePoint = wireEndpointDrag?.endpoint === "source" && endpointDragCoords
-        ? endpointDragCoords
-        : visualMeta.sourcePoint;
-      const targetPoint = wireEndpointDrag?.endpoint === "target" && endpointDragCoords
-        ? endpointDragCoords
-        : visualMeta.targetPoint;
-      const handles = [
-        { endpoint: "source", label: "Origem", point: sourcePoint, color: "#00d8b8", pin: selectedWire.source },
-        { endpoint: "target", label: "Destino", point: targetPoint, color: "#f97316", pin: selectedWire.target },
-      ].filter((handle) => isValidWirePoint(handle.point));
-
-      return (
-        <g id="selected-wire-endpoint-handles">
-          {handles.map((handle) => {
-            const isDragging = wireEndpointDrag?.endpoint === handle.endpoint;
-            const labelWidth = Math.max(36, handle.label.length * 5.4 + 12);
-            return (
-              <g
-                key={handle.endpoint}
-                className="cursor-grab active:cursor-grabbing"
-                onPointerDown={(event) => startWireEndpointDrag(event, handle.endpoint)}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setActiveTab("wiring");
-                  setWireMoveMode(handle.endpoint);
-                }}
-              >
-                <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_HANDLE_HIT_RADIUS} fill="transparent" />
-                <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.outer} fill={handle.color} fillOpacity="0.14" stroke={handle.color} strokeWidth="1.15" strokeDasharray={isDragging ? "0" : "3,2.5"} />
-                <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.inner} fill="#ffffff" stroke={handle.color} strokeWidth="1.55" />
-                <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.dot} fill={handle.color} />
-                <rect
-                  x={handle.point.x - labelWidth / 2}
-                  y={handle.point.y + 10}
-                  width={labelWidth}
-                  height="13.5"
-                  rx="4"
-                  fill={handle.color}
-                  filter="url(#shadow)"
-                />
-                <text x={handle.point.x} y={handle.point.y + 19.6} fill="#ffffff" fontSize="5.8" fontWeight="950" textAnchor="middle" pointerEvents="none">
-                  {handle.label}
-                </text>
-                {isDragging && hoveredPinId && (
-                  <text x={handle.point.x} y={handle.point.y - 15} fill={handle.color} fontSize="6" fontWeight="950" textAnchor="middle" pointerEvents="none">
-                    Solte no borne destacado
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </g>
-      );
-    }
+    const visualMeta = wireRouteMetaRef.current[selectedWireId];
 
     let descriptor = selectedWireDescriptor;
-    
     if (!descriptor && (String(selectedWireId).includes("-ground-") || String(selectedWireId).includes("-neutral-"))) {
       const isGround = String(selectedWireId).includes("-ground-");
       const parentId = String(selectedWireId).split(isGround ? "-ground-" : "-neutral-")[0];
       descriptor = routedWires.find(d => d.wire?.id === parentId);
     }
-    
-    if (!descriptor) return null;
+
+    const currentSource = selectedWire.source || visualMeta?.wire?.source || descriptor?.wire?.source;
+    const currentTarget = selectedWire.target || visualMeta?.wire?.target || descriptor?.wire?.target;
+
+    const sourcePoint = wireEndpointDrag?.endpoint === "source" && endpointDragCoords
+      ? endpointDragCoords
+      : (currentSource ? getPinCoords(currentSource, rails, panelHeight, infrastructure) : visualMeta?.sourcePoint || descriptor?.p1);
+
+    const targetPoint = wireEndpointDrag?.endpoint === "target" && endpointDragCoords
+      ? endpointDragCoords
+      : (currentTarget ? getPinCoords(currentTarget, rails, panelHeight, infrastructure) : visualMeta?.targetPoint || descriptor?.p2);
 
     const handles = [
-      { endpoint: "source", label: "Origem", point: wireEndpointDrag?.endpoint === "source" && endpointDragCoords ? endpointDragCoords : descriptor.p1, color: "#00d8b8", pin: descriptor.wire.source },
-      { endpoint: "target", label: "Destino", point: wireEndpointDrag?.endpoint === "target" && endpointDragCoords ? endpointDragCoords : descriptor.p2, color: "#f97316", pin: descriptor.wire.target },
+      { endpoint: "source", label: "Origem", point: sourcePoint, color: "#00d8b8", pin: currentSource },
+      { endpoint: "target", label: "Destino", point: targetPoint, color: "#f97316", pin: currentTarget },
     ].filter((handle) => isValidWirePoint(handle.point));
+
+    if (!handles.length) return null;
 
     return (
       <g id="selected-wire-endpoint-handles">
         {handles.map((handle) => {
           const isDragging = wireEndpointDrag?.endpoint === handle.endpoint;
+          const isCurrentMoveMode = wireMoveMode === handle.endpoint;
           const labelWidth = Math.max(36, handle.label.length * 5.4 + 12);
           return (
             <g
@@ -7872,11 +7902,20 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
               onClick={(event) => {
                 event.stopPropagation();
                 setActiveTab("wiring");
-                setWireMoveMode(handle.endpoint);
+                setWireMoveMode(isCurrentMoveMode ? "" : handle.endpoint);
               }}
             >
               <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_HANDLE_HIT_RADIUS} fill="transparent" />
-              <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.outer} fill={handle.color} fillOpacity="0.14" stroke={handle.color} strokeWidth="1.15" strokeDasharray={isDragging ? "0" : "3,2.5"} />
+              <circle
+                cx={handle.point.x}
+                cy={handle.point.y}
+                r={WIRE_ENDPOINT_HANDLE_RADIUS.outer}
+                fill={handle.color}
+                fillOpacity={isCurrentMoveMode || isDragging ? "0.32" : "0.14"}
+                stroke={handle.color}
+                strokeWidth={isCurrentMoveMode || isDragging ? "2" : "1.15"}
+                strokeDasharray={isDragging ? "0" : "3,2.5"}
+              />
               <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.inner} fill="#ffffff" stroke={handle.color} strokeWidth="1.55" />
               <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.dot} fill={handle.color} />
               <rect
