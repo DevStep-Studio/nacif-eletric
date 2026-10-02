@@ -12,6 +12,7 @@ import {
   phaseCountForBudgetCircuit,
   resolveBudgetSupplyType,
 } from "@/lib/budgetElectricalMaterials";
+import { getMaterialProductInfo } from "@/lib/materialProductCatalog";
 
 export const BUDGET_BASE_MATERIAL_PRICES = {
   "Disjuntor 10A": 18,
@@ -99,8 +100,6 @@ export const getProjectLogo = (project, fallback) => (
   || fallback
   || DEFAULT_LOGO_URL
 );
-
-import { getMaterialProductInfo } from "@/lib/materialProductCatalog";
 
 export const getBudgetMaterialImageUrl = (name = "") => (
   getMaterialProductInfo(name).imageUrl
@@ -366,6 +365,7 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
     });
   });
 
+  const aggregatedBaseMaterials = aggregateBudgetMaterials(baseMaterials);
   const materials = aggregatedBaseMaterials.map((material) => {
     const productInfo = getMaterialProductInfo(material);
     return {
