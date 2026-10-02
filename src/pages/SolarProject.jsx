@@ -578,9 +578,17 @@ export default function SolarProject() {
 
   // Gatilho de Auto FV com Preview
   const handleTriggerAutoFv = () => {
+    if (!hasRoof) {
+      setEditorMode("draw-polygon");
+      toast({
+        title: "Demarque o telhado primeiro",
+        description: "Clique no mapa para demarcar os cantos da água do telhado antes de gerar o Auto FV.",
+      });
+      return;
+    }
     const bestLayout = getBestPanelLayout(config, 1200, "max_generation");
     const count = bestLayout.panelCount;
-    const kwp = (count * config.module_wp) / 1000;
+    const kwp = (count * (config.module_wp || 540)) / 1000;
     const occupancy = config.roof_utilization_pct || 85;
 
     setAutoFvPreview({
@@ -1033,19 +1041,30 @@ export default function SolarProject() {
                         type="button"
                         variant="outline"
                         onClick={() => setEditorMode("edit")}
-                        className="h-8 rounded-lg border-white/15 bg-white/5 text-white font-bold text-xs"
+                        className="h-8 rounded-lg border-white/15 bg-white/5 text-white font-bold text-xs hover:bg-white/10"
                       >
                         <Pencil className="h-3 w-3 mr-1" /> Vértices
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => setFitRoofRequest((n) => n + 1)}
-                        className="h-8 rounded-lg border-white/15 bg-white/5 text-white font-bold text-xs"
+                        onClick={() => {
+                          setEditorMode("draw-polygon");
+                          toast({ title: "Modo de Demarcação", description: "Clique no mapa para redesenhar a área do telhado." });
+                        }}
+                        className="h-8 rounded-lg border-white/15 bg-white/5 text-cyan-300 font-bold text-xs hover:bg-cyan-500/10"
                       >
-                        <Maximize2 className="h-3 w-3 mr-1" /> Centralizar
+                        <RotateCw className="h-3 w-3 mr-1" /> Redesenhar
                       </Button>
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setFitRoofRequest((n) => n + 1)}
+                      className="w-full h-7 rounded-lg border-white/10 bg-white/5 text-white font-medium text-xs hover:bg-white/10"
+                    >
+                      <Maximize2 className="h-3 w-3 mr-1" /> Centralizar no Telhado
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
@@ -1151,55 +1170,98 @@ export default function SolarProject() {
               {/* CASO DEFAULT: NADA SELECIONADO -> INSPECTOR GERAL */}
               {selectedEntity.type === "none" && (
                 <div className="space-y-4">
-                  {/* Seletor Compacto do Módulo FV */}
-                  <div className="rounded-xl border border-white/10 bg-slate-950/60 p-2.5 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-[10px] font-black uppercase tracking-wider text-white/70">
-                        MÓDULO FOTOVOLTAICO
-                      </Label>
-                      <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/20">
-                        {currentPreset.wp} Wp
-                      </span>
-                    </div>
-                    <select
-                      value={config.module_preset_id}
-                      onChange={(e) => updateConfig("module_preset_id", e.target.value)}
-                      className="w-full rounded-lg border border-white/15 bg-slate-900 px-2 py-1.5 text-xs font-bold text-white focus:border-cyan-400 focus:outline-none"
-                    >
-                      {MODULE_CATALOG.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex items-center justify-between text-[10px] text-white/50 pt-0.5">
-                      <span>{currentPreset.widthM}m × {currentPreset.heightM}m</span>
-                      <span>{currentPreset.manufacturer}</span>
-                    </div>
-                  </div>
+                  {!hasRoof ? (
+                    <div className="space-y-3.5 animate-in fade-in">
+                      <div className="rounded-xl border border-cyan-500/30 bg-gradient-to-b from-cyan-950/40 to-slate-950/80 p-4 text-center space-y-3 shadow-xl">
+                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/10 border border-cyan-400/30 text-cyan-400 shadow-inner">
+                          <Pencil className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-white">Nenhuma Área Demarcada</h4>
+                          <p className="mt-1 text-[11px] leading-relaxed text-white/60">
+                            Demarque a água do telhado no mapa por satélite para iniciar o dimensionamento e posicionar os módulos fotovoltaicos.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={() => setEditorMode("draw-polygon")}
+                          className="w-full h-9 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all"
+                        >
+                          <Plus className="h-4 w-4 mr-1.5 stroke-[3]" /> Demarcar Telhado
+                        </Button>
+                      </div>
 
-                  {/* 4 Seções em Abas Compactas */}
-                  <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-white/10 text-[11px] font-bold">
-                    {[
-                      { id: "layout", label: "Layout" },
-                      { id: "electrical", label: "Elétrica" },
-                      { id: "mounting", label: "Montagem" },
-                      { id: "advanced", label: "Avançado" },
-                    ].map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setActiveInspectorTab(tab.id)}
-                        className={`flex-1 py-1 rounded-md transition text-center ${
-                          activeInspectorTab === tab.id
-                            ? "bg-cyan-500 text-slate-950 font-black shadow"
-                            : "text-white/60 hover:text-white"
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
+                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3 space-y-2">
+                        <div className="text-[10px] font-black uppercase text-white/50 tracking-wider">Passo a Passo Rápido</div>
+                        <div className="space-y-1.5 text-[11px] text-white/70">
+                          <div className="flex items-start gap-2">
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-300 font-bold text-[10px]">1</span>
+                            <span>Aproxime o zoom no telhado do imóvel.</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-300 font-bold text-[10px]">2</span>
+                            <span>Clique em <strong>Demarcar Telhado</strong>.</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-300 font-bold text-[10px]">3</span>
+                            <span>Clique nos cantos e feche no 1º ponto verde.</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Seletor Compacto do Módulo FV */}
+                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[10px] font-black uppercase tracking-wider text-white/70">
+                            MÓDULO FOTOVOLTAICO
+                          </Label>
+                          <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/20">
+                            {currentPreset.wp} Wp
+                          </span>
+                        </div>
+                        <select
+                          value={config.module_preset_id}
+                          onChange={(e) => updateConfig("module_preset_id", e.target.value)}
+                          className="w-full rounded-lg border border-white/15 bg-slate-900 px-2 py-1.5 text-xs font-bold text-white focus:border-cyan-400 focus:outline-none"
+                        >
+                          {MODULE_CATALOG.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex items-center justify-between text-[10px] text-white/50 pt-0.5">
+                          <span>{currentPreset.widthM}m × {currentPreset.heightM}m</span>
+                          <span>{currentPreset.manufacturer}</span>
+                        </div>
+                      </div>
+
+                      {/* 4 Seções em Abas Compactas */}
+                      <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-white/10 text-[11px] font-bold">
+                        {[
+                          { id: "layout", label: "Layout" },
+                          { id: "electrical", label: "Elétrica" },
+                          { id: "mounting", label: "Montagem" },
+                          { id: "advanced", label: "Avançado" },
+                        ].map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveInspectorTab(tab.id)}
+                            className={`flex-1 py-1 rounded-md transition text-center ${
+                              activeInspectorTab === tab.id
+                                ? "bg-cyan-500 text-slate-950 font-black shadow"
+                                : "text-white/60 hover:text-white"
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
                   {/* CONTEÚDO DA ABA: LAYOUT */}
                   {activeInspectorTab === "layout" && (
@@ -1441,12 +1503,16 @@ export default function SolarProject() {
               type="button"
               onClick={() => setEditorMode("draw-polygon")}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
-                editorMode === "draw-polygon" ? "bg-cyan-500 text-slate-950 font-black shadow" : "hover:bg-white/10 text-white/70 hover:text-white"
+                editorMode === "draw-polygon"
+                  ? "bg-cyan-500 text-slate-950 font-black shadow"
+                  : !hasRoof
+                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 hover:bg-cyan-500/30"
+                  : "hover:bg-white/10 text-white/70 hover:text-white"
               }`}
-              title="Desenhar Área Solar (A)"
+              title="Demarcar Área do Telhado (A)"
             >
               <Pencil className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Área</span>
+              <span className="hidden sm:inline">{!hasRoof ? "Demarcar Telhado" : "Área"}</span>
             </button>
 
             <button

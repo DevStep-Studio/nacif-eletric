@@ -198,6 +198,20 @@ label.rounded-full,
   outline: none;
 }
 
+.solar-designer-map--drawing,
+.solar-designer-map--drawing .leaflet-container,
+.solar-designer-map--drawing .leaflet-grab,
+.solar-designer-map--drawing .leaflet-pane {
+  cursor: crosshair !important;
+}
+
+.solar-draw-vertex-marker,
+.solar-roof-vertex-handle,
+.solar-roof-midpoint-handle {
+  background: transparent !important;
+  border: 0 !important;
+}
+
 .solar-edge-workspace {
   background-color: #172637;
   background-image:

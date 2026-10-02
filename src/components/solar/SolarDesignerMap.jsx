@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { Circle, MapContainer, Marker, Pane, Polygon, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import "@geoman-io/leaflet-geoman-free";
-import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import {
   AlertTriangle,
   Box,
@@ -35,25 +33,23 @@ import {
   DEFAULT_SOLAR_MAP_CENTER,
   DEFAULT_SOLAR_MAP_ZOOM,
   buildPanelPolygons,
+  deleteVertex,
   distanceMeters,
   edgeRotationDegrees,
   getAzimuthWithCardinal,
   getMapCenterFromConfig,
+  getPolygonAreaSquareMeters,
   getPolygonCentroid,
   getPolygonEdges,
   getRoofMetricsFromPolygon,
   getRoofPolygonFromConfig,
+  insertVertexAtEdge,
+  moveVertex,
   normalizeRoofPolygon,
 } from "@/lib/solarDesignerGeometry";
 
 const SATELLITE_TILE_URL = "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}";
 const SATELLITE_ATTRIBUTION = "Google Maps Satélite";
-
-const ROOF_LAYER_OPTIONS = {
-  allowSelfIntersection: false,
-  snappable: true,
-  snapDistance: 12,
-};
 
 // Cores das strings no modo elétrico
 export const STRING_COLORS = [
@@ -67,16 +63,6 @@ export const STRING_COLORS = [
 
 function toLeafletPositions(points) {
   return normalizeRoofPolygon(points).map((point) => [point.lat, point.lng]);
-}
-
-function extractLayerPositions(layer) {
-  if (!layer?.getLatLngs) return [];
-  const latLngs = layer.getLatLngs();
-  const ring = Array.isArray(latLngs?.[0]) ? latLngs[0] : latLngs;
-
-  return (ring || [])
-    .map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
-    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
 }
 
 function interpolateLatLng(start, end, ratio) {
@@ -290,125 +276,323 @@ function FloatingMapControls({ onFitRoof, hasRoof, onToggle3D }) {
   );
 }
 
-function RoofEditorLayer({ positions, mode, onChange, onModeChange }) {
+/**
+ * Camada de Desenho Interativo Nativo (Zero Plugin Dependency)
+ */
+function InteractiveRoofDrawingLayer({
+  isDrawing,
+  drawingPoints,
+  onAddPoint,
+  onFinish,
+  onCancel,
+  onUndoPoint,
+}) {
   const map = useMap();
-  const layerRef = useRef(null);
-  const syncingRef = useRef(false);
-  const hasPositions = positions.length >= 3;
-  const positionKey = useMemo(
-    () => positions.map((point) => `${point.lat.toFixed(7)},${point.lng.toFixed(7)}`).join("|"),
-    [positions]
-  );
+  const [mousePos, setMousePos] = useState(null);
 
   useEffect(() => {
-    if (!map.pm) return undefined;
+    if (!isDrawing) {
+      setMousePos(null);
+      return undefined;
+    }
 
-    map.pm.setLang("pt_br");
-    map.pm.setGlobalOptions({
-      ...ROOF_LAYER_OPTIONS,
-      continueDrawing: false,
-    });
-
-    const handleCreate = (event) => {
-      const createdPositions = extractLayerPositions(event.layer);
-      map.removeLayer(event.layer);
-
-      if (createdPositions.length >= 3) {
-        onChange?.(createdPositions);
-        onModeChange?.("edit");
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel?.();
+      } else if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        onUndoPoint?.();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (drawingPoints.length >= 3) {
+          onFinish?.();
+        }
       }
     };
 
-    map.on("pm:create", handleCreate);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDrawing, drawingPoints, onFinish, onCancel, onUndoPoint]);
 
-    return () => {
-      map.off("pm:create", handleCreate);
-      map.pm?.disableDraw();
-    };
-  }, [map, onChange, onModeChange]);
+  useMapEvents({
+    click(e) {
+      if (!isDrawing) return;
 
-  useEffect(() => {
-    if (!hasPositions) return undefined;
+      const clickPt = { lat: e.latlng.lat, lng: e.latlng.lng };
 
-    const emitGeometry = () => {
-      if (syncingRef.current) return;
-      const nextPositions = extractLayerPositions(layerRef.current);
-      if (nextPositions.length >= 3) onChange?.(nextPositions);
-    };
+      // Se já temos 3 ou mais pontos e o clique foi muito próximo ao 1º vértice, fecha o polígono!
+      if (drawingPoints.length >= 3) {
+        const first = drawingPoints[0];
+        const distMeters = map.distance([clickPt.lat, clickPt.lng], [first.lat, first.lng]);
+        const zoom = map.getZoom();
+        const threshold = zoom >= 20 ? 1.8 : zoom >= 18 ? 3.5 : 6.0;
+        if (distMeters <= threshold) {
+          onFinish?.();
+          return;
+        }
+      }
 
-    const layer = L.polygon(toLeafletPositions(positions), {
-      color: "#00d8b8",
-      fillColor: "#00d8b8",
-      fillOpacity: 0.16,
-      opacity: 0.95,
-      pane: "overlayPane",
-      pmIgnore: false,
-      weight: 2.2,
-    }).addTo(map);
+      onAddPoint?.(clickPt);
+    },
+    mousemove(e) {
+      if (!isDrawing) return;
+      setMousePos({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+    dblclick(e) {
+      if (!isDrawing) return;
+      L.DomEvent.stopPropagation(e);
+      if (drawingPoints.length >= 3) {
+        onFinish?.();
+      }
+    },
+  });
 
-    layer.pm.setOptions(ROOF_LAYER_OPTIONS);
-    layer.on("pm:edit", emitGeometry);
-    layer.on("pm:dragend", emitGeometry);
-    layer.on("pm:rotateend", emitGeometry);
-    layer.on("pm:scaleend", emitGeometry);
+  if (!isDrawing) return null;
 
-    layerRef.current = layer;
+  const polylinePositions = drawingPoints.map((p) => [p.lat, p.lng]);
+  const lastPoint = drawingPoints[drawingPoints.length - 1];
+  const firstPoint = drawingPoints[0];
+  const rubberbandPositions = lastPoint && mousePos ? [[lastPoint.lat, lastPoint.lng], [mousePos.lat, mousePos.lng]] : [];
+  const closingGuidePositions = firstPoint && mousePos && drawingPoints.length >= 2 ? [[mousePos.lat, mousePos.lng], [firstPoint.lat, firstPoint.lng]] : [];
 
-    return () => {
-      layer.off("pm:edit", emitGeometry);
-      layer.off("pm:dragend", emitGeometry);
-      layer.off("pm:rotateend", emitGeometry);
-      layer.off("pm:scaleend", emitGeometry);
-      layer.removeFrom(map);
-      layerRef.current = null;
-    };
-  }, [hasPositions, map, onChange]);
+  const previewPoints = mousePos ? [...drawingPoints, mousePos] : drawingPoints;
+  const previewArea = previewPoints.length >= 3 ? getPolygonAreaSquareMeters(previewPoints) : 0;
 
-  useEffect(() => {
-    const layer = layerRef.current;
-    if (!layer || !positions.length) return;
+  return (
+    <Pane name="solar-drawing-pane" style={{ zIndex: 600 }}>
+      {/* Polígono de preenchimento translúcido durante o desenho */}
+      {previewPoints.length >= 3 && (
+        <Polygon
+          positions={previewPoints.map((p) => [p.lat, p.lng])}
+          interactive={false}
+          pathOptions={{
+            color: "#00f0ff",
+            fillColor: "#00f0ff",
+            fillOpacity: 0.22,
+            weight: 1.5,
+            dashArray: "4 4",
+          }}
+        />
+      )}
 
-    syncingRef.current = true;
-    const wasEnabled = layer.pm.enabled();
-    if (wasEnabled) layer.pm.disable();
-    layer.setLatLngs(toLeafletPositions(positions));
-    if (wasEnabled) layer.pm.enable(ROOF_LAYER_OPTIONS);
-    window.requestAnimationFrame(() => {
-      syncingRef.current = false;
-    });
-  }, [positionKey, positions]);
+      {/* Linhas sólidas entre os vértices já demarcados */}
+      {polylinePositions.length > 1 && (
+        <Polyline
+          positions={polylinePositions}
+          interactive={false}
+          pathOptions={{
+            color: "#00f0ff",
+            weight: 3,
+            opacity: 0.95,
+          }}
+        />
+      )}
 
-  useEffect(() => {
-    if (!map.pm) return;
+      {/* Linha elástica / borracha até o cursor do mouse */}
+      {rubberbandPositions.length === 2 && (
+        <Polyline
+          positions={rubberbandPositions}
+          interactive={false}
+          pathOptions={{
+            color: "#38bdf8",
+            weight: 2.2,
+            dashArray: "5 5",
+            opacity: 0.9,
+          }}
+        />
+      )}
 
-    map.pm.disableDraw();
-    map.dragging.enable();
+      {/* Linha guia de fechamento para o 1º ponto */}
+      {closingGuidePositions.length === 2 && (
+        <Polyline
+          positions={closingGuidePositions}
+          interactive={false}
+          pathOptions={{
+            color: "#34d399",
+            weight: 1.8,
+            dashArray: "3 6",
+            opacity: 0.65,
+          }}
+        />
+      )}
 
-    const layer = layerRef.current;
-    if (layer) {
-      layer.pm.disable();
-      layer.pm.disableLayerDrag();
-      layer.pm.disableRotate();
-    }
+      {/* Marcadores de cada vértice */}
+      {drawingPoints.map((pt, idx) => {
+        const isFirst = idx === 0;
+        const canClose = isFirst && drawingPoints.length >= 3;
 
-    if (mode === "draw-polygon") {
-      map.pm.enableDraw("Polygon", ROOF_LAYER_OPTIONS);
-    } else if (mode === "draw-rectangle") {
-      map.pm.enableDraw("Rectangle", ROOF_LAYER_OPTIONS);
-    } else if (mode === "edit" && layer) {
-      layer.pm.enable(ROOF_LAYER_OPTIONS);
-    } else if (mode === "move" && layer) {
-      layer.pm.enableLayerDrag();
-    } else if (mode === "rotate" && layer) {
-      layer.pm.enableRotate();
-    }
+        return (
+          <Marker
+            key={`draw-pt-${idx}`}
+            position={[pt.lat, pt.lng]}
+            eventHandlers={{
+              click: (e) => {
+                L.DomEvent.stopPropagation(e);
+                if (canClose) {
+                  onFinish?.();
+                }
+              },
+            }}
+            icon={L.divIcon({
+              className: "solar-draw-vertex-marker",
+              html: `
+                <div class="group relative flex items-center justify-center cursor-pointer -translate-x-1/2 -translate-y-1/2">
+                  ${
+                    isFirst
+                      ? `<div class="h-6 w-6 rounded-full border-2 border-white ${
+                          canClose
+                            ? "bg-emerald-500 ring-4 ring-emerald-400/60 animate-pulse scale-110"
+                            : "bg-cyan-500 ring-2 ring-cyan-400/40"
+                        } flex items-center justify-center text-slate-950 font-black text-[11px] shadow-2xl">
+                          ${canClose ? "✓" : "1"}
+                        </div>
+                        ${
+                          canClose
+                            ? `<div class="absolute bottom-full mb-1.5 whitespace-nowrap rounded-md bg-emerald-950 px-2 py-0.5 text-[10px] font-black text-emerald-200 border border-emerald-400 shadow-2xl backdrop-blur pointer-events-none">
+                                Clique para fechar (${previewArea.toFixed(1)} m²)
+                              </div>`
+                            : ""
+                        }`
+                      : `<div class="h-4 w-4 rounded-full border-2 border-white bg-cyan-400 ring-2 ring-cyan-400/40 flex items-center justify-center text-slate-950 font-black text-[9px] shadow-lg">
+                          ${idx + 1}
+                        </div>`
+                  }
+                </div>
+              `,
+              iconSize: [0, 0],
+            })}
+          />
+        );
+      })}
+    </Pane>
+  );
+}
 
-    return () => {
-      map.pm?.disableDraw();
-    };
-  }, [hasPositions, map, mode, positionKey]);
+/**
+ * Camada do Telhado Principal com Edição Interativa de Vértices
+ */
+function EditableRoofPolygonLayer({
+  positions,
+  isEditing,
+  onSelectRoof,
+  onChange,
+}) {
+  const hasPositions = positions && positions.length >= 3;
+  const edges = useMemo(() => (hasPositions ? getPolygonEdges(positions) : []), [positions, hasPositions]);
 
-  return null;
+  if (!hasPositions) return null;
+
+  const handleVertexDragEnd = (index, e) => {
+    const latLng = e.target.getLatLng();
+    const updated = moveVertex(positions, index, latLng);
+    onChange?.(updated);
+  };
+
+  const handleAddVertexAtEdge = (edgeIndex) => {
+    const updated = insertVertexAtEdge(positions, edgeIndex);
+    onChange?.(updated);
+  };
+
+  const handleDeleteVertex = (vertexIndex) => {
+    if (positions.length <= 3) return;
+    const updated = deleteVertex(positions, vertexIndex);
+    onChange?.(updated);
+  };
+
+  return (
+    <Pane name="solar-roof-pane" style={{ zIndex: 430 }}>
+      {/* Polígono do telhado */}
+      <Polygon
+        positions={toLeafletPositions(positions)}
+        interactive={true}
+        eventHandlers={{
+          click: (e) => {
+            L.DomEvent.stopPropagation(e);
+            onSelectRoof?.();
+          },
+        }}
+        pathOptions={{
+          color: "#00d8b8",
+          fillColor: "#00d8b8",
+          fillOpacity: 0.16,
+          opacity: 0.95,
+          weight: 2.5,
+          className: "cursor-pointer hover:stroke-cyan-300 transition-all",
+        }}
+      />
+
+      {/* Vértices arrastáveis (em modo select ou edit) */}
+      {isEditing && (
+        <>
+          {positions.map((pt, idx) => (
+            <Marker
+              key={`roof-vert-${idx}-${pt.lat.toFixed(6)}-${pt.lng.toFixed(6)}`}
+              position={[pt.lat, pt.lng]}
+              draggable={true}
+              eventHandlers={{
+                dragend: (e) => handleVertexDragEnd(idx, e),
+                contextmenu: (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  handleDeleteVertex(idx);
+                },
+                dblclick: (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  handleDeleteVertex(idx);
+                },
+              }}
+              icon={L.divIcon({
+                className: "solar-roof-vertex-handle",
+                html: `
+                  <div class="group relative flex items-center justify-center cursor-move -translate-x-1/2 -translate-y-1/2">
+                    <div class="h-4 w-4 rounded-full border-2 border-white bg-cyan-400 ring-2 ring-cyan-500/50 shadow-xl transform group-hover:scale-125 transition-all flex items-center justify-center">
+                      <div class="h-1.5 w-1.5 rounded-full bg-slate-950"></div>
+                    </div>
+                    ${
+                      positions.length > 3
+                        ? `<div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-slate-950/90 px-1.5 py-0.5 text-[9px] font-bold text-cyan-200 border border-cyan-400/50 shadow pointer-events-none transition">
+                            Arrastar · 2 cliques p/ excluir
+                          </div>`
+                        : ""
+                    }
+                  </div>
+                `,
+                iconSize: [0, 0],
+              })}
+            />
+          ))}
+
+          {/* Marcadores de inserção (+) no ponto médio de cada aresta */}
+          {edges.map((edge) => (
+            <Marker
+              key={`roof-mid-${edge.id}`}
+              position={[edge.midpoint.lat, edge.midpoint.lng]}
+              eventHandlers={{
+                click: (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  handleAddVertexAtEdge(edge.index);
+                },
+              }}
+              icon={L.divIcon({
+                className: "solar-roof-midpoint-handle",
+                html: `
+                  <div class="group relative flex items-center justify-center cursor-pointer -translate-x-1/2 -translate-y-1/2">
+                    <div class="h-3.5 w-3.5 rounded-full border border-white bg-slate-900 text-cyan-300 ring-1 ring-cyan-400/40 shadow-lg transform hover:scale-125 hover:bg-cyan-500 hover:text-slate-950 transition-all flex items-center justify-center font-black text-[10px]">
+                      +
+                    </div>
+                    <div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-slate-950/90 px-1.5 py-0.5 text-[9px] font-bold text-cyan-200 border border-cyan-400/50 shadow pointer-events-none transition">
+                      + Adicionar vértice
+                    </div>
+                  </div>
+                `,
+                iconSize: [0, 0],
+              })}
+            />
+          ))}
+        </>
+      )}
+    </Pane>
+  );
 }
 
 export default function SolarDesignerMap({
@@ -466,6 +650,42 @@ export default function SolarDesignerMap({
   const isDrawing = editorMode === "draw-polygon" || editorMode === "draw-rectangle";
   const isMeasuring = editorMode === "measure";
 
+  // Estado de desenho interativo
+  const [drawingPoints, setDrawingPoints] = useState([]);
+
+  // Limpa pontos ao sair do modo de desenho
+  useEffect(() => {
+    if (!isDrawing) {
+      setDrawingPoints([]);
+    }
+  }, [isDrawing]);
+
+  const handleAddDrawingPoint = useCallback((point) => {
+    setDrawingPoints((prev) => [...prev, point]);
+  }, []);
+
+  const handleUndoDrawingPoint = useCallback(() => {
+    setDrawingPoints((prev) => prev.slice(0, -1));
+  }, []);
+
+  const handleFinishDrawing = useCallback(() => {
+    if (drawingPoints.length < 3) return;
+    onRoofChange?.(drawingPoints);
+    onEditorModeChange?.("select");
+    onSelectRoof?.();
+    setDrawingPoints([]);
+  }, [drawingPoints, onRoofChange, onEditorModeChange, onSelectRoof]);
+
+  const handleCancelDrawing = useCallback(() => {
+    setDrawingPoints([]);
+    onEditorModeChange?.("select");
+  }, [onEditorModeChange]);
+
+  const liveDrawingArea = useMemo(() => {
+    if (drawingPoints.length < 3) return 0;
+    return getPolygonAreaSquareMeters(drawingPoints);
+  }, [drawingPoints]);
+
   // Estado da ferramenta Régua de medição
   const [measurePoints, setMeasurePoints] = useState([]);
   const measureDistance = useMemo(() => {
@@ -503,49 +723,101 @@ export default function SolarDesignerMap({
   }, [strings]);
 
   return (
-    <div className={`relative overflow-hidden bg-slate-950 select-none ${className}`}>
-      {/* Banner Superior de Notificação & Status de Área */}
-      <div className="absolute top-3 inset-x-4 z-[500] pointer-events-none flex items-center justify-between">
-        <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/90 px-3.5 py-1.5 text-xs text-white/90 shadow-2xl backdrop-blur-md">
-          <Sun className="h-4 w-4 text-cyan-400" />
-          <span className="font-medium hidden md:inline">
-            {editorMode === "draw-polygon"
-              ? "Clique no mapa para criar os vértices do telhado. Clique no primeiro ponto para fechar."
-              : editorMode === "measure"
-              ? "Clique em dois pontos para medir a distância real no telhado."
-              : "Clique em uma água do telhado ou módulo para inspecionar propriedades."}
-          </span>
-          <span className="font-medium md:hidden">Editor Fotovoltaico</span>
-        </div>
+    <div className={`relative overflow-hidden bg-slate-950 select-none ${className} ${isDrawing ? "solar-designer-map--drawing" : ""}`}>
+      {/* Banner Superior Flutuante de Instruções & Ações de Desenho */}
+      {isDrawing ? (
+        <div className="absolute top-3 inset-x-4 z-[500] flex items-center justify-between pointer-events-none animate-in slide-in-from-top-2">
+          <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-cyan-400/60 bg-slate-900/95 px-3.5 py-1.5 text-xs text-white shadow-2xl backdrop-blur-md">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-cyan-400 animate-ping" />
+            <span className="font-bold text-cyan-300">
+              {drawingPoints.length === 0
+                ? "Clique no 1º canto do telhado no mapa"
+                : drawingPoints.length < 3
+                ? `Canto #${drawingPoints.length + 1}: clique no próximo vértice`
+                : `Demarcado (${drawingPoints.length} cantos · ~${liveDrawingArea.toFixed(1)} m²)`}
+            </span>
+            <span className="hidden lg:inline text-white/50 text-[11px]">
+              (Dica: clique no ponto verde #1 ou Enter para fechar)
+            </span>
+          </div>
 
-        <div className="pointer-events-auto flex items-center gap-2">
-          {hasRoof && (
-            <div
-              onClick={() => onSelectRoof?.()}
-              className="cursor-pointer flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/90 px-3 py-1.5 text-xs font-bold text-white shadow-2xl backdrop-blur-md hover:bg-slate-800 transition"
-              title="Clique para inspecionar esta área"
-            >
-              <span className="text-white/60">◬ {config.roof_pitch_deg || 0}°</span>
-              <span className="h-3 w-px bg-white/15" />
-              <span className="text-cyan-300">{Math.round(roofArea)} m²</span>
-            </div>
-          )}
-
-          {isMeasuring && measureDistance !== null && (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/80 px-3 py-1.5 text-xs font-black text-emerald-300 shadow-2xl backdrop-blur-md">
-              <Ruler className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Distância: {measureDistance.toFixed(2)} m</span>
+          <div className="pointer-events-auto flex items-center gap-1.5">
+            {drawingPoints.length >= 3 && (
               <button
                 type="button"
-                onClick={() => setMeasurePoints([])}
-                className="ml-1 hover:text-white"
+                onClick={handleFinishDrawing}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 px-3 py-1.5 text-xs font-black text-slate-950 shadow-2xl transition active:scale-95"
               >
-                <X className="h-3 w-3" />
+                <Check className="h-3.5 w-3.5 stroke-[3]" />
+                <span>Concluir Área ({drawingPoints.length} pts)</span>
               </button>
-            </div>
-          )}
+            )}
+
+            {drawingPoints.length > 0 && (
+              <button
+                type="button"
+                onClick={handleUndoDrawingPoint}
+                className="flex items-center gap-1 rounded-xl border border-white/15 bg-slate-900/90 hover:bg-white/10 px-2.5 py-1.5 text-xs font-bold text-white/80 hover:text-white shadow-xl transition"
+                title="Desfazer último vértice (Backspace)"
+              >
+                <Undo2 className="h-3 w-3" />
+                <span className="hidden sm:inline">Desfazer</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleCancelDrawing}
+              className="flex items-center gap-1 rounded-xl border border-rose-500/30 bg-rose-950/80 hover:bg-rose-900 px-2.5 py-1.5 text-xs font-bold text-rose-200 shadow-xl transition"
+              title="Cancelar desenho (Esc)"
+            >
+              <X className="h-3.5 w-3.5" />
+              <span>Cancelar</span>
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Banner Superior Padrão de Status */
+        <div className="absolute top-3 inset-x-4 z-[500] pointer-events-none flex items-center justify-between">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/90 px-3.5 py-1.5 text-xs text-white/90 shadow-2xl backdrop-blur-md">
+            <Sun className="h-4 w-4 text-cyan-400" />
+            <span className="font-medium hidden md:inline">
+              {editorMode === "measure"
+                ? "Clique em dois pontos para medir a distância real no telhado."
+                : "Clique em uma água do telhado ou módulo para inspecionar propriedades."}
+            </span>
+            <span className="font-medium md:hidden">Editor Fotovoltaico</span>
+          </div>
+
+          <div className="pointer-events-auto flex items-center gap-2">
+            {hasRoof && (
+              <div
+                onClick={() => onSelectRoof?.()}
+                className="cursor-pointer flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/90 px-3 py-1.5 text-xs font-bold text-white shadow-2xl backdrop-blur-md hover:bg-slate-800 transition"
+                title="Clique para inspecionar esta área"
+              >
+                <span className="text-white/60">◬ {config.roof_pitch_deg || 0}°</span>
+                <span className="h-3 w-px bg-white/15" />
+                <span className="text-cyan-300">{Math.round(roofArea)} m²</span>
+              </div>
+            )}
+
+            {isMeasuring && measureDistance !== null && (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/80 px-3 py-1.5 text-xs font-black text-emerald-300 shadow-2xl backdrop-blur-md">
+                <Ruler className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Distância: {measureDistance.toFixed(2)} m</span>
+                <button
+                  type="button"
+                  onClick={() => setMeasurePoints([])}
+                  className="ml-1 hover:text-white"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <MapContainer
         attributionControl={false}
@@ -557,7 +829,7 @@ export default function SolarDesignerMap({
         scrollWheelZoom={true}
         doubleClickZoom={editorMode === "select"}
         touchZoom={true}
-        className={`solar-designer-map h-full w-full ${designerMode ? "solar-designer-map--edge" : ""}`}
+        className={`solar-designer-map h-full w-full ${isDrawing ? "solar-designer-map--drawing" : ""} ${designerMode ? "solar-designer-map--edge" : ""}`}
       >
         <TileLayer url={SATELLITE_TILE_URL} attribution={SATELLITE_ATTRIBUTION} maxNativeZoom={19} maxZoom={23} />
         
@@ -572,18 +844,32 @@ export default function SolarDesignerMap({
         />
         <FloatingMapControls onFitRoof={onFitRoof} hasRoof={hasRoof} onToggle3D={onToggle3D} />
         
-        <RoofEditorLayer
-          positions={roofPolygon}
-          mode={editorMode}
-          onChange={onRoofChange}
-          onModeChange={onEditorModeChange}
+        {/* Camada de Desenho Interativo Ativo */}
+        <InteractiveRoofDrawingLayer
+          isDrawing={isDrawing}
+          drawingPoints={drawingPoints}
+          onAddPoint={handleAddDrawingPoint}
+          onFinish={handleFinishDrawing}
+          onCancel={handleCancelDrawing}
+          onUndoPoint={handleUndoDrawingPoint}
         />
-        {showMeasurements && <MeasurementLabels roofPolygon={roofPolygon} />}
-        {hasRoof && onAlignToEdge && <EdgeAlignmentLayer roofPolygon={roofPolygon} onAlignToEdge={onAlignToEdge} />}
-        {panelPolygons.length > 0 && <ArrayCountBadge panelPolygons={panelPolygons} />}
+
+        {/* Camada de Telhado Existente e Edição de Vértices */}
+        {!isDrawing && (
+          <EditableRoofPolygonLayer
+            positions={roofPolygon}
+            isEditing={editorMode === "edit" || editorMode === "select"}
+            onSelectRoof={onSelectRoof}
+            onChange={onRoofChange}
+          />
+        )}
+
+        {showMeasurements && !isDrawing && <MeasurementLabels roofPolygon={roofPolygon} />}
+        {hasRoof && !isDrawing && onAlignToEdge && <EdgeAlignmentLayer roofPolygon={roofPolygon} onAlignToEdge={onAlignToEdge} />}
+        {panelPolygons.length > 0 && !isDrawing && <ArrayCountBadge panelPolygons={panelPolygons} />}
 
         {/* Camada de Módulos Fotovoltaicos */}
-        <Pane name="solar-panels-pane" style={{ zIndex: 440 }}>
+        <Pane name="solar-panels-pane" style={{ zIndex: 440, pointerEvents: isDrawing ? "none" : "auto" }}>
           {panelPolygons.map((panel, index) => {
             const isSelected = selectedModuleIndex === index;
             const stringInfo = moduleStringMap.get(index);
@@ -616,14 +902,13 @@ export default function SolarDesignerMap({
               <Polygon
                 key={`panel-${index}`}
                 positions={toLeafletPositions(panel)}
-                interactive={editorMode === "select"}
+                interactive={editorMode === "select" && !isDrawing}
                 eventHandlers={{
                   click: (e) => {
                     L.DomEvent.stopPropagation(e);
                     onSelectModule?.(index);
                   },
                 }}
-                pmIgnore
                 pathOptions={{
                   color: strokeColor,
                   className: `solar-panel-shape cursor-pointer transition-all duration-150 ${isSelected ? "ring-2 ring-white" : ""}`,
@@ -652,7 +937,6 @@ export default function SolarDesignerMap({
             <Polyline
               positions={panelCellLines}
               interactive={false}
-              pmIgnore
               pathOptions={{
                 color: "#e0f2fe",
                 className: "solar-panel-cell-lines",
@@ -693,7 +977,7 @@ export default function SolarDesignerMap({
         )}
 
         {/* Camada de Obstáculos Interativos */}
-        <Pane name="solar-obstacles-pane" style={{ zIndex: 450 }}>
+        <Pane name="solar-obstacles-pane" style={{ zIndex: 450, pointerEvents: isDrawing ? "none" : "auto" }}>
           {obstacles.map((obs) => {
             const isSelected = selectedObstacleId === obs.id;
             return (
