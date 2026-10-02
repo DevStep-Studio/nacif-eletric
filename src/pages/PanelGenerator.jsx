@@ -23,6 +23,14 @@ import {
   normalizeSavedBoard,
   extractPanelObstacles,
   resolvePinPosition,
+  resolveTerminalPosition,
+  getNeutralBusLayout,
+  getGroundBusLayout,
+  getThreePhaseOutputPin,
+  THREE_PHASE_OUTPUT,
+  THREE_PHASE_TERMINALS,
+  NEUTRAL_BUS,
+  GROUND_BUS,
   inferTerminalDirection,
   simplifyOrthogonalPoints,
   isOrthogonalPath,
@@ -128,23 +136,7 @@ const isCombToothVisible = (toothX, busX, busWidth) => {
   return toothX >= busX && toothX + COMB_TOOTH_WIDTH <= busX + width;
 };
 
-const THREE_PHASE_OUTPUT = {
-  x: 54,
-  y: 44,
-  width: 214,
-  height: 38,
-  pinStartX: 82,
-  pinY: 66,
-  pinGap: 34,
-};
 
-const THREE_PHASE_TERMINALS = [
-  { index: 0, label: "PE", kind: "ground", fill: "#16a34a" },
-  { index: 4, label: "N", kind: "neutral", fill: "#38bdf8" },
-  { index: 1, label: "L1", kind: "power", fill: "#111827" },
-  { index: 2, label: "L2", kind: "power", fill: "#dc2626" },
-  { index: 3, label: "L3", kind: "power", fill: "#7c2d12" },
-];
 
 // Paleta visual realista do quadro
 const COLORS = {
@@ -921,77 +913,7 @@ const PROFESSIONAL_BUS = {
   branchRadius: 3,
 };
 
-const NEUTRAL_BUS = {
-  x: PANEL_W - 455,
-  y: 62,
-  width: 286,
-  height: 18,
-  pinCount: 12,
-  pinGap: 22,
-  pinStartX: PANEL_W - 435,
-  pinY: 71,
-};
 
-const GROUND_BUS = {
-  x: 240,
-  width: 390,
-  pinCount: 12,
-  pinGap: 30,
-  pinStartX: 262,
-};
-
-const getNeutralBusLayout = (infrastructure = []) => {
-  const item = (infrastructure || []).find((entry) => entry?.id === "neutral-bus") || {};
-  const width = Math.max(180, Math.min(520, Number(item.width) || NEUTRAL_BUS.width));
-  const rawX = Number(item.x);
-  const rawY = Number(item.y);
-  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : NEUTRAL_BUS.x));
-  const y = Math.max(20, Number.isFinite(rawY) ? rawY : NEUTRAL_BUS.y);
-  const pinGap = Math.max(14, Math.min(32, (width - 40) / Math.max(1, NEUTRAL_BUS.pinCount - 1)));
-
-  return {
-    x,
-    y,
-    width,
-    height: NEUTRAL_BUS.height,
-    pinStartX: x + 20,
-    pinY: y + (NEUTRAL_BUS.pinY - NEUTRAL_BUS.y),
-    pinGap,
-  };
-};
-
-const getGroundBusLayout = (infrastructure = [], panelH = 820) => {
-  const item = (infrastructure || []).find((entry) => entry?.id === "ground-bus") || {};
-  const width = Math.max(260, Math.min(520, Number(item.width) || GROUND_BUS.width));
-  const rawX = Number(item.x ?? item.busX);
-  const rawY = Number(item.y);
-  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : GROUND_BUS.x));
-  const y = Math.max(20, Math.min(panelH - 44, Number.isFinite(rawY) ? rawY : (panelH - 68)));
-  const pinGap = Math.max(20, Math.min(38, (width - 60) / Math.max(1, GROUND_BUS.pinCount - 1)));
-
-  return {
-    x,
-    y,
-    width,
-    pinStartX: x + 22,
-    pinY: y + 14,
-    pinGap,
-  };
-};
-
-const getThreePhaseOutputPin = (terminalIndex = 0) => {
-  const index = Number(terminalIndex);
-  const terminalSlot = index === 4
-    ? 1
-    : index > 0
-      ? index + 1
-      : 0;
-  const safeIndex = Math.max(0, Math.min(4, Number.isFinite(terminalSlot) ? terminalSlot : 0));
-  return {
-    x: THREE_PHASE_OUTPUT.pinStartX + safeIndex * THREE_PHASE_OUTPUT.pinGap,
-    y: THREE_PHASE_OUTPUT.pinY,
-  };
-};
 
 const SHOW_WIRE_GAUGE_TAGS = false;
 
@@ -1567,122 +1489,10 @@ const compareCircuitDescriptors = (a, b) => (
   || String(a.wire?.id || "").localeCompare(String(b.wire?.id || ""))
 );
 
-// ─── LOCALIZADOR DE COORDENADAS DE PINO DE CONEXÃO ─────────────────────────────
-const getPinCoords = (pinId, rails, panelH, infrastructure = []) => {
-  if (!pinId) return { x: 0, y: 0 };
-
-  if (pinId.startsWith("loose:")) {
-    const parts = pinId.split(":");
-    return {
-      x: Number(parts[1]) || 0,
-      y: Number(parts[2]) || 0,
-    };
-  }
-  
-  if (pinId.startsWith("busbar_neutral:")) {
-    const idx = parseInt(pinId.split(":")[1], 10);
-    const neutralBus = getNeutralBusLayout(infrastructure);
-    return {
-      x: neutralBus.pinStartX + (Math.abs(Number(idx) || 0) % NEUTRAL_BUS.pinCount) * neutralBus.pinGap,
-      y: neutralBus.pinY,
-    };
-  }
-  
-  if (pinId === "backbone_ground:start") return { x: getGroundBackboneLeftX(), y: 78 };
-  if (pinId === "backbone_ground:end") {
-    const groundBus = getGroundBusLayout(infrastructure, panelH);
-    return { x: groundBus.x + groundBus.width - 18, y: groundBus.pinY };
-  }
-
-  if (pinId.startsWith("busbar_ground:")) {
-    const idx = parseInt(pinId.split(":")[1], 10);
-    const groundBus = getGroundBusLayout(infrastructure, panelH);
-    return {
-      x: groundBus.pinStartX + (Math.abs(Number(idx) || 0) % GROUND_BUS.pinCount) * groundBus.pinGap,
-      y: groundBus.pinY,
-    };
-  }
-  
-  if (pinId.startsWith("terminal_left_top:")) {
-    return getThreePhaseOutputPin(parseInt(pinId.split(":")[1], 10), infrastructure);
-  }
-
-  if (pinId.startsWith("load_out:")) {
-    const parts = pinId.split(":");
-    const compId = parts[1];
-    const poleToken = parts[2] || "0";
-    const poleIdx = poleToken === "neutral" ? 3 : poleToken === "ground" ? 4 : parseInt(poleToken || "0", 10);
-    const circuitMatch = String(compId || "").match(/circuit_(\d+)/i);
-    const outputIndex = circuitMatch ? Number(circuitMatch[1]) : 0;
-
-    for (let rIdx = 0; rIdx < rails.length; rIdx++) {
-      const rail = rails[rIdx];
-      const railY = 190 + rIdx * 240;
-      let currentX = 160;
-
-      for (const comp of rail.components || []) {
-        const compW = comp.poles * MOD;
-        if (componentMatchesLoadTarget(compId, comp)) {
-          const terminalPole = Number.isFinite(poleIdx) ? Math.max(0, Math.min(Number(poleIdx) || 0, comp.poles - 1)) : 0;
-          const terminalX = currentX + terminalPole * MOD + MOD / 2;
-
-          if (poleToken === "neutral") {
-            return {
-              x: terminalX,
-              y: snapWireGrid(railY + 136 + (outputIndex % 4) * 6),
-            };
-          }
-
-          if (poleToken === "ground") {
-            const baseX = PANEL_W - 140; // Direita do barramento (combed layout default invertido)
-            const baseY = panelH - 240; // Inicia mais alto para empilhar para baixo
-            return {
-              x: baseX,
-              y: snapWireGrid(baseY + outputIndex * 16),
-            };
-          }
-
-          return {
-            x: terminalX,
-            y: snapWireGrid(railY + 132 + (terminalPole % 2) * 8),
-          };
-        }
-        currentX += compW + 2;
-      }
-    }
-
-    return getFallbackLoadPoint(poleToken, rails, panelH);
-  }
-  
-  if (pinId.startsWith("comp:")) {
-    const parts = pinId.split(":");
-    const compId = parts[1];
-    const termType = parts[2]; // "top" | "bottom"
-    const poleIdx = parseInt(parts[3] || "0", 10);
-    
-    for (let rIdx = 0; rIdx < rails.length; rIdx++) {
-      const rail = rails[rIdx];
-      const railY = 190 + rIdx * 240;
-      let currentX = 160;
-      
-      for (const comp of rail.components) {
-        const compW = comp.poles * MOD;
-        if (comp.id === compId) {
-          const x = currentX + poleIdx * MOD + MOD / 2;
-          const y = termType === "top" ? railY - 37 : railY + 57;
-          return { x, y };
-        }
-        currentX += compW + 2;
-      }
-    }
-    // Fallback gracioso para entrada de alimentação caso gen_brk / gen_dr não esteja montado no trilho
-    if (compId === "gen_brk" || compId === "gen_dr" || compId?.startsWith("gen_")) {
-      return getThreePhaseOutputPin(poleIdx + 1, infrastructure);
-    }
-  }
-  
-  return null;
-};
+// ─── LOCALIZADOR DE COORDENADAS DE PINO DE CONEXÃO (SSOT) ─────────────────────
+const getPinCoords = (pinId, rails, panelH, infrastructure = []) => (
+  resolvePinPosition(pinId, rails, panelH, infrastructure) || { x: 0, y: 0 }
+);
 
 export default function PanelGenerator() {
   const navigate = useNavigate();
@@ -2590,24 +2400,21 @@ export default function PanelGenerator() {
       });
     });
 
-    rails.forEach((rail, railIndex) => {
-      const railY = 190 + railIndex * 240;
-      let currentX = 160;
+    rails.forEach((rail) => {
       (rail.components || []).forEach((component) => {
         const poles = Number(component.poles || 1);
-        const width = poles * MOD;
         if (component.type !== "spacer") {
           Array.from({ length: poles }).forEach((_, poleIndex) => {
-            const x = currentX + poleIndex * MOD + MOD / 2;
             const topId = `comp:${component.id}:top:${poleIndex}`;
             const bottomId = `comp:${component.id}:bottom:${poleIndex}`;
+            const topPoint = getPinCoords(topId, rails, panelHeight, infrastructure);
+            const bottomPoint = getPinCoords(bottomId, rails, panelHeight, infrastructure);
             const displayLabel = getComponentDisplayLabel(component);
             const labelBase = `${displayLabel} P${poleIndex + 1}`;
-            addPin({ id: topId, x, y: railY - 37, label: `${labelBase} sup.`, kind: normalizedWireColor({ id: topId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
-            addPin({ id: bottomId, x, y: railY + 57, label: `${labelBase} inf.`, kind: normalizedWireColor({ id: bottomId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
+            addPin({ id: topId, ...topPoint, label: `${labelBase} sup.`, kind: normalizedWireColor({ id: topId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
+            addPin({ id: bottomId, ...bottomPoint, label: `${labelBase} inf.`, kind: normalizedWireColor({ id: bottomId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
           });
         }
-        currentX += width + 2;
       });
     });
 
@@ -6397,8 +6204,8 @@ export default function PanelGenerator() {
         {/* Pinos interativos de fiação */}
         {(wiringMode || !!wireMoveMode) && (
           <>
-            <circle cx={x + W / 2} cy={y + 14} r="8" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-            <circle cx={x + W / 2} cy={y + BRK_H - 14} r="8" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
+            <circle cx={x + W / 2} cy={y + 18} r="8" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
+            <circle cx={x + W / 2} cy={y + BRK_H - 18} r="8" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
           </>
         )}
 
@@ -6567,10 +6374,6 @@ export default function PanelGenerator() {
       isDouble = count > 1;
     }
 
-    if (isDouble && pin.includes("comp:")) {
-      angle = pin.includes(":top:") ? -90 : 90;
-    }
-
     const type = requestedType || (isDouble ? "duplo" : "agulha");
 
     const pinLength = Math.max(5, thickness * 1.6);
@@ -6592,7 +6395,9 @@ export default function PanelGenerator() {
     if (type === "agulha" || type === "duplo") {
       graphic = (
         <g>
+          {/* Pino de cobre estanhado que entra no borne/parafuso (termina exatamente no centro x=0) */}
           <path d={`M ${-pinLength} ${-pinHeight/2} L 0 ${-pinHeight/2 + 0.4} L 0 ${pinHeight/2 - 0.4} L ${-pinLength} ${pinHeight/2} Z`} fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.5" />
+          {/* Luva isolante de polipropileno colorida crimpada no cabo */}
           <rect x={-pinLength - collarLength} y={-collarHeight/2} width={collarLength} height={collarHeight} rx="1.5" fill={ferruleColor} stroke="rgba(0,0,0,0.15)" strokeWidth="0.8" />
           <rect x={-pinLength - collarLength} y={-collarHeight/2 + 0.5} width={collarLength} height={collarHeight/3} fill="#ffffff" fillOpacity="0.3" rx="1" />
         </g>
@@ -6601,10 +6406,11 @@ export default function PanelGenerator() {
       const ringRadius = Math.max(3.5, thickness * 1.2);
       graphic = (
         <g>
-          <circle cx={-ringRadius} cy={0} r={ringRadius} fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.8" />
-          <circle cx={-ringRadius} cy={0} r={ringRadius * 0.45} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.4" />
-          <rect x={-ringRadius * 1.8 - collarLength} y={-collarHeight/2} width={collarLength} height={collarHeight} rx="1.5" fill={ferruleColor} stroke="rgba(0,0,0,0.15)" strokeWidth="0.8" />
-          <rect x={-ringRadius * 1.8 - collarLength} y={-collarHeight/2 + 0.5} width={collarLength} height={collarHeight/3} fill="#ffffff" fillOpacity="0.3" rx="1" />
+          {/* Terminal Olhal concêntrico com o centro do parafuso (0, 0) */}
+          <circle cx={0} cy={0} r={ringRadius} fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.8" />
+          <circle cx={0} cy={0} r={ringRadius * 0.45} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.4" />
+          <rect x={-ringRadius - collarLength} y={-collarHeight/2} width={collarLength} height={collarHeight} rx="1.5" fill={ferruleColor} stroke="rgba(0,0,0,0.15)" strokeWidth="0.8" />
+          <rect x={-ringRadius - collarLength} y={-collarHeight/2 + 0.5} width={collarLength} height={collarHeight/3} fill="#ffffff" fillOpacity="0.3" rx="1" />
         </g>
       );
     } else if (type === "compressao") {
@@ -6612,9 +6418,10 @@ export default function PanelGenerator() {
       const ringRadius = Math.max(4, thickness * 1.3);
       graphic = (
         <g>
-          <path d={`M ${-ringRadius * 2} ${-pinHeight*0.8} L ${-ringRadius*2 - barrelLength} ${-pinHeight*1.1} L ${-ringRadius*2 - barrelLength} ${pinHeight*1.1} L ${-ringRadius * 2} ${pinHeight*0.8} Z`} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.6" />
-          <circle cx={-ringRadius} cy={0} r={ringRadius} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.8" />
-          <circle cx={-ringRadius} cy={0} r={ringRadius * 0.4} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.4" />
+          {/* Terminal de Compressão concêntrico com o centro do parafuso (0, 0) */}
+          <path d={`M ${-ringRadius} ${-pinHeight*0.8} L ${-ringRadius - barrelLength} ${-pinHeight*1.1} L ${-ringRadius - barrelLength} ${pinHeight*1.1} L ${-ringRadius} ${pinHeight*0.8} Z`} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.6" />
+          <circle cx={0} cy={0} r={ringRadius} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.8" />
+          <circle cx={0} cy={0} r={ringRadius * 0.4} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.4" />
         </g>
       );
     }
@@ -7943,6 +7750,30 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     );
   };
 
+  const renderDebugTerminals = () => {
+    const isDebugActive = typeof window !== "undefined" && (
+      window.__DEBUG_TERMINALS === true
+      || window.location?.search?.includes("debug_terminals=1")
+    );
+    if (!isDebugActive) return null;
+
+    return (
+      <g id="debug-terminal-anchors" pointerEvents="none" opacity={0.95}>
+        {connectionPins.map((pin) => (
+          <g key={`debug-pin-${pin.id}`}>
+            <line x1={pin.x - 6} y1={pin.y} x2={pin.x + 6} y2={pin.y} stroke="#ff0055" strokeWidth={1.2} />
+            <line x1={pin.x} y1={pin.y - 6} x2={pin.x} y2={pin.y + 6} stroke="#ff0055" strokeWidth={1.2} />
+            <circle cx={pin.x} cy={pin.y} r={2.5} fill="#ff0055" stroke="#ffffff" strokeWidth={0.6} />
+            <rect x={pin.x + 4} y={pin.y - 12} width={Math.max(38, String(pin.id).length * 4.8 + 8)} height={12} rx={2} fill="#0f172a" fillOpacity={0.9} />
+            <text x={pin.x + 8} y={pin.y - 3} fill="#00ffcc" fontSize={6.2} fontFamily="monospace" fontWeight="bold">
+              {pin.id}
+            </text>
+          </g>
+        ))}
+      </g>
+    );
+  };
+
   const renderSelectedWireEndpointHandles = () => {
     const visualMeta = wireRouteMetaRef.current[selectedWireId];
     const selectedWire = getEditableWire(selectedWireId);
@@ -9129,6 +8960,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     {renderTextAnnotations()}
                     {renderComponentDragPreview()}
                     {renderConnectionHotspots()}
+                    {renderDebugTerminals()}
                     {renderSelectedWireRouteHandles()}
                     {renderSelectedWireEndpointHandles()}
                     {/* Preview line enquanto arrasta endpoint */}

@@ -350,11 +350,92 @@ console.log("Iniciando bateria de testes obrigatórios do Roteador Ortogonal e P
   // O ponto inicial NÃO pode ser (0, 0)
   assert.notEqual(feedWire.route.points[0].x, 0, "TESTE 10: Ponto inicial do alimentador não é x=0");
   assert.notEqual(feedWire.route.points[0].y, 0, "TESTE 10: Ponto inicial do alimentador não é y=0");
-  assert.equal(feedWire.route.points[0].x, 101, "TESTE 10: Origem cai no terminal trifásico L1 (73 + 28 = 101)");
-  assert.equal(feedWire.route.points[0].y, 78, "TESTE 10: Origem cai na altura do bloco de entrada (78)");
+  assert.equal(feedWire.route.points[0].x, 150, "TESTE 10: Origem cai no terminal trifásico L1 (82 + 2*34 = 150)");
+  assert.equal(feedWire.route.points[0].y, 66, "TESTE 10: Origem cai na altura do bloco de entrada (66)");
   console.log("✓ TESTE 10: Disjuntor geral ausente. Conexão deriva do bloco de entrada sem ir para (0, 0).");
 }
 
+// ─── TESTE 11: Precisão de parafusos em Disjuntores multipolares (1P, 2P, 3P, 4P) ──
+{
+  const rails = [
+    {
+      id: "rail_1",
+      components: [
+        { id: "b1", type: "breaker", poles: 1 },
+        { id: "b2", type: "breaker", poles: 2 },
+        { id: "b3", type: "breaker", poles: 3 },
+      ],
+    },
+  ];
+  const railY = 190; // trilho 0
+
+  // b1: x = 160, poles = 1 (width 26), center x = 160 + 13 = 173
+  const b1_top = resolvePinPosition("comp:b1:top:0", rails);
+  const b1_bottom = resolvePinPosition("comp:b1:bottom:0", rails);
+  assert.equal(b1_top.x, 173, "TESTE 11: b1 polo 0 x = 173");
+  assert.equal(b1_top.y, railY - 31, "TESTE 11: b1 top y = railY - 31 = 159");
+  assert.equal(b1_bottom.x, 173, "TESTE 11: b1 bottom x = 173");
+  assert.equal(b1_bottom.y, railY + 51, "TESTE 11: b1 bottom y = railY + 51 = 241");
+
+  // b2: x = 160 + 26 + 2 = 188, polo 0 x = 188 + 13 = 201, polo 1 x = 188 + 26 + 13 = 227
+  const b2_p0 = resolvePinPosition("comp:b2:top:0", rails);
+  const b2_p1 = resolvePinPosition("comp:b2:top:1", rails);
+  assert.equal(b2_p0.x, 201, "TESTE 11: b2 polo 0 x = 201");
+  assert.equal(b2_p1.x, 227, "TESTE 11: b2 polo 1 x = 227");
+
+  console.log("✓ TESTE 11: Disjuntores multipolares ancoram perfeitamente nos parafusos de cada polo.");
+}
+
+// ─── TESTE 12: Precisão de parafusos em Bornes SAK ───────────────────────────
+{
+  const rails = [
+    {
+      id: "rail_1",
+      components: [
+        { id: "sak1", type: "borne", poles: 1 },
+      ],
+    },
+  ];
+  const railY = 190;
+  const sak_top = resolvePinPosition("comp:sak1:top:0", rails);
+  const sak_bottom = resolvePinPosition("comp:sak1:bottom:0", rails);
+
+  assert.equal(sak_top.x, 160 + 7, "TESTE 12: Borne SAK centro x = 167");
+  assert.equal(sak_top.y, railY - 27, "TESTE 12: Borne SAK top y = railY - 27 = 163");
+  assert.equal(sak_bottom.y, railY + 47, "TESTE 12: Borne SAK bottom y = railY + 47 = 237");
+  console.log("✓ TESTE 12: Bornes SAK ancoram exatamente no centro do parafuso (x+7, y-27 / y+47).");
+}
+
+// ─── TESTE 13: Barramentos de Neutro e Terra ─────────────────────────────────
+{
+  const pNeut0 = resolvePinPosition("busbar_neutral:0");
+  const pNeut1 = resolvePinPosition("busbar_neutral:1");
+  const pGnd0 = resolvePinPosition("busbar_ground:0");
+  const pGnd1 = resolvePinPosition("busbar_ground:1");
+
+  assert.equal(pNeut0.y, 71, "TESTE 13: Barramento Neutro Y = 71");
+  assert.equal(Math.round(pNeut1.x - pNeut0.x), 22, "TESTE 13: Gap entre parafusos do neutro ~ 22px");
+  assert.equal(Math.round(pGnd1.x - pGnd0.x), 30, "TESTE 13: Gap entre parafusos do terra = 30px");
+  console.log("✓ TESTE 13: Barramentos Neutro e Terra possuem parafusos individuais perfeitamente indexados.");
+}
+
+// ─── TESTE 14: Bloco de Entrada Trifásica (PE, N, L1, L2, L3) ────────────────
+{
+  const pe = resolvePinPosition("terminal_left_top:0");
+  const n = resolvePinPosition("terminal_left_top:4");
+  const l1 = resolvePinPosition("terminal_left_top:1");
+  const l2 = resolvePinPosition("terminal_left_top:2");
+  const l3 = resolvePinPosition("terminal_left_top:3");
+
+  assert.equal(pe.x, 82, "TESTE 14: Terminal PE x = 82");
+  assert.equal(n.x, 116, "TESTE 14: Terminal N x = 116");
+  assert.equal(l1.x, 150, "TESTE 14: Terminal L1 x = 150");
+  assert.equal(l2.x, 184, "TESTE 14: Terminal L2 x = 184");
+  assert.equal(l3.x, 218, "TESTE 14: Terminal L3 x = 218");
+  assert.equal(pe.y, 66, "TESTE 14: Altura Y dos bornes de entrada = 66");
+  console.log("✓ TESTE 14: Bloco de entrada trifásica mapeia PE, N, L1, L2, L3 para parafusos específicos.");
+}
+
 console.log("\n=======================================================");
-console.log("TODOS OS 10 TESTES OBRIGATÓRIOS PASSARAM COM SUCESSO!");
+console.log("TODOS OS 14 TESTES OBRIGATÓRIOS PASSARAM COM SUCESSO!");
 console.log("=======================================================\n");

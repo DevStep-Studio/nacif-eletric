@@ -12,7 +12,7 @@
  * - Preservação estrita e determinística do estado salvo (Salvar -> Fechar -> Reabrir).
  */
 
-// ─── CONSTANTES GLOBAIS DE ROTEAMENTO ──────────────────────────────────────────
+// ─── CONSTANTES GLOBAIS DE ROTEAMENTO E LAYOUT DE PAINEL ─────────────────────
 export const ROUTING_GRID_SIZE = 8;
 export const PORT_EXIT_OFFSET = 24;
 export const OBSTACLE_PADDING = 14;
@@ -22,6 +22,96 @@ export const PANEL_DESIGN_WIDTH = 850;
 export const DIN_MODULE_WIDTH = 26;
 export const BREAKER_HEIGHT = 110;
 export const RAIL_START_X = 160;
+
+export const THREE_PHASE_OUTPUT = {
+  x: 54,
+  y: 44,
+  width: 214,
+  height: 38,
+  pinStartX: 82,
+  pinY: 66,
+  pinGap: 34,
+};
+
+export const THREE_PHASE_TERMINALS = [
+  { index: 0, label: "PE", kind: "ground", fill: "#16a34a" },
+  { index: 4, label: "N", kind: "neutral", fill: "#38bdf8" },
+  { index: 1, label: "L1", kind: "power", fill: "#111827" },
+  { index: 2, label: "L2", kind: "power", fill: "#dc2626" },
+  { index: 3, label: "L3", kind: "power", fill: "#7c2d12" },
+];
+
+export const NEUTRAL_BUS = {
+  x: PANEL_DESIGN_WIDTH - 455,
+  y: 62,
+  width: 286,
+  height: 18,
+  pinCount: 12,
+  pinGap: 22,
+  pinStartX: PANEL_DESIGN_WIDTH - 435,
+  pinY: 71,
+};
+
+export const GROUND_BUS = {
+  x: 240,
+  width: 390,
+  pinCount: 12,
+  pinGap: 30,
+  pinStartX: 262,
+};
+
+export const getNeutralBusLayout = (infrastructure = []) => {
+  const item = (infrastructure || []).find((entry) => entry?.id === "neutral-bus") || {};
+  const width = Math.max(180, Math.min(520, Number(item.width) || NEUTRAL_BUS.width));
+  const rawX = Number(item.x);
+  const rawY = Number(item.y);
+  const x = Math.max(20, Math.min(PANEL_DESIGN_WIDTH - width - 20, Number.isFinite(rawX) ? rawX : NEUTRAL_BUS.x));
+  const y = Math.max(20, Number.isFinite(rawY) ? rawY : NEUTRAL_BUS.y);
+  const pinGap = Math.max(14, Math.min(32, (width - 40) / Math.max(1, NEUTRAL_BUS.pinCount - 1)));
+
+  return {
+    x,
+    y,
+    width,
+    height: NEUTRAL_BUS.height,
+    pinStartX: x + 20,
+    pinY: y + (NEUTRAL_BUS.pinY - NEUTRAL_BUS.y),
+    pinGap,
+  };
+};
+
+export const getGroundBusLayout = (infrastructure = [], panelH = 820) => {
+  const item = (infrastructure || []).find((entry) => entry?.id === "ground-bus") || {};
+  const width = Math.max(260, Math.min(520, Number(item.width) || GROUND_BUS.width));
+  const rawX = Number(item.x ?? item.busX);
+  const rawY = Number(item.y);
+  const x = Math.max(20, Math.min(PANEL_DESIGN_WIDTH - width - 20, Number.isFinite(rawX) ? rawX : GROUND_BUS.x));
+  const y = Math.max(20, Math.min(panelH - 44, Number.isFinite(rawY) ? rawY : (panelH - 68)));
+  const pinGap = Math.max(20, Math.min(38, (width - 60) / Math.max(1, GROUND_BUS.pinCount - 1)));
+
+  return {
+    x,
+    y,
+    width,
+    pinStartX: x + 22,
+    pinY: y + 14,
+    pinGap,
+  };
+};
+
+export const getThreePhaseOutputPin = (terminalIndex = 0) => {
+  const index = Number(terminalIndex);
+  const terminalSlot = index === 4
+    ? 1
+    : index > 0
+      ? index + 1
+      : 0;
+  const safeIndex = Math.max(0, Math.min(4, Number.isFinite(terminalSlot) ? terminalSlot : 0));
+  return {
+    x: THREE_PHASE_OUTPUT.pinStartX + safeIndex * THREE_PHASE_OUTPUT.pinGap,
+    y: THREE_PHASE_OUTPUT.pinY,
+  };
+};
 
 // ─── UTILITÁRIOS GEOMÉTRICOS BÁSICOS ──────────────────────────────────────────
 
@@ -747,7 +837,7 @@ export const normalizeSavedBoard = (savedBoard = {}, project = null, options = {
 
 export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, infrastructure = []) => {
   if (!pinId) return null;
-  const pin = String(pinId);
+  const pin = String(pinId).trim();
 
   // Pino solto com coordenadas embutidas
   if (pin.startsWith("loose:")) {
@@ -755,41 +845,39 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
     return { x: Number(parts[1]) || 0, y: Number(parts[2]) || 0 };
   }
 
-  // Bloco de entrada trifásica no topo esquerdo
+  // Bloco de entrada trifásica no topo esquerdo (PE, N, L1, L2, L3)
   if (pin.startsWith("terminal_left_top:")) {
     const idx = parseInt(pin.split(":")[1], 10) || 0;
-    return {
-      x: 73 + idx * 28,
-      y: 78,
-    };
+    return getThreePhaseOutputPin(idx);
   }
 
   // Barramento de neutro superior
   if (pin.startsWith("busbar_neutral:")) {
     const idx = parseInt(pin.split(":")[1], 10) || 0;
-    const neutInfra = (infrastructure || []).find((entry) => entry?.id === "neutral-bus");
-    const width = Math.max(160, Math.min(480, Number(neutInfra?.width) || 280));
-    const pinStartX = Number.isFinite(neutInfra?.x) ? Number(neutInfra.x) + 30 : 490;
-    const pinY = Number.isFinite(neutInfra?.y) ? Number(neutInfra.y) + 16 : 56;
-    const pinGap = Math.max(14, Math.min(26, (width - 60) / 11));
+    const neutralBus = getNeutralBusLayout(infrastructure);
     return {
-      x: pinStartX + (Math.abs(idx) % 12) * pinGap,
-      y: pinY,
+      x: neutralBus.pinStartX + (Math.abs(idx) % NEUTRAL_BUS.pinCount) * neutralBus.pinGap,
+      y: neutralBus.pinY,
     };
   }
 
   // Barramento de proteção terra inferior
   if (pin.startsWith("busbar_ground:")) {
     const idx = parseInt(pin.split(":")[1], 10) || 0;
-    const gndInfra = (infrastructure || []).find((entry) => entry?.id === "ground-bus");
-    const width = Math.max(260, Math.min(520, Number(gndInfra?.width) || 390));
-    const pinStartX = Number.isFinite(gndInfra?.x) ? Number(gndInfra.x) + 30 : 340;
-    const busY = Number.isFinite(gndInfra?.y) ? Number(gndInfra.y) + 16 : panelHeight - 92;
-    const pinGap = Math.max(16, Math.min(38, (width - 60) / 17));
+    const groundBus = getGroundBusLayout(infrastructure, panelHeight);
     return {
-      x: pinStartX + (Math.abs(idx) % 18) * pinGap,
-      y: busY,
+      x: groundBus.pinStartX + (Math.abs(idx) % GROUND_BUS.pinCount) * groundBus.pinGap,
+      y: groundBus.pinY,
     };
+  }
+
+  if (pin === "backbone_ground:start") {
+    return { x: 74, y: THREE_PHASE_OUTPUT.pinY };
+  }
+
+  if (pin === "backbone_ground:end") {
+    const groundBus = getGroundBusLayout(infrastructure, panelHeight);
+    return { x: groundBus.x + groundBus.width - 18, y: groundBus.pinY };
   }
 
   // Saídas de carga (vai para circuito)
@@ -826,7 +914,7 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
     return { x: PANEL_DESIGN_WIDTH - 94, y: panelHeight - 118 };
   }
 
-  // Bornes de componentes em trilhos
+  // Bornes de componentes em trilhos (Disjuntores, DPS, IDR, Bornes SAK)
   if (pin.startsWith("comp:")) {
     const parts = pin.split(":");
     const compId = parts[1];
@@ -841,8 +929,15 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
       for (const comp of rail.components || []) {
         const compW = (comp.poles || 1) * DIN_MODULE_WIDTH;
         if (comp.id === compId) {
+          // Bornes SAK possuem 14px de largura com centro em x + 7
+          if (comp.type === "borne") {
+            const x = currentX + 7;
+            const y = termType === "top" ? railY - 27 : railY + 47;
+            return { x, y };
+          }
+          // Disjuntores, DPS e IDRs possuem módulos de 26px com centro do polo em px + 13
           const x = currentX + poleIdx * DIN_MODULE_WIDTH + DIN_MODULE_WIDTH / 2;
-          const y = termType === "top" ? railY - 37 : railY + 57;
+          const y = termType === "top" ? railY - 31 : railY + 51;
           return { x, y };
         }
         currentX += compW + 2;
@@ -851,17 +946,33 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
 
     // Fallback gracioso para alimentador geral caso gen_brk / gen_dr não esteja no trilho
     if (compId === "gen_brk" || compId === "gen_dr" || compId?.startsWith("gen_")) {
-      return {
-        x: 73 + (poleIdx + 1) * 28,
-        y: 78,
-      };
+      return getThreePhaseOutputPin(poleIdx + 1);
     }
 
     return null;
   }
 
+  // Mapeamentos de compatibilidade para referências legadas
+  if (pin === "PE" || pin === "ground" || pin === "terra") {
+    return getThreePhaseOutputPin(0);
+  }
+  if (pin === "N" || pin === "neutral" || pin === "neutro") {
+    return getThreePhaseOutputPin(4);
+  }
+  if (pin === "L1" || pin === "phase_A" || pin === "fase_A") {
+    return getThreePhaseOutputPin(1);
+  }
+  if (pin === "L2" || pin === "phase_B" || pin === "fase_B") {
+    return getThreePhaseOutputPin(2);
+  }
+  if (pin === "L3" || pin === "phase_C" || pin === "fase_C") {
+    return getThreePhaseOutputPin(3);
+  }
+
   return null;
 };
+
+export const resolveTerminalPosition = resolvePinPosition;
 
 const extractComponentIdFromPin = (pinId = "") => {
   const match = String(pinId).match(/^comp:([^:]+)/);
