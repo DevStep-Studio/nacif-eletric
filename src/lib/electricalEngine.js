@@ -1509,7 +1509,12 @@ export function mergeSolarLayoutIntoPrincipal(project, layout, { forceRegenerate
   if (!isSolarProject(project)) return layout;
   const rails = Array.isArray(layout?.rails) ? layout.rails : [];
   const wires = Array.isArray(layout?.wires) ? layout.wires : [];
-  const alreadyMerged = rails.some((rail) => rail.id === "rail_solar_1" || rail.id === "rail_solar_2");
+  const hasSolarComponents = rails.some((rail) =>
+    (rail.components || []).some((c) => String(c?.id || "").startsWith("solar_"))
+  );
+  const alreadyMerged = rails.some((rail) => rail.id === "rail_solar_1" || rail.id === "rail_solar_2")
+    || hasSolarComponents
+    || layout?.meta?.manualDeviceEdits;
 
   if (alreadyMerged && !forceRegenerate) return { ...layout, rails, wires };
 

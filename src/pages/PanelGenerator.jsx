@@ -1540,11 +1540,12 @@ const phaseLaneOffset = (color = "") => {
 };
 
 const referenceFeedLaneY = (descriptor = {}) => {
-  if (descriptor.kind === "ground") return 70;
-  if (descriptor.kind === "neutral") return 92;
-  if (descriptor.color === "red") return 114;
-  if (descriptor.color === "brown" || descriptor.color === "orange") return 138;
-  return 90;
+  if (descriptor.kind === "ground") return 50;
+  if (descriptor.kind === "neutral") return 66;
+  if (descriptor.color === "black") return 86;
+  if (descriptor.color === "red") return 98;
+  if (descriptor.color === "brown" || descriptor.color === "orange") return 110;
+  return 86;
 };
 
 const compareCircuitDescriptors = (a, b) => (
@@ -3770,7 +3771,7 @@ export default function PanelGenerator() {
           movedComponent = component;
           return false;
         }
-        return true;
+        return component.type !== "spacer";
       });
       return { ...rail, components };
     });
@@ -3809,6 +3810,9 @@ export default function PanelGenerator() {
       dinSize: movedWidth,
       poles: movedWidth,
     });
+    const nextRails = withoutComponent.map((rail, index) => (
+      index === targetRailIndex ? { ...rail, components: nextComponents } : rail
+    ));
     const normalizedRails = normalizeRailsLayout(nextRails);
     const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
     const pHeight = 180 + normalizedRails.length * 240 + 100;
@@ -3821,6 +3825,8 @@ export default function PanelGenerator() {
       }
       const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
       const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
       const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
       const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
       const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
@@ -4373,78 +4379,139 @@ export default function PanelGenerator() {
     if (!sel) return;
     const { component, railId } = sel;
     
+    let hasMoved = false;
     const updated = rails.map(r => {
       if (r.id !== railId) return r;
-      const index = r.components.findIndex(c => c.id === component.id);
-      const nextComponents = [...r.components];
+      const activeComponents = (r.components || []).filter(c => c.type !== "spacer");
+      const index = activeComponents.findIndex(c => c.id === component.id);
+      if (index === -1) return r;
       
+      const nextActive = [...activeComponents];
       if (direction === "left" && index > 0) {
-        // Swap left
-        const temp = nextComponents[index - 1];
-        nextComponents[index - 1] = nextComponents[index];
-        nextComponents[index] = temp;
-      } else if (direction === "right" && index < nextComponents.length - 1) {
-        // Swap right
-        const temp = nextComponents[index + 1];
-        nextComponents[index + 1] = nextComponents[index];
-        nextComponents[index] = temp;
+        const temp = nextActive[index - 1];
+        nextActive[index - 1] = nextActive[index];
+        nextActive[index] = temp;
+        hasMoved = true;
+      } else if (direction === "right" && index < nextActive.length - 1) {
+        const temp = nextActive[index + 1];
+        nextActive[index + 1] = nextActive[index];
+        nextActive[index] = temp;
+        hasMoved = true;
       }
 
-      let nextDinPosition = 1;
-      const compactedComponents = nextComponents.map((item) => {
-        if (item.type === "spacer") return item;
-        const dinSize = Math.max(1, Number(item.poles) || 1);
-        const compacted = {
-          ...item,
-          dinPosition: nextDinPosition,
-          startDin: nextDinPosition,
-          slot: nextDinPosition,
-          moduleWidth: dinSize,
-          dinSize,
-          poles: dinSize,
-        };
-        nextDinPosition += dinSize;
-        return compacted;
-      });
-      
-      return { ...r, components: compactedComponents };
+      return { ...r, components: nextActive };
     });
-    updateRails(updated);
+
+    if (!hasMoved) return;
+
+    const normalizedRails = normalizeRailsLayout(updated);
+    const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
+    const pHeight = 180 + normalizedRails.length * 240 + 100;
+
+    const nextWires = wires.map((wire) => {
+      const isSourceAffected = String(wire.source || "").includes(component.id) || String(wire.sourceComponentId || "") === component.id;
+      const isTargetAffected = String(wire.target || "").includes(component.id) || String(wire.targetComponentId || "") === component.id;
+      if (!isSourceAffected && !isTargetAffected) return wire;
+
+      const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
+      const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
+      const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
+      const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+      const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin: wire.source,
+        targetPin: wire.target,
+      });
+      return {
+        ...wire,
+        route: { mode: "orthogonal", points: newRoute },
+        route_points: newRoute.length > 2 ? newRoute.slice(1, -1) : [],
+      };
+    });
+
+    setRails(normalizedRails);
+    setWires(nextWires);
+    saveLayoutToDb(normalizedRails, nextWires, infrastructure);
   };
 
-  const handleMoveToRail = (targetRailId) => {
-    const sel = getSelectedComponent();
-    if (!sel) return;
-    const { component, railId } = sel;
-    if (railId === targetRailId) return;
+  const handleMoveToRail = (targetRailId, targetComponentId = selectedComponentId) => {
+    const componentId = targetComponentId || selectedComponentId;
+    if (!componentId) return;
+    let foundComp = null;
+    let sourceRailId = "";
+    rails.forEach((r) => {
+      const c = (r.components || []).find((item) => item.id === componentId && item.type !== "spacer");
+      if (c) {
+        foundComp = c;
+        sourceRailId = r.id;
+      }
+    });
+    if (!foundComp || sourceRailId === targetRailId) return;
 
-    const updated = rails.map(r => {
-      if (r.id === railId) {
-        return { ...r, components: r.components.filter(c => c.id !== component.id) };
+    const withoutComponent = rails.map((r) => {
+      const active = (r.components || []).filter((c) => c.type !== "spacer");
+      if (r.id === sourceRailId) {
+        return { ...r, components: active.filter((c) => c.id !== foundComp.id) };
       }
       if (r.id === targetRailId) {
-        // Remove reserva se for o único spacer
-        const hasComponents = r.components.some(c => c.type !== "spacer");
-        const list = hasComponents ? r.components : [];
-        return { ...r, components: [...list, component] };
+        return { ...r, components: [...active, { ...foundComp, railId: targetRailId }] };
       }
-      return r;
+      return { ...r, components: active };
     });
-    updateRails(updated);
+
+    const normalizedRails = normalizeRailsLayout(withoutComponent);
+    const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
+    const pHeight = 180 + normalizedRails.length * 240 + 100;
+
+    const nextWires = wires.map((wire) => {
+      const isSourceAffected = String(wire.source || "").includes(componentId) || String(wire.sourceComponentId || "") === componentId;
+      const isTargetAffected = String(wire.target || "").includes(componentId) || String(wire.targetComponentId || "") === componentId;
+      if (!isSourceAffected && !isTargetAffected) return wire;
+
+      const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
+      const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
+      const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
+      const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+      const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin: wire.source,
+        targetPin: wire.target,
+      });
+      return {
+        ...wire,
+        route: { mode: "orthogonal", points: newRoute },
+        route_points: newRoute.length > 2 ? newRoute.slice(1, -1) : [],
+      };
+    });
+
+    setRails(normalizedRails);
+    setWires(nextWires);
+    saveLayoutToDb(normalizedRails, nextWires, infrastructure);
+    setSelectedComponentId(componentId);
   };
 
   const handleToggleRail = (cId) => {
     let currentRailIdx = -1;
     for (let i = 0; i < rails.length; i++) {
-      if (rails[i].components.some(item => item.id === cId)) {
+      if ((rails[i].components || []).some((item) => item.id === cId)) {
         currentRailIdx = i;
         break;
       }
     }
-    if (currentRailIdx === -1) return;
+    if (currentRailIdx === -1 || rails.length <= 1) return;
     const nextRailIdx = (currentRailIdx + 1) % rails.length;
     const targetRailId = rails[nextRailIdx].id;
-    handleMoveToRail(targetRailId);
+    handleMoveToRail(targetRailId, cId);
   };
 
   // ADICIONAR COMPONENTE
@@ -6324,8 +6391,8 @@ export default function PanelGenerator() {
           colorName: group.color,
           name: `Tronco ${phaseLabel} entrada`,
         })}
-        {renderCableTextTag({ x: terminal.x + 34, y: laneY }, phaseLabel, color, `solar-incoming-phase-${group.key}-${groupIndex}-phase`)}
-        {groupIndex === 1 && renderCableTextTag({ x: terminal.x + 82, y: laneY - 18 }, "ENTRADA DA REDE", COLORS.phaseA, `solar-incoming-phase-${group.key}-${groupIndex}-origin`)}
+        {renderCableTextTag({ x: terminal.x, y: terminal.y + 12 }, phaseLabel, color, `solar-incoming-phase-${group.key}-${groupIndex}-phase`)}
+        {groupIndex === 0 && renderCableTextTag({ x: 260, y: 56 }, "ENTRADA DA REDE", COLORS.phaseA, `solar-incoming-phase-${group.key}-${groupIndex}-origin`)}
         {endpoints.map(({ descriptor, device }) => {
           const branch = cleanRoutePoints([
             { x: device.x, y: laneY },
@@ -6378,8 +6445,8 @@ export default function PanelGenerator() {
           colorName: group.color,
           name: `Tronco ${phaseLabel} proteção`,
         })}
-        {renderCableTextTag({ x: source.x + 30, y: busY }, phaseLabel, color, `solar-protection-phase-${group.key}-${groupIndex}-phase`)}
-        {groupIndex === 1 && renderCableTextTag({ x: (source.x + endX) / 2, y: busY + 18 }, "DJ ENTRADA -> DJ SAIDA", COLORS.phaseA, `solar-protection-phase-${group.key}-${groupIndex}-label`)}
+        {renderCableTextTag({ x: source.x, y: source.y + 14 }, phaseLabel, color, `solar-protection-phase-${group.key}-${groupIndex}-phase`)}
+        {groupIndex === 0 && renderCableTextTag({ x: (source.x + endX) / 2, y: railY + 120 }, "DJ ENTRADA -> DJ SAÍDA", COLORS.phaseA, `solar-protection-phase-${group.key}-${groupIndex}-label`)}
         {descriptors.map((descriptor) => {
           const branch = cleanRoutePoints([
             { x: descriptor.p2.x, y: busY },
@@ -6407,12 +6474,13 @@ export default function PanelGenerator() {
       descriptor.sourceMeta?.railIndex === descriptor.targetMeta?.railIndex
     ));
     const railIndex = Math.max(0, descriptors[0].targetMeta?.railIndex ?? descriptors[0].sourceMeta?.railIndex ?? 0);
+    const midY = (descriptors[0].p1.y + descriptors[0].p2.y) / 2;
     const labelAnchor = {
       x: (Math.min(...descriptors.map((descriptor) => descriptor.p1.x), ...descriptors.map((descriptor) => descriptor.p2.x))
         + Math.max(...descriptors.map((descriptor) => descriptor.p1.x), ...descriptors.map((descriptor) => descriptor.p2.x))) / 2,
-      y: sameRail
+      y: Number.isFinite(midY) ? midY : (sameRail
         ? getRailDuctY(railIndex, "top", -52)
-        : getRailDuctY(railIndex, "top", -44),
+        : getRailDuctY(railIndex, "top", -44)),
     };
 
     return (
@@ -6445,7 +6513,7 @@ export default function PanelGenerator() {
             endTerminal: true,
           });
         })}
-        {renderCableTextTag(labelAnchor, "DJ SAIDA -> DJ INVERSOR", COLORS.phaseA, `solar-service-inverter-${group.key}-${groupIndex}-label`)}
+        {renderCableTextTag(labelAnchor, "DJ SAÍDA -> DJ INVERSOR", COLORS.phaseA, `solar-service-inverter-${group.key}-${groupIndex}-label`)}
       </g>
     );
   };
