@@ -63,7 +63,7 @@ export const simplifyOrthogonalPoints = (points = [], epsilon = 0.5) => {
   if (deduped.length < 3) return deduped;
 
   // Passo 2: Eliminar pontos colineares (mesma linha horizontal ou vertical)
-  const simplified = [deduped[0]];
+  let simplified = [deduped[0]];
   for (let i = 1; i < deduped.length - 1; i++) {
     const prev = simplified[simplified.length - 1];
     const curr = deduped[i];
@@ -96,7 +96,7 @@ export const simplifyOrthogonalPoints = (points = [], epsilon = 0.5) => {
     cleaned.push(pt);
   }
 
-  return cleaned;
+  return cleaned.length >= 2 ? cleaned : deduped;
 };
 
 /**
@@ -107,6 +107,7 @@ export const isOrthogonalPath = (points = [], epsilon = 0.5) => {
   for (let i = 1; i < points.length; i++) {
     const p1 = points[i - 1];
     const p2 = points[i];
+    if (!p1 || !p2 || !Number.isFinite(p1.x) || !Number.isFinite(p1.y) || !Number.isFinite(p2.x) || !Number.isFinite(p2.y)) return false;
     const isHorizontal = Math.abs(p1.y - p2.y) <= epsilon;
     const isVertical = Math.abs(p1.x - p2.x) <= epsilon;
     if (!isHorizontal && !isVertical) return false;
@@ -766,18 +767,27 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
   // Barramento de neutro superior
   if (pin.startsWith("busbar_neutral:")) {
     const idx = parseInt(pin.split(":")[1], 10) || 0;
+    const neutInfra = (infrastructure || []).find((entry) => entry?.id === "neutral-bus");
+    const width = Math.max(160, Math.min(480, Number(neutInfra?.width) || 280));
+    const pinStartX = Number.isFinite(neutInfra?.x) ? Number(neutInfra.x) + 30 : 490;
+    const pinY = Number.isFinite(neutInfra?.y) ? Number(neutInfra.y) + 16 : 56;
+    const pinGap = Math.max(14, Math.min(26, (width - 60) / 11));
     return {
-      x: 490 + (Math.abs(idx) % 12) * 16,
-      y: 56,
+      x: pinStartX + (Math.abs(idx) % 12) * pinGap,
+      y: pinY,
     };
   }
 
   // Barramento de proteção terra inferior
   if (pin.startsWith("busbar_ground:")) {
     const idx = parseInt(pin.split(":")[1], 10) || 0;
-    const busY = panelHeight - 92;
+    const gndInfra = (infrastructure || []).find((entry) => entry?.id === "ground-bus");
+    const width = Math.max(260, Math.min(520, Number(gndInfra?.width) || 390));
+    const pinStartX = Number.isFinite(gndInfra?.x) ? Number(gndInfra.x) + 30 : 340;
+    const busY = Number.isFinite(gndInfra?.y) ? Number(gndInfra.y) + 16 : panelHeight - 92;
+    const pinGap = Math.max(16, Math.min(38, (width - 60) / 17));
     return {
-      x: 340 + (Math.abs(idx) % 18) * 18,
+      x: pinStartX + (Math.abs(idx) % 18) * pinGap,
       y: busY,
     };
   }
