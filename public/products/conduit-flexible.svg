@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="yellowConduit" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047"/>
+      <stop offset="50%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#ca8a04"/>
+    </linearGradient>
+    <filter id="conduitShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+  <!-- Outer Coil of Corrugated Conduit -->
+  <circle cx="100" cy="100" r="75" fill="none" stroke="url(#yellowConduit)" stroke-width="26" filter="url(#conduitShadow)"/>
+  <!-- Corrugation Ribs -->
+  <circle cx="100" cy="100" r="75" fill="none" stroke="#a16207" stroke-width="26" stroke-dasharray="4 4"/>
+  <!-- Inner Coil -->
+  <circle cx="100" cy="100" r="48" fill="none" stroke="url(#yellowConduit)" stroke-width="22"/>
+  <circle cx="100" cy="100" r="48" fill="none" stroke="#a16207" stroke-width="22" stroke-dasharray="4 4"/>
+  <!-- Center Hole -->
+  <circle cx="100" cy="100" r="32" fill="#ffffff"/>
+  <!-- Label tag in center -->
+  <text x="100" y="96" font-family="system-ui, sans-serif" font-size="11" font-weight="900" fill="#854d0e" text-anchor="middle">ELETRODUTO</text>
+  <text x="100" y="108" font-family="system-ui, sans-serif" font-size="9" font-weight="800" fill="#a16207" text-anchor="middle">3/4" · DN 25</text>
+  <text x="100" y="118" font-family="system-ui, sans-serif" font-size="7.5" font-weight="700" fill="#a16207" text-anchor="middle">Corrugado Flexível</text>
+</svg>

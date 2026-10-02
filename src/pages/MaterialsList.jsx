@@ -24,10 +24,10 @@ import { openHTMLPrint, PAPER_SIZES } from "@/lib/printUtils";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import PageHeader from "@/components/PageHeader";
 import { buildProjectBudgetMaterials } from "@/lib/projectBudgetMaterials";
-import MaterialSymbol, { getMaterialSymbolDataUri } from "@/components/MaterialSymbol";
+import MaterialProductThumb from "@/components/MaterialProductThumb";
+import { CATEGORY_STYLES, getMaterialProductInfo, getMaterialDataUriForPrint } from "@/lib/materialProductCatalog";
 
 const SUPPLIERS = [
   {
@@ -35,72 +35,37 @@ const SUPPLIERS = [
     type: "Especializada",
     badge: "melhor mix técnico",
     searchBase: "https://www.google.com/search?tbm=shop&q=",
-    multipliers: { protection: 0.94, cable: 1.02, panel: 0.98, accessory: 0.96, default: 0.97 },
+    multipliers: { protecao: 0.94, cabos: 1.02, quadro: 0.98, conectores: 0.95, infraestrutura: 0.97, default: 0.97 },
   },
   {
     name: "Mercado Livre",
     type: "Marketplace",
     badge: "menor preço frequente",
     searchBase: "https://lista.mercadolivre.com.br/",
-    multipliers: { protection: 0.91, cable: 0.97, panel: 1.03, accessory: 0.92, default: 0.95 },
+    multipliers: { protecao: 0.91, cabos: 0.97, quadro: 1.03, conectores: 0.92, infraestrutura: 0.94, default: 0.95 },
   },
   {
     name: "Leroy Merlin",
     type: "Varejo técnico",
     badge: "retirada rápida",
     searchBase: "https://www.google.com/search?q=site%3Aleroymerlin.com.br+",
-    multipliers: { protection: 1.03, cable: 0.99, panel: 0.95, accessory: 1.02, default: 1.01 },
+    multipliers: { protecao: 1.03, cabos: 0.99, quadro: 0.95, conectores: 1.02, infraestrutura: 0.98, default: 1.01 },
   },
   {
     name: "Amazon Brasil",
     type: "Marketplace",
     badge: "entrega rápida",
     searchBase: "https://www.amazon.com.br/s?k=",
-    multipliers: { protection: 0.98, cable: 1.08, panel: 1.02, accessory: 0.94, default: 1.0 },
+    multipliers: { protecao: 0.98, cabos: 1.08, quadro: 1.02, conectores: 0.94, infraestrutura: 0.96, default: 1.0 },
   },
   {
     name: "Distribuidor local",
     type: "Atacado",
     badge: "melhor para volume",
     searchBase: "https://www.google.com/search?q=distribuidor+material+eletrico+",
-    multipliers: { protection: 0.96, cable: 0.93, panel: 0.97, accessory: 0.95, default: 0.96 },
+    multipliers: { protecao: 0.96, cabos: 0.93, quadro: 0.97, conectores: 0.93, infraestrutura: 0.95, default: 0.96 },
   },
 ];
-
-const PRODUCT_IMAGE_URLS = {
-  breaker: [
-    "https://zennyt.com.br/wp-content/uploads/2025/04/mini_disjuntor_weg_unipolar_16a_curva_c_mdw_c16_5291_1_b83d06e37dabf8827df140ca9ebcab4f.jpg",
-  ],
-  dr: [
-    "https://el12.com/zdjecia/residual-current-device-iid-2p-25a-30ma,p94293,w400_m.webp",
-  ],
-  dps: [
-    "https://i.shopar.openk.com.br/protetor_de_surto_dps_classe_ii_1p_20ka_275v_clamper_16235_plug_in_front_v_vermelho_21532_38290.jpg",
-    "https://cdn.awsli.com.br/800x800/2780/2780585/produto/318575198/clamper--4--6a3ro94drj.jpg",
-  ],
-  cable: [
-    "https://images.tcdn.com.br/img/img_prod/1223709/1690997268_design_sem_nome_5.png",
-    "https://images.tcdn.com.br/img/img_prod/1061963/cabo_flexivel_750v_6_0mm_cores_rolo_com_100_metros_cobrecom_743_1_7126131d38bc4e0dcc93786f4a526376.png",
-  ],
-  panel: [
-    "https://images.tcdn.com.br/img/img_prod/1061963/quadro_de_distribuicao_de_sobrepor_para_12_disjuntores_din_pvc_porta_opaca_steck_911_1_7f1f8dbea4c6c71931a80104efd459d1.jpg",
-  ],
-  rail: [
-    "https://altex.com/cdn/shop/files/altex-preferred-mfg-din-rail-1m-35mm-x-75mm-slotted-aluminum-din-rail-564798.jpg",
-  ],
-  terminal: [
-    "https://www.classicautomation.com/media/catalog/product/cache/6517c62f5899ad6aa0ba23ceb3eeff97/u/k/uk-10.jpg",
-  ],
-  busbarPhase: [
-    "https://5df841b7b6204c6b.cdn.gocache.net/images/1738202/master_barramento-pente-bifasico-para-disjuntor-80a-6-polos-legrand-928028-116623ec..jpg",
-  ],
-  busbarNeutral: [
-    "https://www.abastece.com.br/cdn/shop/products/barramento_neutro_6_terminais_azul_sbn6_steck_89869346_0001_600x600_b3fbe835-dee6-4ec0-b538-8530a0b27303.jpg",
-  ],
-  label: [
-    "https://images.salsify.com/image/upload/s--6zSy4KGG--/e_trim/w_1190,h_1190,c_pad/bo_5px_solid_white/73a1d004f0d0ca77ef71a1bdf5ace89f476dc122.jpg",
-  ],
-};
 
 const formatCurrency = (value) => (value || 0).toLocaleString("pt-BR", {
   style: "currency",
@@ -110,14 +75,6 @@ const formatCurrency = (value) => (value || 0).toLocaleString("pt-BR", {
 const formatQty = (qty) => Number.isInteger(qty) ? qty : qty.toFixed(1);
 
 const hashString = (value) => String(value).split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-
-function materialCategory(name) {
-  const lower = name.toLowerCase();
-  if (lower.includes("disjuntor") || lower.includes("dr") || lower.includes("dps")) return "protection";
-  if (lower.includes("cabo")) return "cable";
-  if (lower.includes("quadro") || lower.includes("trilho") || lower.includes("rack")) return "panel";
-  return "accessory";
-}
 
 function materialUnit(name) {
   if (name.includes("(m)")) return "m";
@@ -139,29 +96,12 @@ function googleShoppingUrl(material) {
   return `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(query)}`;
 }
 
-function productImageCandidates(material) {
-  const lower = material.name.toLowerCase();
-
-  if (lower.includes("dps")) return PRODUCT_IMAGE_URLS.dps;
-  if (lower.includes("dr 30ma")) return PRODUCT_IMAGE_URLS.dr;
-  if (lower.includes("disjuntor")) return PRODUCT_IMAGE_URLS.breaker;
-  if (lower.includes("cabo")) return PRODUCT_IMAGE_URLS.cable;
-  if (lower.includes("trilho")) return PRODUCT_IMAGE_URLS.rail;
-  if (lower.includes("barramento fase")) return PRODUCT_IMAGE_URLS.busbarPhase;
-  if (lower.includes("barramento neutro")) return PRODUCT_IMAGE_URLS.busbarNeutral;
-  if (lower.includes("quadro") || lower.includes("rack")) return PRODUCT_IMAGE_URLS.panel;
-  if (lower.includes("borne")) return PRODUCT_IMAGE_URLS.terminal;
-  if (lower.includes("etiqueta")) return PRODUCT_IMAGE_URLS.label;
-
-  return [];
-}
-
 function supplierOffers(material) {
-  const category = materialCategory(material.name);
+  const categoryKey = material.category || "material";
   const seed = hashString(`${material.name}${material.code}`);
 
   return SUPPLIERS.map((supplier, index) => {
-    const multiplier = supplier.multipliers[category] || supplier.multipliers.default;
+    const multiplier = supplier.multipliers[categoryKey] || supplier.multipliers.default;
     const variation = ((seed + index * 7) % 9 - 4) / 100;
     const volumeDiscount = material.qty >= 10 ? 0.96 : material.qty >= 3 ? 0.98 : 1;
     const unit = Math.max(0.5, (material.price || 0) * multiplier * volumeDiscount * (1 + variation));
@@ -181,16 +121,20 @@ function supplierOffers(material) {
 function materialReferenceCode(material) {
   const explicit = material.code || material.sku || material.reference;
   if (explicit) return explicit;
-  const prefix = materialCategory(material.name).slice(0, 3).toUpperCase();
+  const category = material.category || "MAT";
+  const prefix = category.slice(0, 3).toUpperCase();
   return `${prefix}-${String(hashString(material.name) % 10000).padStart(4, "0")}`;
 }
 
 function enrichMaterial(material) {
+  const productInfo = getMaterialProductInfo(material);
   const normalized = {
     ...material,
-    brand: material.brand || material.manufacturer || "Base do orçamento",
-    code: materialReferenceCode(material),
-    category: materialCategory(material.name),
+    imageUrl: material.image || material.imageUrl || productInfo.imageUrl,
+    brand: material.brand || productInfo.brand,
+    specShort: material.specShort || productInfo.specShort,
+    code: materialReferenceCode({ ...material, category: productInfo.categoryKey }),
+    category: material.category || productInfo.categoryKey,
     unit: material.unit || materialUnit(material.name),
   };
   const offers = supplierOffers(normalized);
@@ -217,7 +161,7 @@ function buildAiRecommendation(materials) {
     }, 0);
     return { ...supplier, total: Math.round(total * 100) / 100 };
   }).sort((a, b) => a.total - b.total);
-  const bestSingleSupplier = supplierTotals[0];
+  const bestSingleSupplier = supplierTotals[0] || SUPPLIERS[0];
   const mixedSaving = Math.max(0, referenceTotal - mixedTotal);
   const singleSaving = Math.max(0, referenceTotal - bestSingleSupplier.total);
   const useSingleSupplier = (bestSingleSupplier.total - mixedTotal) / Math.max(mixedTotal, 1) <= 0.06;
@@ -247,36 +191,13 @@ function buildAiRecommendation(materials) {
 }
 
 function CategoryBadge({ category }) {
-  const labels = {
-    protection: "Proteção",
-    cable: "Cabos",
-    panel: "Quadro",
-    accessory: "Acessório",
-  };
-
-  return <Badge variant="outline" className="rounded-[10px] border-[#BCEEE5] bg-[#F2FFFC] px-3 py-1 text-[#004E82]">{labels[category]}</Badge>;
-}
-
-function MaterialPhoto({ material, variant = "compact" }) {
-  const hasReferencePhoto = productImageCandidates(material).length > 0;
-  const googleUrl = googleImagesUrl(material);
-  const sizeClass = variant === "expanded"
-    ? "h-28 w-full sm:h-[118px] lg:h-[118px] lg:w-[118px]"
-    : "h-16 w-16";
+  const norm = String(category || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const config = CATEGORY_STYLES[norm] || CATEGORY_STYLES.material;
 
   return (
-    <a
-      href={googleUrl}
-      target="_blank"
-      rel="noreferrer"
-      className={`group relative flex shrink-0 items-center justify-center overflow-hidden rounded-[16px] border border-[#d9d9d9] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] ${sizeClass}`}
-      title={`${hasReferencePhoto ? "Buscar referencias" : "Buscar imagens"} de ${material.name}`}
-    >
-      <MaterialSymbol name={material.name} className="h-full w-full rounded-none border-0 bg-transparent" />
-      <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-[8px] border border-[#BCEEE5] bg-white/95 text-[#004E82] opacity-0 shadow-sm transition group-hover:opacity-100">
-        <ExternalLink className="h-3.5 w-3.5" />
-      </span>
-    </a>
+    <span className={`inline-flex items-center rounded-[8px] border px-2.5 py-0.5 text-[10px] font-black tracking-wider uppercase ${config.badgeClass}`}>
+      {config.label}
+    </span>
   );
 }
 
@@ -284,50 +205,64 @@ function MaterialProductCard({ material }) {
   const [expanded, setExpanded] = useState(false);
   const bestOffer = material.bestOffer;
   const savingValue = Math.max(0, material.referenceTotal - bestOffer.total);
+  const googleUrl = googleImagesUrl(material);
 
   if (!expanded) {
     return (
-      <article className="rounded-[14px] border border-[#e7e2d6] bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.03)] transition hover:border-primary/30 hover:shadow-[0_16px_38px_rgba(15,23,42,0.055)] sm:p-4">
-        <div className="grid min-w-0 gap-3 lg:grid-cols-[72px_minmax(0,1.45fr)_92px_104px_128px_128px_96px] lg:items-center">
-          <MaterialPhoto material={material} />
+      <article className="rounded-[16px] border border-[#e2e8f0] bg-white p-3.5 shadow-[0_2px_8px_rgba(15,23,42,0.03)] transition duration-150 hover:border-primary/40 hover:shadow-[0_8px_20px_rgba(15,23,42,0.05)] sm:p-4">
+        <div className="grid min-w-0 gap-3.5 lg:grid-cols-[72px_minmax(0,1.45fr)_92px_104px_128px_128px_96px] lg:items-center">
+          <a
+            href={googleUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="group/link relative block shrink-0"
+            title={`Ver fotos reais e referências de ${material.name}`}
+          >
+            <MaterialProductThumb material={material} size="normal" />
+            <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-lg border border-[#BCEEE5] bg-white/95 text-[#004E82] opacity-0 shadow-sm transition group-hover/link:opacity-100">
+              <ExternalLink className="h-3 w-3" />
+            </span>
+          </a>
 
           <div className="min-w-0 lg:pr-4">
-            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <CategoryBadge category={material.category} />
-              <span className="truncate rounded-[10px] bg-[#f4f4f5] px-2.5 py-1 text-xs font-bold text-[#6b7280]">
+              <span className="truncate rounded-[8px] border border-[#e2e8f0] bg-[#f8fafc] px-2 py-0.5 text-[11px] font-bold text-[#64748b]">
                 {material.code}
               </span>
             </div>
-            <h3 className="mt-3 truncate text-lg font-extrabold text-[#111827] sm:text-xl">{material.name}</h3>
-            <p className="mt-1 truncate text-sm font-semibold text-[#6b7280]">{material.brand}</p>
+            <h3 className="mt-2 truncate text-base font-extrabold text-[#0f172a] sm:text-lg">{material.name}</h3>
+            <p className="mt-0.5 truncate text-xs font-semibold text-[#64748b]">
+              {material.brand}{material.specShort ? ` · ${material.specShort}` : ""}
+            </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 border-t border-[#eee9dd] pt-3 text-sm lg:contents lg:border-t-0 lg:pt-0">
+          <div className="grid grid-cols-2 gap-3 border-t border-[#f1f5f9] pt-3 text-sm lg:contents lg:border-t-0 lg:pt-0">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#7a8495] lg:hidden">Qtd.</p>
-              <p className="mt-1 font-extrabold text-[#111827] lg:mt-0 lg:text-right">{formatQty(material.qty)}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#64748b] lg:hidden">Qtd.</p>
+              <p className="mt-1 font-extrabold text-[#0f172a] lg:mt-0 lg:text-right">{formatQty(material.qty)}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#7a8495] lg:hidden">Unidade</p>
-              <p className="mt-1 font-extrabold text-[#111827] lg:mt-0 lg:text-center">{material.unit}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#64748b] lg:hidden">Unidade</p>
+              <p className="mt-1 font-extrabold text-[#0f172a] lg:mt-0 lg:text-center">{material.unit}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#7a8495] lg:hidden">Valor unit.</p>
-              <p className="mt-1 font-extrabold text-[#111827] lg:mt-0 lg:text-right">{formatCurrency(material.price)}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#64748b] lg:hidden">Valor unit.</p>
+              <p className="mt-1 font-extrabold text-[#0f172a] lg:mt-0 lg:text-right">{formatCurrency(material.price)}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#7a8495] lg:hidden">Total</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#64748b] lg:hidden">Total</p>
               <p className="mt-1 font-extrabold text-primary lg:mt-0 lg:text-right">{formatCurrency(material.referenceTotal)}</p>
             </div>
             <div className="col-span-2 flex justify-start lg:col-span-1 lg:justify-end">
               <button
                 type="button"
                 onClick={() => setExpanded(true)}
-                className="inline-flex h-10 shrink-0 items-center gap-2 rounded-[12px] border border-[#CDEFE8] bg-white px-4 text-sm font-extrabold text-[#111827] transition hover:bg-[#F2FFFC]"
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-[#CDEFE8] bg-white px-3 text-xs font-extrabold text-[#0f172a] transition hover:bg-[#F2FFFC]"
                 title={`Melhor estimativa: ${bestOffer.supplier} ${formatCurrency(bestOffer.total)}`}
               >
                 Detalhes
-                <ChevronDown className="h-4 w-4" />
+                <ChevronDown className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
@@ -337,94 +272,96 @@ function MaterialProductCard({ material }) {
   }
 
   return (
-    <article className="overflow-hidden rounded-[18px] border border-[#dedede] bg-white shadow-[0_12px_34px_rgba(15,23,42,0.045)]">
+    <article className="overflow-hidden rounded-[18px] border border-[#cbd5e1] bg-white shadow-[0_12px_34px_rgba(15,23,42,0.045)]">
       <div className="grid min-w-0 xl:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="min-w-0 p-4">
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[118px_minmax(0,1fr)]">
-            <MaterialPhoto material={material} variant="expanded" />
+        <div className="min-w-0 p-4 sm:p-5">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-[118px_minmax(0,1fr)]">
+            <div className="flex shrink-0 items-center justify-center">
+              <MaterialProductThumb material={material} size="expanded" />
+            </div>
 
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <CategoryBadge category={material.category} />
-                <span className="rounded-[10px] bg-[#f0f0f1] px-3 py-1 text-sm font-bold text-[#666d78]">
+                <span className="rounded-[8px] border border-[#e2e8f0] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-bold text-[#64748b]">
                   {material.code}
                 </span>
               </div>
 
-              <h3 className="mt-3 truncate text-xl font-extrabold leading-tight tracking-[-0.01em] text-[#111827] sm:text-2xl">
+              <h3 className="mt-2.5 truncate text-lg font-extrabold leading-tight text-[#0f172a] sm:text-xl">
                 {material.name}
               </h3>
-              <p className="mt-1 truncate text-base font-bold text-[#5f6877]">
-                {material.brand}
+              <p className="mt-1 text-sm font-semibold text-[#64748b]">
+                {material.brand} · {material.specShort}
               </p>
 
-              <div className="mt-4 grid border-y border-[#e5e5e5] py-3 sm:grid-cols-3">
+              <div className="mt-4 grid border-y border-[#e2e8f0] py-3 sm:grid-cols-3">
                 <div className="px-1 sm:px-2">
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#737b8a]">Qtd.</p>
-                  <p className="mt-1 text-base font-extrabold text-[#111827]">{formatQty(material.qty)} {material.unit}</p>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Qtd.</p>
+                  <p className="mt-1 text-base font-extrabold text-[#0f172a]">{formatQty(material.qty)} {material.unit}</p>
                 </div>
-                <div className="mt-2 border-[#e5e5e5] px-1 sm:mt-0 sm:border-l sm:px-4">
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#737b8a]">Unit. base</p>
-                  <p className="mt-1 text-base font-extrabold text-[#111827]">{formatCurrency(material.price)}</p>
+                <div className="mt-2 border-[#e2e8f0] px-1 sm:mt-0 sm:border-l sm:px-4">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Unit. base</p>
+                  <p className="mt-1 text-base font-extrabold text-[#0f172a]">{formatCurrency(material.price)}</p>
                 </div>
-                <div className="mt-2 border-[#e5e5e5] px-1 sm:mt-0 sm:border-l sm:px-4">
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#737b8a]">Economia</p>
+                <div className="mt-2 border-[#e2e8f0] px-1 sm:mt-0 sm:border-l sm:px-4">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Economia</p>
                   <p className="mt-1 text-base font-extrabold text-primary">{formatCurrency(savingValue)}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-[12px] border border-[#e5e1d8]">
+          <div className="mt-4 overflow-hidden rounded-[12px] border border-[#e2e8f0]">
             {material.offers.slice(0, 3).map((offer, index) => (
               <a
                 key={offer.supplier}
                 href={offer.url}
                 target="_blank"
                 rel="noreferrer"
-                className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#e7e4dd] px-3 py-2.5 last:border-b-0 ${
-                  index === 0 ? "bg-[#F2FFFC]" : "bg-white hover:bg-[#F2FFFC]"
+                className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#e2e8f0] px-3.5 py-2.5 last:border-b-0 ${
+                  index === 0 ? "bg-[#F2FFFC]" : "bg-white hover:bg-[#F8FAFC]"
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-3">
-                  <span className="truncate text-sm font-extrabold text-[#111827] sm:text-base">{offer.supplier}</span>
+                  <span className="truncate text-sm font-extrabold text-[#0f172a] sm:text-base">{offer.supplier}</span>
                   {index === 0 && (
-                    <span className="hidden rounded-[9px] border border-[#BCEEE5] bg-white/70 px-2.5 py-0.5 text-xs font-bold text-[#0f4f49] sm:inline">
+                    <span className="hidden rounded-[8px] border border-[#BCEEE5] bg-white/80 px-2 py-0.5 text-[11px] font-bold text-[#004E82] sm:inline">
                       menor preço
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 text-sm font-extrabold text-[#111827] sm:text-base">{formatCurrency(offer.unitPrice)}</span>
+                <span className="shrink-0 text-sm font-extrabold text-[#0f172a] sm:text-base">{formatCurrency(offer.unitPrice)}</span>
               </a>
             ))}
           </div>
 
-          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3 text-sm font-medium text-[#6b7280]">
-            <a href={googleImagesUrl(material)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 transition hover:text-[#111827]">
+          <div className="mt-3.5 flex min-w-0 flex-wrap items-center gap-3 text-sm font-medium text-[#64748b]">
+            <a href={googleImagesUrl(material)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 transition hover:text-[#0f172a]">
               <ImageIcon className="h-4 w-4" />
-              Imagens
+              Imagens reais
             </a>
-            <span className="hidden h-5 w-px bg-[#dddddd] sm:block" />
-            <a href={googleShoppingUrl(material)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 transition hover:text-[#111827]">
+            <span className="hidden h-4 w-px bg-[#cbd5e1] sm:block" />
+            <a href={googleShoppingUrl(material)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 transition hover:text-[#0f172a]">
               <Search className="h-4 w-4" />
               Shopping
             </a>
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              className="ml-auto inline-flex items-center gap-2 rounded-[10px] px-3 py-1 text-sm font-extrabold text-[#6b7280] transition hover:bg-[#f7f7f7] hover:text-[#111827]"
+              className="ml-auto inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-1 text-xs font-extrabold text-[#64748b] transition hover:bg-[#f1f5f9] hover:text-[#0f172a]"
             >
               Recolher
-              <ChevronDown className="h-4 w-4 rotate-180" />
+              <ChevronDown className="h-3.5 w-3.5 rotate-180" />
             </button>
           </div>
         </div>
 
-        <aside className="min-w-0 border-t border-[#dedede] p-4 xl:border-l xl:border-t-0">
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#737b8a]">Recomendado</p>
-          <p className="mt-3 truncate text-lg font-extrabold text-[#111827]">{bestOffer.supplier}</p>
-          <p className="mt-7 text-3xl font-extrabold tracking-[-0.04em] text-primary">{formatCurrency(bestOffer.total)}</p>
-          <p className="mt-3 text-sm font-medium text-[#6b7280]">
+        <aside className="min-w-0 border-t border-[#e2e8f0] bg-[#fafafa] p-4 sm:p-5 xl:border-l xl:border-t-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#64748b]">Melhor Cotação</p>
+          <p className="mt-2 truncate text-base font-extrabold text-[#0f172a]">{bestOffer.supplier}</p>
+          <p className="mt-4 text-2xl font-black tracking-tight text-primary sm:text-3xl">{formatCurrency(bestOffer.total)}</p>
+          <p className="mt-2 text-xs font-semibold text-[#64748b]">
             {formatQty(material.qty)} {material.unit} · {formatCurrency(bestOffer.unitPrice)} un.
           </p>
 
@@ -432,7 +369,7 @@ function MaterialProductCard({ material }) {
             href={bestOffer.url}
             target="_blank"
             rel="noreferrer"
-            className="mt-7 inline-flex h-10 w-full items-center justify-center gap-2 rounded-[12px] bg-primary px-4 text-base font-bold text-primary-foreground shadow-[0_10px_20px_rgba(0,100,166,0.16)] transition hover:brightness-105"
+            className="mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-[12px] bg-primary px-4 text-sm font-extrabold text-primary-foreground shadow-sm transition hover:brightness-105"
           >
             Comprar
             <ExternalLink className="h-4 w-4" />
@@ -471,11 +408,22 @@ export default function MaterialsList() {
 
   const filtered = materials.filter((material) => {
     const term = search.toLowerCase();
-    const matchesSearch = [material.name, material.brand, material.code, material.bestOffer.supplier]
+    const matchesSearch = [
+      material.name,
+      material.brand,
+      material.code,
+      material.specShort,
+      material.bestOffer?.supplier,
+    ]
+      .filter(Boolean)
       .join(" ")
       .toLowerCase()
       .includes(term);
-    const matchesCategory = categoryFilter === "all" || material.category === categoryFilter;
+
+    if (categoryFilter === "all") return matchesSearch;
+    const cat = String(material.category || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const filterKey = categoryFilter.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const matchesCategory = cat === filterKey || cat.startsWith(filterKey.slice(0, 4));
     return matchesSearch && matchesCategory;
   });
 
@@ -527,8 +475,8 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
   const handlePrint = (size) => {
     const rows = materials.map((material) => `
       <tr>
-        <td style="text-align:center"><img src="${getMaterialSymbolDataUri(material.name)}" alt="" style="width:24px;height:24px;object-fit:contain" /></td>
-        <td><strong>${material.name}</strong><br><span style="font-size:7pt;color:#666">${material.brand || ""} · ${material.code || ""}</span></td>
+        <td style="text-align:center"><img src="${getMaterialDataUriForPrint(material.name)}" alt="" style="width:28px;height:28px;object-fit:contain" /></td>
+        <td><strong>${material.name}</strong><br><span style="font-size:7pt;color:#666">${material.brand || ""} · ${material.specShort || material.code || ""}</span></td>
         <td style="text-align:right">${formatQty(material.qty)}</td>
         <td style="text-align:center">${material.unit}</td>
         <td style="text-align:right">${formatCurrency(material.price)}</td>
@@ -537,9 +485,9 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
       </tr>`).join("");
     const html = `
       <h2>Lista de Materiais — ${project?.name || ""}</h2>
-      <p class="sub">Quantitativo automático com cotação IA estimada · NACIF Solutions Eletric · NBR 5410:2004</p>
+      <p class="sub">Quantitativo automático com fotos e cotação IA estimada · NACIF Solutions Eletric · NBR 5410:2004</p>
       <table>
-        <thead><tr><th style="text-align:center">Desenho</th><th>Material</th><th style="text-align:right">Qtd.</th><th style="text-align:center">Unidade</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Melhor compra</th><th style="text-align:right">Total</th></tr></thead>
+        <thead><tr><th style="text-align:center;width:38px">Item</th><th>Material</th><th style="text-align:right">Qtd.</th><th style="text-align:center">Unidade</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Melhor compra</th><th style="text-align:right">Total</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="totals">
@@ -563,7 +511,7 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
       <PageHeader
         icon={Package}
         title="Lista de Materiais"
-        subtitle="Quantitativo automático, imagens dos itens e cotação inteligente de compra."
+        subtitle="Quantitativo automático com fotos reais dos itens e cotação inteligente de compra."
         actions={
           <>
           <label className="inline-flex h-11 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-[12px] border border-dashed border-[#BCEEE5] bg-white px-3 text-sm font-extrabold text-[#5f6877] transition hover:bg-[#F2FFFC] sm:px-4">
@@ -642,10 +590,13 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
                     <Filter className="h-4 w-4 shrink-0 text-[#6b7280]" />
                     {[
                       ["all", "Todos"],
-                      ["protection", "Proteção"],
-                      ["cable", "Cabos"],
-                      ["panel", "Quadro"],
-                      ["accessory", "Acessórios"],
+                      ["protecao", "Proteção"],
+                      ["cabos", "Cabos"],
+                      ["quadro", "Quadro"],
+                      ["conectores", "Conectores"],
+                      ["infraestrutura", "Infra"],
+                      ["acabamentos", "Acabamentos"],
+                      ["consumiveis", "Consumíveis"],
                     ].map(([value, label]) => (
                       <button
                         key={value}
@@ -671,8 +622,8 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
                   </div>
                 ) : (
                   <>
-                    <div className="hidden rounded-[12px] border border-[#CDEFE8] bg-[#F8FBFD] px-4 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B] lg:grid lg:grid-cols-[72px_minmax(0,1.45fr)_92px_104px_128px_128px_96px] lg:items-center">
-                      <span>Desenho</span>
+                    <div className="hidden rounded-[12px] border border-[#e2e8f0] bg-[#f8fafc] px-4 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B] lg:grid lg:grid-cols-[72px_minmax(0,1.45fr)_92px_104px_128px_128px_96px] lg:items-center">
+                      <span>Produto</span>
                       <span>Material</span>
                       <span className="text-right">Qtd.</span>
                       <span className="text-center">Unidade</span>

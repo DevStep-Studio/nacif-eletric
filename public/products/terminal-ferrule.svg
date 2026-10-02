@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="copperPin" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="50%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="redCollar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#b91c1c"/>
+    </linearGradient>
+    <linearGradient id="blueCollar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="yellowCollar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#a16207"/>
+    </linearGradient>
+    <filter id="drop" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <!-- Ferrule 1 (Red 1.5mm) -->
+  <g transform="translate(30, 40) rotate(25)" filter="url(#drop)">
+    <!-- Metal Tube -->
+    <rect x="40" y="8" width="55" height="14" rx="2" fill="url(#copperPin)" stroke="#475569" stroke-width="1"/>
+    <!-- Plastic Collar -->
+    <path d="M5 0 L40 5 L40 25 L5 30 Z" fill="url(#redCollar)" stroke="#991b1b" stroke-width="1.5"/>
+    <ellipse cx="5" cy="15" rx="5" ry="15" fill="#7f1d1d"/>
+  </g>
+  <!-- Ferrule 2 (Blue 2.5mm) -->
+  <g transform="translate(45, 85) rotate(-15)" filter="url(#drop)">
+    <rect x="42" y="7" width="60" height="18" rx="2" fill="url(#copperPin)" stroke="#475569" stroke-width="1"/>
+    <path d="M5 0 L42 5 L42 27 L5 32 Z" fill="url(#blueCollar)" stroke="#1e3a8a" stroke-width="1.5"/>
+    <ellipse cx="5" cy="16" rx="5" ry="16" fill="#1e3a8a"/>
+  </g>
+  <!-- Ferrule 3 (Yellow 6.0mm) -->
+  <g transform="translate(60, 130) rotate(10)" filter="url(#drop)">
+    <rect x="45" y="6" width="65" height="22" rx="2" fill="url(#copperPin)" stroke="#475569" stroke-width="1"/>
+    <path d="M5 0 L45 4 L45 30 L5 34 Z" fill="url(#yellowCollar)" stroke="#713f12" stroke-width="1.5"/>
+    <ellipse cx="5" cy="17" rx="5" ry="17" fill="#713f12"/>
+  </g>
+</svg>
