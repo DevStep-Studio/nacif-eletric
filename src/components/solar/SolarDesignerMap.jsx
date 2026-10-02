@@ -61,6 +61,16 @@ export const STRING_COLORS = [
   { stroke: "#60a5fa", fill: "#2563eb", border: "#bfdbfe", name: "String 6" },
 ];
 
+// Cores realistas de silício fotovoltaico mono-PERC com micro-variação óptica sutil
+export const PHOTOVOLTAIC_BASE_COLORS = [
+  "#112136", // Deep mono-PERC obsidian navy
+  "#14263d", // Rich marine photovoltaic
+  "#0f1e31", // Deep dark silicon
+  "#162a43", // Technical mono-crystalline blue
+  "#122238", // Classic mono-PERC
+  "#152840", // Deep blue-gray silicon
+];
+
 function toLeafletPositions(points) {
   return normalizeRoofPolygon(points).map((point) => [point.lat, point.lng]);
 }
@@ -72,15 +82,58 @@ function interpolateLatLng(start, end, ratio) {
   };
 }
 
-function buildPanelCellLines(panel) {
-  if (!Array.isArray(panel) || panel.length < 4) return [];
-  const [topLeft, topRight, bottomRight, bottomLeft] = panel;
+/**
+ * Gera as divisões internas realistas das células fotovoltaicas (half-cell matrix).
+ * Identifica dinamicamente o eixo maior do módulo (comprimento) e traça a linha divisória
+ * central longitudinal do half-cut e as divisões transversais das células com LOD.
+ */
+function buildRealisticPanelCellLines(panel, zoomLevel, highDetail = false) {
+  if (!Array.isArray(panel) || panel.length < 4) return { primary: [] };
+  const [p0, p1, p2, p3] = panel;
 
-  return [
-    [interpolateLatLng(topLeft, bottomLeft, 1 / 3), interpolateLatLng(topRight, bottomRight, 1 / 3)],
-    [interpolateLatLng(topLeft, bottomLeft, 2 / 3), interpolateLatLng(topRight, bottomRight, 2 / 3)],
-    [interpolateLatLng(topLeft, topRight, 1 / 2), interpolateLatLng(bottomLeft, bottomRight, 1 / 2)],
-  ];
+  // Distância aproximada ao quadrado para determinar eixo longo vs curto (orientação)
+  const d01 = Math.pow(p1.lat - p0.lat, 2) + Math.pow(p1.lng - p0.lng, 2);
+  const d12 = Math.pow(p2.lat - p1.lat, 2) + Math.pow(p2.lng - p1.lng, 2);
+
+  const primary = [];
+
+  if (d12 >= d01) {
+    // Orientação Vertical / Retrato (arestas 0-3 e 1-2 são mais longas)
+    // 1. Linha central longitudinal do half-cut
+    primary.push([interpolateLatLng(p0, p1, 0.5), interpolateLatLng(p3, p2, 0.5)]);
+
+    // 2. Divisores transversais de células (6 linhas = 5 divisórias)
+    const rows = 6;
+    for (let i = 1; i < rows; i++) {
+      const ratio = i / rows;
+      primary.push([interpolateLatLng(p0, p3, ratio), interpolateLatLng(p1, p2, ratio)]);
+    }
+
+    // 3. Detalhes finos de busbars para zoom próximo (zoom >= 20)
+    if (highDetail) {
+      primary.push([interpolateLatLng(p0, p1, 0.25), interpolateLatLng(p3, p2, 0.25)]);
+      primary.push([interpolateLatLng(p0, p1, 0.75), interpolateLatLng(p3, p2, 0.75)]);
+    }
+  } else {
+    // Orientação Horizontal / Paisagem (arestas 0-1 e 3-2 são mais longas)
+    // 1. Linha central longitudinal do half-cut
+    primary.push([interpolateLatLng(p0, p3, 0.5), interpolateLatLng(p1, p2, 0.5)]);
+
+    // 2. Divisores transversais de células (6 colunas = 5 divisórias)
+    const cols = 6;
+    for (let i = 1; i < cols; i++) {
+      const ratio = i / cols;
+      primary.push([interpolateLatLng(p0, p1, ratio), interpolateLatLng(p3, p2, ratio)]);
+    }
+
+    // 3. Detalhes finos de busbars para zoom próximo (zoom >= 20)
+    if (highDetail) {
+      primary.push([interpolateLatLng(p0, p3, 0.25), interpolateLatLng(p1, p2, 0.25)]);
+      primary.push([interpolateLatLng(p0, p3, 0.75), interpolateLatLng(p1, p2, 0.75)]);
+    }
+  }
+
+  return { primary };
 }
 
 function ViewportController({ center, zoom, viewportRequest = 0 }) {
@@ -139,42 +192,49 @@ function EdgeAlignmentLayer({ roofPolygon, onAlignToEdge }) {
         className: "solar-edge-align-handle",
         html: `
           <div class="group relative flex items-center justify-center cursor-pointer pointer-events-auto">
-            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-[#00d8b8] text-slate-950 shadow-lg border-2 border-white ring-2 ring-[#00d8b8]/40 transform hover:scale-125 transition-all">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <div class="flex h-4 w-4 items-center justify-center rounded-full bg-[#00d8b8] text-slate-950 shadow-md border border-white transform hover:scale-125 transition-all">
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
               </svg>
             </div>
-            <div class="absolute bottom-full mb-1.5 opacity-90 group-hover:opacity-100 whitespace-nowrap rounded-md bg-white/95 px-2 py-0.5 text-[10px] font-bold text-[#009b84] border border-[#00d8b8] shadow-xl backdrop-blur-md pointer-events-none transition-all scale-95 group-hover:scale-100 flex items-center gap-1">
+            <div class="absolute bottom-full mb-1.5 opacity-0 group-hover:opacity-100 whitespace-nowrap rounded-md bg-white/95 px-2 py-0.5 text-[10px] font-bold text-[#009b84] border border-[#00d8b8] shadow-xl backdrop-blur-md pointer-events-none transition-all scale-95 group-hover:scale-100 flex items-center gap-1 z-50">
               <span>Alinhar módulos (${edge.azimuth}°)</span>
             </div>
           </div>
         `,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
       })}
     />
   ));
 }
 
 function ArrayCountBadge({ panelPolygons }) {
-  const centroid = useMemo(() => {
+  const topAnchor = useMemo(() => {
     if (!panelPolygons.length) return null;
     const allPoints = panelPolygons.flat();
-    return getPolygonCentroid(allPoints);
+    let maxLat = -Infinity;
+    let avgLng = 0;
+    allPoints.forEach((p) => {
+      if (p.lat > maxLat) maxLat = p.lat;
+      avgLng += p.lng;
+    });
+    avgLng /= allPoints.length;
+    return { lat: maxLat, lng: avgLng };
   }, [panelPolygons]);
 
-  if (!centroid || !panelPolygons.length) return null;
+  if (!topAnchor || !panelPolygons.length) return null;
 
   return (
     <Marker
-      position={[centroid.lat, centroid.lng]}
+      position={[topAnchor.lat, topAnchor.lng]}
       interactive={false}
       icon={L.divIcon({
         className: "solar-array-count-badge",
         html: `
-          <div class="bg-white/95 border border-slate-200 text-slate-900 px-2.5 py-1 rounded-md text-[11px] font-bold shadow-xl backdrop-blur-md whitespace-nowrap flex items-center gap-1.5 -translate-x-1/2 -translate-y-1/2">
-            <span class="h-2 w-2 rounded-full bg-[#00d8b8] animate-pulse"></span>
-            <span>Módulos FV: ${panelPolygons.length}</span>
+          <div class="bg-white/95 border border-slate-200/90 text-slate-800 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold shadow-md backdrop-blur-md whitespace-nowrap flex items-center gap-1.5 -translate-x-1/2 -translate-y-[130%] pointer-events-none">
+            <span class="h-1.5 w-1.5 rounded-full bg-[#00d8b8]"></span>
+            <span>Arranjo: <strong class="text-[#009b84]">${panelPolygons.length}</strong> módulos</span>
           </div>
         `,
         iconSize: [0, 0],
@@ -183,20 +243,24 @@ function ArrayCountBadge({ panelPolygons }) {
   );
 }
 
-function MapViewportEvents({ onViewportChange, onMapClick, isDrawing, onMeasureClick, isMeasuring }) {
+function MapViewportEvents({ onViewportChange, onMapClick, isDrawing, onMeasureClick, isMeasuring, onZoomChange }) {
   const map = useMapEvents({
     moveend() {
       const center = map.getCenter();
+      const zoom = map.getZoom();
+      onZoomChange?.(zoom);
       onViewportChange?.({
         center: { lat: center.lat, lng: center.lng },
-        zoom: map.getZoom(),
+        zoom,
       });
     },
     zoomend() {
       const center = map.getCenter();
+      const zoom = map.getZoom();
+      onZoomChange?.(zoom);
       onViewportChange?.({
         center: { lat: center.lat, lng: center.lng },
-        zoom: map.getZoom(),
+        zoom,
       });
     },
     click(e) {
@@ -515,9 +579,10 @@ function EditableRoofPolygonLayer({
         pathOptions={{
           color: "#00d8b8",
           fillColor: "#00d8b8",
-          fillOpacity: 0.16,
-          opacity: 0.95,
-          weight: 2.5,
+          fillOpacity: 0.05,
+          opacity: 0.85,
+          weight: 1.8,
+          dashArray: "4 4",
           className: "cursor-pointer hover:stroke-[#00c4a7] transition-all",
         }}
       />
@@ -631,14 +696,30 @@ export default function SolarDesignerMap({
   const generatedPanelPolygons = useMemo(() => buildPanelPolygons(config, sizing), [config, sizing]);
   const panelPolygons = controlledPanelPolygons || generatedPanelPolygons;
   
-  // LOD: apenas gera linhas internas de células se quantidade de painéis for moderada (< 120)
-  const panelCellLines = useMemo(() => {
-    if (panelPolygons.length > 120) return [];
-    return panelPolygons.flatMap(buildPanelCellLines).map(toLeafletPositions);
-  }, [panelPolygons]);
-
   const mapCenter = useMemo(() => getMapCenterFromConfig(config), [config]);
   const mapZoom = Math.max(3, Math.min(22, Math.round(Number(config.map_zoom) || DEFAULT_SOLAR_MAP_ZOOM)));
+  const [currentZoom, setCurrentZoom] = useState(mapZoom);
+
+  // LOD Dinâmico por Zoom:
+  // - Zoom < 17: Sem linhas internas (modo visão geral leve e ultra-rápido)
+  // - Zoom 17 a 19: Divisão longitudinal half-cut + 5 linhas transversais de células
+  // - Zoom >= 20: Detalhamento completo com matriz de células + busbars secundárias
+  const panelCellLines = useMemo(() => {
+    if (currentZoom < 17) return [];
+    const isLargeArray = panelPolygons.length > 250;
+    const highDetail = currentZoom >= 20 && !isLargeArray;
+
+    const allLines = [];
+    for (let i = 0; i < panelPolygons.length; i++) {
+      const res = buildRealisticPanelCellLines(panelPolygons[i], currentZoom, highDetail);
+      if (res.primary && res.primary.length > 0) {
+        allLines.push(...res.primary);
+      }
+    }
+
+    return allLines.map(toLeafletPositions);
+  }, [panelPolygons, currentZoom]);
+
   const initialCenter = useMemo(
     () => [mapCenter?.lat || DEFAULT_SOLAR_MAP_CENTER.lat, mapCenter?.lng || DEFAULT_SOLAR_MAP_CENTER.lng],
     []
@@ -841,6 +922,7 @@ export default function SolarDesignerMap({
           isDrawing={isDrawing}
           isMeasuring={isMeasuring}
           onMeasureClick={handleMeasureClick}
+          onZoomChange={setCurrentZoom}
         />
         <FloatingMapControls onFitRoof={onFitRoof} hasRoof={hasRoof} onToggle3D={onToggle3D} />
         
@@ -877,14 +959,20 @@ export default function SolarDesignerMap({
             const strColor = STRING_COLORS[strIdx % STRING_COLORS.length];
             const isStringActive = selectedStringIndex === null || selectedStringIndex === strIdx;
 
-            let fillColor = viewMode === "irradiation" ? "#00c853" : "#0284c7";
-            let strokeColor = "#7dd3fc";
-            let opacity = 0.95;
-            let fillOpacity = 0.92;
+            // Paleta realista de silício mono-PERC com micro-variação óptica sutil
+            const realisticSiliconColor = PHOTOVOLTAIC_BASE_COLORS[(index * 7 + 3) % PHOTOVOLTAIC_BASE_COLORS.length];
+
+            // Moldura externa de alumínio anodizado escuro / grafite
+            let strokeColor = "#1e293b";
+            let fillColor = viewMode === "irradiation" ? "#00c853" : realisticSiliconColor;
+            let opacity = 0.98;
+            let fillOpacity = 0.96;
+            let strokeWidth = 1.2;
 
             if (electricalMode || selectedStringIndex !== null) {
               fillColor = strColor.fill;
               strokeColor = strColor.stroke;
+              strokeWidth = 1.4;
               if (!isStringActive) {
                 opacity = 0.35;
                 fillOpacity = 0.3;
@@ -892,8 +980,9 @@ export default function SolarDesignerMap({
             }
 
             if (isSelected) {
-              strokeColor = "#ffffff";
-              fillColor = "#38bdf8";
+              strokeColor = "#00d8b8";
+              fillColor = "#1a3b5c";
+              strokeWidth = 2.2;
               opacity = 1;
               fillOpacity = 1;
             }
@@ -911,19 +1000,19 @@ export default function SolarDesignerMap({
                 }}
                 pathOptions={{
                   color: strokeColor,
-                  className: `solar-panel-shape cursor-pointer transition-all duration-150 ${isSelected ? "ring-2 ring-white" : ""}`,
+                  className: `solar-panel-shape cursor-pointer transition-all duration-150 ${isSelected ? "solar-panel--selected" : ""}`,
                   fillColor,
                   fillOpacity,
                   opacity,
-                  weight: isSelected ? 2.2 : 0.8,
+                  weight: strokeWidth,
                 }}
               >
                 <Tooltip sticky direction="top" className="solar-panel-tooltip">
                   <div className="text-[11px] font-bold">
-                    <span className="text-cyan-300">Módulo #{index + 1}</span>
-                    <span className="text-white/60 ml-1.5">{moduleWp} Wp</span>
+                    <span className="text-[#00d8b8]">Módulo #{index + 1}</span>
+                    <span className="text-slate-300 ml-1.5">{moduleWp} Wp</span>
                     {stringInfo && (
-                      <div className="text-[10px] text-emerald-300 mt-0.5">
+                      <div className="text-[10px] text-emerald-400 mt-0.5 font-medium">
                         {stringInfo.stringName}
                       </div>
                     )}
@@ -938,10 +1027,10 @@ export default function SolarDesignerMap({
               positions={panelCellLines}
               interactive={false}
               pathOptions={{
-                color: "#e0f2fe",
+                color: "#93c5fd",
                 className: "solar-panel-cell-lines",
-                opacity: 0.45,
-                weight: 0.5,
+                opacity: currentZoom >= 20 ? 0.46 : 0.34,
+                weight: currentZoom >= 20 ? 0.75 : 0.55,
               }}
             />
           )}
