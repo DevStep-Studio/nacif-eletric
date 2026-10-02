@@ -2024,7 +2024,6 @@ export default function PlantaIA() {
   const latestPlantSnapshotRef = useRef(null);
   const latestScannerReportRef = useRef(null);
   const latestRoutesRef = useRef([]);
-  const lastCircuitPromptRef = useRef("");
   const [historyMeta, setHistoryMeta] = useState({ canUndo: false, canRedo: false });
   const layers = useMemo(() => layerVisibilityForLegacyCanvas(editorLayers), [editorLayers]);
 
@@ -4121,22 +4120,6 @@ export default function PlantaIA() {
     });
     setCircuitModalPointId(String(point.id));
   }, [circuitOptions, selectedProjectData]);
-
-  useEffect(() => {
-    if (!selectedPoint || !isCircuitConfigurablePoint(selectedPoint)) {
-      lastCircuitPromptRef.current = "";
-      return;
-    }
-    const key = String(selectedPoint.id);
-    if (lastCircuitPromptRef.current === key) return;
-    lastCircuitPromptRef.current = key;
-    try {
-      openCircuitConfigForPoint(selectedPoint);
-    } catch (error) {
-      console.error("Erro ao abrir configuração do ponto:", error);
-      setCircuitModalPointId("");
-    }
-  }, [openCircuitConfigForPoint, selectedPoint]);
 
   const applyCircuitMetadataToPoint = (point, circuit, mode = "existing") => {
     const preparedCircuit = enrichCircuitInstallation(circuit);
@@ -7286,11 +7269,18 @@ export default function PlantaIA() {
               onAddRoutePoint={addRoutePoint}
               onRemoveRoutePoint={removeRoutePoint}
               onSelectRoutePoint={setSelectedRoutePointIndex}
-              onPointDoubleClick={(id) => setPointHeightModalId(String(id))}
-              onCircuitDoubleClick={(id) => {
-                const point = points.find(p => String(p.id) === String(id));
+              onPointDoubleClick={(id) => {
+                const point = points.find((p) => sameId(p.id, id));
                 if (point && isCircuitConfigurablePoint(point)) {
-                  setCircuitModalPointId(String(id));
+                  openCircuitConfigForPoint(point);
+                } else if (point) {
+                  setPointHeightModalId(String(id));
+                }
+              }}
+              onCircuitDoubleClick={(id) => {
+                const point = points.find((p) => sameId(p.id, id));
+                if (point && isCircuitConfigurablePoint(point)) {
+                  openCircuitConfigForPoint(point);
                 }
               }}
               onMoveRoute={moveRoute}
