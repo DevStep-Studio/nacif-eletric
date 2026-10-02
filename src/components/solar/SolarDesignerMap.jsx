@@ -112,7 +112,7 @@ function MeasurementLabels({ roofPolygon }) {
       interactive={false}
       icon={L.divIcon({
         className: "solar-measure-label",
-        html: `<span class="bg-slate-950/85 text-white border border-white/30 px-1.5 py-0.5 rounded text-[10px] font-bold shadow-lg whitespace-nowrap backdrop-blur-sm" style="transform: rotate(${item.rotation}deg); display: inline-block;">${item.label}</span>`,
+        html: `<span class="bg-white/95 text-slate-900 border border-slate-300 px-1.5 py-0.5 rounded text-[10px] font-bold shadow-md whitespace-nowrap backdrop-blur-sm" style="transform: rotate(${item.rotation}deg); display: inline-block;">${item.label}</span>`,
         iconSize: [70, 18],
         iconAnchor: [35, 9],
       })}
@@ -139,12 +139,12 @@ function EdgeAlignmentLayer({ roofPolygon, onAlignToEdge }) {
         className: "solar-edge-align-handle",
         html: `
           <div class="group relative flex items-center justify-center cursor-pointer pointer-events-auto">
-            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/90 text-slate-950 shadow-lg border-2 border-white ring-2 ring-cyan-500/40 transform hover:scale-125 transition-all">
+            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-[#00d8b8] text-slate-950 shadow-lg border-2 border-white ring-2 ring-[#00d8b8]/40 transform hover:scale-125 transition-all">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
               </svg>
             </div>
-            <div class="absolute bottom-full mb-1.5 opacity-90 group-hover:opacity-100 whitespace-nowrap rounded-md bg-slate-950/95 px-2 py-0.5 text-[10px] font-bold text-cyan-200 border border-cyan-400/80 shadow-2xl backdrop-blur-md pointer-events-none transition-all scale-95 group-hover:scale-100 flex items-center gap-1">
+            <div class="absolute bottom-full mb-1.5 opacity-90 group-hover:opacity-100 whitespace-nowrap rounded-md bg-white/95 px-2 py-0.5 text-[10px] font-bold text-[#009b84] border border-[#00d8b8] shadow-xl backdrop-blur-md pointer-events-none transition-all scale-95 group-hover:scale-100 flex items-center gap-1">
               <span>Alinhar módulos (${edge.azimuth}°)</span>
             </div>
           </div>
@@ -172,8 +172,8 @@ function ArrayCountBadge({ panelPolygons }) {
       icon={L.divIcon({
         className: "solar-array-count-badge",
         html: `
-          <div class="bg-slate-950/90 border border-white/25 text-white px-2.5 py-1 rounded-md text-[11px] font-bold shadow-xl backdrop-blur-md whitespace-nowrap flex items-center gap-1.5 -translate-x-1/2 -translate-y-1/2">
-            <span class="h-2 w-2 rounded-full bg-cyan-400 animate-pulse"></span>
+          <div class="bg-white/95 border border-slate-200 text-slate-900 px-2.5 py-1 rounded-md text-[11px] font-bold shadow-xl backdrop-blur-md whitespace-nowrap flex items-center gap-1.5 -translate-x-1/2 -translate-y-1/2">
+            <span class="h-2 w-2 rounded-full bg-[#00d8b8] animate-pulse"></span>
             <span>Módulos FV: ${panelPolygons.length}</span>
           </div>
         `,
@@ -232,12 +232,12 @@ function FloatingMapControls({ onFitRoof, hasRoof, onToggle3D }) {
   const map = useMap();
 
   return (
-    <div className="absolute bottom-6 right-6 z-[500] flex flex-col items-center gap-1 rounded-xl border border-white/15 bg-slate-900/90 p-1 shadow-2xl backdrop-blur-md text-white">
+    <div className="absolute bottom-6 right-6 z-[500] flex flex-col items-center gap-1 rounded-xl border border-slate-200/90 bg-white/95 p-1 shadow-2xl backdrop-blur-md text-slate-700">
       <button
         type="button"
         title="Aproximar Zoom (+)"
         onClick={() => map.zoomIn()}
-        className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-white/15 active:bg-white/25 transition text-white"
+        className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 active:bg-slate-200 transition text-slate-700"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
@@ -245,18 +245,18 @@ function FloatingMapControls({ onFitRoof, hasRoof, onToggle3D }) {
         type="button"
         title="Afastar Zoom (-)"
         onClick={() => map.zoomOut()}
-        className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-white/15 active:bg-white/25 transition text-white"
+        className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 active:bg-slate-200 transition text-slate-700"
       >
         <Minus className="h-3.5 w-3.5" />
       </button>
       {hasRoof && (
         <>
-          <span className="h-px w-4 bg-white/15 my-0.5" />
+          <span className="h-px w-4 bg-slate-200 my-0.5" />
           <button
             type="button"
             title="Enquadrar Telhado"
             onClick={onFitRoof}
-            className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-white/15 active:bg-white/25 transition text-cyan-300"
+            className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 active:bg-slate-200 transition text-[#009b84]"
           >
             <Maximize2 className="h-3.5 w-3.5" />
           </button>
@@ -267,7 +267,7 @@ function FloatingMapControls({ onFitRoof, hasRoof, onToggle3D }) {
           type="button"
           title="Alternar Vista 3D"
           onClick={onToggle3D}
-          className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-white/15 active:bg-white/25 transition text-amber-300"
+          className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-slate-100 active:bg-slate-200 transition text-amber-600"
         >
           <Move3D className="h-3.5 w-3.5" />
         </button>
@@ -442,19 +442,19 @@ function InteractiveRoofDrawingLayer({
                     isFirst
                       ? `<div class="h-6 w-6 rounded-full border-2 border-white ${
                           canClose
-                            ? "bg-emerald-500 ring-4 ring-emerald-400/60 animate-pulse scale-110"
-                            : "bg-cyan-500 ring-2 ring-cyan-400/40"
-                        } flex items-center justify-center text-slate-950 font-black text-[11px] shadow-2xl">
+                            ? "bg-emerald-500 ring-4 ring-emerald-400/60 animate-pulse scale-110 text-white"
+                            : "bg-[#00d8b8] ring-2 ring-[#00d8b8]/40 text-slate-950"
+                        } flex items-center justify-center font-black text-[11px] shadow-2xl">
                           ${canClose ? "✓" : "1"}
                         </div>
                         ${
                           canClose
-                            ? `<div class="absolute bottom-full mb-1.5 whitespace-nowrap rounded-md bg-emerald-950 px-2 py-0.5 text-[10px] font-black text-emerald-200 border border-emerald-400 shadow-2xl backdrop-blur pointer-events-none">
+                            ? `<div class="absolute bottom-full mb-1.5 whitespace-nowrap rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white border border-emerald-400 shadow-2xl backdrop-blur pointer-events-none">
                                 Clique para fechar (${previewArea.toFixed(1)} m²)
                               </div>`
                             : ""
                         }`
-                      : `<div class="h-4 w-4 rounded-full border-2 border-white bg-cyan-400 ring-2 ring-cyan-400/40 flex items-center justify-center text-slate-950 font-black text-[9px] shadow-lg">
+                      : `<div class="h-4 w-4 rounded-full border-2 border-white bg-[#00d8b8] ring-2 ring-[#00d8b8]/40 flex items-center justify-center text-slate-950 font-black text-[9px] shadow-lg">
                           ${idx + 1}
                         </div>`
                   }
@@ -518,7 +518,7 @@ function EditableRoofPolygonLayer({
           fillOpacity: 0.16,
           opacity: 0.95,
           weight: 2.5,
-          className: "cursor-pointer hover:stroke-cyan-300 transition-all",
+          className: "cursor-pointer hover:stroke-[#00c4a7] transition-all",
         }}
       />
 
@@ -545,12 +545,12 @@ function EditableRoofPolygonLayer({
                 className: "solar-roof-vertex-handle",
                 html: `
                   <div class="group relative flex items-center justify-center cursor-move -translate-x-1/2 -translate-y-1/2">
-                    <div class="h-4 w-4 rounded-full border-2 border-white bg-cyan-400 ring-2 ring-cyan-500/50 shadow-xl transform group-hover:scale-125 transition-all flex items-center justify-center">
+                    <div class="h-4 w-4 rounded-full border-2 border-white bg-[#00d8b8] ring-2 ring-[#00d8b8]/50 shadow-xl transform group-hover:scale-125 transition-all flex items-center justify-center">
                       <div class="h-1.5 w-1.5 rounded-full bg-slate-950"></div>
                     </div>
                     ${
                       positions.length > 3
-                        ? `<div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-slate-950/90 px-1.5 py-0.5 text-[9px] font-bold text-cyan-200 border border-cyan-400/50 shadow pointer-events-none transition">
+                        ? `<div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-slate-800 border border-[#00d8b8]/60 shadow-xl pointer-events-none transition">
                             Arrastar · 2 cliques p/ excluir
                           </div>`
                         : ""
@@ -577,10 +577,10 @@ function EditableRoofPolygonLayer({
                 className: "solar-roof-midpoint-handle",
                 html: `
                   <div class="group relative flex items-center justify-center cursor-pointer -translate-x-1/2 -translate-y-1/2">
-                    <div class="h-3.5 w-3.5 rounded-full border border-white bg-slate-900 text-cyan-300 ring-1 ring-cyan-400/40 shadow-lg transform hover:scale-125 hover:bg-cyan-500 hover:text-slate-950 transition-all flex items-center justify-center font-black text-[10px]">
+                    <div class="h-3.5 w-3.5 rounded-full border border-white bg-white text-[#009b84] ring-1 ring-[#00d8b8]/60 shadow-lg transform hover:scale-125 hover:bg-[#00d8b8] hover:text-slate-950 transition-all flex items-center justify-center font-black text-[10px]">
                       +
                     </div>
-                    <div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-slate-950/90 px-1.5 py-0.5 text-[9px] font-bold text-cyan-200 border border-cyan-400/50 shadow pointer-events-none transition">
+                    <div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-[#009b84] border border-[#00d8b8]/60 shadow-xl pointer-events-none transition">
                       + Adicionar vértice
                     </div>
                   </div>
@@ -723,20 +723,20 @@ export default function SolarDesignerMap({
   }, [strings]);
 
   return (
-    <div className={`relative overflow-hidden bg-slate-950 select-none ${className} ${isDrawing ? "solar-designer-map--drawing" : ""}`}>
-      {/* Banner Superior Flutuante de Instruções & Ações de Desenho */}
+    <div className={`relative overflow-hidden bg-slate-100 select-none ${className} ${isDrawing ? "solar-designer-map--drawing" : ""}`}>
+      {/* Banner Superior Flutuante de Instruções & Ações de Desenho (Light Theme) */}
       {isDrawing ? (
         <div className="absolute top-3 inset-x-4 z-[500] flex items-center justify-between pointer-events-none animate-in slide-in-from-top-2">
-          <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-cyan-400/60 bg-slate-900/95 px-3.5 py-1.5 text-xs text-white shadow-2xl backdrop-blur-md">
-            <span className="flex h-2.5 w-2.5 rounded-full bg-cyan-400 animate-ping" />
-            <span className="font-bold text-cyan-300">
+          <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-[#00d8b8]/60 bg-white/95 px-3.5 py-1.5 text-xs text-slate-900 shadow-2xl backdrop-blur-md">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-[#00d8b8] animate-ping" />
+            <span className="font-bold text-[#009b84]">
               {drawingPoints.length === 0
                 ? "Clique no 1º canto do telhado no mapa"
                 : drawingPoints.length < 3
                 ? `Canto #${drawingPoints.length + 1}: clique no próximo vértice`
                 : `Demarcado (${drawingPoints.length} cantos · ~${liveDrawingArea.toFixed(1)} m²)`}
             </span>
-            <span className="hidden lg:inline text-white/50 text-[11px]">
+            <span className="hidden lg:inline text-slate-500 text-[11px]">
               (Dica: clique no ponto verde #1 ou Enter para fechar)
             </span>
           </div>
@@ -746,7 +746,7 @@ export default function SolarDesignerMap({
               <button
                 type="button"
                 onClick={handleFinishDrawing}
-                className="flex items-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 px-3 py-1.5 text-xs font-black text-slate-950 shadow-2xl transition active:scale-95"
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 px-3 py-1.5 text-xs font-black text-white shadow-2xl transition active:scale-95"
               >
                 <Check className="h-3.5 w-3.5 stroke-[3]" />
                 <span>Concluir Área ({drawingPoints.length} pts)</span>
@@ -757,7 +757,7 @@ export default function SolarDesignerMap({
               <button
                 type="button"
                 onClick={handleUndoDrawingPoint}
-                className="flex items-center gap-1 rounded-xl border border-white/15 bg-slate-900/90 hover:bg-white/10 px-2.5 py-1.5 text-xs font-bold text-white/80 hover:text-white shadow-xl transition"
+                className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white/95 hover:bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-xl transition"
                 title="Desfazer último vértice (Backspace)"
               >
                 <Undo2 className="h-3 w-3" />
@@ -768,7 +768,7 @@ export default function SolarDesignerMap({
             <button
               type="button"
               onClick={handleCancelDrawing}
-              className="flex items-center gap-1 rounded-xl border border-rose-500/30 bg-rose-950/80 hover:bg-rose-900 px-2.5 py-1.5 text-xs font-bold text-rose-200 shadow-xl transition"
+              className="flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 text-xs font-bold text-rose-700 shadow-xl transition"
               title="Cancelar desenho (Esc)"
             >
               <X className="h-3.5 w-3.5" />
@@ -777,10 +777,10 @@ export default function SolarDesignerMap({
           </div>
         </div>
       ) : (
-        /* Banner Superior Padrão de Status */
+        /* Banner Superior Padrão de Status (Light Theme) */
         <div className="absolute top-3 inset-x-4 z-[500] pointer-events-none flex items-center justify-between">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/90 px-3.5 py-1.5 text-xs text-white/90 shadow-2xl backdrop-blur-md">
-            <Sun className="h-4 w-4 text-cyan-400" />
+          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white/95 px-3.5 py-1.5 text-xs text-slate-800 shadow-xl backdrop-blur-md">
+            <Sun className="h-4 w-4 text-[#00d8b8]" />
             <span className="font-medium hidden md:inline">
               {editorMode === "measure"
                 ? "Clique em dois pontos para medir a distância real no telhado."
@@ -793,23 +793,23 @@ export default function SolarDesignerMap({
             {hasRoof && (
               <div
                 onClick={() => onSelectRoof?.()}
-                className="cursor-pointer flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/90 px-3 py-1.5 text-xs font-bold text-white shadow-2xl backdrop-blur-md hover:bg-slate-800 transition"
+                className="cursor-pointer flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-800 shadow-xl backdrop-blur-md hover:bg-slate-50 transition"
                 title="Clique para inspecionar esta área"
               >
-                <span className="text-white/60">◬ {config.roof_pitch_deg || 0}°</span>
-                <span className="h-3 w-px bg-white/15" />
-                <span className="text-cyan-300">{Math.round(roofArea)} m²</span>
+                <span className="text-slate-500">◬ {config.roof_pitch_deg || 0}°</span>
+                <span className="h-3 w-px bg-slate-300" />
+                <span className="text-[#009b84]">{Math.round(roofArea)} m²</span>
               </div>
             )}
 
             {isMeasuring && measureDistance !== null && (
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/80 px-3 py-1.5 text-xs font-black text-emerald-300 shadow-2xl backdrop-blur-md">
-                <Ruler className="h-3.5 w-3.5 text-emerald-400" />
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800 shadow-xl backdrop-blur-md">
+                <Ruler className="h-3.5 w-3.5 text-emerald-600" />
                 <span>Distância: {measureDistance.toFixed(2)} m</span>
                 <button
                   type="button"
                   onClick={() => setMeasurePoints([])}
-                  className="ml-1 hover:text-white"
+                  className="ml-1 hover:text-slate-900"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -986,8 +986,8 @@ export default function SolarDesignerMap({
                 center={[obs.lat, obs.lng]}
                 radius={(obs.radiusM || 1.0) + 0.3}
                 pathOptions={{
-                  color: isSelected ? "#38bdf8" : "#f43f5e",
-                  fillColor: isSelected ? "#38bdf8" : "#f43f5e",
+                  color: isSelected ? "#00d8b8" : "#f43f5e",
+                  fillColor: isSelected ? "#00d8b8" : "#f43f5e",
                   fillOpacity: isSelected ? 0.35 : 0.22,
                   weight: isSelected ? 2 : 1.5,
                   dashArray: "4 4",
@@ -1012,11 +1012,11 @@ export default function SolarDesignerMap({
                 icon={L.divIcon({
                   className: "solar-obstacle-marker",
                   html: `<div class="cursor-grab active:cursor-grabbing flex items-center gap-1.5 rounded-lg border ${
-                    isSelected ? "border-sky-400 bg-sky-950 text-sky-200" : "border-rose-500/80 bg-slate-950 text-rose-300"
+                    isSelected ? "border-[#00d8b8] bg-white text-[#009b84]" : "border-rose-300 bg-white text-rose-700"
                   } px-2 py-1 text-[11px] font-bold shadow-xl backdrop-blur -translate-x-1/2 -translate-y-1/2">
-                    <span class="h-2 w-2 rounded-full ${isSelected ? "bg-sky-400 animate-ping" : "bg-rose-500"}"></span>
+                    <span class="h-2 w-2 rounded-full ${isSelected ? "bg-[#00d8b8] animate-ping" : "bg-rose-500"}"></span>
                     <span>${obs.name || "Obstáculo"}</span>
-                    <span class="text-[9px] text-white/50">${(obs.radiusM || 1.0).toFixed(1)}m</span>
+                    <span class="text-[9px] text-slate-500">${(obs.radiusM || 1.0).toFixed(1)}m</span>
                   </div>`,
                   iconSize: [0, 0],
                 })}
@@ -1042,32 +1042,32 @@ export default function SolarDesignerMap({
         )}
       </MapContainer>
 
-      {/* Rosa dos Ventos / Compass Overlay Minimalista (Top-Right) */}
-      <div className="absolute top-16 right-4 z-[500] flex flex-col items-center gap-1 rounded-xl border border-white/15 bg-slate-900/90 p-2 shadow-2xl backdrop-blur-md select-none text-white">
+      {/* Rosa dos Ventos / Compass Overlay Minimalista (Top-Right Light) */}
+      <div className="absolute top-16 right-4 z-[500] flex flex-col items-center gap-1 rounded-xl border border-slate-200/90 bg-white/95 p-2 shadow-2xl backdrop-blur-md select-none text-slate-800">
         <div className="relative flex h-8 w-8 items-center justify-center">
-          <span className="absolute top-0 text-[7px] font-black text-rose-400">N</span>
-          <span className="absolute right-0 text-[7px] font-bold text-white/60">L</span>
-          <span className="absolute bottom-0 text-[7px] font-bold text-white/60">S</span>
-          <span className="absolute left-0 text-[7px] font-bold text-white/60">O</span>
+          <span className="absolute top-0 text-[7px] font-black text-rose-600">N</span>
+          <span className="absolute right-0 text-[7px] font-bold text-slate-400">L</span>
+          <span className="absolute bottom-0 text-[7px] font-bold text-slate-400">S</span>
+          <span className="absolute left-0 text-[7px] font-bold text-slate-400">O</span>
           <div
             className="flex h-5 w-5 items-center justify-center transition-transform duration-500"
             style={{ transform: `rotate(${-azimuthInfo.degrees}deg)` }}
           >
-            <Compass className="h-4 w-4 text-cyan-400" />
+            <Compass className="h-4 w-4 text-[#00d8b8]" />
           </div>
         </div>
-        <span className="text-[8.5px] font-bold text-cyan-300">{azimuthInfo.formatted}</span>
+        <span className="text-[8.5px] font-bold text-[#009b84]">{azimuthInfo.formatted}</span>
       </div>
 
-      {/* Miniaturas / Seletor de Camadas Compacto (Bottom-Left) */}
-      <div className="absolute bottom-6 left-6 z-[500] flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/15 shadow-2xl backdrop-blur-md">
+      {/* Miniaturas / Seletor de Camadas Compacto (Bottom-Left Light) */}
+      <div className="absolute bottom-6 left-6 z-[500] flex items-center gap-1 bg-white/95 p-1 rounded-xl border border-slate-200/90 shadow-2xl backdrop-blur-md">
         <button
           type="button"
           onClick={() => onViewModeChange?.("map")}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
             viewMode === "map"
-              ? "bg-cyan-500 text-slate-950 font-black shadow"
-              : "text-white/60 hover:text-white"
+              ? "bg-[#00d8b8] text-slate-950 font-black shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
           }`}
         >
           <Layers className="h-3.5 w-3.5" />
@@ -1078,11 +1078,11 @@ export default function SolarDesignerMap({
           onClick={() => onViewModeChange?.("irradiation")}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
             viewMode === "irradiation"
-              ? "bg-amber-500 text-slate-950 font-black shadow"
-              : "text-white/60 hover:text-white"
+              ? "bg-amber-400 text-slate-950 font-black shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
           }`}
         >
-          <Flame className="h-3.5 w-3.5 text-amber-400" />
+          <Flame className="h-3.5 w-3.5 text-amber-500" />
           <span>Irradiação</span>
         </button>
       </div>
