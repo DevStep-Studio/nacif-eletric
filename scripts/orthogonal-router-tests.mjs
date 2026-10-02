@@ -266,6 +266,95 @@ console.log("Iniciando bateria de testes obrigatórios do Roteador Ortogonal e P
   console.log("✓ TESTE 8: Projeto antigo sem waypoints. Aberto e migrado com rota ortogonal válida.");
 }
 
+// ─── TESTE 9: Recuperação de rotas diagonais corrompidas ──────────────────────
+{
+  const boardWithCorruptedDiagonalRoutes = {
+    id: "corrupted-01",
+    name: "Quadro com rotas diagonais corrompidas",
+    layout: {
+      rails: [
+        {
+          id: "rail_1",
+          components: [
+            { id: "circuit_0", type: "breaker", poles: 1, label: "C1 - Iluminação" },
+          ],
+        },
+      ],
+      wires: [
+        {
+          id: "w_neutral_diag",
+          source: "busbar_neutral:3",
+          target: "load_out:circuit_0:neutral",
+          color: "blue",
+          route: {
+            mode: "orthogonal",
+            // Rota de 2 pontos puramente diagonal (corrompida de versões legadas)
+            points: [{ x: 538, y: 56 }, { x: 232, y: 326 }],
+          },
+        },
+        {
+          id: "w_ground_diag",
+          source: "busbar_ground:3",
+          target: "load_out:circuit_0:ground",
+          color: "green",
+          route: {
+            mode: "orthogonal",
+            // Rota de 2 pontos puramente diagonal
+            points: [{ x: 394, y: 428 }, { x: 710, y: 280 }],
+          },
+        },
+      ],
+    },
+  };
+
+  const fixed = normalizeSavedBoard(boardWithCorruptedDiagonalRoutes);
+  const neutralWire = fixed.layout.wires.find(w => w.id === "w_neutral_diag");
+  const groundWire = fixed.layout.wires.find(w => w.id === "w_ground_diag");
+
+  assert.ok(isOrthogonalPath(neutralWire.route.points), "TESTE 9: Rota de neutro recalculada para 100% ortogonal");
+  assert.ok(neutralWire.route.points.length >= 3, "TESTE 9: Rota de neutro possui curvas ortogonais de 90°");
+  assert.ok(isOrthogonalPath(groundWire.route.points), "TESTE 9: Rota de terra recalculada para 100% ortogonal");
+  assert.ok(groundWire.route.points.length >= 3, "TESTE 9: Rota de terra possui curvas ortogonais de 90°");
+  console.log("✓ TESTE 9: Recuperação de rotas diagonais corrompidas. Corrigidas para 100% ortogonais.");
+}
+
+// ─── TESTE 10: Fallback quando disjuntor geral gen_brk está ausente ────────────
+{
+  const boardWithoutGenBrk = {
+    id: "single-circuit-01",
+    layout: {
+      rails: [
+        {
+          id: "rail_1",
+          components: [
+            { id: "circuit_0", type: "breaker", poles: 1 },
+          ],
+        },
+      ],
+      wires: [
+        {
+          id: "w_feed_in",
+          source: "comp:gen_brk:bottom:0",
+          target: "comp:circuit_0:top:0",
+          color: "black",
+        },
+      ],
+    },
+  };
+
+  const normalized = normalizeSavedBoard(boardWithoutGenBrk);
+  const feedWire = normalized.layout.wires[0];
+
+  assert.ok(feedWire.route.points.length >= 2, "TESTE 10: Rota gerada para alimentador");
+  assert.ok(isOrthogonalPath(feedWire.route.points), "TESTE 10: Rota do alimentador é 100% ortogonal");
+  // O ponto inicial NÃO pode ser (0, 0)
+  assert.notEqual(feedWire.route.points[0].x, 0, "TESTE 10: Ponto inicial do alimentador não é x=0");
+  assert.notEqual(feedWire.route.points[0].y, 0, "TESTE 10: Ponto inicial do alimentador não é y=0");
+  assert.equal(feedWire.route.points[0].x, 101, "TESTE 10: Origem cai no terminal trifásico L1 (73 + 28 = 101)");
+  assert.equal(feedWire.route.points[0].y, 78, "TESTE 10: Origem cai na altura do bloco de entrada (78)");
+  console.log("✓ TESTE 10: Disjuntor geral ausente. Conexão deriva do bloco de entrada sem ir para (0, 0).");
+}
+
 console.log("\n=======================================================");
-console.log("TODOS OS 8 TESTES OBRIGATÓRIOS PASSARAM COM SUCESSO!");
+console.log("TODOS OS 10 TESTES OBRIGATÓRIOS PASSARAM COM SUCESSO!");
 console.log("=======================================================\n");

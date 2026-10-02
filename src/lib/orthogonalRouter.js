@@ -659,19 +659,25 @@ export const normalizeSavedBoard = (savedBoard = {}, project = null, options = {
     const gauge = wire.gauge || "2.5mm²";
     const conductorType = wire.conductorType || (color === "blue" ? "neutral" : color === "green" ? "ground" : "phase");
 
-    // Verifica se já possui rota válida salva
-    const savedRoutePoints = Array.isArray(wire.route?.points) && wire.route.points.length >= 2
+    const p1 = resolvePinPosition(source, normalizedRails, panelHeight, infrastructure);
+    const p2 = resolvePinPosition(target, normalizedRails, panelHeight, infrastructure);
+
+    // Verifica se já possui rota válida salva e estritamente ortogonal
+    const candidateRoute = Array.isArray(wire.route?.points) && wire.route.points.length >= 2
       ? wire.route.points
-      : Array.isArray(wire.route_points) && wire.route_points.length >= 2
-        ? wire.route_points
+      : Array.isArray(wire.route_points) && wire.route_points.length > 0 && p1 && p2
+        ? [p1, ...wire.route_points, p2]
         : null;
 
-    let routePoints = savedRoutePoints;
+    const hasValidSavedRoute = !options.forceRecalculate
+      && candidateRoute
+      && candidateRoute.length >= 2
+      && isOrthogonalPath(candidateRoute);
+
+    let routePoints = hasValidSavedRoute ? candidateRoute : null;
 
     // Se não tiver rota válida salva, calcula rota ortogonal padrão
-    if (!routePoints || options.forceRecalculate) {
-      const p1 = resolvePinPosition(source, normalizedRails, panelHeight, infrastructure);
-      const p2 = resolvePinPosition(target, normalizedRails, panelHeight, infrastructure);
+    if ((!routePoints || routePoints.length < 2) && p1 && p2) {
       const sourceSide = inferTerminalDirection(source, p1, normalizedRails, panelHeight);
       const targetSide = inferTerminalDirection(target, p2, normalizedRails, panelHeight);
 
@@ -687,7 +693,7 @@ export const normalizeSavedBoard = (savedBoard = {}, project = null, options = {
       });
     }
 
-    const cleanPoints = simplifyOrthogonalPoints(routePoints);
+    const cleanPoints = routePoints && routePoints.length >= 2 ? simplifyOrthogonalPoints(routePoints) : [];
     const waypointsOnly = cleanPoints.length > 2 ? cleanPoints.slice(1, -1) : [];
 
     return {
@@ -739,7 +745,7 @@ export const normalizeSavedBoard = (savedBoard = {}, project = null, options = {
 // ─── RESOLUÇÃO DE COORDENADAS DE PINOS ────────────────────────────────────────
 
 export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, infrastructure = []) => {
-  if (!pinId) return { x: 0, y: 0 };
+  if (!pinId) return null;
   const pin = String(pinId);
 
   // Pino solto com coordenadas embutidas
@@ -832,9 +838,19 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
         currentX += compW + 2;
       }
     }
+
+    // Fallback gracioso para alimentador geral caso gen_brk / gen_dr não esteja no trilho
+    if (compId === "gen_brk" || compId === "gen_dr" || compId?.startsWith("gen_")) {
+      return {
+        x: 73 + (poleIdx + 1) * 28,
+        y: 78,
+      };
+    }
+
+    return null;
   }
 
-  return { x: 0, y: 0 };
+  return null;
 };
 
 const extractComponentIdFromPin = (pinId = "") => {

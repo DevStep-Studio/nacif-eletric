@@ -1662,9 +1662,13 @@ const getPinCoords = (pinId, rails, panelH, infrastructure = []) => {
         currentX += compW + 2;
       }
     }
+    // Fallback gracioso para entrada de alimentação caso gen_brk / gen_dr não esteja montado no trilho
+    if (compId === "gen_brk" || compId === "gen_dr" || compId?.startsWith("gen_")) {
+      return getThreePhaseOutputPin(poleIdx + 1, infrastructure);
+    }
   }
   
-  return { x: 0, y: 0 };
+  return null;
 };
 
 export default function PanelGenerator() {
@@ -2091,13 +2095,24 @@ export default function PanelGenerator() {
       const p1 = resolvePinPosition(wire.source, currentRails, pHeight, currentInfra);
       const p2 = resolvePinPosition(wire.target, currentRails, pHeight, currentInfra);
 
-      const savedRoute = Array.isArray(wire.route?.points) && wire.route.points.length >= 2
-        ? wire.route.points
-        : Array.isArray(wire.route_points) && wire.route_points.length >= 2
-          ? wire.route_points
-          : wirePathsRef.current[wire.id] || wireRouteMetaRef.current[wire.id]?.routePoints;
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) {
+        return {
+          ...wire,
+          route: { mode: "orthogonal", points: [] },
+          route_points: [],
+        };
+      }
 
-      let points = savedRoute;
+      const visualRoute = wirePathsRef.current[wire.id] || wireRouteMetaRef.current[wire.id]?.routePoints;
+      const savedRoute = Array.isArray(wire.route?.points) && wire.route.points.length >= 2 && isOrthogonalPath(wire.route.points)
+        ? wire.route.points
+        : Array.isArray(wire.route_points) && wire.route_points.length > 0
+          ? [p1, ...wire.route_points, p2]
+          : Array.isArray(visualRoute) && visualRoute.length >= 2 && isOrthogonalPath(visualRoute)
+            ? visualRoute
+            : null;
+
+      let points = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : null;
       if (!points || points.length < 2) {
         const sourceSide = inferTerminalDirection(wire.source, p1, currentRails, pHeight);
         const targetSide = inferTerminalDirection(wire.target, p2, currentRails, pHeight);
@@ -2111,7 +2126,7 @@ export default function PanelGenerator() {
         });
       }
 
-      const cleanPoints = simplifyOrthogonalPoints(points);
+      const cleanPoints = points && points.length >= 2 ? simplifyOrthogonalPoints(points) : [];
       const waypointsOnly = cleanPoints.length > 2 ? cleanPoints.slice(1, -1) : [];
 
       return {
@@ -6137,17 +6152,21 @@ export default function PanelGenerator() {
     const thickness = hasEditableThickness
       ? getEffectiveWireThickness(activeWire, fallbackThickness)
       : fallbackThickness;
-    const hasCustomRoute = Boolean(
-      storedWire?.route?.points?.length
-      || storedWire?.route_points?.length
-      || getCableControlPoints(storedWire || {}).length
-      || activeWire.route?.points?.length
-      || activeWire.route_points?.length
-      || getCableControlPoints(activeWire).length
-    );
-    const baseRoutePoints = hasCustomRoute
-      ? (storedWire?.route?.points || (storedWire?.route_points?.length ? [routePoints[0], ...storedWire.route_points, routePoints[routePoints.length - 1]] : null) || activeWire.route?.points || (activeWire.route_points?.length ? [routePoints[0], ...activeWire.route_points, routePoints[routePoints.length - 1]] : null) || routePoints)
+
+    const candidateSavedPoints = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+      ? storedWire.route.points
+      : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
+        ? [routePoints[0], ...storedWire.route_points, routePoints[routePoints.length - 1]]
+        : Array.isArray(activeWire?.route?.points) && activeWire.route.points.length >= 2 && isOrthogonalPath(activeWire.route.points)
+          ? activeWire.route.points
+          : Array.isArray(activeWire?.route_points) && activeWire.route_points.length > 0
+            ? [routePoints[0], ...activeWire.route_points, routePoints[routePoints.length - 1]]
+            : null;
+
+    const baseRoutePoints = (candidateSavedPoints && candidateSavedPoints.length >= 2 && isOrthogonalPath(candidateSavedPoints))
+      ? candidateSavedPoints
       : routePoints;
+
     const registeredRoutePoints = registerWireRoute(activeWire, baseRoutePoints, {
       descriptor,
       color: baseColor,
@@ -6155,6 +6174,7 @@ export default function PanelGenerator() {
       thickness,
     });
     const editableRoutePoints = getEditableWireRoutePoints(activeWire, registeredRoutePoints);
+    if (!editableRoutePoints || editableRoutePoints.length < 2) return null;
     const pathStr = getRoundedPath(editableRoutePoints, getCableCornerRadius(activeWire, options.radius ?? DEFAULT_CABLE_CORNER_RADIUS));
 	    const isHighlighted = selectedWireId === descriptor.wire.id || hoveredWireId === descriptor.wire.id;
 	    const tapPoint = options.showTap ? editableRoutePoints[0] : null;
@@ -6239,42 +6259,24 @@ export default function PanelGenerator() {
 
   const routeServicePowerDescriptor = (descriptor) => {
     const { p1, p2, sourceMeta, targetMeta } = descriptor;
+    if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return [];
+    const obstacles = extractPanelObstacles(rails, infrastructure);
 
-    if (isTerminalFeedWire(descriptor)) {
-      const sourceIsTerminal = String(descriptor.wire.source || "").startsWith("terminal_left_top:");
-      const terminal = sourceIsTerminal ? p1 : p2;
-      const device = sourceIsTerminal ? p2 : p1;
-      const laneY = referenceFeedLaneY(descriptor);
-      return sourceIsTerminal
-        ? cleanRoutePoints([
-            terminal,
-            { x: terminal.x, y: laneY },
-            { x: device.x, y: laneY },
-            device,
-          ])
-        : cleanRoutePoints([
-            device,
-            { x: device.x, y: laneY },
-            { x: terminal.x, y: laneY },
-            terminal,
-          ]);
+    const storedWire = getStoredWire(descriptor.wire?.id);
+    if (Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)) {
+      return storedWire.route.points;
     }
 
-    const sameRail = sourceMeta?.railIndex === targetMeta?.railIndex;
-    if (sameRail && sourceMeta?.term === "bottom" && targetMeta?.term === "top") {
-      return routeLocalDeviceJumper(descriptor);
-    }
+    const sourceSide = isTerminalFeedWire(descriptor) || String(descriptor.wire?.source || "").startsWith("terminal_") ? "DOWN" : sourceMeta?.term === "bottom" ? "DOWN" : "UP";
+    const targetSide = targetMeta?.term === "bottom" ? "DOWN" : "UP";
 
-    const railIndex = Math.max(0, targetMeta?.railIndex ?? sourceMeta?.railIndex ?? 0);
-    const ductSide = sourceMeta?.term === "bottom" && targetMeta?.term === "bottom" ? "bottom" : "top";
-    const ductY = getRailDuctY(railIndex, ductSide, phaseLaneOffset(descriptor.color));
-
-    return cleanRoutePoints([
-      p1,
-      { x: p1.x, y: ductY },
-      { x: p2.x, y: ductY },
-      p2,
-    ]);
+    return calculateOrthogonalRoute(p1, p2, obstacles, {
+      sourceSide,
+      targetSide,
+      laneOffset: phaseLaneOffset(descriptor.color),
+      sourcePin: descriptor.wire?.source,
+      targetPin: descriptor.wire?.target,
+    });
   };
 
   const renderPowerServiceWire = (descriptor) => (
@@ -6463,14 +6465,14 @@ export default function PanelGenerator() {
       >
         {descriptors.map((descriptor, descriptorIndex) => {
           const storedWire = getStoredWire(descriptor.wire.id);
-          const savedRoute = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2
+          const savedRoute = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
             ? storedWire.route.points
-            : Array.isArray(storedWire?.route_points) && storedWire.route_points.length >= 2
+            : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
               ? [descriptor.p1, ...storedWire.route_points, descriptor.p2]
               : null;
 
           const laneOffset = (descriptorIndex - (descriptors.length - 1) / 2) * WIRE_SPACING;
-          const routePoints = savedRoute || calculateOrthogonalRoute(descriptor.p1, descriptor.p2, obstacles, {
+          const routePoints = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : calculateOrthogonalRoute(descriptor.p1, descriptor.p2, obstacles, {
             sourceSide: descriptor.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
             targetSide: descriptor.targetMeta?.term === "bottom" ? "DOWN" : "UP",
             laneOffset,
@@ -6494,13 +6496,23 @@ export default function PanelGenerator() {
     const loadEndpoint = getLoadEndpoint(descriptor);
     if (!loadEndpoint) return null;
     const devicePoint = descriptor.sourceMeta?.type === "load" ? descriptor.p2 : descriptor.p1;
-    const dropY = snapWireGrid(devicePoint.y + 68 + phaseLaneOffset(descriptor.color));
-    const routePoints = cleanRoutePoints([
-      devicePoint,
-      { x: devicePoint.x, y: dropY },
-      { x: loadEndpoint.point.x, y: dropY },
-      loadEndpoint.point,
-    ]);
+    if (!isValidWirePoint(devicePoint) || !isValidWirePoint(loadEndpoint.point)) return null;
+
+    const obstacles = extractPanelObstacles(rails, infrastructure);
+    const storedWire = getStoredWire(descriptor.wire.id);
+    const savedRoute = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+      ? storedWire.route.points
+      : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
+        ? [devicePoint, ...storedWire.route_points, loadEndpoint.point]
+        : null;
+
+    const routePoints = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : calculateOrthogonalRoute(devicePoint, loadEndpoint.point, obstacles, {
+      sourceSide: "DOWN",
+      targetSide: "DOWN",
+      sourcePin: descriptor.wire?.source,
+      targetPin: descriptor.wire?.target,
+      laneOffset: phaseLaneOffset(descriptor.color),
+    });
 
     return renderDescriptorPath(descriptor, routePoints, `${descriptor.wire.id}-output`, {
       radius: 2,
@@ -6521,78 +6533,54 @@ export default function PanelGenerator() {
   };
 
   const routeNeutralDescriptorBranches = (descriptor) => {
-
     const endpoints = getBusbarBranchEndpoints(descriptor);
     const busPoint = getNeutralBusPoint(descriptor);
+    const obstacles = extractPanelObstacles(rails, infrastructure);
 
     if (endpoints.length === 2 || !endpoints.length) {
-      return [routeLocalDeviceJumper(descriptor)];
+      const p1 = descriptor.p1;
+      const p2 = descriptor.p2;
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return [];
+      return [calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide: descriptor.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
+        targetSide: descriptor.targetMeta?.term === "bottom" ? "DOWN" : "UP",
+        sourcePin: descriptor.wire?.source,
+        targetPin: descriptor.wire?.target,
+      })];
     }
 
     return endpoints.map(({ point, pin, meta }, branchIndex) => {
       const start = busPoint || { x: getNeutralBackboneX(), y: getNeutralBackboneTopY() };
+      if (!isValidWirePoint(start) || !isValidWirePoint(point)) return [];
 
-      if (String(pin).startsWith("load_out:")) {
-        const branchY = snapWireGrid(point.y);
-        return cleanRoutePoints([
-          start,
-          { x: start.x, y: branchY },
-          { x: point.x, y: branchY },
-          point,
-        ]);
-      }
-
-      if (meta?.type === "component" && meta?.term === "top" && Number(meta?.railIndex) === 0) {
-        const laneY = snapWireGrid((busPoint?.y ?? NEUTRAL_BUS.pinY) + 34 + (branchIndex % 3) * 8);
-        return cleanRoutePoints([
-          start,
-          { x: start.x, y: laneY },
-          { x: point.x, y: laneY },
-          point,
-        ]);
-      }
-
-      const laneY = getNeutralBranchLaneY(point, meta, descriptor, branchIndex);
-      return cleanRoutePoints([
-        start,
-        { x: start.x, y: laneY },
-        { x: point.x, y: laneY },
-        point,
-      ]);
-    });
+      const targetSide = String(pin).startsWith("load_out:") ? "DOWN" : meta?.term === "bottom" ? "DOWN" : "UP";
+      return calculateOrthogonalRoute(start, point, obstacles, {
+        sourceSide: "DOWN",
+        targetSide,
+        laneOffset: (branchIndex % 3) * 6,
+        sourcePin: descriptor.wire?.source,
+        targetPin: pin || descriptor.wire?.target,
+      });
+    }).filter(r => r && r.length >= 2);
   };
 
   const renderNeutralBranchWire = (descriptor) => {
     if (descriptor.wire?.id?.includes("main") || descriptor.wire?.id?.includes("backbone") || descriptor.wire?.id?.includes("tie")) return null;
-    return routeNeutralDescriptorBranches(descriptor).map((routePoints, index) => {
+    const branches = routeNeutralDescriptorBranches(descriptor);
+    return branches.map((routePoints, index) => {
       const branchId = `${descriptor.wire.id}-neutral-${index}`;
-      const customWire = wires.find(w => w.id === branchId);
+      const customWire = wires.find(w => w.id === branchId || w.id === descriptor.wire.id);
       if (customWire?.deleted) return null;
-      let finalStart = routePoints[0];
-      let finalEnd = routePoints[routePoints.length - 1];
-      if (customWire?.source) finalStart = getPinCoords(customWire.source, rails, panelHeight, infrastructure) || finalStart;
-      if (customWire?.target) finalEnd = getPinCoords(customWire.target, rails, panelHeight, infrastructure) || finalEnd;
 
-      let innerPoints = customWire?.route_points?.length > 0 ? [...customWire.route_points] : [...routePoints.slice(1, -1)];
-      
-      if (!(customWire?.route_points?.length > 0) && innerPoints.length > 0) {
-        const lastInner = innerPoints[innerPoints.length - 1];
-        const origEnd = routePoints[routePoints.length - 1];
-        const origPrev = routePoints[routePoints.length - 2];
-        if (Math.abs(origPrev.y - origEnd.y) < 2) lastInner.y = finalEnd.y;
-        else if (Math.abs(origPrev.x - origEnd.x) < 2) lastInner.x = finalEnd.x;
+      const savedRoute = Array.isArray(customWire?.route?.points) && customWire.route.points.length >= 2 && isOrthogonalPath(customWire.route.points)
+        ? customWire.route.points
+        : Array.isArray(customWire?.route_points) && customWire.route_points.length > 0
+          ? [routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]]
+          : null;
 
-        const firstInner = innerPoints[0];
-        const origStart = routePoints[0];
-        const origNext = routePoints[1];
-        if (Math.abs(origNext.y - origStart.y) < 2) firstInner.y = finalStart.y;
-        else if (Math.abs(origNext.x - origStart.x) < 2) firstInner.x = finalStart.x;
-      }
-      
-      const activeRoutePoints = [finalStart, ...innerPoints, finalEnd];
-      
-      const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId, route_points: [] } };
-      
+      const activeRoutePoints = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : routePoints;
+      const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId } };
+
       return renderDescriptorPath(branchDesc, activeRoutePoints, branchId, {
         color: customWire?.color ? wireDisplayColor(customWire.color) : COLORS.neutral,
         radius: PROFESSIONAL_BUS.branchRadius,
@@ -6622,82 +6610,54 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     if (isTerminalFeedWire(descriptor)) return [];
 
     const endpoints = getBusbarBranchEndpoints(descriptor);
-    
     const groundLayout = getGroundBusLayout(infrastructure, panelHeight);
     const bottomY = groundLayout.pinY;
-
     const busPoint = getGroundBusPoint(descriptor, infrastructure, panelHeight) || { x: PROFESSIONAL_BUS.groundLeftX, y: bottomY };
+    const obstacles = extractPanelObstacles(rails, infrastructure);
 
     if (endpoints.length === 2 || !endpoints.length) {
-      return [routeLocalDeviceJumper(descriptor)];
+      const p1 = descriptor.p1;
+      const p2 = descriptor.p2;
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return [];
+      return [calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide: descriptor.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
+        targetSide: descriptor.targetMeta?.term === "bottom" ? "DOWN" : "UP",
+        sourcePin: descriptor.wire?.source,
+        targetPin: descriptor.wire?.target,
+      })];
     }
 
     return endpoints.map(({ point, pin, meta }, branchIndex) => {
-      if (String(pin).startsWith("load_out:") || point.y >= panelHeight - 140) {
-        const branchY = snapWireGrid(point.y);
+      if (!isValidWirePoint(busPoint) || !isValidWirePoint(point)) return [];
 
-        return cleanRoutePoints([
-          busPoint,
-          { x: busPoint.x, y: branchY },
-          { x: point.x, y: branchY },
-          point,
-        ]);
-      }
-
-      const riserX = PROFESSIONAL_BUS.groundLeftX;
-      const isDpsGround = /dps/i.test(`${descriptor.wire?.id || ""}:${pin || ""}`);
-      if (isDpsGround) {
-        const railIndex = Math.max(0, meta?.railIndex ?? descriptor.sourceMeta?.railIndex ?? descriptor.targetMeta?.railIndex ?? 0);
-        const laneY = getRailDuctY(railIndex, "bottom", -8 + (branchIndex % 2) * 6);
-        return cleanRoutePoints([
-          busPoint,
-          { x: busPoint.x, y: laneY },
-          { x: riserX, y: laneY },
-          { x: point.x, y: laneY },
-          { x: point.x, y: point.y },
-          point,
-        ]);
-      }
-
-      return cleanRoutePoints([
-        busPoint,
-        { x: busPoint.x, y: point.y },
-        point,
-      ]);
-    });
+      const targetSide = String(pin).startsWith("load_out:") ? "DOWN" : meta?.term === "bottom" ? "DOWN" : "UP";
+      return calculateOrthogonalRoute(busPoint, point, obstacles, {
+        sourceSide: "UP",
+        targetSide,
+        laneOffset: (branchIndex % 3) * 6,
+        sourcePin: descriptor.wire?.source,
+        targetPin: pin || descriptor.wire?.target,
+      });
+    }).filter(r => r && r.length >= 2);
   };
 
   const renderGroundBranchWire = (descriptor) => {
     if (descriptor.wire?.id?.includes("main") || descriptor.wire?.id?.includes("backbone") || descriptor.wire?.id?.includes("tie")) return null;
-    return routeGroundDescriptorBranches(descriptor).map((routePoints, index) => {
+    const branches = routeGroundDescriptorBranches(descriptor);
+    return branches.map((routePoints, index) => {
       const branchId = `${descriptor.wire.id}-ground-${index}`;
-      const customWire = wires.find(w => w.id === branchId);
+      const customWire = wires.find(w => w.id === branchId || w.id === descriptor.wire.id);
       if (customWire?.deleted) return null;
-      let finalStart = routePoints[0];
-      let finalEnd = routePoints[routePoints.length - 1];
-      if (customWire?.source) finalStart = getPinCoords(customWire.source, rails, panelHeight, infrastructure) || finalStart;
-      if (customWire?.target) finalEnd = getPinCoords(customWire.target, rails, panelHeight, infrastructure) || finalEnd;
 
-      let innerPoints = customWire?.route_points?.length > 0 ? [...customWire.route_points] : [...routePoints.slice(1, -1)];
-      
-      if (!(customWire?.route_points?.length > 0) && innerPoints.length > 0) {
-        const lastInner = innerPoints[innerPoints.length - 1];
-        const origEnd = routePoints[routePoints.length - 1];
-        const origPrev = routePoints[routePoints.length - 2];
-        if (Math.abs(origPrev.y - origEnd.y) < 2) lastInner.y = finalEnd.y;
-        else if (Math.abs(origPrev.x - origEnd.x) < 2) lastInner.x = finalEnd.x;
+      const savedRoute = Array.isArray(customWire?.route?.points) && customWire.route.points.length >= 2 && isOrthogonalPath(customWire.route.points)
+        ? customWire.route.points
+        : Array.isArray(customWire?.route_points) && customWire.route_points.length > 0
+          ? [routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]]
+          : null;
 
-        const firstInner = innerPoints[0];
-        const origStart = routePoints[0];
-        const origNext = routePoints[1];
-        if (Math.abs(origNext.y - origStart.y) < 2) firstInner.y = finalStart.y;
-        else if (Math.abs(origNext.x - origStart.x) < 2) firstInner.x = finalStart.x;
-      }
-      
-      const activeRoutePoints = [finalStart, ...innerPoints, finalEnd];
-      
-      const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId, route_points: [] } };
-      
+      const activeRoutePoints = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : routePoints;
+      const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId } };
+
       return renderDescriptorPath(branchDesc, activeRoutePoints, branchId, {
         color: customWire?.color ? wireDisplayColor(customWire.color) : COLORS.ground,
         radius: PROFESSIONAL_BUS.branchRadius,
@@ -6775,21 +6735,16 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       if (isValidWirePoint(targetPoint)) anchoredPoints[anchoredPoints.length - 1] = targetPoint;
       fallbackPoints = cleanRoutePoints(anchoredPoints);
     }
-    const hasCustomRoute = Boolean(
-      storedWire?.route?.points?.length
-      || storedWire?.route_points?.length
-      || getCableControlPoints(storedWire || {}).length
-      || activeWire.route?.points?.length
-      || activeWire.route_points?.length
-      || getCableControlPoints(activeWire).length
-    );
-    const effectiveRoutePoints = (
-      storedWire?.route?.points
-      || (storedWire?.route_points?.length ? [fallbackPoints[0], ...storedWire.route_points, fallbackPoints[fallbackPoints.length - 1]] : null)
-      || activeWire.route?.points
-      || (activeWire.route_points?.length ? [fallbackPoints[0], ...activeWire.route_points, fallbackPoints[fallbackPoints.length - 1]] : null)
-      || fallbackPoints
-    );
+    const candidateSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+      ? storedWire.route.points
+      : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
+        ? [fallbackPoints[0], ...storedWire.route_points, fallbackPoints[fallbackPoints.length - 1]]
+        : Array.isArray(activeWire?.route?.points) && activeWire.route.points.length >= 2 && isOrthogonalPath(activeWire.route.points)
+          ? activeWire.route.points
+          : Array.isArray(activeWire?.route_points) && activeWire.route_points.length > 0
+            ? [fallbackPoints[0], ...activeWire.route_points, fallbackPoints[fallbackPoints.length - 1]]
+            : null;
+    const effectiveRoutePoints = (candidateSaved && isOrthogonalPath(candidateSaved)) ? candidateSaved : fallbackPoints;
     fallbackPoints = cleanRoutePoints(effectiveRoutePoints);
     const baseDisplayColor = storedWire?.color
       ? wireDisplayColor(normalizedWireColor(storedWire))
