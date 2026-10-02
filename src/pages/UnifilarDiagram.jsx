@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
 import ProfessionalBoardSheetSVG from "@/components/ProfessionalBoardSheetSVG";
 import QgbtDiagramSheetSVG from "@/components/QgbtDiagramSheetSVG";
+import { buildProfessionalPanelBoardSheets } from "@/lib/professionalPanelBoardLibrary";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
 import { calcProjectMetrics, autoBalancePhases, selectDrRating, getPrimaryPanelBoard } from "@/lib/electricalEngine";
@@ -943,8 +944,13 @@ export default function UnifilarDiagram() {
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
   const [activeTab, setActiveTab] = useState("interactive"); // 'interactive', 'unifilar'
   const [diagramModel, setDiagramModel] = useState("standard"); // 'standard', 'qgbt'
+  const [currentSheetIndex, setCurrentSheetIndex] = useState(0);
   const [historyCount, setHistoryCount] = useState(0);
   const [futureCount, setFutureCount] = useState(0);
+
+  const panelSheetsData = (project && metrics) ? buildProfessionalPanelBoardSheets(project, metrics) : null;
+  const totalSheets = panelSheetsData?.totalSheets || 1;
+  const safeSheetIndex = Math.min(currentSheetIndex, Math.max(0, totalSheets - 1));
   
   // Adicionar conexões interativamente
   const [connectToId, setConnectToId] = useState("");
@@ -1679,11 +1685,16 @@ export default function UnifilarDiagram() {
 
   // Visualizar / Imprimir Legado
   const handlePrintLegacy = (size) => {
-    const svg = document.querySelector("#legacy-svg-container svg");
-    if (!svg) return;
-    const svgContent = new XMLSerializer().serializeToString(svg);
+    let svgs = Array.from(document.querySelectorAll("#all-sheets-export-container svg"));
+    if (svgs.length === 0) {
+      const singleSvg = document.querySelector("#legacy-svg-container svg");
+      if (singleSvg) svgs = [singleSvg];
+    }
+    if (svgs.length === 0) return;
+
+    const svgContents = svgs.map((svg) => new XMLSerializer().serializeToString(svg));
     openSVGPrint({
-      svgContent,
+      svgContents,
       paperSize: size,
       projectName: project?.name,
       logoUrl,
@@ -1700,13 +1711,19 @@ export default function UnifilarDiagram() {
     const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${diagramModel === "qgbt" ? "diagrama_qgbt" : "diagrama_cad"}_${project?.name || "projeto"}.svg`;
+    const sheetSuffix = totalSheets > 1 ? `_folha_${safeSheetIndex + 1}` : "";
+    a.download = `${diagramModel === "qgbt" ? "diagrama_qgbt" : "diagrama_unifilar"}_${project?.name || "projeto"}${sheetSuffix}.svg`;
     a.click();
   };
 
   const downloadCurrentSheetPDF = async () => {
-    const svg = document.querySelector("#legacy-svg-container svg");
-    if (!svg) {
+    let svgs = Array.from(document.querySelectorAll("#all-sheets-export-container svg"));
+    if (svgs.length === 0) {
+      const singleSvg = document.querySelector("#legacy-svg-container svg");
+      if (singleSvg) svgs = [singleSvg];
+    }
+
+    if (svgs.length === 0) {
       setActiveTab("unifilar");
       toast({
         title: "Prancha A0 pronta na aba Unifilar",
@@ -1716,13 +1733,6 @@ export default function UnifilarDiagram() {
     }
 
     try {
-      const clone = svg.cloneNode(true);
-      clone.setAttribute("width", "1189");
-      clone.setAttribute("height", "841");
-      clone.setAttribute("viewBox", clone.getAttribute("viewBox") || "0 0 1189 841");
-      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-
-      const svgContent = new XMLSerializer().serializeToString(clone);
       const doc = new jsPDF({
         orientation: "landscape",
         unit: "mm",
@@ -1731,13 +1741,35 @@ export default function UnifilarDiagram() {
       });
 
       doc.setProperties({
-        title: `${project?.name || "Projeto"} - ${diagramModel === "qgbt" ? "Prancha QGBT" : "Prancha A0"}`,
-        subject: diagramModel === "qgbt" ? "Diagrama QGBT com alimentadores dos quadros" : "Diagrama unifilar e memoria do quadro",
+        title: `${project?.name || "Projeto"} - ${diagramModel === "qgbt" ? "Prancha QGBT" : "Prancha A0 Unifilar"}`,
+        subject: diagramModel === "qgbt" ? "Diagrama QGBT com alimentadores dos quadros" : "Diagrama unifilar e memória do quadro",
         creator: "Volt AI",
       });
 
-      await doc.addSvgAsImage(svgContent, 0, 0, 1189, 841, "board-sheet", "FAST");
-      doc.save(`${diagramModel === "qgbt" ? "prancha_qgbt" : "prancha_a0"}_${safeFileName(project?.name)}.pdf`);
+      for (let i = 0; i < svgs.length; i++) {
+        const svg = svgs[i];
+        if (i > 0) {
+          doc.addPage([1189, 841], "landscape");
+        }
+        const clone = svg.cloneNode(true);
+        clone.setAttribute("width", "1189");
+        clone.setAttribute("height", "841");
+        clone.setAttribute("viewBox", clone.getAttribute("viewBox") || "0 0 1189 841");
+        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+        const svgContent = new XMLSerializer().serializeToString(clone);
+        await doc.addSvgAsImage(svgContent, 0, 0, 1189, 841, `board-sheet-${i + 1}`, "FAST");
+      }
+
+      const fileName = diagramModel === "qgbt"
+        ? `prancha_qgbt_${safeFileName(project?.name)}.pdf`
+        : `pranchas_unifilar_${safeFileName(project?.name)}_${svgs.length}folhas.pdf`;
+      doc.save(fileName);
+
+      toast({
+        title: "PDF gerado com sucesso!",
+        description: `${svgs.length} folha(s) incluída(s) em formato executivo A0/A3.`,
+      });
     } catch (err) {
       console.error("Erro ao exportar prancha A0:", err);
       toast({
@@ -2451,26 +2483,90 @@ export default function UnifilarDiagram() {
               </div>
             </div>
           ) : (
-            /* VISUALIZADORES CAD CLÁSSICOS (TAB CAD UNIFILAR / CAD TRIFILAR) */
-            <div
-              className="rounded-2xl border border-border/40 overflow-auto relative p-6 bg-slate-50"
-              style={{ background: CAD_BG }}
-              id="legacy-svg-container"
-            >
-              <div
-                className="mx-auto"
-                style={{
-                  width: 1189 * scale,
-                  height: 841 * scale,
-                }}
-              >
-                <div style={{ width: 1189, height: 841, transformOrigin: "top left", transform: `scale(${scale})` }}>
-                  {diagramModel === "qgbt" ? (
-                    <QgbtDiagramSheetSVG project={project} metrics={metrics} />
-                  ) : (
-                    <ProfessionalBoardSheetSVG project={project} metrics={metrics} />
-                  )}
+            /* VISUALIZADORES CAD CLÁSSICOS (TAB UNIFILAR) */
+            <div className="space-y-3">
+              {/* Toolbar de Navegação de Folhas para Projetos com Múltiplas Pranchas */}
+              {diagramModel !== "qgbt" && totalSheets > 1 && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-white border border-[#CDEFE8] rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                      Pranchas Técnicas ({totalSheets} folhas):
+                    </span>
+                    <span className="text-xs font-extrabold text-primary px-2.5 py-1 rounded-lg bg-[#EEF7FC] border border-[#00d8b8]/20">
+                      Folha {safeSheetIndex + 1}/{totalSheets} — {panelSheetsData?.sheets?.[safeSheetIndex]?.title} ({panelSheetsData?.sheets?.[safeSheetIndex]?.subtitle})
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={safeSheetIndex === 0}
+                      onClick={() => setCurrentSheetIndex((i) => Math.max(0, i - 1))}
+                      className="h-8 rounded-lg text-xs font-bold"
+                    >
+                      ← Anterior
+                    </Button>
+
+                    {panelSheetsData?.sheets?.map((sheet, idx) => (
+                      <button
+                        key={sheet.id}
+                        type="button"
+                        onClick={() => setCurrentSheetIndex(idx)}
+                        className={`h-8 px-3 rounded-lg text-xs font-black transition ${
+                          safeSheetIndex === idx
+                            ? "bg-[#00d8b8] text-white shadow-sm"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        Folha {idx + 1}
+                      </button>
+                    ))}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={safeSheetIndex >= totalSheets - 1}
+                      onClick={() => setCurrentSheetIndex((i) => Math.min(totalSheets - 1, i + 1))}
+                      className="h-8 rounded-lg text-xs font-bold"
+                    >
+                      Próxima →
+                    </Button>
+                  </div>
                 </div>
+              )}
+
+              <div
+                className="rounded-2xl border border-border/40 overflow-auto relative p-6 bg-slate-50"
+                style={{ background: CAD_BG }}
+                id="legacy-svg-container"
+              >
+                <div
+                  className="mx-auto"
+                  style={{
+                    width: 1189 * scale,
+                    height: 841 * scale,
+                  }}
+                >
+                  <div style={{ width: 1189, height: 841, transformOrigin: "top left", transform: `scale(${scale})` }}>
+                    {diagramModel === "qgbt" ? (
+                      <QgbtDiagramSheetSVG project={project} metrics={metrics} />
+                    ) : (
+                      <ProfessionalBoardSheetSVG project={project} metrics={metrics} sheetIndex={safeSheetIndex} />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Container oculto com todas as pranchas para exportação completa em PDF e Impressão */}
+              <div id="all-sheets-export-container" style={{ display: "none" }} aria-hidden="true">
+                {diagramModel === "qgbt" ? (
+                  <QgbtDiagramSheetSVG project={project} metrics={metrics} />
+                ) : (
+                  panelSheetsData?.sheets?.map((sheet, idx) => (
+                    <ProfessionalBoardSheetSVG key={sheet.id} project={project} metrics={metrics} sheetIndex={idx} />
+                  ))
+                )}
               </div>
             </div>
           )}

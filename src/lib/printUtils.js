@@ -33,12 +33,13 @@ function buildTitleBlock(projectName, logoUrl, paperSize, projectInfo = {}) {
   const displayLogo = logoUrl || DEFAULT_LOGO_URL;
   const clientName = projectInfo.clientName || projectInfo.client_name || projectInfo.client || "";
   const address = projectInfo.address || projectInfo.project_address || "";
+  const sheet = projectInfo.sheetNumber || "1 / 1";
   const fields = [
     ["Formato", paperSize],
     ["Data", date],
     ["Escala", "S/E"],
-    ["Rev.", "01"],
-    ["Folha", "1 / 1"],
+    ["Rev.", projectInfo.revision || "01"],
+    ["Folha", sheet],
   ];
   return `
     <div style="
@@ -98,14 +99,28 @@ function prepareSVG(svgContent) {
   return new XMLSerializer().serializeToString(svg);
 }
 
-export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", logoUrl = "", projectInfo = {} }) {
+export function openSVGPrint({ svgContent, svgContents, paperSize = "A4", projectName = "", logoUrl = "", projectInfo = {} }) {
   const paper = PAPER_SIZES[paperSize] || PAPER_SIZES.A4;
   // Área útil (mm) após margens ABNT
   const areaW = paper.w - M.left - M.right;   // largura útil
   const areaH = paper.h - M.top  - M.bottom;  // altura útil total
   const svgH  = areaH - TITLE_H - 2;          // altura para o SVG (2mm gap)
 
-  const preparedSVG = prepareSVG(svgContent);
+  const rawList = Array.isArray(svgContents) && svgContents.length > 0 ? svgContents : (svgContent ? [svgContent] : []);
+  const pagesHtml = rawList.map((content, idx) => {
+    const prepared = prepareSVG(content);
+    const infoWithSheet = {
+      ...projectInfo,
+      sheetNumber: `${idx + 1} / ${rawList.length}`,
+    };
+    return `
+      <div class="page">
+        <div class="drawing-border">${prepared}</div>
+        <div class="title-block">${buildTitleBlock(projectName, logoUrl, paperSize, infoWithSheet)}</div>
+      </div>
+    `;
+  }).join("");
+
   const win = window.open("", "_blank");
   win.document.write(`<!DOCTYPE html>
 <html>
@@ -122,9 +137,7 @@ export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", l
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: ${paper.w}mm;
-      height: ${paper.h}mm;
-      min-height: 0;
-      overflow: hidden;
+      min-height: ${paper.h}mm;
       background: white;
       font-family: Arial, sans-serif;
       -webkit-print-color-adjust: exact;
@@ -137,6 +150,13 @@ export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", l
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      break-after: page;
+      page-break-after: always;
+      box-sizing: border-box;
+    }
+    .page:last-child {
+      break-after: auto;
+      page-break-after: auto;
     }
     /* Borda da área de desenho */
     .drawing-border {
@@ -168,10 +188,7 @@ export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", l
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="drawing-border">${preparedSVG}</div>
-    <div class="title-block">${buildTitleBlock(projectName, logoUrl, paperSize, projectInfo)}</div>
-  </div>
+  ${pagesHtml}
 </body>
 </html>`);
   win.document.close();
