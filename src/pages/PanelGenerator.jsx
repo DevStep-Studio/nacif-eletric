@@ -6250,24 +6250,28 @@ export default function PanelGenerator() {
           pointerEvents="none"
         />
         {/* Badge de contraste central para manter 100% legível sobre o trilho */}
-        <rect
-          x={x + W / 2 - badgeW / 2}
-          y={y + BRK_H / 2 - 17}
-          width={badgeW}
-          height="34"
-          rx="6"
-          fill="#ffffff"
-          fillOpacity="0.95"
-          stroke="#cbd5e1"
-          strokeWidth="0.9"
-          pointerEvents="none"
-        />
-        <text x={x + W / 2} y={y + BRK_H / 2 - 3} fill="#1e293b" fontSize="9" fontWeight="900" textAnchor="middle" pointerEvents="none">
-          {c.label || "RESERVA"}
-        </text>
-        <text x={x + W / 2} y={y + BRK_H / 2 + 10} fill="#475569" fontSize="7.8" fontWeight="800" textAnchor="middle" pointerEvents="none">
-          {c.poles} Módulos DIN ({W}mm)
-        </text>
+        {showLegend && (
+          <>
+            <rect
+              x={x + W / 2 - badgeW / 2}
+              y={y + BRK_H / 2 - 17}
+              width={badgeW}
+              height="34"
+              rx="6"
+              fill="#ffffff"
+              fillOpacity="0.95"
+              stroke="#cbd5e1"
+              strokeWidth="0.9"
+              pointerEvents="none"
+            />
+            <text x={x + W / 2} y={y + BRK_H / 2 - 3} fill="#1e293b" fontSize="9" fontWeight="900" textAnchor="middle" pointerEvents="none">
+              {c.label || "RESERVA"}
+            </text>
+            <text x={x + W / 2} y={y + BRK_H / 2 + 10} fill="#475569" fontSize="7.8" fontWeight="800" textAnchor="middle" pointerEvents="none">
+              {c.poles} Módulos DIN ({W}mm)
+            </text>
+          </>
+        )}
       </g>
     );
   };
@@ -8394,13 +8398,18 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                   </Button>
                   <Button
                     variant={showLegend ? "secondary" : "outline"}
-                    size="icon"
-                    className="h-9 w-9 rounded-lg"
+                    size="sm"
+                    className={`h-9 rounded-lg font-bold text-xs gap-1.5 px-3 transition-colors ${
+                      !showLegend
+                        ? "border-[#00d8b8] bg-[#EEF7FC] text-[#005188] hover:bg-[#E0F2FE]"
+                        : "border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
                     onClick={() => setShowLegend((current) => !current)}
-                    aria-label={showLegend ? "Ocultar legenda" : "Mostrar legenda"}
-                    title={showLegend ? "Ocultar legenda" : "Mostrar legenda"}
+                    aria-label={showLegend ? "Ocultar legendas e ver só o quadro" : "Mostrar legendas do quadro"}
+                    title={showLegend ? "Ocultar legendas e ver só o quadro" : "Mostrar legendas do quadro"}
                   >
-                    <Info className="h-4 w-4" />
+                    {showLegend ? <EyeOff className="h-4 w-4 text-slate-600" /> : <Eye className="h-4 w-4 text-[#00d8b8]" />}
+                    <span>{showLegend ? "Ocultar Legendas" : "Mostrar Legendas"}</span>
                   </Button>
                   <Button
                     variant={wiringMode ? "destructive" : "secondary"}
@@ -8790,32 +8799,34 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               </g>
                             );
                           })}
-                          <g
-                            className="cursor-move"
-                            onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
-                          >
-                            <rect
-                              x={(neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 12)) - 4}
-                              y={(neutralBus.labelY ?? (neutralLayout.y + 11)) - 11}
-                              width="22"
-                              height="19"
-                              rx="4.5"
-                              fill="#ffffff"
-                              fillOpacity="0.96"
-                              stroke="#bae6fd"
-                              strokeWidth="0.9"
-                            />
-                            <text
-                              x={neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 17)}
-                              y={neutralBus.labelY ?? (neutralLayout.y + 12.5)}
-                              fill={neutralBus.color || "#0369a1"}
-                              fontSize={neutralBus.fontSize || 9.5}
-                              fontWeight="950"
-                              textAnchor="middle"
+                          {showLegend && (
+                            <g
+                              className="cursor-move"
+                              onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                             >
-                              {neutralBus.label || "N"}
-                            </text>
-                          </g>
+                              <rect
+                                x={(neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 12)) - 4}
+                                y={(neutralBus.labelY ?? (neutralLayout.y + 11)) - 11}
+                                width="22"
+                                height="19"
+                                rx="4.5"
+                                fill="#ffffff"
+                                fillOpacity="0.96"
+                                stroke="#bae6fd"
+                                strokeWidth="0.9"
+                              />
+                              <text
+                                x={neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 17)}
+                                y={neutralBus.labelY ?? (neutralLayout.y + 12.5)}
+                                fill={neutralBus.color || "#0369a1"}
+                                fontSize={neutralBus.fontSize || 9.5}
+                                fontWeight="950"
+                                textAnchor="middle"
+                              >
+                                {neutralBus.label || "N"}
+                              </text>
+                            </g>
+                          )}
                         </g>
                       );
                     })()}
@@ -8875,7 +8886,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               </g>
                             );
                           })}
-                          {(() => {
+                          {showLegend && (() => {
                             const labelText = groundBus.label || "BARRAMENTO DE PROTEÇÃO TERRA (PE)";
                             const labelXPos = groundBus.labelX ?? (groundLayout.x + groundLayout.width / 2);
                             const labelYPos = groundBus.labelY ?? (groundY - 8);
@@ -8976,7 +8987,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     )}
 
                     {/* TÍTULOS DOS TRILHOS DIN COM BADGE DE ALTA LEGIBILIDADE */}
-                    {rails.map((r, rIdx) => {
+                    {showLegend && rails.map((r, rIdx) => {
                       const railY = 190 + rIdx * 240;
                       const titleText = r.name.toUpperCase();
                       const titleW = titleText.length * 6.6 + 24;
@@ -9071,7 +9082,6 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       );
                     })()}
                     {showLegend && renderWiringLegend()}
-                    {!showLegend && renderLegendToggle()}
 
                     {/* Tooltip flutuante inteligente de cabo */}
                     {hoveredWireId && (() => {
