@@ -5206,13 +5206,16 @@ export default function PanelGenerator() {
           const id = item.id;
           const bx = Number.isFinite(Number(item.x)) ? Number(item.x) : 220;
           const by = Number.isFinite(Number(item.y)) ? Number(item.y) : 360;
-          const bw = clampNumber(item.width, 18, PANEL_W - 40, 40);
+          const bw = clampNumber(item.width, 18, PANEL_W - 40, 48);
           const bh = clampNumber(item.height, 18, panelHeight - 100, 300);
           const rotation = Number(item.rotation) || 0;
           const cx = bx + bw / 2;
           const cy = by + bh / 2;
           const isSelected = selectedInfrastructureId === id;
           const transform = rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined;
+          const barW = Math.max(6, (bw - 16) / 3);
+          const phaseColors = [COLORS.phaseA, COLORS.phaseB, COLORS.phaseC];
+          const phaseLabels = ["L1", "L2", "L3"];
           
           return (
             <g
@@ -5226,16 +5229,40 @@ export default function PanelGenerator() {
                 if (!wiringMode && !wireMoveMode) selectInfrastructure(id);
               }}
             >
-              <title>Barramento Trifásico</title>
+              <title>Barramento Trifásico Industrial</title>
               {isSelected && (
                 <rect x={bx - 6} y={by - 6} width={bw + 12} height={bh + 12} rx="4" fill="none" stroke="#00d8b8" strokeWidth="1.5" strokeDasharray="4,3" pointerEvents="none" />
               )}
-              {/* Backplate */}
-              <rect x={bx} y={by} width={bw} height={bh} rx="2" fill="#1e293b" opacity="0.4" />
-              {/* 3 Copper Bars */}
-              <rect x={bx + bw*0.1} y={by + 4} width={bw*0.2} height={bh - 8} rx="1" fill="#b87333" stroke="#854d0e" strokeWidth="0.5" />
-              <rect x={bx + bw*0.4} y={by + 4} width={bw*0.2} height={bh - 8} rx="1" fill="#b87333" stroke="#854d0e" strokeWidth="0.5" />
-              <rect x={bx + bw*0.7} y={by + 4} width={bw*0.2} height={bh - 8} rx="1" fill="#b87333" stroke="#854d0e" strokeWidth="0.5" />
+              {/* Placa isoladora base em Poliéster reforçado com fibra de vidro (DMC vermelho/cinza escuro) */}
+              <rect x={bx} y={by} width={bw} height={bh} rx="3" fill="#1e293b" stroke="#0f172a" strokeWidth="0.8" filter="url(#shadow)" />
+              <rect x={bx + 2} y={by + 2} width={bw - 4} height={bh - 4} rx="2" fill="#334155" />
+              
+              {/* 3 Barras de Cobre Eletrolítico Maciço com Terminais Parafusados */}
+              {[0, 1, 2].map((pIdx) => {
+                const px = bx + 4 + pIdx * (barW + 3);
+                return (
+                  <g key={`copper-bar-${pIdx}`}>
+                    {/* Barra de Cobre */}
+                    <rect x={px} y={by + 6} width={barW} height={bh - 12} rx="1.5" fill="url(#brassGrad)" stroke="#92400e" strokeWidth="0.5" />
+                    {/* Tarja de identificação de fase no topo */}
+                    <rect x={px} y={by + 8} width={barW} height="5" rx="1" fill={phaseColors[pIdx]} />
+                    <text x={px + barW / 2} y={by + 12} fill="#ffffff" fontSize="4.5" fontWeight="950" textAnchor="middle" pointerEvents="none">
+                      {phaseLabels[pIdx]}
+                    </text>
+                    {/* Parafusos de fixação M6 ao longo da barra */}
+                    {Array.from({ length: Math.max(2, Math.floor((bh - 30) / 45)) }).map((_, si) => {
+                      const sy = by + 26 + si * 45;
+                      return (
+                        <g key={`screw-${pIdx}-${si}`}>
+                          <circle cx={px + barW / 2} cy={sy} r="3" fill="#1e293b" />
+                          <circle cx={px + barW / 2} cy={sy} r="2.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.25" />
+                          <line x1={px + barW / 2 - 1.5} y1={sy} x2={px + barW / 2 + 1.5} y2={sy} stroke="#f1f5f9" strokeWidth="0.5" />
+                        </g>
+                      );
+                    })}
+                  </g>
+                );
+              })}
               
               {isSelected && (
                 <g>
@@ -5271,12 +5298,13 @@ export default function PanelGenerator() {
           const bx = Number.isFinite(Number(item.x)) ? Number(item.x) : 220;
           const by = Number.isFinite(Number(item.y)) ? Number(item.y) : 360;
           const bw = clampNumber(item.width, 18, PANEL_W - 40, 180);
-          const bh = clampNumber(item.height, 10, 40, 24);
+          const bh = clampNumber(item.height, 10, 40, 28);
           const rotation = Number(item.rotation) || 0;
           const cx = bx + bw / 2;
           const cy = by + bh / 2;
           const isSelected = selectedInfrastructureId === id;
           const transform = rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined;
+          const slotCount = Math.floor((bw - 30) / 24);
           
           return (
             <g
@@ -5290,15 +5318,29 @@ export default function PanelGenerator() {
                 if (!wiringMode && !wireMoveMode) selectInfrastructure(id);
               }}
             >
-              <title>Trilho DIN Livre</title>
+              <title>Trilho DIN Livre EN 50022</title>
               {isSelected && (
-                <rect x={bx - 4} y={by - 4} width={bw + 8} height={bh + 8} rx="2" fill="none" stroke="#00d8b8" strokeWidth="1.5" strokeDasharray="4,3" pointerEvents="none" />
+                <rect x={bx - 4} y={by - 4} width={bw + 8} height={bh + 8} rx="3" fill="none" stroke="#00d8b8" strokeWidth="1.5" strokeDasharray="4,3" pointerEvents="none" />
               )}
-              {/* Rail drawing */}
-              <rect x={bx} y={by} width={bw} height={bh} rx="2" fill="url(#railGrad)" stroke="#475569" strokeWidth="0.8" filter="url(#shadow)" />
-              <rect x={bx + 2} y={by + 2} width={Math.max(0, bw - 4)} height="4" fill="#ffffff" fillOpacity="0.25" pointerEvents="none" />
-              <circle cx={bx + 10} cy={by + bh/2} r="3" fill="#334155" pointerEvents="none" />
-              <circle cx={bx + bw - 10} cy={by + bh/2} r="3" fill="#334155" pointerEvents="none" />
+              {/* Sombra de profundidade */}
+              <rect x={bx} y={by} width={bw} height={bh} rx="2" fill="#0f172a" fillOpacity="0.12" filter="url(#railShadow)" />
+              {/* Perfil metálico zincado */}
+              <rect x={bx} y={by} width={bw} height={bh} rx="2" fill="url(#dinRailTopHat)" stroke="#475569" strokeWidth="0.85" />
+              <line x1={bx + 2} y1={by + 2} x2={bx + bw - 2} y2={by + 2} stroke="#ffffff" strokeOpacity="0.8" strokeWidth="0.8" />
+              <line x1={bx + 2} y1={by + bh - 2} x2={bx + bw - 2} y2={by + bh - 2} stroke="#334155" strokeOpacity="0.8" strokeWidth="0.8" />
+              
+              {/* Canal central com rasgos oblongos */}
+              <rect x={bx + 2} y={by + bh / 2 - 4.5} width={bw - 4} height="9" fill="#64748b" fillOpacity="0.25" />
+              {Array.from({ length: Math.max(1, slotCount) }).map((_, si) => {
+                const sx = bx + 16 + si * 24;
+                return (
+                  <rect key={`free-slot-${si}`} x={sx - 5} y={by + bh / 2 - 2.5} width="10" height="5" rx="2.5" fill="url(#dinSlotHole)" stroke="#334155" strokeWidth="0.4" />
+                );
+              })}
+
+              {/* Parafusos de extremidade */}
+              <circle cx={bx + 8} cy={by + bh / 2} r="3.2" fill="url(#metallicScrew)" stroke="#1e293b" strokeWidth="0.4" pointerEvents="none" />
+              <circle cx={bx + bw - 8} cy={by + bh / 2} r="3.2" fill="url(#metallicScrew)" stroke="#1e293b" strokeWidth="0.4" pointerEvents="none" />
               
               {isSelected && (
                 <g>
@@ -5327,7 +5369,7 @@ export default function PanelGenerator() {
     );
   };
 
-  // Renders de componentes no SVG
+  // Renders de componentes no SVG com Alto Realismo Técnico Industrial
   const renderBreaker = (c, x, y, isSelected) => {
     const W = c.poles * MOD;
     const isGen = c.isGeneral;
@@ -5360,20 +5402,45 @@ export default function PanelGenerator() {
         })}
         onMouseLeave={() => setHoveredItem(null)}
       >
-        {/* Sombra de projeção 3D */}
-        <rect x={x+1} y={y+2} width={W-2} height={BRK_H} rx="5" fill="#000000" fillOpacity="0.12" />
+        {/* Sombra de projeção técnica sobre o trilho */}
+        <rect x={x + 1} y={y + 2} width={W - 2} height={BRK_H} rx="5" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
 
-        {/* Corpo externo com gradiente metálico industrial */}
-        <rect x={x} y={y} width={W} height={BRK_H} rx="5" fill="url(#breakerBody)" stroke={isSelected ? "#00d8b8" : "#475569"} strokeWidth={isSelected ? "2.5" : "1.2"} />
+        {/* Corpo externo em Poliamida RAL 7035 com gradiente industrial */}
+        <rect
+          x={x}
+          y={y}
+          width={W}
+          height={BRK_H}
+          rx="5"
+          fill="url(#breakerBody)"
+          stroke={isSelected ? "#00d8b8" : "#475569"}
+          strokeWidth={isSelected ? "2.5" : "1.1"}
+        />
         
-        {/* Bevel interno de iluminação */}
-        <rect x={x+1} y={y+1} width={W-2} height={BRK_H-2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.7" strokeWidth="0.8" />
+        {/* Bevel interno de estamparia plástica */}
+        <rect x={x + 1} y={y + 1} width={W - 2} height={BRK_H - 2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.75" strokeWidth="0.8" />
         
-        {/* Trilho guia de fixação lateral */}
-        <path d={`M ${x} ${y+15} L ${x+4} ${y+15} M ${x+W-4} ${y+15} L ${x+W} ${y+15}`} stroke="#475569" strokeWidth="2.5" />
-        <path d={`M ${x} ${y+BRK_H-15} L ${x+4} ${y+BRK_H-15} M ${x+W-4} ${y+BRK_H-15} L ${x+W} ${y+BRK_H-15}`} stroke="#475569" strokeWidth="2.5" />
+        {/* Ranhuras de ventilação e guias mecânicas laterais DIN */}
+        <line x1={x} y1={y + 14} x2={x + 3.5} y2={y + 14} stroke="#64748b" strokeWidth="1.8" />
+        <line x1={x + W - 3.5} y1={y + 14} x2={x + W} y2={y + 14} stroke="#64748b" strokeWidth="1.8" />
+        <line x1={x} y1={y + BRK_H - 14} x2={x + 3.5} y2={y + BRK_H - 14} stroke="#64748b" strokeWidth="1.8" />
+        <line x1={x + W - 3.5} y1={y + BRK_H - 14} x2={x + W} y2={y + BRK_H - 14} stroke="#64748b" strokeWidth="1.8" />
 
-        {/* Polos e parafusos de terminais */}
+        {/* Divisórias modulares para disjuntores multipolares */}
+        {c.poles > 1 && Array.from({ length: c.poles - 1 }).map((_, divIdx) => (
+          <line
+            key={`div-${divIdx}`}
+            x1={x + (divIdx + 1) * MOD}
+            y1={y + 2}
+            x2={x + (divIdx + 1) * MOD}
+            y2={y + BRK_H - 2}
+            stroke="#94a3b8"
+            strokeWidth="0.9"
+            strokeDasharray="4,2"
+          />
+        ))}
+
+        {/* Polos, gaiolas de fixação e parafusos de terminais */}
         {Array.from({ length: c.poles }).map((_, pi) => {
           const px = x + pi * MOD;
           const pinTopId = `comp:${c.id}:top:${pi}`;
@@ -5381,93 +5448,177 @@ export default function PanelGenerator() {
           
           return (
             <g key={pi}>
-              {/* Parafuso Topo */}
-              <rect x={px+2} y={y+4} width={MOD-4} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
-              <circle cx={px+MOD/2} cy={y+14} r="6" fill="#0f172a" />
-              <circle cx={px+MOD/2} cy={y+14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-              {/* Fenda cruzada */}
-              <line x1={px+MOD/2-3} y1={y+14} x2={px+MOD/2+3} y2={y+14} stroke="#cbd5e1" strokeWidth="1.2" />
-              <line x1={px+MOD/2} y1={y+14-3} x2={px+MOD/2} y2={y+14+3} stroke="#cbd5e1" strokeWidth="1.2" />
+              {/* Funil guia de entrada do cabo - Topo */}
+              <path d={`M ${px + 5} ${y} L ${px + MOD - 5} ${y} L ${px + MOD - 6} ${y + 3} L ${px + 6} ${y + 3} Z`} fill="#334155" />
+              {/* Gaiola metálica do parafuso Topo */}
+              <rect x={px + 2.5} y={y + 4} width={MOD - 5} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="5.5" fill="#0f172a" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              {/* Fenda combinada Pozidriv */}
+              <line x1={px + MOD / 2 - 2.8} y1={y + 14} x2={px + MOD / 2 + 2.8} y2={y + 14} stroke="#cbd5e1" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + 14 - 2.8} x2={px + MOD / 2} y2={y + 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
-              {/* Parafuso Base */}
-              <rect x={px+2} y={y+BRK_H-24} width={MOD-4} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
-              <circle cx={px+MOD/2} cy={y+BRK_H-14} r="6" fill="#0f172a" />
-              <circle cx={px+MOD/2} cy={y+BRK_H-14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-              <line x1={px+MOD/2-3} y1={y+BRK_H-14} x2={px+MOD/2+3} y2={y+BRK_H-14} stroke="#cbd5e1" strokeWidth="1.2" />
-              <line x1={px+MOD/2} y1={y+BRK_H-14-3} x2={px+MOD/2} y2={y+BRK_H-14+3} stroke="#cbd5e1" strokeWidth="1.2" />
+              {/* Funil guia de saída do cabo - Base */}
+              <path d={`M ${px + 5} ${y + BRK_H} L ${px + MOD - 5} ${y + BRK_H} L ${px + MOD - 6} ${y + BRK_H - 3} L ${px + 6} ${y + BRK_H - 3} Z`} fill="#334155" />
+              {/* Gaiola metálica do parafuso Base */}
+              <rect x={px + 2.5} y={y + BRK_H - 24} width={MOD - 5} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="5.5" fill="#0f172a" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              <line x1={px + MOD / 2 - 2.8} y1={y + BRK_H - 14} x2={px + MOD / 2 + 2.8} y2={y + BRK_H - 14} stroke="#cbd5e1" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + BRK_H - 14 - 2.8} x2={px + MOD / 2} y2={y + BRK_H - 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
-              {/* Indicador de fase */}
-              <text x={px+MOD/2} y={y+31} fill="#1e293b" fontSize="7.2" textAnchor="middle" fontWeight="900">
+              {/* Indicador de fase gravado no polo */}
+              <text x={px + MOD / 2} y={y + 31} fill="#334155" fontSize="7.2" textAnchor="middle" fontWeight="900">
                 {polePhaseLabel(c, pi)}
               </text>
 
               {/* Pinos interativos de fiação */}
               {(wiringMode || !!wireMoveMode) && (
                 <>
-                  <circle cx={px+MOD/2} cy={y+14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-                  <circle cx={px+MOD/2} cy={y+BRK_H-14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
+                  <circle cx={px + MOD / 2} cy={y + 14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
+                  <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
                 </>
               )}
             </g>
           );
         })}
 
-        {/* Linha divisória interna */}
-        <line x1={x+3} y1={y+36} x2={x+W-3} y2={y+36} stroke="#cbd5e1" strokeWidth="1" />
+        {/* Linha técnica de recuo frontal da carcaça */}
+        <line x1={x + 3} y1={y + 36} x2={x + W - 3} y2={y + 36} stroke="#cbd5e1" strokeWidth="1" />
 
-        {/* Cavidade da alavanca */}
-        <rect x={x + W/2 - 7} y={y + 39} width="14" height="28" rx="2" fill="#0f172a" stroke="#475569" strokeWidth="0.5" />
-        {/* Alavanca de controle */}
-        <rect
-          x={x + W/2 - 5}
-          y={c.status === "ON" ? y + 41 : y + 51}
-          width="10"
-          height="14"
-          rx="1.5"
-          fill={col}
-          stroke="#450a0a"
-          strokeWidth="0.5"
-          className="transition-all duration-150 cursor-pointer"
-          onClick={toggleBreaker}
-        />
-        <rect
-          x={x + W/2 - 5}
-          y={c.status === "ON" ? y + 41 : y + 51}
-          width="10"
-          height="14"
-          rx="1.5"
-          fill="url(#toggleGlow)"
-          className="transition-all duration-150 pointer-events-none"
-        />
-        
-        {/* Marcações técnicas liga/desliga integradas */}
-        <text x={x+W/2} y={y+37} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
-        <text x={x+W/2} y={y+73} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
-        
-        {/* Indicador visual de estado de cor (Vermelho = Ligado, Verde = Desligado) */}
-        <rect x={x + W/2 - (W > MOD ? 16 : 11)} y={y+48} width="4" height="6" rx="0.5" fill={c.status === "ON" ? "#ef4444" : "#22c55e"} stroke="#475569" strokeWidth="0.3" />
+        {/* Cavidades individuais de cada manopla com ranhura de operação */}
+        {Array.from({ length: c.poles }).map((_, pi) => {
+          const px = x + pi * MOD;
+          return (
+            <rect
+              key={`cavity-${pi}`}
+              x={px + MOD / 2 - 5.5}
+              y={y + 39}
+              width="11"
+              height="28"
+              rx="2"
+              fill="#0f172a"
+              stroke="#475569"
+              strokeWidth="0.5"
+            />
+          );
+        })}
 
-        {/* Cartão de etiqueta de identificação embutido na face */}
-        <rect x={x+3} y={y+68} width={W-6} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
+        {/* Manopla(s) e Barra de Intertravamento Mecânico para disjuntores multipolares */}
         {c.poles === 1 ? (
-          <text x={x+W/2} y={y+78.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
+          <g onClick={toggleBreaker} className="cursor-pointer">
+            {/* Alavanca monopolar */}
+            <rect
+              x={x + W / 2 - 4.5}
+              y={c.status === "ON" ? y + 41 : y + 51}
+              width="9"
+              height="14"
+              rx="1.5"
+              fill={col}
+              stroke="#1e293b"
+              strokeWidth="0.6"
+              className="transition-all duration-150"
+            />
+            {/* Ranhuras ergonômicas da alavanca */}
+            <line x1={x + W / 2 - 3} y1={c.status === "ON" ? y + 45 : y + 55} x2={x + W / 2 + 3} y2={c.status === "ON" ? y + 45 : y + 55} stroke="#ffffff" strokeOpacity="0.6" strokeWidth="0.8" />
+            <line x1={x + W / 2 - 3} y1={c.status === "ON" ? y + 48 : y + 58} x2={x + W / 2 + 3} y2={c.status === "ON" ? y + 48 : y + 58} stroke="#ffffff" strokeOpacity="0.6" strokeWidth="0.8" />
+            <line x1={x + W / 2 - 3} y1={c.status === "ON" ? y + 51 : y + 61} x2={x + W / 2 + 3} y2={c.status === "ON" ? y + 51 : y + 61} stroke="#ffffff" strokeOpacity="0.6" strokeWidth="0.8" />
+            <rect
+              x={x + W / 2 - 4.5}
+              y={c.status === "ON" ? y + 41 : y + 51}
+              width="9"
+              height="14"
+              rx="1.5"
+              fill="url(#toggleGlow)"
+              className="transition-all duration-150 pointer-events-none"
+            />
+          </g>
+        ) : (
+          <g onClick={toggleBreaker} className="cursor-pointer">
+            {/* Alavancas de cada polo */}
+            {Array.from({ length: c.poles }).map((_, pi) => {
+              const px = x + pi * MOD;
+              return (
+                <rect
+                  key={`lever-p-${pi}`}
+                  x={px + MOD / 2 - 4.5}
+                  y={c.status === "ON" ? y + 41 : y + 51}
+                  width="9"
+                  height="14"
+                  rx="1.5"
+                  fill={col}
+                  stroke="#1e293b"
+                  strokeWidth="0.6"
+                  className="transition-all duration-150"
+                />
+              );
+            })}
+            {/* Barra de acoplamento mecânico multipolar (Gang Bar) */}
+            <rect
+              x={x + MOD / 2 - 4.5}
+              y={c.status === "ON" ? y + 44 : y + 54}
+              width={(c.poles - 1) * MOD + 9}
+              height="8"
+              rx="2"
+              fill="#1e293b"
+              stroke="#0f172a"
+              strokeWidth="0.7"
+              className="transition-all duration-150"
+            />
+            {/* Friso de reforço na barra de união */}
+            <line
+              x1={x + MOD / 2 - 2}
+              y1={c.status === "ON" ? y + 48 : y + 58}
+              x2={x + (c.poles - 1) * MOD + MOD / 2 + 2}
+              y2={c.status === "ON" ? y + 48 : y + 58}
+              stroke="#475569"
+              strokeWidth="1"
+              className="transition-all duration-150 pointer-events-none"
+            />
+          </g>
+        )}
+        
+        {/* Marcações técnicas liga/desliga I / O (Norma IEC 60898-1) */}
+        <text x={x + W / 2} y={y + 37.5} fill="#64748b" fontSize="6.5" textAnchor="middle" fontWeight="950">I</text>
+        <text x={x + W / 2} y={y + 73.5} fill="#64748b" fontSize="6.5" textAnchor="middle" fontWeight="950">O</text>
+        
+        {/* Janela de inspeção de estado mecânico (Vermelho = Ligado / Verde = Desligado) */}
+        <rect
+          x={x + W / 2 - (W > MOD ? 17 : 11)}
+          y={y + 48}
+          width="4.5"
+          height="6.5"
+          rx="1"
+          fill={c.status === "ON" ? "#ef4444" : "#22c55e"}
+          stroke="#1e293b"
+          strokeWidth="0.4"
+        />
+
+        {/* Cartão de etiqueta de identificação técnica embutido na face */}
+        <rect x={x + 2.5} y={y + 68} width={W - 5} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
+        {c.poles === 1 ? (
+          <text x={x + W / 2} y={y + 78.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
             {(shortLabel || displayLabel).slice(0, 10)} · {c.current}A
           </text>
         ) : (
           <g>
-            <text x={x+W/2} y={y+75.5} fill="#0f172a" fontSize="6.5" fontWeight="900" textAnchor="middle">
+            <text x={x + W / 2} y={y + 75.5} fill="#0f172a" fontSize="6.5" fontWeight="900" textAnchor="middle">
               {displayLabel.slice(0, 18)}
             </text>
-            <text x={x+W/2} y={y+81.5} fill="#dc2626" fontSize="5.6" fontWeight="950" textAnchor="middle">
+            <text x={x + W / 2} y={y + 81.5} fill="#dc2626" fontSize="5.6" fontWeight="950" textAnchor="middle">
               {c.current}A/{c.curve} · {c.poles}P
             </text>
           </g>
         )}
         
-        {/* Norma técnica nos multipolos */}
-        <text x={x+W/2} y={y+27.5} fill="#64748b" fontSize="5" fontWeight="900" textAnchor="middle">NBR</text>
+        {/* Especificações normativas estampadas a laser */}
+        <text x={x + W / 2} y={y + 27.5} fill="#64748b" fontSize="5.2" fontWeight="900" textAnchor="middle">NBR NM 60898</text>
         {c.poles > 1 && (
-          <text x={x+W/2} y={y+33.5} fill="#94a3b8" fontSize="3.8" fontWeight="bold" textAnchor="middle">IEC 60898-1</text>
+          <g>
+            {/* Retângulo de capacidade de ruptura 3000A / 6000A */}
+            <rect x={x + W / 2 - 8} y={y + 29.5} width="16" height="5" fill="none" stroke="#64748b" strokeWidth="0.5" />
+            <text x={x + W / 2} y={y + 33.5} fill="#475569" fontSize="3.8" fontWeight="950" textAnchor="middle">3000 [3]</text>
+          </g>
         )}
 
         {/* Controles Flutuantes se Selecionado */}
@@ -5494,58 +5645,77 @@ export default function PanelGenerator() {
         onClick={() => selectComponent(c.id)}
       >
         {/* Sombra */}
-        <rect x={x+1} y={y+2} width={W-2} height={BRK_H} rx="5" fill="#000000" fillOpacity="0.12" />
+        <rect x={x + 1} y={y + 2} width={W - 2} height={BRK_H} rx="5" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
 
-        {/* Corpo vermelho característico de DPS com gradiente */}
-        <rect x={x} y={y} width={W} height={BRK_H} rx="5" fill="url(#dpsBody)" stroke={isSelected ? "#00d8b8" : "#7f1d1d"} strokeWidth={isSelected ? "2.5" : "1.2"} />
-        <rect x={x+1} y={y+1} width={W-2} height={BRK_H-2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.4" strokeWidth="0.8" />
-
-        {/* Parafuso Topo */}
-        <rect x={x+2} y={y+4} width={W-4} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
-        <circle cx={x+W/2} cy={y+14} r="6" fill="#1e293b" />
-        <circle cx={x+W/2} cy={y+14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-        <line x1={x+W/2-3} y1={y+14} x2={x+W/2+3} y2={y+14} stroke="#fecaca" strokeWidth="1.2" />
-
-        {/* Parafuso Base */}
-        <rect x={x+2} y={y+BRK_H-24} width={W-4} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
-        <circle cx={x+W/2} cy={y+BRK_H-14} r="6" fill="#1e293b" />
-        <circle cx={x+W/2} cy={y+BRK_H-14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-        <line x1={x+W/2-3} y1={y+BRK_H-14} x2={x+W/2+3} y2={y+BRK_H-14} stroke="#fecaca" strokeWidth="1.2" />
-
-        {/* Janela de Status activa (verde/vermelha) */}
-        <rect x={x+4} y={y+25} width={W-8} height="12" rx="2" fill="#0f172a" />
+        {/* Corpo vermelho característico de DPS Classe II com gradiente */}
         <rect
-          x={x+5}
-          y={y+26}
-          width={W-10}
-          height="10"
+          x={x}
+          y={y}
+          width={W}
+          height={BRK_H}
+          rx="5"
+          fill="url(#dpsBody)"
+          stroke={isSelected ? "#00d8b8" : "#7f1d1d"}
+          strokeWidth={isSelected ? "2.5" : "1.2"}
+        />
+        <rect x={x + 1} y={y + 1} width={W - 2} height={BRK_H - 2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.35" strokeWidth="0.8" />
+
+        {/* Guias do cartucho plugável */}
+        <line x1={x + 3} y1={y + 24} x2={x + W - 3} y2={y + 24} stroke="#7f1d1d" strokeWidth="1" />
+        <line x1={x + 3} y1={y + 64} x2={x + W - 3} y2={y + 64} stroke="#7f1d1d" strokeWidth="1" />
+
+        {/* Parafuso Topo (Entrada de Linha) */}
+        <path d={`M ${x + 5} ${y} L ${x + W - 5} ${y} L ${x + W - 6} ${y + 3} L ${x + 6} ${y + 3} Z`} fill="#334155" />
+        <rect x={x + 2.5} y={y + 4} width={W - 5} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
+        <circle cx={x + W / 2} cy={y + 14} r="5.5" fill="#1e293b" />
+        <circle cx={x + W / 2} cy={y + 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+        <line x1={x + W / 2 - 2.8} y1={y + 14} x2={x + W / 2 + 2.8} y2={y + 14} stroke="#fecaca" strokeWidth="1.1" />
+        <line x1={x + W / 2} y1={y + 14 - 2.8} x2={x + W / 2} y2={y + 14 + 2.8} stroke="#fecaca" strokeWidth="1.1" />
+
+        {/* Parafuso Base (Saída de Terra PE) */}
+        <path d={`M ${x + 5} ${y + BRK_H} L ${x + W - 5} ${y + BRK_H} L ${x + W - 6} ${y + BRK_H - 3} L ${x + 6} ${y + BRK_H - 3} Z`} fill="#334155" />
+        <rect x={x + 2.5} y={y + BRK_H - 24} width={W - 5} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
+        <circle cx={x + W / 2} cy={y + BRK_H - 14} r="5.5" fill="#1e293b" />
+        <circle cx={x + W / 2} cy={y + BRK_H - 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+        <line x1={x + W / 2 - 2.8} y1={y + BRK_H - 14} x2={x + W / 2 + 2.8} y2={y + BRK_H - 14} stroke="#fecaca" strokeWidth="1.1" />
+        <line x1={x + W / 2} y1={y + BRK_H - 14 - 2.8} x2={x + W / 2} y2={y + BRK_H - 14 + 2.8} stroke="#fecaca" strokeWidth="1.1" />
+
+        {/* Janela de Status Óptica do Varistor (Verde = OK / Vermelho = DEFEITO) */}
+        <rect x={x + 3.5} y={y + 26} width={W - 7} height="13" rx="2" fill="#0f172a" stroke="#450a0a" strokeWidth="0.6" />
+        <rect
+          x={x + 4.5}
+          y={y + 27}
+          width={W - 9}
+          height="11"
           rx="1.5"
           fill={c.dpsStatus === "OK" ? COLORS.dpsGreen : "#ef4444"}
           onClick={toggleStatus}
           className="transition-colors duration-150"
         />
-        <text x={x+W/2} y={y+33.5} fill="#ffffff" fontSize="6.2" fontWeight="950" textAnchor="middle" pointerEvents="none">
+        {/* Brilho da lente da janela óptica */}
+        <rect x={x + 5.5} y={y + 28} width={W - 11} height="4" rx="1" fill="#ffffff" fillOpacity="0.4" pointerEvents="none" />
+        <text x={x + W / 2} y={y + 35} fill="#ffffff" fontSize="6.2" fontWeight="950" textAnchor="middle" pointerEvents="none">
           {c.dpsStatus}
         </text>
 
-        {/* Raio indicador */}
+        {/* Símbolo de Raio de Alta Tensão */}
         <polygon
-          points={`${x+W/2},${y+40} ${x+W/2+4},${y+48} ${x+W/2+1.5},${y+48} ${x+W/2+3},${y+58} ${x+W/2-4},${y+49} ${x+W/2-1.5},${y+49}`}
+          points={`${x + W / 2},${y + 42} ${x + W / 2 + 4.5},${y + 49} ${x + W / 2 + 1.5},${y + 49} ${x + W / 2 + 3.5},${y + 59} ${x + W / 2 - 4.5},${y + 50} ${x + W / 2 - 1.5},${y + 50}`}
           fill="#fbbf24"
-          stroke="#d97706"
-          strokeWidth="0.5"
+          stroke="#b45309"
+          strokeWidth="0.6"
         />
 
-        {/* Cartão de etiqueta embutido */}
-        <rect x={x+3} y={y+67} width={W-6} height="17" fill="#ffffff" rx="2" stroke="#7f1d1d" strokeWidth="0.85" />
-        <text x={x+W/2} y={y+74.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">DPS-{c.phase}</text>
-        <text x={x+W/2} y={y+81} fill="#b91c1c" fontSize="5.6" fontWeight="950" textAnchor="middle">Uc 275V</text>
+        {/* Cartão de etiqueta técnica com normas IEC 61643-11 */}
+        <rect x={x + 2.5} y={y + 67} width={W - 5} height="17" fill="#ffffff" rx="2" stroke="#7f1d1d" strokeWidth="0.85" />
+        <text x={x + W / 2} y={y + 74.5} fill="#0f172a" fontSize="6.6" fontWeight="900" textAnchor="middle">DPS-{c.phase}</text>
+        <text x={x + W / 2} y={y + 81} fill="#b91c1c" fontSize="5.5" fontWeight="950" textAnchor="middle">Uc 275V·20kA</text>
 
         {/* Pinos interativos de fiação */}
         {(wiringMode || !!wireMoveMode) && (
           <>
-            <circle cx={x+W/2} cy={y+14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-            <circle cx={x+W/2} cy={y+BRK_H-14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
+            <circle cx={x + W / 2} cy={y + 14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
+            <circle cx={x + W / 2} cy={y + BRK_H - 14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
           </>
         )}
 
@@ -5571,11 +5741,34 @@ export default function PanelGenerator() {
         onClick={() => selectComponent(c.id)}
       >
         {/* Sombra */}
-        <rect x={x+1} y={y+2} width={W-2} height={BRK_H} rx="5" fill="#000000" fillOpacity="0.12" />
+        <rect x={x + 1} y={y + 2} width={W - 2} height={BRK_H} rx="5" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
 
-        {/* Corpo cinza robusto com gradiente */}
-        <rect x={x} y={y} width={W} height={BRK_H} rx="5" fill="url(#drBody)" stroke={isSelected ? "#00d8b8" : "#475569"} strokeWidth={isSelected ? "2.5" : "1.2"} />
-        <rect x={x+1} y={y+1} width={W-2} height={BRK_H-2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.7" strokeWidth="0.8" />
+        {/* Corpo robusto em Poliamida cinza com gradiente */}
+        <rect
+          x={x}
+          y={y}
+          width={W}
+          height={BRK_H}
+          rx="5"
+          fill="url(#drBody)"
+          stroke={isSelected ? "#00d8b8" : "#475569"}
+          strokeWidth={isSelected ? "2.5" : "1.2"}
+        />
+        <rect x={x + 1} y={y + 1} width={W - 2} height={BRK_H - 2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.75" strokeWidth="0.8" />
+
+        {/* Divisórias entre polos */}
+        {c.poles > 1 && Array.from({ length: c.poles - 1 }).map((_, divIdx) => (
+          <line
+            key={`dr-div-${divIdx}`}
+            x1={x + (divIdx + 1) * MOD}
+            y1={y + 2}
+            x2={x + (divIdx + 1) * MOD}
+            y2={y + BRK_H - 2}
+            stroke="#cbd5e1"
+            strokeWidth="0.8"
+            strokeDasharray="4,2"
+          />
+        ))}
 
         {/* Parafusos de terminais */}
         {Array.from({ length: c.poles }).map((_, pi) => {
@@ -5585,43 +5778,49 @@ export default function PanelGenerator() {
           
           return (
             <g key={pi}>
-              <rect x={px+2} y={y+4} width={MOD-4} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
-              <circle cx={px+MOD/2} cy={y+14} r="6" fill="#0f172a" />
-              <circle cx={px+MOD/2} cy={y+14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-              <line x1={px+MOD/2-3} y1={y+14} x2={px+MOD/2+3} y2={y+14} stroke="#cbd5e1" strokeWidth="1.2" />
-              <line x1={px+MOD/2} y1={y+14-3} x2={px+MOD/2} y2={y+14+3} stroke="#cbd5e1" strokeWidth="1.2" />
+              <path d={`M ${px + 5} ${y} L ${px + MOD - 5} ${y} L ${px + MOD - 6} ${y + 3} L ${px + 6} ${y + 3} Z`} fill="#334155" />
+              <rect x={px + 2.5} y={y + 4} width={MOD - 5} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="5.5" fill="#0f172a" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              <line x1={px + MOD / 2 - 2.8} y1={y + 14} x2={px + MOD / 2 + 2.8} y2={y + 14} stroke="#cbd5e1" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + 14 - 2.8} x2={px + MOD / 2} y2={y + 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
-              <rect x={px+2} y={y+BRK_H-24} width={MOD-4} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
-              <circle cx={px+MOD/2} cy={y+BRK_H-14} r="6" fill="#0f172a" />
-              <circle cx={px+MOD/2} cy={y+BRK_H-14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-              <line x1={px+MOD/2-3} y1={y+BRK_H-14} x2={px+MOD/2+3} y2={y+BRK_H-14} stroke="#cbd5e1" strokeWidth="1.2" />
-              <line x1={px+MOD/2} y1={y+BRK_H-14-3} x2={px+MOD/2} y2={y+BRK_H-14+3} stroke="#cbd5e1" strokeWidth="1.2" />
+              <path d={`M ${px + 5} ${y + BRK_H} L ${px + MOD - 5} ${y + BRK_H} L ${px + MOD - 6} ${y + BRK_H - 3} L ${px + 6} ${y + BRK_H - 3} Z`} fill="#334155" />
+              <rect x={px + 2.5} y={y + BRK_H - 24} width={MOD - 5} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="5.5" fill="#0f172a" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              <line x1={px + MOD / 2 - 2.8} y1={y + BRK_H - 14} x2={px + MOD / 2 + 2.8} y2={y + BRK_H - 14} stroke="#cbd5e1" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + BRK_H - 14 - 2.8} x2={px + MOD / 2} y2={y + BRK_H - 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
-              <text x={px+MOD/2} y={y+31} fill="#1e293b" fontSize="7.5" textAnchor="middle" fontWeight="900">
+              <text x={px + MOD / 2} y={y + 31} fill="#1e293b" fontSize="7.5" textAnchor="middle" fontWeight="900">
                 {drPoleLabel(c, pi)}
               </text>
 
               {/* Pinos interativos de fiação */}
               {(wiringMode || !!wireMoveMode) && (
                 <>
-                  <circle cx={px+MOD/2} cy={y+14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-                  <circle cx={px+MOD/2} cy={y+BRK_H-14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
+                  <circle cx={px + MOD / 2} cy={y + 14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
+                  <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
                 </>
               )}
             </g>
           );
         })}
 
-        {/* Botão de Teste azul brilhante (com posição corrigida para não sobrepor fiação) */}
-        <rect x={x+6} y={y+35} width="15" height="12" rx="2.5" fill="#00d8b8" stroke="#0f766e" strokeWidth="0.8" filter="url(#shadow)" />
-        <text x={x+13.5} y={y+43.5} fill="#ffffff" fontSize="7.2" fontWeight="950" textAnchor="middle" pointerEvents="none">T</text>
+        {/* Botão de Teste mecânico "T" com textura ergonômica */}
+        <g id={`dr-test-btn-${c.id}`}>
+          <rect x={x + 5.5} y={y + 36} width="15" height="12" rx="2.5" fill="#00d8b8" stroke="#0f766e" strokeWidth="0.8" />
+          <rect x={x + 7} y={y + 37.5} width="12" height="3" fill="#ffffff" fillOpacity="0.4" rx="1" />
+          <text x={x + 13} y={y + 44.5} fill="#ffffff" fontSize="7.5" fontWeight="950" textAnchor="middle" pointerEvents="none">T</text>
+          <text x={x + 13} y={y + 53} fill="#64748b" fontSize="4.2" fontWeight="800" textAnchor="middle" pointerEvents="none">Test Mensal</text>
+        </g>
 
-        {/* Cavidade da alavanca */}
-        <rect x={x + W/2 - 7} y={y + 39} width="14" height="28" rx="2" fill="#0f172a" stroke="#475569" strokeWidth="0.5" />
+        {/* Cavidade e Alavanca do DR */}
+        <rect x={x + W / 2 + 1} y={y + 39} width="12" height="28" rx="2" fill="#0f172a" stroke="#475569" strokeWidth="0.5" />
         <rect
-          x={x + W/2 - 5}
+          x={x + W / 2 + 2.5}
           y={c.status === "ON" ? y + 41 : y + 51}
-          width="10"
+          width="9"
           height="14"
           rx="1.5"
           fill="#00d8b8"
@@ -5631,25 +5830,25 @@ export default function PanelGenerator() {
           onClick={toggleDR}
         />
         <rect
-          x={x + W/2 - 5}
+          x={x + W / 2 + 2.5}
           y={c.status === "ON" ? y + 41 : y + 51}
-          width="10"
+          width="9"
           height="14"
           rx="1.5"
           fill="url(#toggleGlow)"
           className="transition-all duration-150 pointer-events-none"
         />
         
-        {/* Indicadores de liga/desliga da alavanca */}
-        <text x={x+W/2} y={y+37} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
-        <text x={x+W/2} y={y+73} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
+        {/* Indicadores I / O */}
+        <text x={x + W / 2 + 7} y={y + 37.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
+        <text x={x + W / 2 + 7} y={y + 73.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
 
-        {/* Cartão de etiqueta de identificação embutido na face */}
-        <rect x={x+3} y={y+68} width={W-6} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
-        <text x={x+W/2} y={y+75.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
+        {/* Cartão de etiqueta de identificação embutido */}
+        <rect x={x + 2.5} y={y + 68} width={W - 5} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
+        <text x={x + W / 2} y={y + 75.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
           {c.label.slice(0, 14)}
         </text>
-        <text x={x+W/2} y={y+81.5} fill="#0284c7" fontSize="5.6" fontWeight="950" textAnchor="middle">
+        <text x={x + W / 2} y={y + 81.5} fill="#0284c7" fontSize="5.6" fontWeight="950" textAnchor="middle">
           {c.current}A / IΔn 30mA
         </text>
 
@@ -5664,25 +5863,38 @@ export default function PanelGenerator() {
     const badgeW = Math.min(W - 8, Math.max(96, (c.label || "").length * 8.8 + 20));
     return (
       <g key={c.id}>
-        <rect x={x+1} y={y} width={W-2} height={BRK_H} rx="4" fill="#f8fafc" fillOpacity="0.08" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="6,4" pointerEvents="none" />
+        {/* Área tracejada discreta de reserva deixando transparecer o trilho DIN */}
+        <rect
+          x={x + 1}
+          y={y}
+          width={W - 2}
+          height={BRK_H}
+          rx="4"
+          fill="#f8fafc"
+          fillOpacity="0.05"
+          stroke="#94a3b8"
+          strokeWidth="1.1"
+          strokeDasharray="5,4"
+          pointerEvents="none"
+        />
         {/* Badge de contraste central para manter 100% legível sobre o trilho */}
         <rect
-          x={x + W/2 - badgeW / 2}
-          y={y + BRK_H/2 - 17}
+          x={x + W / 2 - badgeW / 2}
+          y={y + BRK_H / 2 - 17}
           width={badgeW}
           height="34"
           rx="6"
           fill="#ffffff"
-          fillOpacity="0.94"
+          fillOpacity="0.95"
           stroke="#cbd5e1"
           strokeWidth="0.9"
           pointerEvents="none"
         />
-        <text x={x+W/2} y={y+BRK_H/2-3} fill="#1e293b" fontSize="9" fontWeight="900" textAnchor="middle" pointerEvents="none">
-          {c.label}
+        <text x={x + W / 2} y={y + BRK_H / 2 - 3} fill="#1e293b" fontSize="9" fontWeight="900" textAnchor="middle" pointerEvents="none">
+          {c.label || "RESERVA"}
         </text>
-        <text x={x+W/2} y={y+BRK_H/2+10} fill="#475569" fontSize="7.8" fontWeight="800" textAnchor="middle" pointerEvents="none">
-          {c.poles} Módulos DIN
+        <text x={x + W / 2} y={y + BRK_H / 2 + 10} fill="#475569" fontSize="7.8" fontWeight="800" textAnchor="middle" pointerEvents="none">
+          {c.poles} Módulos DIN ({W}mm)
         </text>
       </g>
     );
@@ -5694,17 +5906,19 @@ export default function PanelGenerator() {
     const pinBottomId = `comp:${c.id}:bottom:0`;
     
     // Cor-código técnica para Bornes baseados em função (Neutro = Azul, Terra = Verde/Amarelo, Fase = Cinza/Marrom)
-    let bodyColor = "#78350f"; // Padrão marrom
-    let centerColor = "#b45309";
+    let bodyColor = "#475569";
+    let centerColor = "#64748b";
     let textColor = "#ffffff";
+    let isGroundTwoTone = false;
     
-    const labelUpper = c.label.toUpperCase();
+    const labelUpper = (c.label || "").toUpperCase();
     if (labelUpper.includes("N")) {
-      bodyColor = "#1e3a8a"; // Azul Neutro escuro
+      bodyColor = "#1e3a8a"; // Azul Neutro
       centerColor = "#00d8b8";
     } else if (labelUpper.includes("PE") || labelUpper.includes("TERRA") || labelUpper.includes("G")) {
-      bodyColor = "#14532d"; // Verde Terra escuro
+      bodyColor = "#14532d"; // Verde Terra
       centerColor = "#16a34a";
+      isGroundTwoTone = true;
     } else {
       bodyColor = "#475569"; // Cinza Fase
       centerColor = "#64748b";
@@ -5718,27 +5932,51 @@ export default function PanelGenerator() {
         onClick={() => selectComponent(c.id)}
       >
         {/* Sombra */}
-        <rect x={x+0.5} y={y+2} width={W-1} height={BRK_H} rx="2" fill="#000000" fillOpacity="0.12" />
+        <rect x={x + 0.5} y={y + 2} width={W - 1} height={BRK_H} rx="2" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
 
-        {/* Corpo do Borne com gradiente */}
-        <rect x={x} y={y} width={W} height={BRK_H} rx="2" fill={bodyColor} stroke={isSelected ? "#00d8b8" : "#1e293b"} strokeWidth={isSelected ? "2.5" : "0.8"} />
-        <rect x={x+2} y={y+4} width={W-4} height={BRK_H-8} fill={centerColor} rx="1" />
+        {/* Corpo modular do borne SAK */}
+        <rect
+          x={x}
+          y={y}
+          width={W}
+          height={BRK_H}
+          rx="2"
+          fill={bodyColor}
+          stroke={isSelected ? "#00d8b8" : "#1e293b"}
+          strokeWidth={isSelected ? "2.5" : "0.8"}
+        />
+        {/* Faixa central de contraste */}
+        <rect x={x + 2} y={y + 4} width={W - 4} height={BRK_H - 8} fill={centerColor} rx="1" />
         
-        {/* Bevel metálico clamp interno */}
-        <rect x={x+3} y={y+12} width={W-6} height="12" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" rx="1" />
-        <circle cx={x+W/2} cy={y+18} r="2.5" fill="#1e293b" />
-        <rect x={x+3} y={y+BRK_H-24} width={W-6} height="12" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" rx="1" />
-        <circle cx={x+W/2} cy={y+BRK_H-18} r="2.5" fill="#1e293b" />
+        {/* Se for terra, listras verde-amarelas técnicas */}
+        {isGroundTwoTone && (
+          <g pointerEvents="none">
+            <line x1={x + 2} y1={y + 32} x2={x + W - 2} y2={y + 32} stroke="#facc15" strokeWidth="4" />
+            <line x1={x + 2} y1={y + BRK_H - 32} x2={x + W - 2} y2={y + BRK_H - 32} stroke="#facc15" strokeWidth="4" />
+          </g>
+        )}
+        
+        {/* Ponto de teste e parafuso de fixação do borne Topo */}
+        <rect x={x + 2.5} y={y + 11} width={W - 5} height="14" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.35" rx="1.5" />
+        <circle cx={x + W / 2} cy={y + 18} r="2.8" fill="#1e293b" />
+        <line x1={x + W / 2 - 1.8} y1={y + 18} x2={x + W / 2 + 1.8} y2={y + 18} stroke="#94a3b8" strokeWidth="0.7" />
 
-        <text x={x+W/2} y={y+BRK_H/2+3} fill={textColor} fontSize="7" fontWeight="900" textAnchor="middle" transform={`rotate(-90 ${x+W/2} ${y+BRK_H/2})`}>
+        {/* Ponto de teste e parafuso de fixação do borne Base */}
+        <rect x={x + 2.5} y={y + BRK_H - 25} width={W - 5} height="14" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.35" rx="1.5" />
+        <circle cx={x + W / 2} cy={y + BRK_H - 18} r="2.8" fill="#1e293b" />
+        <line x1={x + W / 2 - 1.8} y1={y + BRK_H - 18} x2={x + W / 2 + 1.8} y2={y + BRK_H - 18} stroke="#94a3b8" strokeWidth="0.7" />
+
+        {/* Tag de identificação vertical */}
+        <rect x={x + 1.5} y={y + BRK_H / 2 - 14} width={W - 3} height="28" rx="1.5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.5" />
+        <text x={x + W / 2} y={y + BRK_H / 2 + 3} fill="#0f172a" fontSize="7" fontWeight="950" textAnchor="middle" transform={`rotate(-90 ${x + W / 2} ${y + BRK_H / 2})`}>
           {c.label}
         </text>
 
         {/* Pinos interativos de fiação */}
         {(wiringMode || !!wireMoveMode) && (
           <>
-            <circle cx={x+W/2} cy={y+14} r="8" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-            <circle cx={x+W/2} cy={y+BRK_H-14} r="8" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
+            <circle cx={x + W / 2} cy={y + 14} r="8" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
+            <circle cx={x + W / 2} cy={y + BRK_H - 14} r="8" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
           </>
         )}
 
@@ -7877,62 +8115,110 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       if (!wireEndpointDrag) setHoveredPinId("");
                     }}
                   >
-                    {/* Definições de Gradientes Metálicos e Brilhos */}
+                    {/* Definições de Gradientes Metálicos, Texturas e Efeitos de Profundidade */}
                     <defs>
-                      <linearGradient id="railGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#475569" />
-                        <stop offset="30%" stopColor="#cbd5e1" />
-                        <stop offset="50%" stopColor="#f1f5f9" />
-                        <stop offset="70%" stopColor="#cbd5e1" />
-                        <stop offset="100%" stopColor="#334155" />
-                      </linearGradient>
-                      <linearGradient id="brassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#b45309" />
-                        <stop offset="30%" stopColor="#fbbf24" />
-                        <stop offset="70%" stopColor="#f59e0b" />
-                        <stop offset="100%" stopColor="#78350f" />
-                      </linearGradient>
-                      <linearGradient id="screwCageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#94a3b8" />
-                        <stop offset="50%" stopColor="#cbd5e1" />
-                        <stop offset="100%" stopColor="#475569" />
-                      </linearGradient>
-                      <linearGradient id="metallicScrew" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#cbd5e1" />
-                        <stop offset="50%" stopColor="#64748b" />
-                        <stop offset="100%" stopColor="#334155" />
-                      </linearGradient>
-                      <linearGradient id="breakerBody" x1="0%" y1="0%" x2="100%" y2="0%">
+                      {/* Gradiente da chapa de fundo do gabinete eletrostático (RAL 7035 Industrial) */}
+                      <linearGradient id="chassisPlateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#f8fafc" />
-                        <stop offset="15%" stopColor="#f1f5f9" />
-                        <stop offset="85%" stopColor="#e2e8f0" />
+                        <stop offset="40%" stopColor="#f1f5f9" />
+                        <stop offset="80%" stopColor="#e2e8f0" />
                         <stop offset="100%" stopColor="#cbd5e1" />
                       </linearGradient>
+                      {/* Borda chanfrada de estampagem metálica do gabinete */}
+                      <linearGradient id="chassisBevelGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#cbd5e1" />
+                        <stop offset="50%" stopColor="#94a3b8" />
+                        <stop offset="100%" stopColor="#64748b" />
+                      </linearGradient>
+                      {/* Trilho DIN 35x7.5mm perfil ômega de aço zincado bicromatizado (EN 50022 / IEC 60715) */}
+                      <linearGradient id="dinRailTopHat" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#64748b" />
+                        <stop offset="14%" stopColor="#cbd5e1" />
+                        <stop offset="28%" stopColor="#f8fafc" />
+                        <stop offset="48%" stopColor="#94a3b8" />
+                        <stop offset="52%" stopColor="#64748b" />
+                        <stop offset="72%" stopColor="#f1f5f9" />
+                        <stop offset="88%" stopColor="#cbd5e1" />
+                        <stop offset="100%" stopColor="#475569" />
+                      </linearGradient>
+                      <linearGradient id="dinSlotHole" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#0f172a" />
+                        <stop offset="50%" stopColor="#1e293b" />
+                        <stop offset="100%" stopColor="#334155" />
+                      </linearGradient>
+                      {/* Canaleta perfurada industrial cinza chumbo (PVC finger duct) */}
+                      <linearGradient id="fingerDuctBody" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#334155" />
+                        <stop offset="25%" stopColor="#475569" />
+                        <stop offset="80%" stopColor="#334155" />
+                        <stop offset="100%" stopColor="#1e293b" />
+                      </linearGradient>
+                      {/* Latão usinado polido para barramentos de neutro e terra */}
+                      <linearGradient id="brassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#78350f" />
+                        <stop offset="20%" stopColor="#d97706" />
+                        <stop offset="45%" stopColor="#fde047" />
+                        <stop offset="75%" stopColor="#f59e0b" />
+                        <stop offset="100%" stopColor="#78350f" />
+                      </linearGradient>
+                      {/* Gaiola metálica niquelada do terminal de parafuso */}
+                      <linearGradient id="screwCageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#475569" />
+                        <stop offset="40%" stopColor="#cbd5e1" />
+                        <stop offset="70%" stopColor="#e2e8f0" />
+                        <stop offset="100%" stopColor="#334155" />
+                      </linearGradient>
+                      {/* Cabeça de parafuso usinada em aço com fenda combinada Pozidriv */}
+                      <linearGradient id="metallicScrew" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#e2e8f0" />
+                        <stop offset="35%" stopColor="#94a3b8" />
+                        <stop offset="70%" stopColor="#64748b" />
+                        <stop offset="100%" stopColor="#1e293b" />
+                      </linearGradient>
+                      {/* Poliamida cinza industrial fosca para disjuntores (RAL 7035) */}
+                      <linearGradient id="breakerBody" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#ffffff" />
+                        <stop offset="10%" stopColor="#f8fafc" />
+                        <stop offset="80%" stopColor="#f1f5f9" />
+                        <stop offset="95%" stopColor="#e2e8f0" />
+                        <stop offset="100%" stopColor="#cbd5e1" />
+                      </linearGradient>
+                      {/* Cartucho vermelho industrial Classe II para DPS */}
                       <linearGradient id="dpsBody" x1="0%" y1="0%" x2="100%" y2="0%">
                         <stop offset="0%" stopColor="#ef4444" />
-                        <stop offset="25%" stopColor="#dc2626" />
-                        <stop offset="85%" stopColor="#b91c1c" />
-                        <stop offset="100%" stopColor="#991b1b" />
+                        <stop offset="20%" stopColor="#dc2626" />
+                        <stop offset="80%" stopColor="#b91c1c" />
+                        <stop offset="100%" stopColor="#7f1d1d" />
                       </linearGradient>
+                      {/* Corpo do IDR com textura de plástico de engenharia */}
                       <linearGradient id="drBody" x1="0%" y1="0%" x2="100%" y2="0%">
                         <stop offset="0%" stopColor="#ffffff" />
-                        <stop offset="20%" stopColor="#f8fafc" />
+                        <stop offset="15%" stopColor="#f8fafc" />
                         <stop offset="85%" stopColor="#f1f5f9" />
                         <stop offset="100%" stopColor="#e2e8f0" />
                       </linearGradient>
+                      {/* Alavanca de desarme ergonômica com sombreamento tátil */}
                       <linearGradient id="toggleGlow" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
-                        <stop offset="40%" stopColor="#ffffff" stopOpacity="0.1" />
-                        <stop offset="100%" stopColor="#000000" stopOpacity="0.4" />
+                        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+                        <stop offset="35%" stopColor="#ffffff" stopOpacity="0.15" />
+                        <stop offset="100%" stopColor="#000000" stopOpacity="0.45" />
                       </linearGradient>
+                      {/* Capa isolante amarela de barramento pente (Comb Busbar) */}
                       <linearGradient id="combBusbar" x1="0%" y1="0%" x2="0%" y2="100%">
                         <stop offset="0%" stopColor="#fef08a" />
-                        <stop offset="30%" stopColor="#fde047" />
-                        <stop offset="70%" stopColor="#eab308" />
-                        <stop offset="100%" stopColor="#ca8a04" />
+                        <stop offset="25%" stopColor="#facc15" />
+                        <stop offset="75%" stopColor="#eab308" />
+                        <stop offset="100%" stopColor="#a16207" />
                       </linearGradient>
+                      {/* Sombra de profundidade técnica */}
                       <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
-                        <feDropShadow dx="2" dy="5" stdDeviation="4" floodOpacity="0.15" />
+                        <feDropShadow dx="1.5" dy="3.5" stdDeviation="3" floodColor="#0f172a" floodOpacity="0.12" />
+                      </filter>
+                      <filter id="railShadow" x="-3%" y="-15%" width="106%" height="130%">
+                        <feDropShadow dx="0" dy="4" stdDeviation="3.5" floodColor="#0f172a" floodOpacity="0.16" />
+                      </filter>
+                      <filter id="deviceShadow" x="-4%" y="-3%" width="108%" height="108%">
+                        <feDropShadow dx="1" dy="3.5" stdDeviation="2.5" floodColor="#0f172a" floodOpacity="0.18" />
                       </filter>
                       <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
                         <feGaussianBlur stdDeviation="3" result="blur" />
@@ -7940,25 +8226,60 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       </filter>
                     </defs>
 
-                    {/* 1. ESTRUTURA DO GABINETE (ENCLOSURE) */}
-                    {/* Borda Externa */}
-                    <rect x="15" y="15" width={PANEL_W-30} height={panelHeight-30} rx="12" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2.5" filter="url(#shadow)" />
-                    {/* Quadro Interno */}
-                    <rect x="25" y="25" width={PANEL_W-50} height={panelHeight-50} rx="10" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1.5" />
+                    {/* 1. ESTRUTURA DO GABINETE METÁLICO (CHASSIS BACKPLATE & CANALETAS) */}
+                    {/* Borda externa com profundidade de estamparia */}
+                    <rect x="14" y="14" width={PANEL_W - 28} height={panelHeight - 28} rx="14" fill="url(#chassisBevelGrad)" stroke="#64748b" strokeWidth="1.2" filter="url(#shadow)" />
+                    {/* Chapa de fundo do quadro eletrostático */}
+                    <rect x="18" y="18" width={PANEL_W - 36} height={panelHeight - 36} rx="11" fill="url(#chassisPlateGrad)" stroke="#cbd5e1" strokeWidth="1" />
                     
-                    {/* Canaletas Passa-fios Laterais (Pentes organizadores amarelos na borda) */}
-                    {/* Canaleta Direita */}
-                    {Array.from({ length: Math.ceil(panelHeight / 40) }).map((_, i) => (
-                      <rect key={`y-r-${i}`} x={PANEL_W - 40} y={40 + i * 40} width="12" height="15" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.5" />
+                    {/* Furos de fixação mecânica nos 4 cantos da chapa de fundo */}
+                    {[
+                      { cx: 32, cy: 32 },
+                      { cx: PANEL_W - 32, cy: 32 },
+                      { cx: 32, cy: panelHeight - 32 },
+                      { cx: PANEL_W - 32, cy: panelHeight - 32 },
+                    ].map((cornerScrew, idx) => (
+                      <g key={`corner-screw-${idx}`}>
+                        <circle cx={cornerScrew.cx} cy={cornerScrew.cy} r="6" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.8" />
+                        <circle cx={cornerScrew.cx} cy={cornerScrew.cy} r="4.2" fill="url(#metallicScrew)" stroke="#475569" strokeWidth="0.5" />
+                        <line x1={cornerScrew.cx - 2.5} y1={cornerScrew.cy - 2.5} x2={cornerScrew.cx + 2.5} y2={cornerScrew.cy + 2.5} stroke="#334155" strokeWidth="0.9" />
+                        <line x1={cornerScrew.cx - 2.5} y1={cornerScrew.cy + 2.5} x2={cornerScrew.cx + 2.5} y2={cornerScrew.cy - 2.5} stroke="#334155" strokeWidth="0.9" />
+                      </g>
                     ))}
-                    {/* Canaleta Esquerda */}
-                    {Array.from({ length: Math.ceil(panelHeight / 40) }).map((_, i) => (
-                      <rect key={`y-l-${i}`} x={28} y={40 + i * 40} width="12" height="15" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.5" />
-                    ))}
-                    
-                    {/* Pinos amarelos de teto e chão */}
-                    <rect x={60} y={26} width={15} height="12" rx="1" fill={COLORS.yellowComb} />
-                    <rect x={PANEL_W - 75} y={26} width={15} height="12" rx="1" fill={COLORS.yellowComb} />
+
+                    {/* Ponto de Aterramento da Carcaça do Painel (Canto inferior esquerdo) */}
+                    <g id="chassis-ground-point" transform={`translate(48, ${panelHeight - 32})`}>
+                      <circle cx="0" cy="0" r="5" fill="url(#brassGrad)" stroke="#92400e" strokeWidth="0.8" />
+                      <circle cx="0" cy="0" r="3" fill="#fbbf24" />
+                      <line x1="-2" y1="0" x2="2" y2="0" stroke="#78350f" strokeWidth="0.8" />
+                      <line x1="0" y1="-2" x2="0" y2="2" stroke="#78350f" strokeWidth="0.8" />
+                      <text x="8" y="2.8" fill="#475569" fontSize="6.5" fontWeight="900">⏚ PE</text>
+                    </g>
+
+                    {/* Canaletas Passa-fios Perfuradas Industriais (Finger Ducts nas laterais) */}
+                    {/* Canaleta Lateral Esquerda */}
+                    <g id="left-finger-duct">
+                      <rect x="26" y="44" width="22" height={panelHeight - 88} rx="3" fill="url(#fingerDuctBody)" stroke="#1e293b" strokeWidth="0.8" />
+                      <rect x="44" y="46" width="3" height={panelHeight - 92} fill="#0f172a" fillOpacity="0.4" />
+                      {Array.from({ length: Math.floor((panelHeight - 100) / 22) }).map((_, i) => (
+                        <g key={`duct-l-slot-${i}`}>
+                          <rect x="36" y={52 + i * 22} width="11" height="8" rx="2" fill="#0f172a" stroke="#1e293b" strokeWidth="0.5" />
+                          <line x1="28" y1={56 + i * 22} x2="36" y2={56 + i * 22} stroke="#64748b" strokeWidth="0.8" />
+                        </g>
+                      ))}
+                    </g>
+
+                    {/* Canaleta Lateral Direita */}
+                    <g id="right-finger-duct">
+                      <rect x={PANEL_W - 48} y="44" width="22" height={panelHeight - 88} rx="3" fill="url(#fingerDuctBody)" stroke="#1e293b" strokeWidth="0.8" />
+                      <rect x={PANEL_W - 47} y="46" width="3" height={panelHeight - 92} fill="#0f172a" fillOpacity="0.4" />
+                      {Array.from({ length: Math.floor((panelHeight - 100) / 22) }).map((_, i) => (
+                        <g key={`duct-r-slot-${i}`}>
+                          <rect x={PANEL_W - 47} y={52 + i * 22} width="11" height="8" rx="2" fill="#0f172a" stroke="#1e293b" strokeWidth="0.5" />
+                          <line x1={PANEL_W - 36} y1={56 + i * 22} x2={PANEL_W - 28} y2={56 + i * 22} stroke="#64748b" strokeWidth="0.8" />
+                        </g>
+                      ))}
+                    </g>
 
                     {/* Saída no topo esquerdo (PE + N + L1 + L2 + L3) */}
                     <g id="three-phase-output" className="cursor-default">
@@ -8048,56 +8369,58 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             />
                           )}
                           {/* Suportes plásticos azuis */}
+                          {/* Suportes plásticos azuis antichama */}
                           <rect
-                            x={neutralLayout.x - 13}
+                            x={neutralLayout.x - 14}
                             y={neutralLayout.y - 4}
-                            width="18"
+                            width="20"
                             height="28"
-                            rx="2"
-                            fill="#00d8b8"
-                            stroke={isSelected ? "#00d8b8" : "#00d8b8"}
-                            strokeWidth={isSelected ? 1.5 : 0.8}
+                            rx="3"
+                            fill="#0284c7"
+                            stroke={isSelected ? "#00d8b8" : "#0369a1"}
+                            strokeWidth={isSelected ? 1.8 : 0.9}
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           />
                           <rect
-                            x={neutralLayout.x + neutralLayout.width - 5}
+                            x={neutralLayout.x + neutralLayout.width - 6}
                             y={neutralLayout.y - 4}
-                            width="18"
+                            width="20"
                             height="28"
-                            rx="2"
-                            fill="#00d8b8"
-                            stroke={isSelected ? "#00d8b8" : "#00d8b8"}
-                            strokeWidth={isSelected ? 1.5 : 0.8}
+                            rx="3"
+                            fill="#0284c7"
+                            stroke={isSelected ? "#00d8b8" : "#0369a1"}
+                            strokeWidth={isSelected ? 1.8 : 0.9}
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           />
-                          {/* Barra azul superior */}
+                          {/* Barra de Latão Maciço com Gradiente Realista */}
                           <rect
                             x={neutralLayout.x}
                             y={neutralLayout.y}
                             width={neutralLayout.width}
                             height={neutralLayout.height}
-                            rx="1.5"
-                            fill="#0ea5e9"
-                            stroke={isSelected ? "#00d8b8" : "#0369a1"}
-                            strokeWidth={isSelected ? 1.35 : 0.8}
+                            rx="2"
+                            fill="url(#brassGrad)"
+                            stroke={isSelected ? "#00d8b8" : "#b45309"}
+                            strokeWidth={isSelected ? 1.5 : 0.8}
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           />
-                          <rect x={neutralLayout.x + 4} y={neutralLayout.y + 3} width={neutralLayout.width - 8} height="3" fill="#e0f2fe" fillOpacity="0.5" pointerEvents="none" />
-                          {/* Parafusos */}
+                          <rect x={neutralLayout.x + 2} y={neutralLayout.y + 2} width={neutralLayout.width - 4} height="3" fill="#fef08a" fillOpacity="0.6" pointerEvents="none" />
+                          {/* Parafusos de fixação dos condutores de neutro */}
                           {Array.from({ length: NEUTRAL_BUS.pinCount }).map((_, i) => {
                             const sx = neutralLayout.pinStartX + i * neutralLayout.pinGap;
                             const pinId = `busbar_neutral:${i}`;
                             return (
                               <g key={i}>
-                                <circle cx={sx} cy={neutralLayout.pinY} r="4.2" fill="#e0f2fe" stroke="#075985" strokeWidth="0.8" />
-                                <line x1={sx-2} y1={neutralLayout.pinY} x2={sx+2} y2={neutralLayout.pinY} stroke="#075985" strokeWidth="0.9" />
+                                <circle cx={sx} cy={neutralLayout.pinY} r="4.6" fill="#1e293b" />
+                                <circle cx={sx} cy={neutralLayout.pinY} r="3.6" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+                                <line x1={sx - 2.2} y1={neutralLayout.pinY} x2={sx + 2.2} y2={neutralLayout.pinY} stroke="#f1f5f9" strokeWidth="0.8" />
                                 {(wiringMode || !!wireMoveMode) && (
                                   <circle
                                     cx={sx}
                                     cy={neutralLayout.pinY}
-                                    r="8"
+                                    r="8.5"
                                     fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"}
-                                    fillOpacity="0.8"
+                                    fillOpacity="0.85"
                                     className="animate-pulse cursor-pointer"
                                     onClick={(event) => {
                                       event.stopPropagation();
@@ -8115,20 +8438,20 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             <rect
                               x={(neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 12)) - 4}
                               y={(neutralBus.labelY ?? (neutralLayout.y + 11)) - 11}
-                              width="18"
-                              height="17"
-                              rx="4"
+                              width="22"
+                              height="19"
+                              rx="4.5"
                               fill="#ffffff"
-                              fillOpacity="0.94"
+                              fillOpacity="0.96"
                               stroke="#bae6fd"
-                              strokeWidth="0.85"
+                              strokeWidth="0.9"
                             />
                             <text
                               x={neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 17)}
-                              y={neutralBus.labelY ?? (neutralLayout.y + 12)}
+                              y={neutralBus.labelY ?? (neutralLayout.y + 12.5)}
                               fill={neutralBus.color || "#0369a1"}
                               fontSize={neutralBus.fontSize || 9.5}
-                              fontWeight="900"
+                              fontWeight="950"
                               textAnchor="middle"
                             >
                               {neutralBus.label || "N"}
@@ -8172,21 +8495,23 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               pointerEvents="none"
                             />
                           )}
-                          {/* Suportes plásticos verdes */}
-                          <rect x={groundLayout.x - 16} y={groundY} width="22" height="28" rx="2" fill="#16a34a" stroke={isSelected ? "#00d8b8" : "#15803d"} strokeWidth={isSelected ? 2 : 0.8} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
-                          <rect x={groundLayout.x + groundLayout.width - 6} y={groundY} width="22" height="28" rx="2" fill="#16a34a" stroke={isSelected ? "#00d8b8" : "#15803d"} strokeWidth={isSelected ? 2 : 0.8} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
-                          {/* Barra de latão */}
-                          <rect x={groundLayout.x} y={groundY + 6} width={groundLayout.width} height="15" rx="1.5" fill="url(#brassGrad)" stroke={isSelected ? "#00d8b8" : "#d97706"} strokeWidth={isSelected ? 1.3 : 0.6} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
-                          {/* Parafusos */}
+                          {/* Suportes plásticos verdes antichama */}
+                          <rect x={groundLayout.x - 16} y={groundY} width="22" height="28" rx="3" fill="#15803d" stroke={isSelected ? "#00d8b8" : "#14532d"} strokeWidth={isSelected ? 1.8 : 0.9} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
+                          <rect x={groundLayout.x + groundLayout.width - 6} y={groundY} width="22" height="28" rx="3" fill="#15803d" stroke={isSelected ? "#00d8b8" : "#14532d"} strokeWidth={isSelected ? 1.8 : 0.9} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
+                          {/* Barra de Latão Maciço com Gradiente Realista */}
+                          <rect x={groundLayout.x} y={groundY + 6} width={groundLayout.width} height="15" rx="2" fill="url(#brassGrad)" stroke={isSelected ? "#00d8b8" : "#b45309"} strokeWidth={isSelected ? 1.4 : 0.7} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
+                          <rect x={groundLayout.x + 2} y={groundY + 8} width={groundLayout.width - 4} height="3" fill="#fef08a" fillOpacity="0.6" pointerEvents="none" />
+                          {/* Parafusos dos condutores de proteção terra */}
                           {Array.from({ length: GROUND_BUS.pinCount }).map((_, i) => {
                             const sx = groundLayout.pinStartX + i * groundLayout.pinGap;
                             const pinId = `busbar_ground:${i}`;
                             return (
                               <g key={i}>
-                                <circle cx={sx} cy={groundLayout.pinY} r="4.5" fill="#334155" stroke="#cbd5e1" strokeWidth="0.5" />
-                                <line x1={sx-2} y1={groundLayout.pinY} x2={sx+2} y2={groundLayout.pinY} stroke="#cbd5e1" strokeWidth="0.8" />
+                                <circle cx={sx} cy={groundLayout.pinY} r="4.6" fill="#1e293b" />
+                                <circle cx={sx} cy={groundLayout.pinY} r="3.6" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+                                <line x1={sx - 2.2} y1={groundLayout.pinY} x2={sx + 2.2} y2={groundLayout.pinY} stroke="#f1f5f9" strokeWidth="0.8" />
                                 {(wiringMode || !!wireMoveMode) && (
-                                  <circle cx={sx} cy={groundLayout.pinY} r="8" fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePinClick(pinId); }} />
+                                  <circle cx={sx} cy={groundLayout.pinY} r="8.5" fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePinClick(pinId); }} />
                                 )}
                               </g>
                             );
@@ -8229,18 +8554,53 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       );
                     })()}
 
-                    {/* 4. RENDERIZAÇÃO DOS TRILHOS DIN */}
+                    {/* 4. RENDERIZAÇÃO DOS TRILHOS DIN EN 50022 */}
                     {rails.map((r, rIdx) => {
                       const railY = 190 + rIdx * 240;
+                      const railX = 138;
+                      const railWidth = PANEL_W - 276;
+                      const slotCount = Math.floor((railWidth - 70) / 24);
+                      const slotStartX = railX + 35;
+
                       return (
-                        <g key={r.id}>
-                          {/* Trilho DIN Metálico */}
-                          <rect x="140" y={railY - 12} width={PANEL_W - 280} height="24" rx="2" fill="url(#railGrad)" stroke="#475569" strokeWidth="0.8" />
-                          <rect x="142" y={railY - 10} width={PANEL_W - 284} height="4" fill="#ffffff" fillOpacity="0.25" />
-                          
-                          {/* Parafusos de fixação do trilho */}
-                          <circle cx="150" cy={railY} r="3" fill="#334155" />
-                          <circle cx={PANEL_W - 150} cy={railY} r="3" fill="#334155" />
+                        <g key={r.id} id={`din-rail-${r.id}`}>
+                          {/* Sombra de profundidade do trilho na chapa de fundo */}
+                          <rect x={railX} y={railY - 14} width={railWidth} height="28" rx="2.5" fill="#0f172a" fillOpacity="0.14" filter="url(#railShadow)" />
+
+                          {/* Perfil Ômega Top-Hat EN 50022 em Aço Zincado */}
+                          <rect x={railX} y={railY - 14} width={railWidth} height="28" rx="2" fill="url(#dinRailTopHat)" stroke="#475569" strokeWidth="0.85" />
+
+                          {/* Aba superior chanfrada de fixação com specular highlight */}
+                          <line x1={railX + 2} y1={railY - 13} x2={railX + railWidth - 2} y2={railY - 13} stroke="#ffffff" strokeOpacity="0.85" strokeWidth="0.8" />
+                          <line x1={railX + 2} y1={railY - 7.5} x2={railX + railWidth - 2} y2={railY - 7.5} stroke="#334155" strokeOpacity="0.6" strokeWidth="0.6" />
+
+                          {/* Canaleta central rebaixada onde ficam os rasgos oblongos */}
+                          <rect x={railX + 4} y={railY - 6.5} width={railWidth - 8} height="13" fill="#64748b" fillOpacity="0.28" stroke="#334155" strokeWidth="0.5" />
+
+                          {/* Ranhuras oblongas industriais (6.2x18mm slots espaçados a cada 24px) */}
+                          {Array.from({ length: slotCount }).map((_, si) => {
+                            const sx = slotStartX + si * 24;
+                            return (
+                              <g key={`slot-${r.id}-${si}`}>
+                                <rect x={sx - 7} y={railY - 3.5} width="14" height="7" rx="3.5" fill="url(#dinSlotHole)" stroke="#334155" strokeWidth="0.5" />
+                                <rect x={sx - 6} y={railY - 2.5} width="12" height="5" rx="2.5" fill="#0f172a" />
+                              </g>
+                            );
+                          })}
+
+                          {/* Aba inferior de retenção com chanfro de luz */}
+                          <line x1={railX + 2} y1={railY + 7.5} x2={railX + railWidth - 2} y2={railY + 7.5} stroke="#ffffff" strokeOpacity="0.5" strokeWidth="0.6" />
+                          <line x1={railX + 2} y1={railY + 13} x2={railX + railWidth - 2} y2={railY + 13} stroke="#334155" strokeOpacity="0.75" strokeWidth="0.8" />
+
+                          {/* Parafusos de fixação mecânica do trilho na chapa de fundo */}
+                          {[railX + 16, railX + Math.floor(railWidth / 2), railX + railWidth - 16].map((screwX, idx) => (
+                            <g key={`rail-screw-${r.id}-${idx}`}>
+                              <circle cx={screwX} cy={railY} r="5.5" fill="#cbd5e1" stroke="#64748b" strokeWidth="0.6" />
+                              <circle cx={screwX} cy={railY} r="4" fill="url(#metallicScrew)" stroke="#1e293b" strokeWidth="0.4" />
+                              <line x1={screwX - 2.5} y1={railY} x2={screwX + 2.5} y2={railY} stroke="#0f172a" strokeWidth="0.9" />
+                              <line x1={screwX} y1={railY - 2.5} x2={screwX} y2={railY + 2.5} stroke="#0f172a" strokeWidth="0.9" />
+                            </g>
+                          ))}
                         </g>
                       );
                     })}
