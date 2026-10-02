@@ -209,8 +209,8 @@ function App() {
           <BrandingBoot />
           <Router>
             <AuthenticatedApp />
+            <CookieConsentBanner />
           </Router>
-          <CookieConsentBanner />
           <Toaster />
         </QueryClientProvider>
       </AuthProvider>

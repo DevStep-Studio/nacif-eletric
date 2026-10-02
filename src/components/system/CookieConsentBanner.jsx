@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { Cookie, Shield, Check, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,9 +92,9 @@ export default function CookieConsentBanner() {
                 </p>
                 <p className="text-[11px] sm:text-xs font-medium leading-relaxed text-[#64748B]">
                   Utilizamos cookies estritamente necessários para autenticação e segurança, além de cookies analíticos para aprimorar o desempenho das ferramentas de engenharia elétrica. Saiba mais na nossa{" "}
-                  <Link to="/cookies" className="text-[#00d8b8] font-bold underline hover:text-[#00bda1]">
+                  <a href="/cookies" className="text-[#00d8b8] font-bold underline hover:text-[#00bda1]">
                     Política de Cookies
-                  </Link>.
+                  </a>.
                 </p>
               </div>
             </div>
