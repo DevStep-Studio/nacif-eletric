@@ -6479,9 +6479,16 @@ export default function PanelGenerator() {
 
     const pin = String(pinId || "");
 
+    // Determina a direção ortogonal pura (0°, 90°, 180°, -90°)
     let angle = 90;
     if (adjacentPoint && (adjacentPoint.x !== point.x || adjacentPoint.y !== point.y)) {
-      angle = Math.atan2(point.y - adjacentPoint.y, point.x - adjacentPoint.x) * (180 / Math.PI);
+      const dx = point.x - adjacentPoint.x;
+      const dy = point.y - adjacentPoint.y;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        angle = dx > 0 ? 0 : 180;
+      } else {
+        angle = dy > 0 ? 90 : -90;
+      }
     }
 
     let isDouble = false;
@@ -6495,52 +6502,196 @@ export default function PanelGenerator() {
 
     const type = requestedType || (isDouble ? "duplo" : "agulha");
 
-    const pinLength = Math.max(5, thickness * 1.6);
-    const collarLength = Math.max(8, thickness * 2.5);
-    const pinHeight = Math.max(2, thickness * 0.7);
-    const collarHeight = Math.max(3.5, thickness * 1.2 + (type === "duplo" ? 3.5 : 1.5));
-    
+    // Dimensões proporcionais de precisão industrial (DIN 46228)
+    const effectiveTh = Math.max(1.0, Math.min(8.0, Number(thickness) || 1.8));
+    const pinLength = Math.max(7.5, Math.min(13, effectiveTh * 2.0));
+    const collarLength = Math.max(8.5, Math.min(14, effectiveTh * 2.4));
+    const pinHeight = Math.max(2.8, Math.min(6.5, effectiveTh * 0.95));
+    const collarHeight = Math.max(effectiveTh + 3.2, (type === "duplo" ? 8.5 : 5.8));
+    const totalLength = pinLength + collarLength;
+
+    // Código de cores padrão industrial DIN 46228-4 para ilhós
     const getFerruleColor = (th) => {
-      if (th <= 2.5) return "#ef4444";
-      if (th <= 4) return "#00d8b8";
-      if (th <= 6) return "#64748b";
-      if (th <= 10) return "#eab308";
-      return "#ef4444"; 
+      if (th <= 1.8) return "#dc2626"; // 1.0mm² / 1.5mm² - Vermelho
+      if (th <= 2.8) return "#0284c7"; // 2.5mm² - Azul
+      if (th <= 4.2) return "#64748b"; // 4.0mm² - Cinza
+      if (th <= 6.2) return "#eab308"; // 6.0mm² - Amarelo
+      if (th <= 10.0) return "#dc2626"; // 10.0mm² - Vermelho / Laranja
+      return "#2563eb"; // 16.0mm² - Azul escuro
     };
-    const ferruleColor = getFerruleColor(thickness);
+    const ferruleColor = getFerruleColor(effectiveTh);
 
     let graphic = null;
 
-    if (type === "agulha" || type === "duplo") {
+    if (type === "agulha" || type === "duplo" || type === "tubular") {
       graphic = (
         <g>
-          {/* Pino de cobre estanhado que entra no borne/parafuso (termina exatamente no centro x=0) */}
-          <path d={`M ${-pinLength} ${-pinHeight/2} L 0 ${-pinHeight/2 + 0.4} L 0 ${pinHeight/2 - 0.4} L ${-pinLength} ${pinHeight/2} Z`} fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.5" />
-          {/* Luva isolante de polipropileno colorida crimpada no cabo */}
-          <rect x={-pinLength - collarLength} y={-collarHeight/2} width={collarLength} height={collarHeight} rx="1.5" fill={ferruleColor} stroke="rgba(0,0,0,0.15)" strokeWidth="0.8" />
-          <rect x={-pinLength - collarLength} y={-collarHeight/2 + 0.5} width={collarLength} height={collarHeight/3} fill="#ffffff" fillOpacity="0.3" rx="1" />
+          {/* 1. MÁSCARA OPACA: bloqueia completamente o traço do cabo por baixo para não vazar pela ponta */}
+          <rect
+            x={-totalLength - 1.5}
+            y={-Math.max(collarHeight, effectiveTh * 2.2) / 2}
+            width={totalLength + 2.5}
+            height={Math.max(collarHeight, effectiveTh * 2.2)}
+            fill="#0f172a"
+            fillOpacity="0.001"
+          />
+
+          {/* 2. TUBO METÁLICO ESTANHADO (Pino de Cobre Estanhado / Ponteira) */}
+          {/* Corpo metálico sólido opaco */}
+          <path
+            d={`M ${-pinLength} ${-pinHeight / 2} 
+                L -0.8 ${-pinHeight / 2} 
+                L 0 ${-pinHeight / 2 + 0.6} 
+                L 0 ${pinHeight / 2 - 0.6} 
+                L -0.8 ${pinHeight / 2} 
+                L ${-pinLength} ${pinHeight / 2} 
+                Z`}
+            fill="#f1f5f9"
+            stroke="#475569"
+            strokeWidth="0.75"
+            strokeLinejoin="round"
+          />
+          {/* Brilho reflexivo metálico cilíndrico */}
+          <line
+            x1={-pinLength + 0.8}
+            y1={-pinHeight * 0.16}
+            x2={-1.2}
+            y2={-pinHeight * 0.16}
+            stroke="#ffffff"
+            strokeWidth={Math.max(0.6, pinHeight * 0.28)}
+            strokeLinecap="round"
+          />
+          {/* Marca de prensagem / crimpagem mecânica */}
+          <line
+            x1={-pinLength * 0.52}
+            y1={-pinHeight / 2 + 0.5}
+            x2={-pinLength * 0.52}
+            y2={pinHeight / 2 - 0.5}
+            stroke="#94a3b8"
+            strokeWidth="0.8"
+            strokeLinecap="round"
+          />
+          {type === "duplo" && (
+            <line
+              x1={-pinLength * 0.25}
+              y1={-pinHeight / 2 + 0.5}
+              x2={-pinLength * 0.25}
+              y2={pinHeight / 2 - 0.5}
+              stroke="#94a3b8"
+              strokeWidth="0.8"
+              strokeLinecap="round"
+            />
+          )}
+
+          {/* 3. LUVA ISOLANTE DE POLIPROPILENO (Colar Plástico com Funil de Entrada) */}
+          <path
+            d={`M ${-totalLength} ${-collarHeight * 0.56} 
+                L ${-pinLength - collarLength * 0.72} ${-collarHeight * 0.5} 
+                L ${-pinLength} ${-collarHeight * 0.5} 
+                L ${-pinLength} ${collarHeight * 0.5} 
+                L ${-pinLength - collarLength * 0.72} ${collarHeight * 0.5} 
+                L ${-totalLength} ${collarHeight * 0.56} 
+                Z`}
+            fill={ferruleColor}
+            stroke="#0f172a"
+            strokeWidth="0.8"
+            strokeLinejoin="round"
+          />
+          {/* Brilho sutil no topo do plástico */}
+          <path
+            d={`M ${-totalLength + 1.2} ${-collarHeight * 0.38} 
+                L ${-pinLength - 0.8} ${-collarHeight * 0.34}`}
+            stroke="#ffffff"
+            strokeWidth={Math.max(0.6, collarHeight * 0.2)}
+            strokeOpacity="0.55"
+            strokeLinecap="round"
+          />
+          {/* Borda interna do funil de entrada do condutor */}
+          <line
+            x1={-totalLength}
+            y1={-collarHeight * 0.42}
+            x2={-totalLength}
+            y2={collarHeight * 0.42}
+            stroke="rgba(0,0,0,0.35)"
+            strokeWidth="0.8"
+          />
         </g>
       );
-    } else if (type === "ilhais") {
-      const ringRadius = Math.max(3.5, thickness * 1.2);
+    } else if (type === "ilhais" || type === "olhal") {
+      const ringRadius = Math.max(4.2, effectiveTh * 1.35);
+      const neckLength = Math.max(5, effectiveTh * 1.5);
       graphic = (
         <g>
           {/* Terminal Olhal concêntrico com o centro do parafuso (0, 0) */}
-          <circle cx={0} cy={0} r={ringRadius} fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.8" />
-          <circle cx={0} cy={0} r={ringRadius * 0.45} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.4" />
-          <rect x={-ringRadius - collarLength} y={-collarHeight/2} width={collarLength} height={collarHeight} rx="1.5" fill={ferruleColor} stroke="rgba(0,0,0,0.15)" strokeWidth="0.8" />
-          <rect x={-ringRadius - collarLength} y={-collarHeight/2 + 0.5} width={collarLength} height={collarHeight/3} fill="#ffffff" fillOpacity="0.3" rx="1" />
+          <path
+            d={`M ${-ringRadius - neckLength} ${-pinHeight * 0.8} 
+                L ${-ringRadius * 0.8} ${-pinHeight * 0.8} 
+                L ${-ringRadius * 0.8} ${pinHeight * 0.8} 
+                L ${-ringRadius - neckLength} ${pinHeight * 0.8} 
+                Z`}
+            fill="#f1f5f9"
+            stroke="#475569"
+            strokeWidth="0.75"
+          />
+          <circle cx={0} cy={0} r={ringRadius} fill="#f1f5f9" stroke="#475569" strokeWidth="0.85" />
+          <circle cx={0} cy={0} r={ringRadius * 0.48} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.5" />
+          {/* Luva isolante */}
+          <rect
+            x={-ringRadius - neckLength - collarLength}
+            y={-collarHeight / 2}
+            width={collarLength}
+            height={collarHeight}
+            rx="1.5"
+            fill={ferruleColor}
+            stroke="#0f172a"
+            strokeWidth="0.8"
+          />
+          <rect
+            x={-ringRadius - neckLength - collarLength + 1}
+            y={-collarHeight / 2 + 0.6}
+            width={collarLength - 2}
+            height={collarHeight / 3}
+            fill="#ffffff"
+            fillOpacity="0.45"
+            rx="1"
+          />
         </g>
       );
-    } else if (type === "compressao") {
-      const barrelLength = Math.max(8, thickness * 2.0);
-      const ringRadius = Math.max(4, thickness * 1.3);
+    } else if (type === "compressao" || type === "garfo") {
+      const barrelLength = Math.max(9, effectiveTh * 2.2);
+      const forkRadius = Math.max(4.5, effectiveTh * 1.4);
       graphic = (
         <g>
-          {/* Terminal de Compressão concêntrico com o centro do parafuso (0, 0) */}
-          <path d={`M ${-ringRadius} ${-pinHeight*0.8} L ${-ringRadius - barrelLength} ${-pinHeight*1.1} L ${-ringRadius - barrelLength} ${pinHeight*1.1} L ${-ringRadius} ${pinHeight*0.8} Z`} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.6" />
-          <circle cx={0} cy={0} r={ringRadius} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.8" />
-          <circle cx={0} cy={0} r={ringRadius * 0.4} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.4" />
+          {/* Terminal de Compressão/Garfo concêntrico com o centro do parafuso (0, 0) */}
+          <path
+            d={`M ${-forkRadius} ${-pinHeight * 0.8} 
+                L ${-forkRadius - barrelLength} ${-pinHeight * 1.1} 
+                L ${-forkRadius - barrelLength} ${pinHeight * 1.1} 
+                L ${-forkRadius} ${pinHeight * 0.8} 
+                Z`}
+            fill="#cbd5e1"
+            stroke="#475569"
+            strokeWidth="0.75"
+          />
+          <circle cx={0} cy={0} r={forkRadius} fill="#cbd5e1" stroke="#475569" strokeWidth="0.85" />
+          <circle cx={0} cy={0} r={forkRadius * 0.45} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.5" />
+          {/* Marcas de compressão sextavada */}
+          <line
+            x1={-forkRadius - barrelLength * 0.4}
+            y1={-pinHeight}
+            x2={-forkRadius - barrelLength * 0.4}
+            y2={pinHeight}
+            stroke="#64748b"
+            strokeWidth="0.9"
+          />
+          <line
+            x1={-forkRadius - barrelLength * 0.75}
+            y1={-pinHeight}
+            x2={-forkRadius - barrelLength * 0.75}
+            y2={pinHeight}
+            stroke="#64748b"
+            strokeWidth="0.9"
+          />
         </g>
       );
     }
