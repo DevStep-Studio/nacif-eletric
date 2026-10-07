@@ -330,7 +330,7 @@ export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", l
 }
 
 /**
- * Função de Impressão HTML Multi-páginas ABNT com enquadramento perfeito
+ * Função de Impressão HTML ABNT garantindo tudo em UMA ÚNICA FOLHA com escala adaptativa
  */
 export function openHTMLPrint({
   htmlContent = "",
@@ -367,44 +367,74 @@ export function openHTMLPrint({
     }
   }
 
-  // Capacidade estrita de itens por folha para garantir folga e borda inferior intacta
   const isA3 = paper.w >= 400;
-  const maxRowsFirstPage = isA3 ? 22 : 11; // Folha final com Totais
-  const maxRowsMiddlePage = isA3 ? 30 : 16; // Folha intermediária (sem Totais)
+  const count = rowItems.length;
 
+  // Escala adaptativa para garantir que TUDO caiba em 1 folha só
+  let fontSizePt = 7.4;
+  let thPaddingMm = "1.5mm 2mm";
+  let tdPaddingMm = "1.3mm 2mm";
+  let imgSizePx = 20;
+  let headerHeightMm = 12;
+  let totalsGapMm = 0.8;
+  let totalsWidthMm = 74;
+  let totalsFontPt = 6.8;
+  let carimboHeightMm = 24;
+
+  if (count > 25) {
+    fontSizePt = isA3 ? 7.0 : 5.8;
+    thPaddingMm = isA3 ? "1.2mm 1.5mm" : "0.7mm 1.2mm";
+    tdPaddingMm = isA3 ? "1.0mm 1.5mm" : "0.55mm 1.2mm";
+    imgSizePx = isA3 ? 16 : 13;
+    headerHeightMm = isA3 ? 11 : 8.5;
+    totalsGapMm = isA3 ? 0.6 : 0.4;
+    totalsWidthMm = isA3 ? 70 : 64;
+    totalsFontPt = isA3 ? 6.5 : 5.8;
+    carimboHeightMm = isA3 ? 24 : 21;
+  } else if (count > 16) {
+    fontSizePt = isA3 ? 7.2 : 6.4;
+    thPaddingMm = isA3 ? "1.4mm 1.8mm" : "0.9mm 1.5mm";
+    tdPaddingMm = isA3 ? "1.2mm 1.8mm" : "0.75mm 1.5mm";
+    imgSizePx = isA3 ? 18 : 15;
+    headerHeightMm = isA3 ? 12 : 9.5;
+    totalsGapMm = isA3 ? 0.7 : 0.5;
+    totalsWidthMm = isA3 ? 72 : 68;
+    totalsFontPt = isA3 ? 6.8 : 6.2;
+    carimboHeightMm = isA3 ? 25 : 22;
+  } else if (count > 10) {
+    fontSizePt = isA3 ? 7.5 : 6.9;
+    thPaddingMm = "1.2mm 1.8mm";
+    tdPaddingMm = "1.0mm 1.8mm";
+    imgSizePx = 17;
+    headerHeightMm = 10.5;
+    totalsGapMm = 0.6;
+    totalsWidthMm = 70;
+    totalsFontPt = 6.5;
+    carimboHeightMm = 23;
+  }
+
+  // Garantia de folha única (apenas particiona se exceder limites físicos de mais de 45 itens)
+  const maxRowsSinglePage = isA3 ? 65 : 42;
   let pages = [];
-  if (rowItems.length === 0) {
-    pages.push({ rows: [], isLast: true, pageIndex: 1 });
-  } else if (rowItems.length <= maxRowsFirstPage) {
+
+  if (count <= maxRowsSinglePage) {
     pages.push({ rows: rowItems, isLast: true, pageIndex: 1 });
   } else {
-    // Paginação dinâmica
-    let remaining = [...rowItems];
-    let pIdx = 1;
-    while (remaining.length > 0) {
-      const isFinal = remaining.length <= maxRowsFirstPage;
-      const takeCount = isFinal ? remaining.length : maxRowsMiddlePage;
-      const chunk = remaining.slice(0, takeCount);
-      remaining = remaining.slice(takeCount);
-      pages.push({
-        rows: chunk,
-        isLast: remaining.length === 0,
-        pageIndex: pIdx,
-      });
-      pIdx += 1;
-    }
+    const perPage = Math.ceil(count / 2);
+    pages.push({ rows: rowItems.slice(0, perPage), isLast: false, pageIndex: 1 });
+    pages.push({ rows: rowItems.slice(perPage), isLast: true, pageIndex: 2 });
   }
 
   const totalPages = pages.length;
 
   const defaultThead = `
     <tr>
-      <th style="width:34px;text-align:center">Símb.</th>
+      <th style="width:28px;text-align:center">Símb.</th>
       <th style="text-align:left">Material / Descrição Técnica</th>
-      <th style="width:50px;text-align:center">Qtd.</th>
-      <th style="width:50px;text-align:center">Unid.</th>
-      <th style="width:85px;text-align:right">Valor Unitário</th>
-      <th style="width:90px;text-align:right">Total</th>
+      <th style="width:45px;text-align:center">Qtd.</th>
+      <th style="width:45px;text-align:center">Unid.</th>
+      <th style="width:80px;text-align:right">Valor Unitário</th>
+      <th style="width:85px;text-align:right">Total</th>
     </tr>
   `;
 
@@ -424,13 +454,13 @@ export function openHTMLPrint({
     if (totalsData.total !== undefined) {
       return `
         <div class="sheet-totals-box">
-          <div class="sheet-totals-table">
+          <div class="sheet-totals-table" style="width:${totalsWidthMm}mm; gap:${totalsGapMm}mm; font-size:${totalsFontPt}pt;">
             <div class="tot-row"><span>Materiais base:</span><span class="tot-val">${formatBRL(totalsData.baseMaterialTotal)}</span></div>
             ${totalsData.productAdjustment ? `<div class="tot-row"><span>Variação produtos (${totalsData.productAdjustment}%):</span><span class="tot-val">${formatBRL(totalsData.productAdjustmentValue)}</span></div>` : ""}
             <div class="tot-row"><span>Materiais ajustados:</span><span class="tot-val">${formatBRL(totalsData.materialTotal)}</span></div>
             <div class="tot-row"><span>Mão de Obra técnica:</span><span class="tot-val">${formatBRL(totalsData.laborCost)}</span></div>
-            <div class="tot-row"><span>BDI / Margem (${totalsData.margin}%):</span><span class="tot-val">${formatBRL(totalsData.margin ? ((totalsData.materialTotal + totalsData.laborCost) * totalsData.margin / 100) : 0)}</span></div>
-            <div class="tot-grand-row"><span>TOTAL GERAL:</span><span class="tot-grand-val">${formatBRL(totalsData.total)}</span></div>
+            <div class="tot-row"><span>Margem (${totalsData.margin}%):</span><span class="tot-val">${formatBRL(totalsData.margin ? ((totalsData.materialTotal + totalsData.laborCost) * totalsData.margin / 100) : 0)}</span></div>
+            <div class="tot-grand-row" style="font-size:${totalsFontPt + 1.2}pt;"><span>Total:</span><span class="tot-grand-val">${formatBRL(totalsData.total)}</span></div>
           </div>
         </div>
       `;
@@ -439,7 +469,7 @@ export function openHTMLPrint({
     if (totalsData.referenceTotal !== undefined) {
       return `
         <div class="sheet-totals-box">
-          <div class="sheet-totals-table">
+          <div class="sheet-totals-table" style="width:${totalsWidthMm}mm; gap:${totalsGapMm}mm; font-size:${totalsFontPt}pt;">
             <div class="tot-row"><span>Total de Referência:</span><span class="tot-val">${formatBRL(totalsData.referenceTotal)}</span></div>
             ${totalsData.mixedTotal ? `<div class="tot-row"><span>Menor Preço Estimado IA:</span><span class="tot-val">${formatBRL(totalsData.mixedTotal)}</span></div>` : ""}
             ${totalsData.saving ? `<div class="tot-row" style="color:#059669;font-weight:bold;"><span>Economia Estimada:</span><span class="tot-val">${formatBRL(totalsData.saving)}</span></div>` : ""}
@@ -458,18 +488,18 @@ export function openHTMLPrint({
     const formatUnit = (u) => (!u || u === "un" ? "un." : u === "m" ? "m" : u);
     return `
       <tr>
-        <td style="width:34px;text-align:center">
-          ${row.imageUrl ? `<img src="${row.imageUrl}" alt="" style="width:20px;height:20px;object-fit:contain;display:inline-block;vertical-align:middle;" />` : "—"}
+        <td style="width:28px;text-align:center;padding:${tdPaddingMm}">
+          ${row.imageUrl ? `<img src="${row.imageUrl}" alt="" style="width:${imgSizePx}px;height:${imgSizePx}px;object-fit:contain;display:inline-block;vertical-align:middle;" />` : "—"}
         </td>
-        <td>
-          <div style="font-weight:700;color:#0f172a;line-height:1.2;">${escapeHTML(row.name)}</div>
-          ${row.category ? `<span style="display:inline-block;font-size:5.8pt;text-transform:uppercase;font-weight:800;color:#64748b;background:#f1f5f9;padding:0.5px 2.5px;border-radius:2px;margin-top:1px;">${escapeHTML(row.category)}</span>` : ""}
-          ${row.manual ? `<span style="display:inline-block;font-size:5.8pt;text-transform:uppercase;font-weight:800;color:#0d9488;background:#ccfbf1;padding:0.5px 2.5px;border-radius:2px;margin-top:1px;margin-left:2px;">manual</span>` : ""}
+        <td style="padding:${tdPaddingMm}">
+          <div style="font-weight:700;color:#0f172a;line-height:1.15;">${escapeHTML(row.name)}</div>
+          ${row.category ? `<span style="display:inline-block;font-size:${fontSizePt - 1.2}pt;text-transform:uppercase;font-weight:800;color:#64748b;background:#f1f5f9;padding:0.5px 2px;border-radius:2px;margin-top:0.5px;">${escapeHTML(row.category)}</span>` : ""}
+          ${row.manual ? `<span style="display:inline-block;font-size:${fontSizePt - 1.2}pt;text-transform:uppercase;font-weight:800;color:#0d9488;background:#ccfbf1;padding:0.5px 2px;border-radius:2px;margin-top:0.5px;margin-left:2px;">manual</span>` : ""}
         </td>
-        <td style="text-align:center;font-weight:700;">${formatQty(row.qty)}</td>
-        <td style="text-align:center;color:#64748b;">${formatUnit(row.unit)}</td>
-        <td style="text-align:right;">${formatBRL(row.price)}</td>
-        <td style="text-align:right;font-weight:800;color:${WEG_BLUE};">${formatBRL(row.qty * row.price)}</td>
+        <td style="text-align:center;font-weight:700;padding:${tdPaddingMm}">${formatQty(row.qty)}</td>
+        <td style="text-align:center;color:#64748b;padding:${tdPaddingMm}">${formatUnit(row.unit)}</td>
+        <td style="text-align:right;padding:${tdPaddingMm}">${formatBRL(row.price)}</td>
+        <td style="text-align:right;font-weight:800;color:${WEG_BLUE};padding:${tdPaddingMm}">${formatBRL(row.qty * row.price)}</td>
       </tr>
     `;
   };
@@ -490,29 +520,30 @@ export function openHTMLPrint({
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: ${paper.w}mm;
+      height: ${paper.h}mm;
+      max-height: ${paper.h}mm;
       background: #f1f5f9;
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 7.5pt;
+      font-size: ${fontSizePt}pt;
+      overflow: hidden;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     .sheet-page {
       width: ${paper.w}mm;
       height: ${paper.h}mm;
+      max-height: ${paper.h}mm;
       padding: ${M.top}mm ${M.right}mm ${M.bottom}mm ${M.left}mm;
       display: flex;
       flex-direction: column;
       background: white;
-      margin: 0 auto 10px auto;
+      margin: 0 auto;
       overflow: hidden;
       box-sizing: border-box;
-      break-after: page;
-      page-break-after: always;
-    }
-    .sheet-page:last-child {
-      margin-bottom: 0;
-      break-after: auto;
-      page-break-after: auto;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      page-break-after: ${totalPages > 1 ? "always" : "avoid"};
+      break-after: ${totalPages > 1 ? "page" : "avoid"};
     }
     .sheet-frame {
       flex: 1;
@@ -523,29 +554,30 @@ export function openHTMLPrint({
       overflow: hidden;
       background: #ffffff;
       height: 100%;
+      max-height: 100%;
       box-sizing: border-box;
     }
     .sheet-header-banner {
       border-bottom: 1px solid #cbd5e1;
-      padding: 2mm 3.5mm;
+      padding: 1.5mm 3mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
       background: #ffffff;
       flex-shrink: 0;
-      height: 13mm;
+      height: ${headerHeightMm}mm;
     }
     .sheet-header-title {
-      font-size: 10.5pt;
+      font-size: ${Math.max(8.5, fontSizePt + 2.5)}pt;
       font-weight: 900;
       color: ${WEG_BLUE};
       line-height: 1.1;
     }
     .sheet-header-sub {
-      font-size: 6.5pt;
+      font-size: ${Math.max(5.5, fontSizePt - 1.0)}pt;
       color: #64748b;
       font-weight: 500;
-      margin-top: 0.3mm;
+      margin-top: 0.2mm;
     }
     .sheet-header-badge {
       display: flex;
@@ -553,11 +585,11 @@ export function openHTMLPrint({
       gap: 2mm;
     }
     .sheet-page-indicator {
-      font-size: 7pt;
+      font-size: ${Math.max(5.8, fontSizePt - 0.8)}pt;
       font-weight: 800;
       color: #0f172a;
       background: #f1f5f9;
-      padding: 0.8mm 2mm;
+      padding: 0.5mm 1.8mm;
       border-radius: 3px;
       border: 1px solid #e2e8f0;
     }
@@ -565,27 +597,27 @@ export function openHTMLPrint({
       flex: 1 1 auto;
       min-height: 0;
       overflow: hidden;
-      padding: 1.5mm 3mm;
+      padding: 1mm 2.5mm;
       display: flex;
       flex-direction: column;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 7.2pt;
+      font-size: ${fontSizePt}pt;
     }
     th {
       background: ${WEG_BLUE};
       color: #ffffff;
       font-weight: 800;
-      font-size: 6.8pt;
+      font-size: ${Math.max(5.8, fontSizePt - 0.5)}pt;
       text-transform: uppercase;
-      letter-spacing: 0.3px;
-      padding: 1.5mm 2mm;
+      letter-spacing: 0.2px;
+      padding: ${thPaddingMm};
       border: none;
     }
     td {
-      padding: 1.3mm 2mm;
+      padding: ${tdPaddingMm};
       border-bottom: 0.5px solid #e2e8f0;
       vertical-align: middle;
       color: #1e293b;
@@ -595,35 +627,32 @@ export function openHTMLPrint({
     }
     .sheet-continuation {
       margin-top: auto;
-      padding-top: 1mm;
+      padding-top: 0.8mm;
       text-align: right;
-      font-size: 6.8pt;
+      font-size: 6.2pt;
       font-weight: 800;
       color: ${WEG_BLUE};
       font-style: italic;
     }
     .sheet-totals-box {
       margin-top: auto;
-      padding: 1mm 3mm 1.5mm 3mm;
+      padding: 0.8mm 2.5mm 1mm 2.5mm;
       display: flex;
       justify-content: flex-end;
       background: #ffffff;
       flex-shrink: 0;
     }
     .sheet-totals-table {
-      width: 72mm;
       background: #f8fafc;
       border: 1px solid #cbd5e1;
-      border-radius: 4px;
-      padding: 1.5mm 2.5mm;
+      border-radius: 3px;
+      padding: 1mm 2mm;
       display: flex;
       flex-direction: column;
-      gap: 0.8mm;
     }
     .tot-row {
       display: flex;
       justify-content: space-between;
-      font-size: 6.8pt;
       color: #475569;
     }
     .tot-val {
@@ -633,10 +662,9 @@ export function openHTMLPrint({
     .tot-grand-row {
       display: flex;
       justify-content: space-between;
-      border-top: 1.5px solid ${WEG_BLUE};
-      padding-top: 1mm;
-      margin-top: 0.8mm;
-      font-size: 8pt;
+      border-top: 1.2px solid ${WEG_BLUE};
+      padding-top: 0.6mm;
+      margin-top: 0.5mm;
       font-weight: 900;
       color: ${WEG_BLUE};
     }
@@ -645,7 +673,7 @@ export function openHTMLPrint({
       color: ${WEG_BLUE};
     }
     .sheet-carimbo {
-      height: ${TITLE_H}mm;
+      height: ${carimboHeightMm}mm;
       border-top: 1.5px solid #1e293b;
       display: flex;
       background: #ffffff;
@@ -654,24 +682,24 @@ export function openHTMLPrint({
       box-sizing: border-box;
     }
     .sheet-carimbo-logo {
-      width: 34mm;
+      width: 32mm;
       border-right: 1px solid #1e293b;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 1.5mm;
+      padding: 1mm;
       flex-shrink: 0;
       box-sizing: border-box;
     }
     .sheet-carimbo-logo img {
-      max-height: 20mm;
-      max-width: 30mm;
+      max-height: ${carimboHeightMm - 5}mm;
+      max-width: 28mm;
       object-fit: contain;
     }
     .sheet-carimbo-main {
       flex: 1;
       border-right: 1px solid #1e293b;
-      padding: 1.5mm 3mm;
+      padding: 1mm 2.5mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -679,7 +707,7 @@ export function openHTMLPrint({
       box-sizing: border-box;
     }
     .sheet-carimbo-title {
-      font-size: 9.5pt;
+      font-size: 8.8pt;
       font-weight: 800;
       color: ${WEG_BLUE};
       white-space: nowrap;
@@ -689,8 +717,8 @@ export function openHTMLPrint({
     .sheet-carimbo-grid {
       display: flex;
       flex-direction: column;
-      gap: 0.5mm;
-      font-size: 6.8pt;
+      gap: 0.3mm;
+      font-size: 6.2pt;
       color: #1e293b;
     }
     .sheet-carimbo-row {
@@ -704,7 +732,7 @@ export function openHTMLPrint({
     .sheet-carimbo-label {
       font-weight: 700;
       color: #64748b;
-      width: 15mm;
+      width: 14mm;
       flex-shrink: 0;
     }
     .sheet-carimbo-val {
@@ -714,25 +742,25 @@ export function openHTMLPrint({
       text-overflow: ellipsis;
     }
     .sheet-carimbo-norm {
-      font-size: 6pt;
+      font-size: 5.5pt;
       color: #64748b;
       font-weight: 500;
     }
     .sheet-carimbo-meta {
-      width: 42mm;
+      width: 38mm;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
       justify-content: space-around;
-      padding: 1mm 2.5mm;
+      padding: 0.8mm 2mm;
       box-sizing: border-box;
     }
     .sheet-carimbo-field {
       display: flex;
       justify-content: space-between;
       border-bottom: 0.5px solid #e2e8f0;
-      padding: 0.5px 0;
-      font-size: 6.8pt;
+      padding: 0.3px 0;
+      font-size: 6.2pt;
     }
     .sheet-field-k { color: #64748b; font-weight: 500; }
     .sheet-field-v { color: #0f172a; font-weight: 800; }
@@ -740,6 +768,7 @@ export function openHTMLPrint({
       html, body {
         width: ${paper.w}mm !important;
         height: ${paper.h}mm !important;
+        max-height: ${paper.h}mm !important;
         background: white !important;
         margin: 0 !important;
         padding: 0 !important;
@@ -751,14 +780,16 @@ export function openHTMLPrint({
         max-height: ${paper.h}mm !important;
         margin: 0 !important;
         padding: ${M.top}mm ${M.right}mm ${M.bottom}mm ${M.left}mm !important;
-        break-after: page !important;
-        page-break-after: always !important;
+        break-after: ${totalPages > 1 ? "page" : "avoid"} !important;
+        page-break-after: ${totalPages > 1 ? "always" : "avoid"} !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
         box-shadow: none !important;
         overflow: hidden !important;
       }
       .sheet-page:last-child {
-        break-after: auto !important;
-        page-break-after: auto !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
       }
     }
   </style>
