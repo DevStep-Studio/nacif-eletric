@@ -15,10 +15,10 @@ export const PAPER_SIZES = {
 };
 
 // Margens de segurança ABNT para plotagem/impressão física (mm)
-// Margem esquerda de 20mm para fixação/furação, 8mm nas demais bordas para evitar cortes em qualquer impressora
-const M = { top: 8, right: 8, bottom: 8, left: 20 };
-// Altura da legenda / carimbo técnico inferior (mm)
-const TITLE_H = 32;
+// Margem esquerda de 16mm para fixação/furação, 6mm nas demais bordas para garantir 100% de visibilidade em qualquer impressora/plotter
+const M = { top: 6, right: 6, bottom: 6, left: 16 };
+// Altura compacta da legenda / carimbo técnico inferior (mm)
+const TITLE_H = 26;
 
 function escapeHTML(value = "") {
   return String(value ?? "")
@@ -85,8 +85,8 @@ function prepareSVG(svgContent) {
     if (!svg) return svgContent;
 
     if (!svg.getAttribute("viewBox")) {
-      const w = parseFloat(svg.getAttribute("width") || 800);
-      const h = parseFloat(svg.getAttribute("height") || 600);
+      const w = parseFloat(svg.getAttribute("width") || 1189);
+      const h = parseFloat(svg.getAttribute("height") || 841);
       svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
     }
 
@@ -101,8 +101,12 @@ function prepareSVG(svgContent) {
   }
 }
 
+/**
+ * Impressão / Plotagem de Pranchas CAD e Diagramas SVG
+ */
 export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", logoUrl = "", projectInfo = {} }) {
   const paper = PAPER_SIZES[paperSize] || PAPER_SIZES.A4;
+  const isFullCadSheet = /PRANCHA|QE-|QGBT-|TitleBlock|QUADRO DE CARGAS|DIAGRAMA UNIFILAR PRINCIPAL|data\.sheet/i.test(svgContent);
   const preparedSVG = prepareSVG(svgContent);
   const win = window.open("", "_blank");
   if (!win) return;
@@ -131,142 +135,193 @@ export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", l
     .sheet-page {
       width: ${paper.w}mm;
       height: ${paper.h}mm;
-      padding: ${M.top}mm ${M.right}mm ${M.bottom}mm ${M.left}mm;
+      padding: ${isFullCadSheet ? "5mm" : `${M.top}mm ${M.right}mm ${M.bottom}mm ${M.left}mm`};
       display: flex;
       flex-direction: column;
-      overflow: hidden;
-      box-sizing: border-box;
-    }
-    .sheet-frame {
-      flex: 1;
-      border: 1.5px solid #1e293b;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      overflow: hidden;
-      background: #ffffff;
-      height: 100%;
-      box-sizing: border-box;
-    }
-    .drawing-area {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-      overflow: hidden;
-      padding: 2mm;
-    }
-    .drawing-area svg {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-    .sheet-carimbo {
-      height: ${TITLE_H}mm;
-      border-top: 1.5px solid #1e293b;
-      display: flex;
-      background: #ffffff;
-      flex-shrink: 0;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .sheet-carimbo-logo {
-      width: 36mm;
-      border-right: 1px solid #1e293b;
-      display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2mm;
-      flex-shrink: 0;
-      box-sizing: border-box;
-    }
-    .sheet-carimbo-logo img {
-      max-height: 22mm;
-      max-width: 32mm;
-      object-fit: contain;
-    }
-    .sheet-carimbo-main {
-      flex: 1;
-      border-right: 1px solid #1e293b;
-      padding: 2mm 3.5mm;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      min-width: 0;
-      box-sizing: border-box;
-    }
-    .sheet-carimbo-title {
-      font-size: 10pt;
-      font-weight: 800;
-      color: ${WEG_BLUE};
-      white-space: nowrap;
       overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .sheet-carimbo-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 1mm;
-      font-size: 7pt;
-      color: #1e293b;
-    }
-    .sheet-carimbo-row {
-      display: flex;
-      gap: 2mm;
-      align-items: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .sheet-carimbo-label {
-      font-weight: 700;
-      color: #64748b;
-      width: 16mm;
-      flex-shrink: 0;
-    }
-    .sheet-carimbo-val {
-      font-weight: 600;
-      color: #0f172a;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .sheet-carimbo-norm {
-      font-size: 6.5pt;
-      color: #64748b;
-      font-weight: 500;
-    }
-    .sheet-carimbo-meta {
-      width: 44mm;
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-around;
-      padding: 1.5mm 3mm;
       box-sizing: border-box;
+      background: white;
     }
-    .sheet-carimbo-field {
-      display: flex;
-      justify-content: space-between;
-      border-bottom: 0.5px solid #e2e8f0;
-      padding: 0.5px 0;
-      font-size: 7pt;
-    }
-    .sheet-field-k { color: #64748b; font-weight: 500; }
-    .sheet-field-v { color: #0f172a; font-weight: 800; }
+    ${isFullCadSheet ? `
+      .cad-prancha-wrap {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .cad-prancha-wrap svg {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        display: block;
+        object-fit: contain;
+      }
+    ` : `
+      .sheet-frame {
+        flex: 1;
+        width: 100%;
+        height: 100%;
+        border: 1.5px solid #1e293b;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        overflow: hidden;
+        background: #ffffff;
+        box-sizing: border-box;
+      }
+      .drawing-area {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        padding: 2mm;
+      }
+      .drawing-area svg {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        display: block;
+        object-fit: contain;
+      }
+      .sheet-carimbo {
+        height: ${TITLE_H}mm;
+        border-top: 1.5px solid #1e293b;
+        display: flex;
+        background: #ffffff;
+        flex-shrink: 0;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .sheet-carimbo-logo {
+        width: 34mm;
+        border-right: 1px solid #1e293b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5mm;
+        flex-shrink: 0;
+        box-sizing: border-box;
+      }
+      .sheet-carimbo-logo img {
+        max-height: 20mm;
+        max-width: 30mm;
+        object-fit: contain;
+      }
+      .sheet-carimbo-main {
+        flex: 1;
+        border-right: 1px solid #1e293b;
+        padding: 1.5mm 3mm;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+      .sheet-carimbo-title {
+        font-size: 9.5pt;
+        font-weight: 800;
+        color: ${WEG_BLUE};
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sheet-carimbo-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5mm;
+        font-size: 6.8pt;
+        color: #1e293b;
+      }
+      .sheet-carimbo-row {
+        display: flex;
+        gap: 2mm;
+        align-items: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sheet-carimbo-label {
+        font-weight: 700;
+        color: #64748b;
+        width: 15mm;
+        flex-shrink: 0;
+      }
+      .sheet-carimbo-val {
+        font-weight: 600;
+        color: #0f172a;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sheet-carimbo-norm {
+        font-size: 6pt;
+        color: #64748b;
+        font-weight: 500;
+      }
+      .sheet-carimbo-meta {
+        width: 42mm;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        padding: 1mm 2.5mm;
+        box-sizing: border-box;
+      }
+      .sheet-carimbo-field {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 0.5px solid #e2e8f0;
+        padding: 0.5px 0;
+        font-size: 6.8pt;
+      }
+      .sheet-field-k { color: #64748b; font-weight: 500; }
+      .sheet-field-v { color: #0f172a; font-weight: 800; }
+    `}
     @media print {
-      html, body { width: ${paper.w}mm; height: ${paper.h}mm; }
-      .sheet-page { break-after: page; page-break-after: always; }
-      .sheet-page:last-child { break-after: auto; page-break-after: auto; }
+      html, body {
+        width: ${paper.w}mm !important;
+        height: ${paper.h}mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+      }
+      .sheet-page {
+        width: ${paper.w}mm !important;
+        height: ${paper.h}mm !important;
+        max-height: ${paper.h}mm !important;
+        margin: 0 !important;
+        padding: ${isFullCadSheet ? "4mm !important" : `${M.top}mm ${M.right}mm ${M.bottom}mm ${M.left}mm !important`};
+        break-after: page !important;
+        page-break-after: always !important;
+        overflow: hidden !important;
+        box-shadow: none !important;
+      }
+      .sheet-page:last-child {
+        break-after: auto !important;
+        page-break-after: auto !important;
+      }
     }
   </style>
 </head>
 <body>
   <div class="sheet-page">
-    <div class="sheet-frame">
-      <div class="drawing-area">${preparedSVG}</div>
-      ${buildTitleBlock(projectName, logoUrl, paperSize, projectInfo, 1, 1)}
-    </div>
+    ${isFullCadSheet ? `
+      <div class="cad-prancha-wrap">
+        ${preparedSVG}
+      </div>
+    ` : `
+      <div class="sheet-frame">
+        <div class="drawing-area">${preparedSVG}</div>
+        ${buildTitleBlock(projectName, logoUrl, paperSize, projectInfo, 1, 1)}
+      </div>
+    `}
   </div>
 </body>
 </html>`);
@@ -289,12 +344,9 @@ export function openHTMLPrint({
   projectInfo = {},
 }) {
   const paper = PAPER_SIZES[paperSize] || PAPER_SIZES.A4;
-  const displayLogo = logoUrl || DEFAULT_LOGO_URL;
   const docTitle = documentTitle || (projectName ? `Orçamento — ${projectName}` : "Orçamento Técnico");
   const docSub = subtitle || "Proposta gerada automaticamente · NACIF Solutions Eletric · NBR 5410:2004 / IEC 60617";
 
-  // Se items não foram passados diretamente mas htmlContent contém uma tabela HTML,
-  // faz o parse dos rows e totals para paginar perfeitamente.
   let rowItems = Array.isArray(items) && items.length > 0 ? items : [];
   let totalsData = totals;
   let customThead = "";
@@ -315,10 +367,10 @@ export function openHTMLPrint({
     }
   }
 
-  // Capacidade de itens por folha para garantir que NUNCA haja corte vertical
+  // Capacidade estrita de itens por folha para garantir folga e borda inferior intacta
   const isA3 = paper.w >= 400;
-  const maxRowsFirstPage = isA3 ? 24 : 13; // Página com Totais
-  const maxRowsMiddlePage = isA3 ? 32 : 17; // Página contínua (sem Totais)
+  const maxRowsFirstPage = isA3 ? 22 : 11; // Folha final com Totais
+  const maxRowsMiddlePage = isA3 ? 30 : 16; // Folha intermediária (sem Totais)
 
   let pages = [];
   if (rowItems.length === 0) {
@@ -347,12 +399,12 @@ export function openHTMLPrint({
 
   const defaultThead = `
     <tr>
-      <th style="width:36px;text-align:center">Símb.</th>
+      <th style="width:34px;text-align:center">Símb.</th>
       <th style="text-align:left">Material / Descrição Técnica</th>
-      <th style="width:55px;text-align:center">Qtd.</th>
-      <th style="width:55px;text-align:center">Unid.</th>
-      <th style="width:90px;text-align:right">Valor Unitário</th>
-      <th style="width:95px;text-align:right">Total</th>
+      <th style="width:50px;text-align:center">Qtd.</th>
+      <th style="width:50px;text-align:center">Unid.</th>
+      <th style="width:85px;text-align:right">Valor Unitário</th>
+      <th style="width:90px;text-align:right">Total</th>
     </tr>
   `;
 
@@ -360,7 +412,6 @@ export function openHTMLPrint({
 
   const renderTotalsBlock = () => {
     if (!totalsData) {
-      // Se não passou totalsData mas htmlContent tinha totals, tenta extrair
       if (htmlContent.includes("totals")) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(`<div>${htmlContent}</div>`, "text/html");
@@ -370,7 +421,6 @@ export function openHTMLPrint({
       return "";
     }
 
-    // Totais estruturados do orçamento
     if (totalsData.total !== undefined) {
       return `
         <div class="sheet-totals-box">
@@ -386,7 +436,6 @@ export function openHTMLPrint({
       `;
     }
 
-    // Totais de Lista de Materiais
     if (totalsData.referenceTotal !== undefined) {
       return `
         <div class="sheet-totals-box">
@@ -409,13 +458,13 @@ export function openHTMLPrint({
     const formatUnit = (u) => (!u || u === "un" ? "un." : u === "m" ? "m" : u);
     return `
       <tr>
-        <td style="width:36px;text-align:center">
-          ${row.imageUrl ? `<img src="${row.imageUrl}" alt="" style="width:24px;height:24px;object-fit:contain;display:inline-block;vertical-align:middle;" />` : "—"}
+        <td style="width:34px;text-align:center">
+          ${row.imageUrl ? `<img src="${row.imageUrl}" alt="" style="width:20px;height:20px;object-fit:contain;display:inline-block;vertical-align:middle;" />` : "—"}
         </td>
         <td>
           <div style="font-weight:700;color:#0f172a;line-height:1.2;">${escapeHTML(row.name)}</div>
-          ${row.category ? `<span style="display:inline-block;font-size:6pt;text-transform:uppercase;font-weight:800;color:#64748b;background:#f1f5f9;padding:0.5px 3px;border-radius:2px;margin-top:1px;">${escapeHTML(row.category)}</span>` : ""}
-          ${row.manual ? `<span style="display:inline-block;font-size:6pt;text-transform:uppercase;font-weight:800;color:#0d9488;background:#ccfbf1;padding:0.5px 3px;border-radius:2px;margin-top:1px;margin-left:2px;">manual</span>` : ""}
+          ${row.category ? `<span style="display:inline-block;font-size:5.8pt;text-transform:uppercase;font-weight:800;color:#64748b;background:#f1f5f9;padding:0.5px 2.5px;border-radius:2px;margin-top:1px;">${escapeHTML(row.category)}</span>` : ""}
+          ${row.manual ? `<span style="display:inline-block;font-size:5.8pt;text-transform:uppercase;font-weight:800;color:#0d9488;background:#ccfbf1;padding:0.5px 2.5px;border-radius:2px;margin-top:1px;margin-left:2px;">manual</span>` : ""}
         </td>
         <td style="text-align:center;font-weight:700;">${formatQty(row.qty)}</td>
         <td style="text-align:center;color:#64748b;">${formatUnit(row.unit)}</td>
@@ -443,7 +492,7 @@ export function openHTMLPrint({
       width: ${paper.w}mm;
       background: #f1f5f9;
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 8pt;
+      font-size: 7.5pt;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -478,64 +527,65 @@ export function openHTMLPrint({
     }
     .sheet-header-banner {
       border-bottom: 1px solid #cbd5e1;
-      padding: 2.5mm 4mm;
+      padding: 2mm 3.5mm;
       display: flex;
       justify-content: space-between;
       align-items: center;
       background: #ffffff;
       flex-shrink: 0;
+      height: 13mm;
     }
     .sheet-header-title {
-      font-size: 11.5pt;
+      font-size: 10.5pt;
       font-weight: 900;
       color: ${WEG_BLUE};
-      line-height: 1.2;
+      line-height: 1.1;
     }
     .sheet-header-sub {
-      font-size: 7pt;
+      font-size: 6.5pt;
       color: #64748b;
       font-weight: 500;
-      margin-top: 0.5mm;
+      margin-top: 0.3mm;
     }
     .sheet-header-badge {
       display: flex;
       align-items: center;
-      gap: 3mm;
+      gap: 2mm;
     }
     .sheet-page-indicator {
-      font-size: 7.5pt;
+      font-size: 7pt;
       font-weight: 800;
       color: #0f172a;
       background: #f1f5f9;
-      padding: 1mm 2.5mm;
+      padding: 0.8mm 2mm;
       border-radius: 3px;
       border: 1px solid #e2e8f0;
     }
     .sheet-table-wrap {
-      flex: 1;
+      flex: 1 1 auto;
       min-height: 0;
       overflow: hidden;
-      padding: 2mm 3.5mm;
+      padding: 1.5mm 3mm;
       display: flex;
       flex-direction: column;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 7.5pt;
+      font-size: 7.2pt;
     }
     th {
       background: ${WEG_BLUE};
       color: #ffffff;
       font-weight: 800;
-      font-size: 7pt;
+      font-size: 6.8pt;
       text-transform: uppercase;
-      letter-spacing: 0.4px;
-      padding: 2mm 2.5mm;
+      letter-spacing: 0.3px;
+      padding: 1.5mm 2mm;
       border: none;
     }
     td {
-      padding: 1.8mm 2.5mm;
+      padding: 1.3mm 2mm;
       border-bottom: 0.5px solid #e2e8f0;
       vertical-align: middle;
       color: #1e293b;
@@ -545,35 +595,35 @@ export function openHTMLPrint({
     }
     .sheet-continuation {
       margin-top: auto;
-      padding-top: 1.5mm;
+      padding-top: 1mm;
       text-align: right;
-      font-size: 7pt;
+      font-size: 6.8pt;
       font-weight: 800;
       color: ${WEG_BLUE};
       font-style: italic;
     }
     .sheet-totals-box {
       margin-top: auto;
-      padding: 2mm 3.5mm 2.5mm 3.5mm;
+      padding: 1mm 3mm 1.5mm 3mm;
       display: flex;
       justify-content: flex-end;
       background: #ffffff;
       flex-shrink: 0;
     }
     .sheet-totals-table {
-      width: 75mm;
+      width: 72mm;
       background: #f8fafc;
       border: 1px solid #cbd5e1;
       border-radius: 4px;
-      padding: 2mm 3mm;
+      padding: 1.5mm 2.5mm;
       display: flex;
       flex-direction: column;
-      gap: 1mm;
+      gap: 0.8mm;
     }
     .tot-row {
       display: flex;
       justify-content: space-between;
-      font-size: 7pt;
+      font-size: 6.8pt;
       color: #475569;
     }
     .tot-val {
@@ -584,9 +634,9 @@ export function openHTMLPrint({
       display: flex;
       justify-content: space-between;
       border-top: 1.5px solid ${WEG_BLUE};
-      padding-top: 1.5mm;
-      margin-top: 1mm;
-      font-size: 8.5pt;
+      padding-top: 1mm;
+      margin-top: 0.8mm;
+      font-size: 8pt;
       font-weight: 900;
       color: ${WEG_BLUE};
     }
@@ -604,24 +654,24 @@ export function openHTMLPrint({
       box-sizing: border-box;
     }
     .sheet-carimbo-logo {
-      width: 36mm;
+      width: 34mm;
       border-right: 1px solid #1e293b;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2mm;
+      padding: 1.5mm;
       flex-shrink: 0;
       box-sizing: border-box;
     }
     .sheet-carimbo-logo img {
-      max-height: 22mm;
-      max-width: 32mm;
+      max-height: 20mm;
+      max-width: 30mm;
       object-fit: contain;
     }
     .sheet-carimbo-main {
       flex: 1;
       border-right: 1px solid #1e293b;
-      padding: 2mm 3.5mm;
+      padding: 1.5mm 3mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -629,7 +679,7 @@ export function openHTMLPrint({
       box-sizing: border-box;
     }
     .sheet-carimbo-title {
-      font-size: 10pt;
+      font-size: 9.5pt;
       font-weight: 800;
       color: ${WEG_BLUE};
       white-space: nowrap;
@@ -639,8 +689,8 @@ export function openHTMLPrint({
     .sheet-carimbo-grid {
       display: flex;
       flex-direction: column;
-      gap: 1mm;
-      font-size: 7pt;
+      gap: 0.5mm;
+      font-size: 6.8pt;
       color: #1e293b;
     }
     .sheet-carimbo-row {
@@ -654,7 +704,7 @@ export function openHTMLPrint({
     .sheet-carimbo-label {
       font-weight: 700;
       color: #64748b;
-      width: 16mm;
+      width: 15mm;
       flex-shrink: 0;
     }
     .sheet-carimbo-val {
@@ -664,17 +714,17 @@ export function openHTMLPrint({
       text-overflow: ellipsis;
     }
     .sheet-carimbo-norm {
-      font-size: 6.5pt;
+      font-size: 6pt;
       color: #64748b;
       font-weight: 500;
     }
     .sheet-carimbo-meta {
-      width: 44mm;
+      width: 42mm;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
       justify-content: space-around;
-      padding: 1.5mm 3mm;
+      padding: 1mm 2.5mm;
       box-sizing: border-box;
     }
     .sheet-carimbo-field {
@@ -682,25 +732,29 @@ export function openHTMLPrint({
       justify-content: space-between;
       border-bottom: 0.5px solid #e2e8f0;
       padding: 0.5px 0;
-      font-size: 7pt;
+      font-size: 6.8pt;
     }
     .sheet-field-k { color: #64748b; font-weight: 500; }
     .sheet-field-v { color: #0f172a; font-weight: 800; }
     @media print {
       html, body {
         width: ${paper.w}mm !important;
+        height: ${paper.h}mm !important;
         background: white !important;
         margin: 0 !important;
         padding: 0 !important;
+        overflow: hidden !important;
       }
       .sheet-page {
         width: ${paper.w}mm !important;
         height: ${paper.h}mm !important;
+        max-height: ${paper.h}mm !important;
         margin: 0 !important;
         padding: ${M.top}mm ${M.right}mm ${M.bottom}mm ${M.left}mm !important;
         break-after: page !important;
         page-break-after: always !important;
         box-shadow: none !important;
+        overflow: hidden !important;
       }
       .sheet-page:last-child {
         break-after: auto !important;
