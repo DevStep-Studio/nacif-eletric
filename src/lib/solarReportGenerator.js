@@ -60,6 +60,7 @@ function normalizeParams(project = {}, config = {}, sizing = {}) {
     acCurrent,
     investment,
     payback,
+    areas: s.areas || c.areas || [],
   };
 }
 

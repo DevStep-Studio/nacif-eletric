@@ -26,13 +26,22 @@ import {
   SOLAR_MODULE_WIDTH_M,
   buildRoofPolygon,
   calculateStringGrouping,
+  computeAreaPanels,
+  computeMultiAreaLayouts,
   computeRoofFaceTechnicalAnalysis,
+  createDefaultSolarArea,
+  getAzimuthWithCardinal,
   getBestPanelLayout,
   getModulePreset,
+  getMultiAreaAggregateMetrics,
   getPolygonAreaSquareMeters,
   getRoofCenterFromConfig,
   getRoofMetricsFromPolygon,
   normalizeRoofPolygon,
+  normalizeSolarArea,
+  normalizeSolarAreas,
+  round1,
+  round2,
   serializeRoofPolygon,
 } from "@/lib/solarDesignerGeometry";
 import { estimateAnnualGenerationKwh, estimateAnnualSavingsBrl, estimateSimplePaybackYears } from "@/lib/solarSizing";
@@ -49,7 +58,6 @@ import {
   printExecutiveSolarReport,
 } from "@/lib/solarReportGenerator";
 import {
-  ArrowLeft,
   AlertTriangle,
   Box,
   Camera,
@@ -58,12 +66,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Compass,
+  Copy,
   Download,
+  Edit2,
   FileText,
   Flame,
   Grid,
-  Grid2X2,
-  Home,
   Info,
   Layers,
   Loader2,
@@ -72,10 +80,7 @@ import {
   Maximize2,
   MousePointer2,
   Pencil,
-  PiggyBank,
   Plus,
-  Printer,
-  Redo2,
   Rotate3d,
   RotateCw,
   Save,
@@ -88,6 +93,7 @@ import {
   Sun,
   Trash2,
   Undo2,
+  Redo2,
   X,
   Zap,
 } from "lucide-react";
@@ -117,6 +123,7 @@ const defaultSolarConfig = {
   map_center_lat: DEFAULT_SOLAR_MAP_CENTER.lat,
   map_center_lng: DEFAULT_SOLAR_MAP_CENTER.lng,
   map_zoom: DEFAULT_SOLAR_MAP_ZOOM,
+  areas: [],
   roof_polygon: [],
   roof_defined: false,
   obstacles: [],
@@ -147,8 +154,6 @@ const OBSTACLE_PRESETS = [
 const DEFAULT_OBSTACLE_PRESET = OBSTACLE_PRESETS[0];
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-const round1 = (value) => Math.round(value * 10) / 10;
-const round2 = (value) => Math.round(value * 100) / 100;
 const asNumber = (value, fallback) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -162,13 +167,16 @@ const breakerForCurrent = (current) => {
 function normalizeSolarConfig(config = {}) {
   const merged = { ...defaultSolarConfig, ...(config || {}) };
   delete merged.layout_fill_mode;
-  const normalizedRoofPolygon = serializeRoofPolygon(normalizeRoofPolygon(merged.roof_polygon));
+  
+  const normalizedAreas = normalizeSolarAreas(merged.areas, merged);
+  const legacyPolygon = serializeRoofPolygon(normalizeRoofPolygon(merged.roof_polygon));
+  const primaryPolygon = normalizedAreas[0]?.polygon || legacyPolygon;
   const hasExplicitRoofState = Object.prototype.hasOwnProperty.call(config || {}, "roof_defined");
   const roofWidth = asNumber(merged.roof_width_m, defaultSolarConfig.roof_width_m);
   const roofHeight = asNumber(merged.roof_height_m, defaultSolarConfig.roof_height_m);
-  const polygonArea = normalizedRoofPolygon.length >= 3
-    ? getPolygonAreaSquareMeters(normalizedRoofPolygon)
-    : null;
+  
+  const totalAreasM2 = normalizedAreas.reduce((sum, a) => sum + (a.roof_area_m2 || 0), 0);
+  const polygonArea = totalAreasM2 > 0 ? totalAreasM2 : (primaryPolygon.length >= 3 ? getPolygonAreaSquareMeters(primaryPolygon) : null);
 
   const preset = getModulePreset(merged.module_preset_id || merged.module_model || merged.module_wp);
 
@@ -204,70 +212,16 @@ function normalizeSolarConfig(config = {}) {
     map_center_lat: asNumber(merged.map_center_lat, defaultSolarConfig.map_center_lat),
     map_center_lng: asNumber(merged.map_center_lng, defaultSolarConfig.map_center_lng),
     map_zoom: clamp(asNumber(merged.map_zoom, defaultSolarConfig.map_zoom), 3, 23),
-    roof_polygon: normalizedRoofPolygon,
+    areas: normalizedAreas,
+    roof_polygon: primaryPolygon,
     roof_defined: hasExplicitRoofState
-      ? Boolean(merged.roof_defined) && normalizedRoofPolygon.length >= 3
-      : normalizedRoofPolygon.length >= 3,
+      ? Boolean(merged.roof_defined) && (normalizedAreas.length > 0 || primaryPolygon.length >= 3)
+      : (normalizedAreas.length > 0 || primaryPolygon.length >= 3),
     obstacles: Array.isArray(merged.obstacles) ? merged.obstacles : [],
     layout_strategy: merged.layout_strategy || "max_generation",
     ac_voltage: asNumber(merged.ac_voltage, defaultSolarConfig.ac_voltage),
     ac_supply_type: merged.ac_supply_type || defaultSolarConfig.ac_supply_type,
     layout_note: merged.layout_note || "",
-  };
-}
-
-function syncRoofPolygonFromDimensions(config) {
-  const normalized = normalizeSolarConfig(config);
-  const center = getRoofCenterFromConfig(normalized);
-
-  return normalizeSolarConfig({
-    ...normalized,
-    roof_defined: true,
-    roof_polygon: serializeRoofPolygon(buildRoofPolygon(
-      center,
-      normalized.roof_width_m,
-      normalized.roof_height_m,
-      normalized.roof_rotation_deg
-    )),
-  });
-}
-
-function calculateSolar(config, panelCapacity = null) {
-  const inverterKw = Math.max(0.1, asNumber(config.inverter_kw, defaultSolarConfig.inverter_kw));
-  const moduleWp = Math.max(1, asNumber(config.module_wp, defaultSolarConfig.module_wp));
-  const roofWidth = Math.max(0.1, asNumber(config.roof_width_m, defaultSolarConfig.roof_width_m));
-  const roofHeight = Math.max(0.1, asNumber(config.roof_height_m, defaultSolarConfig.roof_height_m));
-  const usablePct = clamp(asNumber(config.roof_utilization_pct, defaultSolarConfig.roof_utilization_pct), 10, 95);
-  const roofArea = Math.max(0, asNumber(config.roof_area_m2, roofWidth * roofHeight));
-  const moduleArea = (config.module_width_m || SOLAR_MODULE_WIDTH_M) * (config.module_height_m || SOLAR_MODULE_HEIGHT_M);
-  const usableArea = roofArea * (usablePct / 100);
-  const physicalLimit = Math.max(0, Math.round(Number.isFinite(Number(panelCapacity)) ? Number(panelCapacity) : Math.floor(usableArea / moduleArea)));
-  
-  // Se preencher automaticamente estiver ativo, usa a capacidade máxima física
-  const panelCount = config.auto_fill_surface ? physicalLimit : Math.min(asNumber(config.requested_panel_count, physicalLimit), physicalLimit);
-  const requestedPanelCount = config.auto_fill_surface ? physicalLimit : clamp(Math.round(asNumber(config.requested_panel_count, physicalLimit)), 1, 1200);
-  
-  const dcPowerKw = (panelCount * moduleWp) / 1000;
-  const voltage = Math.max(1, asNumber(config.ac_voltage, defaultSolarConfig.ac_voltage));
-  const acCurrent = config.ac_supply_type === "Trifásico"
-    ? (inverterKw * 1000) / (Math.sqrt(3) * voltage)
-    : (inverterKw * 1000) / voltage;
-  const breaker = breakerForCurrent(acCurrent);
-
-  return {
-    moduleArea,
-    usableArea,
-    physicalLimit,
-    requestedPanelCount,
-    fitsArea: true,
-    missingPanelCount: 0,
-    panelCount,
-    dcPowerKw,
-    dcAcRatio: dcPowerKw / inverterKw,
-    acCurrent,
-    breaker,
-    roofArea,
-    usablePct,
   };
 }
 
@@ -278,6 +232,7 @@ export default function SolarProject() {
   const projectId = searchParams.get("project");
   const [project, setProject] = useState(null);
   const [config, setConfig] = useState(defaultSolarConfig);
+  const [selectedAreaId, setSelectedAreaId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState("map"); // "map" | "3d" | "shadows" | "irradiation"
   const [editorMode, setEditorMode] = useState("select");
@@ -287,11 +242,14 @@ export default function SolarProject() {
   const [activeRailTab, setActiveRailTab] = useState("modules"); // "info" | "roof" | "modules" | "strings" | "inverters" | "reports"
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [positioningOpen, setPositioningOpen] = useState(true);
+  const [areasListOpen, setAreasListOpen] = useState(true);
   const [groupParamsOpen, setGroupParamsOpen] = useState(false);
   const [reportsOpen, setReportsOpen] = useState(false);
   const [searchAddress, setSearchAddress] = useState("");
   const [searchingAddress, setSearchingAddress] = useState(false);
   const [pendingObstaclePreset, setPendingObstaclePreset] = useState(null);
+  const [editingAreaNameId, setEditingAreaNameId] = useState(null);
+  const [tempAreaName, setTempAreaName] = useState("");
 
   const reportProject = useMemo(() => {
     if (!project) return project;
@@ -322,48 +280,55 @@ export default function SolarProject() {
           || "",
         distributor: item?.solar_config?.distributor || item?.consumption?.distributor || item?.distributor || "",
       });
-      const initialRoof = serializeRoofPolygon(normalizeRoofPolygon(normalizedConfig.roof_polygon));
       setProject(item);
       setConfig(normalizedConfig);
+      if (normalizedConfig.areas?.length > 0) {
+        setSelectedAreaId(normalizedConfig.areas[0].id);
+      }
       setSearchAddress(item?.address || "");
-      roofHistoryRef.current = [initialRoof];
+      roofHistoryRef.current = [normalizedConfig.areas];
       roofHistoryIndexRef.current = 0;
       setRoofHistoryState({ canUndo: false, canRedo: false });
       setViewportRequest((n) => n + 1);
     });
   }, [projectId]);
 
-  const roofPolygonKey = JSON.stringify(config.roof_polygon);
-  const obstaclesKey = JSON.stringify(config.obstacles);
-
-  const roofLayout = useMemo(
-    () => getBestPanelLayout(config, 1200, config.layout_strategy || "max_generation"),
-    [
-      config.module_orientation,
-      config.module_preset_id,
-      config.structure_type,
-      config.roof_rotation_deg,
-      config.column_gap_cm,
-      config.row_gap_cm,
-      config.layout_strategy,
-      roofPolygonKey,
-      obstaclesKey,
-    ]
+  // Layouts e painéis calculados para TODAS as áreas de forma independente
+  const multiAreaLayouts = useMemo(
+    () => computeMultiAreaLayouts(config),
+    [config]
   );
 
-  const sizing = useMemo(
-    () => calculateSolar(config, roofLayout.panelCount),
-    [config, roofLayout.panelCount]
+  // Define a área atualmente selecionada
+  const selectedArea = useMemo(() => {
+    if (!multiAreaLayouts.length) return null;
+    return multiAreaLayouts.find((a) => a.id === selectedAreaId) || multiAreaLayouts[0];
+  }, [multiAreaLayouts, selectedAreaId]);
+
+  // Se selectedAreaId ainda não foi definido, sincroniza com a primeira área
+  useEffect(() => {
+    if (!selectedAreaId && multiAreaLayouts.length > 0) {
+      setSelectedAreaId(multiAreaLayouts[0].id);
+    }
+  }, [multiAreaLayouts, selectedAreaId]);
+
+  // Reúne todos os painéis fotovoltaicos de todas as áreas
+  const allVisiblePanelPolygons = useMemo(
+    () => multiAreaLayouts.flatMap((a) => a.panelPolygons || []),
+    [multiAreaLayouts]
   );
 
-  const visiblePanelPolygons = useMemo(
-    () => roofLayout.panels.slice(0, sizing.panelCount),
-    [roofLayout.panels, sizing.panelCount]
+  const aggregateMetrics = useMemo(
+    () => getMultiAreaAggregateMetrics(multiAreaLayouts, config),
+    [multiAreaLayouts, config]
   );
+
+  const totalPanelCount = aggregateMetrics.totalPanels;
+  const totalDcPowerKw = aggregateMetrics.totalDcPowerKw;
 
   const annualGenerationKwh = useMemo(
-    () => estimateAnnualGenerationKwh(sizing.dcPowerKw) || 20950,
-    [sizing.dcPowerKw]
+    () => estimateAnnualGenerationKwh(totalDcPowerKw) || Math.round(totalDcPowerKw * 1350),
+    [totalDcPowerKw]
   );
 
   const annualSavingsBrl = useMemo(
@@ -377,39 +342,94 @@ export default function SolarProject() {
 
   const paybackYears = useMemo(
     () => estimateSimplePaybackYears(
-      project?.investment_brl || (sizing.dcPowerKw * 1000 * 3.5),
+      project?.investment_brl || (totalDcPowerKw * 1000 * 3.5),
       annualSavingsBrl
     ) || 3.8,
-    [project, sizing.dcPowerKw, annualSavingsBrl]
+    [project, totalDcPowerKw, annualSavingsBrl]
   );
 
   const strings = useMemo(
-    () => calculateStringGrouping(sizing.panelCount, {
+    () => calculateStringGrouping(totalPanelCount, {
       moduleWp: config.module_wp,
       inverterKw: config.inverter_kw,
     }),
-    [sizing.panelCount, config.module_wp, config.inverter_kw]
+    [totalPanelCount, config.module_wp, config.inverter_kw]
   );
 
   const technicalAnalysis = useMemo(
-    () => computeRoofFaceTechnicalAnalysis(config.roof_polygon, config),
-    [config]
+    () => (selectedArea?.polygon ? computeRoofFaceTechnicalAnalysis(selectedArea.polygon, selectedArea) : null),
+    [selectedArea]
   );
 
+  const voltage = Math.max(1, asNumber(config.ac_voltage, defaultSolarConfig.ac_voltage));
+  const inverterKw = Math.max(0.1, asNumber(config.inverter_kw, defaultSolarConfig.inverter_kw));
+  const acCurrent = config.ac_supply_type === "Trifásico"
+    ? (inverterKw * 1000) / (Math.sqrt(3) * voltage)
+    : (inverterKw * 1000) / voltage;
+  const breaker = breakerForCurrent(acCurrent);
+
   const visualSizing = useMemo(() => ({
-    ...sizing,
+    panelCount: totalPanelCount,
+    dcPowerKw: totalDcPowerKw,
+    dcAcRatio: aggregateMetrics.dcAcRatio,
+    acCurrent,
+    breaker,
+    roofArea: aggregateMetrics.totalAreaM2,
     annualGenerationKwh,
     annualSavingsBrl,
     paybackYears,
     strings,
     technicalAnalysis,
-  }), [sizing, annualGenerationKwh, annualSavingsBrl, paybackYears, strings, technicalAnalysis]);
+    areas: multiAreaLayouts,
+    selectedArea,
+  }), [totalPanelCount, totalDcPowerKw, aggregateMetrics, acCurrent, breaker, annualGenerationKwh, annualSavingsBrl, paybackYears, strings, technicalAnalysis, multiAreaLayouts, selectedArea]);
 
+  // Funções de Gerenciamento do Histórico (Undo / Redo)
+  const syncRoofHistoryState = useCallback(() => {
+    const index = roofHistoryIndexRef.current;
+    setRoofHistoryState({
+      canUndo: index > 0,
+      canRedo: index < roofHistoryRef.current.length - 1,
+    });
+  }, []);
+
+  const pushAreasHistory = useCallback((nextAreas) => {
+    const nextKey = JSON.stringify(nextAreas);
+    const currentHistory = roofHistoryRef.current;
+    const currentKey = JSON.stringify(currentHistory[roofHistoryIndexRef.current] || []);
+
+    if (nextKey !== currentKey) {
+      const nextHistory = currentHistory.slice(0, roofHistoryIndexRef.current + 1);
+      nextHistory.push(nextAreas);
+      roofHistoryRef.current = nextHistory.slice(-40);
+      roofHistoryIndexRef.current = roofHistoryRef.current.length - 1;
+      syncRoofHistoryState();
+    }
+  }, [syncRoofHistoryState]);
+
+  const undoRoofChange = useCallback(() => {
+    if (roofHistoryIndexRef.current <= 0) return;
+    roofHistoryIndexRef.current -= 1;
+    const restoredAreas = roofHistoryRef.current[roofHistoryIndexRef.current];
+    setConfig((prev) => normalizeSolarConfig({ ...prev, areas: restoredAreas }));
+    setEditorMode("select");
+    syncRoofHistoryState();
+    toast({ title: "Alteração desfeita" });
+  }, [syncRoofHistoryState, toast]);
+
+  const redoRoofChange = useCallback(() => {
+    if (roofHistoryIndexRef.current >= roofHistoryRef.current.length - 1) return;
+    roofHistoryIndexRef.current += 1;
+    const restoredAreas = roofHistoryRef.current[roofHistoryIndexRef.current];
+    setConfig((prev) => normalizeSolarConfig({ ...prev, areas: restoredAreas }));
+    setEditorMode("select");
+    syncRoofHistoryState();
+    toast({ title: "Alteração refeita" });
+  }, [syncRoofHistoryState, toast]);
+
+  // Atualiza campo global de configuração (ex: inversor, modelo do módulo)
   const updateConfig = (field, value) => {
     const next = { ...config, [field]: value };
-    if (field === "roof_width_m" || field === "roof_height_m") {
-      next.roof_area_m2 = round1(Number(next.roof_width_m || 0) * Number(next.roof_height_m || 0));
-    }
     if (field === "module_preset_id") {
       const p = getModulePreset(value);
       next.module_preset_id = p.id;
@@ -419,95 +439,168 @@ export default function SolarProject() {
       next.module_width_m = p.widthM;
       next.module_height_m = p.heightM;
     }
-    if (field === "roof_width_m" || field === "roof_height_m" || field === "roof_rotation_deg") {
-      setConfig(syncRoofPolygonFromDimensions(next));
-      return;
-    }
     setConfig(normalizeSolarConfig(next));
   };
 
+  // Atualiza parâmetros da área selecionada (ex: inclinação, azimute, orientação, espaçamento)
+  const updateSelectedArea = (field, value) => {
+    if (!selectedArea) return;
+    const targetId = selectedArea.id;
+
+    const nextAreas = config.areas.map((a) => {
+      if (a.id !== targetId) return a;
+      const updated = { ...a, [field]: value };
+      if (field === "roof_width_m" || field === "roof_height_m") {
+        updated.roof_area_m2 = round1(Number(updated.roof_width_m || 0) * Number(updated.roof_height_m || 0));
+      }
+      return normalizeSolarArea(updated, 1, config);
+    });
+
+    const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
+    setConfig(nextConfig);
+    pushAreasHistory(nextAreas);
+  };
+
+  // Ação de alinhar os módulos à borda da área ativa
   const handleAlignToEdge = useCallback((azimuthAngle) => {
-    updateConfig("roof_rotation_deg", round2(azimuthAngle));
+    if (!selectedArea) return;
+    updateSelectedArea("roof_rotation_deg", round2(azimuthAngle));
     toast({
       title: "Módulos alinhados à borda",
-      description: `Azimute ajustado automaticamente para ${round2(azimuthAngle)}°.`,
+      description: `Azimute da ${selectedArea.name} ajustado para ${round2(azimuthAngle)}°.`,
     });
-  }, [toast]);
+  }, [selectedArea, toast]);
 
-  const applyRoofGeometry = useCallback((positions) => {
-    setConfig((current) => {
-      const normalizedPositions = serializeRoofPolygon(normalizeRoofPolygon(positions));
-      if (normalizedPositions.length < 3) {
-        return normalizeSolarConfig({
-          ...current,
-          roof_defined: false,
-          roof_polygon: [],
-        });
-      }
+  // Criação de uma nova área solar demarcada pelo usuário no mapa
+  const handleCreateArea = useCallback((createdPositions) => {
+    const normalizedPositions = serializeRoofPolygon(normalizeRoofPolygon(createdPositions));
+    if (normalizedPositions.length < 3) return;
 
-      const metrics = getRoofMetricsFromPolygon(normalizedPositions, current);
-      return normalizeSolarConfig({
-        ...current,
-        roof_defined: true,
-        roof_width_m: round1(metrics.widthM),
-        roof_height_m: round1(metrics.heightM),
-        roof_area_m2: round1(metrics.areaM2),
-        roof_rotation_deg: round2(metrics.rotationDeg),
-        map_center_lat: metrics.center.lat,
-        map_center_lng: metrics.center.lng,
-        roof_polygon: normalizedPositions,
-      });
+    const newIndex = config.areas.length + 1;
+    const newArea = createDefaultSolarArea(
+      {
+        id: `area_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: `Área ${newIndex}`,
+        polygon: normalizedPositions,
+        roof_rotation_deg: config.roof_rotation_deg || 0,
+        roof_pitch_deg: config.roof_pitch_deg || 12,
+        structure_type: config.structure_type || "triangle",
+        module_orientation: config.module_orientation || "horizontal",
+        auto_fill_surface: true,
+      },
+      newIndex,
+      config
+    );
+
+    const nextAreas = [...config.areas, newArea];
+    const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
+    setConfig(nextConfig);
+    setSelectedAreaId(newArea.id);
+    setEditorMode("select");
+    pushAreasHistory(nextAreas);
+
+    toast({
+      title: "Área solar adicionada!",
+      description: `${newArea.name} demarcada com sucesso (${newArea.roof_area_m2} m²).`,
     });
-  }, []);
+  }, [config, pushAreasHistory, toast]);
 
-  const syncRoofHistoryState = useCallback(() => {
-    const index = roofHistoryIndexRef.current;
-    setRoofHistoryState({
-      canUndo: index > 0,
-      canRedo: index < roofHistoryRef.current.length - 1,
-    });
-  }, []);
-
+  // Alteração de vértices na área ativa
   const handleRoofGeometryChange = useCallback((positions) => {
+    if (!selectedArea) return;
     const normalizedPositions = serializeRoofPolygon(normalizeRoofPolygon(positions));
-    const nextKey = JSON.stringify(normalizedPositions);
-    const currentHistory = roofHistoryRef.current;
-    const currentKey = JSON.stringify(currentHistory[roofHistoryIndexRef.current] || []);
 
-    if (nextKey !== currentKey) {
-      const nextHistory = currentHistory.slice(0, roofHistoryIndexRef.current + 1);
-      nextHistory.push(normalizedPositions);
-      roofHistoryRef.current = nextHistory.slice(-40);
-      roofHistoryIndexRef.current = roofHistoryRef.current.length - 1;
-      syncRoofHistoryState();
+    const nextAreas = config.areas.map((a) => {
+      if (a.id !== selectedArea.id) return a;
+      return createDefaultSolarArea(
+        {
+          ...a,
+          polygon: normalizedPositions,
+        },
+        1,
+        config
+      );
+    });
+
+    const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
+    setConfig(nextConfig);
+    pushAreasHistory(nextAreas);
+  }, [config, selectedArea, pushAreasHistory]);
+
+  // Duplicação de área solar
+  const handleDuplicateArea = (areaId) => {
+    const source = config.areas.find((a) => a.id === areaId);
+    if (!source) return;
+
+    const newIndex = config.areas.length + 1;
+    const cloned = createDefaultSolarArea(
+      {
+        ...source,
+        id: `area_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: `${source.name} (Cópia)`,
+      },
+      newIndex,
+      config
+    );
+
+    const nextAreas = [...config.areas, cloned];
+    const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
+    setConfig(nextConfig);
+    setSelectedAreaId(cloned.id);
+    pushAreasHistory(nextAreas);
+
+    toast({
+      title: "Área duplicada",
+      description: `${cloned.name} criada com sucesso.`,
+    });
+  };
+
+  // Exclusão de área solar
+  const handleDeleteArea = (areaId) => {
+    const target = config.areas.find((a) => a.id === areaId);
+    if (!target) return;
+
+    const nextAreas = config.areas.filter((a) => a.id !== areaId);
+    const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
+    setConfig(nextConfig);
+
+    if (selectedAreaId === areaId) {
+      setSelectedAreaId(nextAreas[0]?.id || null);
     }
+    pushAreasHistory(nextAreas);
 
-    applyRoofGeometry(normalizedPositions);
-  }, [applyRoofGeometry, syncRoofHistoryState]);
+    toast({
+      title: "Área removida",
+      description: `${target.name} e seus módulos foram removidos.`,
+    });
+  };
 
-  const undoRoofChange = useCallback(() => {
-    if (roofHistoryIndexRef.current <= 0) return;
-    roofHistoryIndexRef.current -= 1;
-    applyRoofGeometry(roofHistoryRef.current[roofHistoryIndexRef.current]);
-    setEditorMode("select");
-    syncRoofHistoryState();
-    toast({ title: "Alteração desfeita" });
-  }, [applyRoofGeometry, syncRoofHistoryState, toast]);
-
-  const redoRoofChange = useCallback(() => {
-    if (roofHistoryIndexRef.current >= roofHistoryRef.current.length - 1) return;
-    roofHistoryIndexRef.current += 1;
-    applyRoofGeometry(roofHistoryRef.current[roofHistoryIndexRef.current]);
-    setEditorMode("select");
-    syncRoofHistoryState();
-    toast({ title: "Alteração refeita" });
-  }, [applyRoofGeometry, syncRoofHistoryState, toast]);
-
-  const clearRoof = useCallback(() => {
-    handleRoofGeometryChange([]);
+  // Iniciar demarcação de nova área
+  const handleStartDrawNewArea = () => {
     setEditorMode("draw-polygon");
-    toast({ title: "Área do telhado removida", description: "Use Desfazer para restaurar o contorno." });
-  }, [handleRoofGeometryChange, toast]);
+    setActiveRailTab("roof");
+    setSidebarOpen(true);
+    toast({
+      title: "Demarcar Nova Área",
+      description: "Clique no mapa de satélite para definir os vértices da nova área solar.",
+    });
+  };
+
+  // Renomeação de área
+  const handleSaveAreaName = (areaId) => {
+    if (!tempAreaName.trim()) {
+      setEditingAreaNameId(null);
+      return;
+    }
+    const nextAreas = config.areas.map((a) =>
+      a.id === areaId ? { ...a, name: tempAreaName.trim() } : a
+    );
+    setConfig(normalizeSolarConfig({ ...config, areas: nextAreas }));
+    setEditingAreaNameId(null);
+    setTempAreaName("");
+    pushAreasHistory(nextAreas);
+    toast({ title: "Nome atualizado" });
+  };
 
   const handleSearchAddress = async (e) => {
     e?.preventDefault();
@@ -639,7 +732,10 @@ export default function SolarProject() {
       await backend.entities.Project.update(projectId, payload);
       setConfig(normalizedConfig);
       setProject((current) => (current ? { ...current, ...payload } : current));
-      toast({ title: "Projeto salvo", description: "Configurações e layout atualizados com sucesso." });
+      toast({
+        title: "Projeto salvo com sucesso",
+        description: `${normalizedConfig.areas.length} áreas solares salvas com ${totalPanelCount} módulos instalados.`,
+      });
     } catch {
       toast({ title: "Não foi possível salvar", variant: "destructive" });
     } finally {
@@ -651,7 +747,7 @@ export default function SolarProject() {
     saveConfig();
     toast({
       title: "Arranjo aceito com sucesso",
-      description: `${visualSizing.panelCount} módulos posicionados com potência de ${visualSizing.dcPowerKw.toFixed(2)} kWp.`,
+      description: `${visualSizing.panelCount} módulos posicionados em ${multiAreaLayouts.length} áreas com potência de ${visualSizing.dcPowerKw.toFixed(2)} kWp.`,
     });
   };
 
@@ -663,7 +759,7 @@ export default function SolarProject() {
     );
   }
 
-  const hasRoof = normalizeRoofPolygon(config.roof_polygon).length >= 3 && config.roof_defined !== false;
+  const hasAnyRoof = multiAreaLayouts.length > 0 && multiAreaLayouts.some((a) => a.polygon?.length >= 3);
   const currentPreset = getModulePreset(config.module_preset_id || config.module_model);
 
   return (
@@ -685,11 +781,15 @@ export default function SolarProject() {
           {/* Abas do Design / Estado */}
           <div className="flex items-center gap-1.5 bg-slate-950/60 p-0.5 rounded-lg border border-white/10">
             <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-bold text-white">
-              <Grid className="h-3 w-3 text-cyan-400" /> Design 1
+              <Grid className="h-3 w-3 text-cyan-400" /> Projeto Solar
+            </span>
+            <span className="h-3 w-px bg-white/15" />
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-cyan-300">
+              {multiAreaLayouts.length} {multiAreaLayouts.length === 1 ? "Área" : "Áreas"}
             </span>
             <span className="h-3 w-px bg-white/15" />
             <span className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-white/70">
-              {visualSizing.panelCount} Módulos
+              {visualSizing.panelCount} Módulos ({visualSizing.dcPowerKw.toFixed(1)} kWp)
             </span>
           </div>
 
@@ -784,7 +884,7 @@ export default function SolarProject() {
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-white/10" />
               <DropdownMenuItem onClick={() => handleDownloadDirect("site_plan")} className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5">
-                Planta de Implantação
+                Planta de Implantação ({multiAreaLayouts.length} Áreas)
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDownloadDirect("electrical")} className="text-xs font-medium text-white/90 hover:bg-white/10 cursor-pointer rounded-lg px-2.5 py-1.5">
                 Diagrama Elétrico & Strings
@@ -825,12 +925,11 @@ export default function SolarProject() {
         <div className="w-12 shrink-0 flex flex-col items-center justify-between border-r border-white/10 bg-[#0a111e] py-3 z-20">
           <div className="flex flex-col items-center gap-2">
             {[
-              { id: "info", icon: Info, label: "Informações" },
-              { id: "camera", icon: Camera, label: "Captura" },
-              { id: "roof", icon: Box, label: "Estrutura do Telhado" },
-              { id: "modules", icon: Grid, label: "Módulos FV", isPrimary: true },
+              { id: "roof", icon: Box, label: "Áreas do Telhado", count: multiAreaLayouts.length },
+              { id: "modules", icon: Grid, label: "Módulos FV & Arranjo", isPrimary: true },
               { id: "strings", icon: Zap, label: "Strings Elétricas" },
               { id: "inverters", icon: Layers, label: "Inversores" },
+              { id: "info", icon: Info, label: "Informações" },
               { id: "reports", icon: FileText, label: "Relatórios" },
             ].map((item) => {
               const Icon = item.icon;
@@ -844,7 +943,7 @@ export default function SolarProject() {
                     setActiveRailTab(item.id);
                     setSidebarOpen(true);
                   }}
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                  className={`relative flex h-8 w-8 items-center justify-center rounded-lg transition ${
                     item.isPrimary && isActive
                       ? "bg-red-600 text-white shadow-lg"
                       : isActive
@@ -853,6 +952,11 @@ export default function SolarProject() {
                   }`}
                 >
                   <Icon className="h-4 w-4" />
+                  {item.count !== undefined && item.count > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-cyan-500 text-[8px] font-black text-slate-950">
+                      {item.count}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -870,13 +974,17 @@ export default function SolarProject() {
           </div>
         </div>
 
-        {/* Sidebar Inspetor (Passo 3 & 4: MÓDULOS FV & POSICIONAMENTO) */}
+        {/* Sidebar Inspetor */}
         {sidebarOpen && (
           <aside className="w-80 shrink-0 flex flex-col border-r border-white/10 bg-[#0d1522] overflow-hidden z-10 animate-in slide-in-from-left duration-200">
             {/* Header da Sidebar com botão de fechar « */}
             <div className="flex h-10 items-center justify-between border-b border-white/10 px-3 bg-slate-950/40">
               <span className="text-xs font-black uppercase tracking-wider text-white">
-                {activeRailTab === "modules" ? "Módulos FV & Arranjo" : activeRailTab === "roof" ? "Água do Telhado" : "Propriedades"}
+                {activeRailTab === "roof"
+                  ? `Áreas Solares (${multiAreaLayouts.length})`
+                  : activeRailTab === "modules"
+                  ? `Módulos FV (${visualSizing.panelCount})`
+                  : "Propriedades"}
               </span>
               <button
                 type="button"
@@ -889,11 +997,126 @@ export default function SolarProject() {
             </div>
 
             {/* Conteúdo Rolável do Inspetor */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-              {/* Seção 1: Seleção de Módulos FV */}
+            <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5 text-xs">
+              {/* Seção Principal: GERENCIAMENTO DE MÚLTIPLAS ÁREAS SOLARES */}
+              <div className="rounded-xl border border-white/10 bg-slate-950/70 overflow-hidden">
+                <div className="flex items-center justify-between p-3 bg-slate-900/60 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <Box className="h-4 w-4 text-cyan-400" />
+                    <span className="font-black text-xs uppercase tracking-wider text-white">
+                      ÁREAS SOLARES ({multiAreaLayouts.length})
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleStartDrawNewArea}
+                    className="h-6 rounded-md bg-cyan-500 px-2 text-[10px] font-black text-slate-950 hover:bg-cyan-400 shadow-sm"
+                  >
+                    <Plus className="mr-0.5 h-3 w-3" /> Nova Área
+                  </Button>
+                </div>
+
+                <div className="p-2 space-y-1.5 max-h-56 overflow-y-auto">
+                  {multiAreaLayouts.map((area, idx) => {
+                    const isSelected = area.id === selectedArea?.id;
+                    const isEditingName = editingAreaNameId === area.id;
+
+                    return (
+                      <div
+                        key={area.id}
+                        onClick={() => setSelectedAreaId(area.id)}
+                        className={`group relative rounded-lg border p-2.5 cursor-pointer transition-all ${
+                          isSelected
+                            ? "border-cyan-400/80 bg-cyan-950/40 shadow-sm ring-1 ring-cyan-400/30"
+                            : "border-white/10 bg-slate-900/40 hover:bg-slate-900/80 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-1.5 flex-1 mr-2">
+                            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black ${
+                              isSelected ? "bg-cyan-500 text-slate-950" : "bg-white/10 text-white/70"
+                            }`}>
+                              {idx + 1}
+                            </span>
+                            {isEditingName ? (
+                              <div className="flex items-center gap-1 flex-1" onClick={(e) => e.stopPropagation()}>
+                                <Input
+                                  value={tempAreaName}
+                                  onChange={(e) => setTempAreaName(e.target.value)}
+                                  onKeyDown={(e) => e.key === "Enter" && handleSaveAreaName(area.id)}
+                                  className="h-6 text-xs bg-slate-950 text-white border-cyan-400 px-1.5"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveAreaName(area.id)}
+                                  className="h-6 w-6 flex items-center justify-center rounded bg-cyan-500 text-slate-950"
+                                >
+                                  <Check className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className={`font-bold text-xs truncate ${isSelected ? "text-cyan-200" : "text-white"}`}>
+                                {area.name || `Área ${idx + 1}`}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Ações da Área: Renomear, Duplicar, Excluir */}
+                          <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingAreaNameId(area.id);
+                                setTempAreaName(area.name);
+                              }}
+                              className="h-5 w-5 flex items-center justify-center rounded hover:bg-white/10 text-white/60 hover:text-white"
+                              title="Renomear área"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDuplicateArea(area.id)}
+                              className="h-5 w-5 flex items-center justify-center rounded hover:bg-white/10 text-white/60 hover:text-white"
+                              title="Duplicar área"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                            {multiAreaLayouts.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteArea(area.id)}
+                                className="h-5 w-5 flex items-center justify-center rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-300"
+                                title="Excluir área"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Métricas rápidas da área */}
+                        <div className="flex items-center gap-2 text-[10px] text-white/60">
+                          <span className="font-bold text-emerald-400">{area.panelCount || 0} módulos</span>
+                          <span>•</span>
+                          <span>{area.dcPowerKw ? area.dcPowerKw.toFixed(1) : 0} kWp</span>
+                          <span>•</span>
+                          <span>{Math.round(area.roof_area_m2 || 0)} m²</span>
+                          <span>•</span>
+                          <span>{area.roof_pitch_deg || 0}°</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Seção 2: Seleção Global de Módulos FV */}
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-black uppercase tracking-wider text-white/70">
-                  MÓDULOS FV
+                  MÓDULO FOTOVOLTAICO
                 </Label>
                 <select
                   value={config.module_preset_id}
@@ -902,175 +1125,172 @@ export default function SolarProject() {
                 >
                   {MODULE_CATALOG.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.label}
+                      {m.label} ({m.wp} Wp)
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Seção 2: Posicionamento (Accordion) */}
-              <div className="rounded-xl border border-white/10 bg-slate-950/50 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setPositioningOpen(!positioningOpen)}
-                  className="w-full flex items-center justify-between p-3 text-left font-black text-xs uppercase tracking-wider text-white hover:bg-white/5 transition"
-                >
-                  <span>POSICIONAMENTO</span>
-                  <ChevronDown className={`h-4 w-4 text-white/50 transition-transform ${positioningOpen ? "rotate-180" : ""}`} />
-                </button>
+              {/* Seção 3: Posicionamento & Configurações da Área Ativa */}
+              {selectedArea && (
+                <div className="rounded-xl border border-white/10 bg-slate-950/50 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setPositioningOpen(!positioningOpen)}
+                    className="w-full flex items-center justify-between p-3 text-left font-black text-xs uppercase tracking-wider text-white hover:bg-white/5 transition"
+                  >
+                    <span className="text-cyan-300">CONFIGURAÇÃO DA {selectedArea.name.toUpperCase()}</span>
+                    <ChevronDown className={`h-4 w-4 text-white/50 transition-transform ${positioningOpen ? "rotate-180" : ""}`} />
+                  </button>
 
-                {positioningOpen && (
-                  <div className="p-3 pt-0 space-y-4 border-t border-white/5">
-                    {/* Estrutura de Fixação: 3 Ícones */}
-                    <div className="space-y-1.5 pt-2">
-                      <Label className="text-[10px] font-bold text-white/60">Estrutura de Fixação</Label>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[
-                          { id: "coplanar", label: "Coplanar", symbol: "— /" },
-                          { id: "triangle", label: "Triângulo", symbol: "◺" },
-                          { id: "shed", label: "Shed / L-O", symbol: "/\\" },
-                        ].map((st) => (
+                  {positioningOpen && (
+                    <div className="p-3 pt-0 space-y-4 border-t border-white/5">
+                      {/* Estrutura de Fixação */}
+                      <div className="space-y-1.5 pt-2">
+                        <Label className="text-[10px] font-bold text-white/60">Estrutura de Fixação</Label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[
+                            { id: "coplanar", label: "Coplanar", symbol: "— /" },
+                            { id: "triangle", label: "Triângulo", symbol: "◺" },
+                            { id: "shed", label: "Shed / L-O", symbol: "/\\" },
+                          ].map((st) => (
+                            <button
+                              key={st.id}
+                              type="button"
+                              onClick={() => updateSelectedArea("structure_type", st.id)}
+                              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg border text-center transition ${
+                                selectedArea.structure_type === st.id
+                                  ? "border-cyan-400 bg-cyan-950/60 text-cyan-200 font-black shadow-sm"
+                                  : "border-white/10 bg-slate-900/60 text-white/60 hover:bg-white/5 hover:text-white"
+                              }`}
+                            >
+                              <span className="text-sm font-black mb-0.5">{st.symbol}</span>
+                              <span className="text-[9px] font-bold leading-tight">{st.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Orientação: Paisagem vs Retrato */}
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-bold text-white/60">Orientação dos Módulos</Label>
+                        <div className="grid grid-cols-2 gap-1.5">
                           <button
-                            key={st.id}
                             type="button"
-                            onClick={() => updateConfig("structure_type", st.id)}
-                            className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg border text-center transition ${
-                              config.structure_type === st.id
+                            onClick={() => updateSelectedArea("module_orientation", "horizontal")}
+                            className={`flex items-center justify-center gap-2 py-2 px-2 rounded-lg border text-xs font-bold transition ${
+                              selectedArea.module_orientation === "horizontal"
                                 ? "border-cyan-400 bg-cyan-950/60 text-cyan-200 font-black shadow-sm"
                                 : "border-white/10 bg-slate-900/60 text-white/60 hover:bg-white/5 hover:text-white"
                             }`}
                           >
-                            <span className="text-sm font-black mb-0.5">{st.symbol}</span>
-                            <span className="text-[9px] font-bold leading-tight">{st.label}</span>
+                            <div className="h-3 w-5 border border-current rounded-sm flex items-center justify-center">
+                              <span className="h-1.5 w-3 bg-current/40" />
+                            </div>
+                            <span>Paisagem</span>
                           </button>
-                        ))}
+                          <button
+                            type="button"
+                            onClick={() => updateSelectedArea("module_orientation", "vertical")}
+                            className={`flex items-center justify-center gap-2 py-2 px-2 rounded-lg border text-xs font-bold transition ${
+                              selectedArea.module_orientation === "vertical"
+                                ? "border-cyan-400 bg-cyan-950/60 text-cyan-200 font-black shadow-sm"
+                                : "border-white/10 bg-slate-900/60 text-white/60 hover:bg-white/5 hover:text-white"
+                            }`}
+                          >
+                            <div className="h-5 w-3 border border-current rounded-sm flex items-center justify-center">
+                              <span className="h-3 w-1.5 bg-current/40" />
+                            </div>
+                            <span>Retrato</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Orientação: Paisagem vs Retrato */}
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px] font-bold text-white/60">Orientação</Label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => updateConfig("module_orientation", "horizontal")}
-                          className={`flex items-center justify-center gap-2 py-2 px-2 rounded-lg border text-xs font-bold transition ${
-                            config.module_orientation === "horizontal"
-                              ? "border-cyan-400 bg-cyan-950/60 text-cyan-200 font-black shadow-sm"
-                              : "border-white/10 bg-slate-900/60 text-white/60 hover:bg-white/5 hover:text-white"
-                          }`}
-                        >
-                          <div className="h-3 w-5 border border-current rounded-sm flex items-center justify-center">
-                            <span className="h-1.5 w-3 bg-current/40" />
-                          </div>
-                          <span>Paisagem</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => updateConfig("module_orientation", "vertical")}
-                          className={`flex items-center justify-center gap-2 py-2 px-2 rounded-lg border text-xs font-bold transition ${
-                            config.module_orientation === "vertical"
-                              ? "border-cyan-400 bg-cyan-950/60 text-cyan-200 font-black shadow-sm"
-                              : "border-white/10 bg-slate-900/60 text-white/60 hover:bg-white/5 hover:text-white"
-                          }`}
-                        >
-                          <div className="h-5 w-3 border border-current rounded-sm flex items-center justify-center">
-                            <span className="h-3 w-1.5 bg-current/40" />
-                          </div>
-                          <span>Retrato</span>
-                        </button>
+                      {/* Grade de Parâmetros Numéricos da Área */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <Label className="text-[10px] font-bold text-white/60">Azimute (°)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={selectedArea.roof_rotation_deg}
+                            onChange={(e) => updateSelectedArea("roof_rotation_deg", parseFloat(e.target.value) || 0)}
+                            className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] font-bold text-white/60">Inclinação (°)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={selectedArea.roof_pitch_deg}
+                            onChange={(e) => updateSelectedArea("roof_pitch_deg", parseFloat(e.target.value) || 0)}
+                            className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] font-bold text-white/60">Espaçamento Colunas (cm)</Label>
+                          <Input
+                            type="number"
+                            value={selectedArea.column_gap_cm || 0}
+                            onChange={(e) => updateSelectedArea("column_gap_cm", parseInt(e.target.value, 10) || 0)}
+                            className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] font-bold text-white/60">Espaçamento Linhas (cm)</Label>
+                          <Input
+                            type="number"
+                            value={selectedArea.row_gap_cm || 0}
+                            onChange={(e) => updateSelectedArea("row_gap_cm", parseInt(e.target.value, 10) || 0)}
+                            className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                          />
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Grade de 6 Parâmetros Numéricos (Azimute, Inclinação, Linhas/Mesa, Altura, Espaçamentos) */}
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div>
-                        <Label className="text-[10px] font-bold text-white/60">Azimute *</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={config.roof_rotation_deg}
-                          onChange={(e) => updateConfig("roof_rotation_deg", parseFloat(e.target.value) || 0)}
-                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                      {/* Switch: PREENCHER SUPERFÍCIE AUTOMATICAMENTE */}
+                      <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                        <div className="flex flex-col">
+                          <span className="text-[11px] font-black uppercase text-white tracking-wider">
+                            PREENCHER SUPERFÍCIE
+                          </span>
+                          <span className="text-[10px] text-white/50">
+                            Densidade máxima de painéis nesta área
+                          </span>
+                        </div>
+                        <Switch
+                          checked={selectedArea.auto_fill_surface}
+                          onCheckedChange={(checked) => updateSelectedArea("auto_fill_surface", checked)}
+                          className="data-[state=checked]:bg-cyan-500"
                         />
                       </div>
-                      <div>
-                        <Label className="text-[10px] font-bold text-white/60">Inclinação *</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={config.roof_pitch_deg}
-                          onChange={(e) => updateConfig("roof_pitch_deg", parseFloat(e.target.value) || 0)}
-                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[10px] font-bold text-white/60">Linhas por Mesa *</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={config.rows_per_table || 1}
-                          onChange={(e) => updateConfig("rows_per_table", parseInt(e.target.value, 10) || 1)}
-                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[10px] font-bold text-white/60">Altura da Base *</Label>
-                        <Input
-                          type="number"
-                          value={config.base_height_cm || 0}
-                          onChange={(e) => updateConfig("base_height_cm", parseInt(e.target.value, 10) || 0)}
-                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[10px] font-bold text-white/60">Espaçamento colunas *</Label>
-                        <Input
-                          type="number"
-                          value={config.column_gap_cm || 0}
-                          onChange={(e) => updateConfig("column_gap_cm", parseInt(e.target.value, 10) || 0)}
-                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[10px] font-bold text-white/60">Espaçamento linhas *</Label>
-                        <Input
-                          type="number"
-                          value={config.row_gap_cm || 0}
-                          onChange={(e) => updateConfig("row_gap_cm", parseInt(e.target.value, 10) || 0)}
-                          className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
-                        />
-                      </div>
-                    </div>
 
-                    {/* Switch: PREENCHER SUPERFÍCIE AUTOMATICAMENTE */}
-                    <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                      <div className="flex flex-col">
-                        <span className="text-[11px] font-black uppercase text-white tracking-wider">
-                          PREENCHER SUPERFÍCIE AUTOMATICAMENTE
-                        </span>
-                        <span className="text-[10px] text-white/50">
-                          Preenche a água com a densidade máxima
-                        </span>
-                      </div>
-                      <Switch
-                        checked={config.auto_fill_surface}
-                        onCheckedChange={(checked) => updateConfig("auto_fill_surface", checked)}
-                        className="data-[state=checked]:bg-cyan-500"
-                      />
+                      {!selectedArea.auto_fill_surface && (
+                        <div>
+                          <Label className="text-[10px] font-bold text-white/60">Módulos Desejados nesta Área</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="1200"
+                            value={selectedArea.requested_panel_count || 14}
+                            onChange={(e) => updateSelectedArea("requested_panel_count", parseInt(e.target.value, 10) || 1)}
+                            className="mt-1 h-8 rounded-lg border-white/10 bg-slate-950 text-xs font-bold text-white focus:border-cyan-400"
+                          />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
 
-              {/* Seção 3: Parâmetros do Grupo (Accordion) */}
+              {/* Seção 4: Parâmetros Elétricos do Grupo */}
               <div className="rounded-xl border border-white/10 bg-slate-950/50 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setGroupParamsOpen(!groupParamsOpen)}
                   className="w-full flex items-center justify-between p-3 text-left font-black text-xs uppercase tracking-wider text-white hover:bg-white/5 transition"
                 >
-                  <span>PARÂMETROS DO GRUPO</span>
+                  <span>PARÂMETROS ELÉTRICOS & INVERSOR</span>
                   <ChevronDown className={`h-4 w-4 text-white/50 transition-transform ${groupParamsOpen ? "rotate-180" : ""}`} />
                 </button>
 
@@ -1116,7 +1336,7 @@ export default function SolarProject() {
               </div>
             </div>
 
-            {/* Ações Inferiores da Sidebar: CANCELAR & ACEITAR */}
+            {/* Ações Inferiores da Sidebar */}
             <div className="p-3 border-t border-white/10 bg-slate-950/80 grid grid-cols-2 gap-2">
               <Button
                 type="button"
@@ -1124,7 +1344,7 @@ export default function SolarProject() {
                 onClick={undoRoofChange}
                 className="h-9 rounded-lg border-white/15 bg-white/5 text-xs font-black text-white hover:bg-white/10 uppercase tracking-wider"
               >
-                CANCELAR
+                DESFAZER
               </Button>
               <Button
                 type="button"
@@ -1152,21 +1372,33 @@ export default function SolarProject() {
         {/* Canvas Central (Mapa 2D ou Vista 3D) */}
         <main className="relative flex-1 bg-slate-950">
           {viewMode === "3d" ? (
-            <Solar3DView config={config} sizing={visualSizing} panelPolygons={visiblePanelPolygons} />
+            <Solar3DView
+              config={config}
+              areas={multiAreaLayouts}
+              sizing={visualSizing}
+              panelPolygons={allVisiblePanelPolygons}
+            />
           ) : (
             <SolarDesignerMap
               className="h-full w-full"
               config={config}
+              areas={multiAreaLayouts}
+              selectedAreaId={selectedAreaId}
               viewMode={viewMode}
               sizing={visualSizing}
               editorMode={editorMode}
               fitRoofRequest={fitRoofRequest}
               viewportRequest={viewportRequest}
               selectedObstacleId={selectedObstacleId}
-              panelPolygons={visiblePanelPolygons}
+              panelPolygons={allVisiblePanelPolygons}
               showBadges={false}
               showMeasurements
               onEditorModeChange={setEditorMode}
+              onSelectArea={(id) => {
+                setSelectedAreaId(id);
+                setEditorMode("select");
+              }}
+              onCreateArea={handleCreateArea}
               onRoofChange={handleRoofGeometryChange}
               onAlignToEdge={handleAlignToEdge}
               onToggle3D={() => setViewMode("3d")}

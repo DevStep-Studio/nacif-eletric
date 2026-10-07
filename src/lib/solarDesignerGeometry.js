@@ -96,6 +96,9 @@ export const finiteNumber = (value, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
+export const round1 = (value) => Math.round(finiteNumber(value) * 10) / 10;
+export const round2 = (value) => Math.round(finiteNumber(value) * 100) / 100;
+
 export const roundCoordinate = (value) => Math.round(Number(value) * COORD_PRECISION) / COORD_PRECISION;
 
 export function normalizeLatLng(point) {
@@ -671,7 +674,6 @@ export function computeRoofFaceTechnicalAnalysis(roofPolygon, config = {}) {
   const tiltDeg = config.roof_pitch_deg || 12; // inclinação padrão 12°
 
   // Fator de orientação azimutal para o hemisfério Sul (Norte = 0° é o ideal)
-  // Perda percentual proporcional ao desvio do Norte (0°) e inclinação
   const angleFromNorth = Math.min(azimuth.degrees, 360 - azimuth.degrees);
   const azimuthLossPct = Math.round((angleFromNorth / 180) * 8 * 10) / 10;
   const tiltLossPct = Math.abs(tiltDeg - 15) * 0.15;
@@ -688,5 +690,154 @@ export function computeRoofFaceTechnicalAnalysis(roofPolygon, config = {}) {
     estimatedLossPct: totalLossPct,
     effectiveHsp,
     annualIrradiationKwhM2: Math.round(effectiveHsp * 365),
+  };
+}
+
+export function createDefaultSolarArea(partial = {}, index = 1, fallbackConfig = {}) {
+  const id = partial.id || `area_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const polygon = serializeRoofPolygon(normalizeRoofPolygon(partial.polygon || partial.roof_polygon || []));
+  const metrics = polygon.length >= 3 ? getRoofMetricsFromPolygon(polygon, fallbackConfig) : null;
+  const fallbackWidth = finiteNumber(fallbackConfig.roof_width_m, 10);
+  const fallbackHeight = finiteNumber(fallbackConfig.roof_height_m, 6);
+
+  const roofRotationDeg = Number.isFinite(Number(partial.roof_rotation_deg))
+    ? round2(Number(partial.roof_rotation_deg))
+    : (metrics ? round2(metrics.rotationDeg) : round2(finiteNumber(fallbackConfig.roof_rotation_deg, 0)));
+
+  return {
+    id,
+    name: partial.name || `Área ${index}`,
+    polygon,
+    roof_width_m: metrics ? round1(metrics.widthM) : finiteNumber(partial.roof_width_m, fallbackWidth),
+    roof_height_m: metrics ? round1(metrics.heightM) : finiteNumber(partial.roof_height_m, fallbackHeight),
+    roof_area_m2: metrics ? round1(metrics.areaM2) : finiteNumber(partial.roof_area_m2, fallbackWidth * fallbackHeight),
+    roof_rotation_deg: roofRotationDeg,
+    roof_pitch_deg: round2(finiteNumber(partial.roof_pitch_deg, fallbackConfig.roof_pitch_deg ?? 12)),
+    structure_type: ["coplanar", "triangle", "shed"].includes(partial.structure_type)
+      ? partial.structure_type
+      : (fallbackConfig.structure_type || "triangle"),
+    module_orientation: ["horizontal", "vertical", "auto"].includes(partial.module_orientation)
+      ? partial.module_orientation
+      : (fallbackConfig.module_orientation || "horizontal"),
+    auto_fill_surface: partial.auto_fill_surface !== false,
+    rows_per_table: Math.max(1, Math.round(finiteNumber(partial.rows_per_table, fallbackConfig.rows_per_table ?? 1))),
+    base_height_cm: finiteNumber(partial.base_height_cm, fallbackConfig.base_height_cm ?? 0),
+    column_gap_cm: finiteNumber(partial.column_gap_cm, fallbackConfig.column_gap_cm ?? 0),
+    row_gap_cm: finiteNumber(partial.row_gap_cm, fallbackConfig.row_gap_cm ?? 0),
+    requested_panel_count: Math.max(1, Math.min(1200, Math.round(finiteNumber(partial.requested_panel_count, fallbackConfig.requested_panel_count ?? 14)))),
+    layout_strategy: partial.layout_strategy || fallbackConfig.layout_strategy || "max_generation",
+    panelCount: 0,
+    panelPolygons: [],
+  };
+}
+
+export function normalizeSolarArea(rawArea = {}, index = 1, fallbackConfig = {}) {
+  return createDefaultSolarArea(rawArea, index, fallbackConfig);
+}
+
+export function normalizeSolarAreas(rawAreas, fallbackConfig = {}) {
+  if (Array.isArray(rawAreas) && rawAreas.length > 0) {
+    return rawAreas
+      .filter((a) => a && typeof a === "object")
+      .map((area, idx) => normalizeSolarArea(area, idx + 1, fallbackConfig));
+  }
+
+  const legacyPolygon = serializeRoofPolygon(normalizeRoofPolygon(fallbackConfig.roof_polygon));
+  if (legacyPolygon.length >= 3) {
+    return [
+      normalizeSolarArea(
+        {
+          id: "area_1",
+          name: "Área 1",
+          polygon: legacyPolygon,
+          ...fallbackConfig,
+        },
+        1,
+        fallbackConfig
+      ),
+    ];
+  }
+
+  return [];
+}
+
+export function computeAreaPanels(area = {}, globalConfig = {}) {
+  const polygon = normalizeRoofPolygon(area.polygon || area.roof_polygon);
+  if (polygon.length < 3) {
+    return {
+      ...area,
+      polygon: [],
+      panelPolygons: [],
+      panelCount: 0,
+      dcPowerKw: 0,
+      areaM2: 0,
+      metrics: { widthM: 0, heightM: 0, areaM2: 0, rotationDeg: 0, center: null },
+    };
+  }
+
+  const metrics = getRoofMetricsFromPolygon(polygon, area);
+  const areaRotation = Number.isFinite(Number(area.roof_rotation_deg))
+    ? area.roof_rotation_deg
+    : metrics.rotationDeg;
+
+  const mergedConfig = {
+    ...globalConfig,
+    ...area,
+    roof_polygon: polygon,
+    roof_rotation_deg: areaRotation,
+    roof_pitch_deg: area.roof_pitch_deg ?? globalConfig.roof_pitch_deg ?? 12,
+    structure_type: area.structure_type || globalConfig.structure_type || "triangle",
+    module_orientation: area.module_orientation || globalConfig.module_orientation || "horizontal",
+    column_gap_cm: area.column_gap_cm ?? globalConfig.column_gap_cm ?? 0,
+    row_gap_cm: area.row_gap_cm ?? globalConfig.row_gap_cm ?? 0,
+    layout_strategy: area.layout_strategy || globalConfig.layout_strategy || "max_generation",
+  };
+
+  const limit = area.auto_fill_surface ? 1200 : Math.max(1, Number(area.requested_panel_count) || 1200);
+  const layout = getBestPanelLayout(mergedConfig, limit, mergedConfig.layout_strategy);
+  const moduleWp = Number(globalConfig.module_wp) || 540;
+  const panelCount = layout.panelCount;
+  const dcPowerKw = round2((panelCount * moduleWp) / 1000);
+
+  return {
+    ...area,
+    polygon,
+    roof_width_m: round1(metrics.widthM),
+    roof_height_m: round1(metrics.heightM),
+    roof_area_m2: round1(metrics.areaM2),
+    roof_rotation_deg: round2(areaRotation),
+    panelPolygons: layout.panels,
+    panelCount,
+    dcPowerKw,
+    areaM2: round1(metrics.areaM2),
+    metrics,
+  };
+}
+
+export function computeMultiAreaLayouts(config = {}) {
+  const normalizedAreas = normalizeSolarAreas(config.areas, config);
+  return normalizedAreas.map((area) => computeAreaPanels(area, config));
+}
+
+export function getMultiAreaAggregateMetrics(areas = [], globalConfig = {}) {
+  const moduleWp = Number(globalConfig.module_wp) || 540;
+  const inverterKw = Number(globalConfig.inverter_kw) || 5;
+  const computedAreas = areas.map((area) =>
+    area.panelPolygons ? area : computeAreaPanels(area, globalConfig)
+  );
+
+  const totalPanels = computedAreas.reduce((sum, a) => sum + (a.panelCount || 0), 0);
+  const totalAreaM2 = computedAreas.reduce((sum, a) => sum + (a.roof_area_m2 || 0), 0);
+  const totalDcPowerKw = round2((totalPanels * moduleWp) / 1000);
+  const allPanelPolygons = computedAreas.flatMap((a) => a.panelPolygons || []);
+
+  return {
+    areas: computedAreas,
+    areasCount: computedAreas.length,
+    totalPanels,
+    totalAreaM2: round1(totalAreaM2),
+    totalDcPowerKw,
+    dcAcRatio: inverterKw > 0 ? round2(totalDcPowerKw / inverterKw) : 0,
+    allPanelPolygons,
   };
 }
