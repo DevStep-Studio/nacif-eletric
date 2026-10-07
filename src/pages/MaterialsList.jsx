@@ -525,32 +525,27 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
   };
 
   const handlePrint = (size) => {
-    const rows = materials.map((material) => `
-      <tr>
-        <td style="text-align:center"><img src="${getMaterialSymbolDataUri(material.name)}" alt="" style="width:24px;height:24px;object-fit:contain" /></td>
-        <td><strong>${material.name}</strong><br><span style="font-size:7pt;color:#666">${material.brand || ""} · ${material.code || ""}</span></td>
-        <td style="text-align:right">${formatQty(material.qty)}</td>
-        <td style="text-align:center">${material.unit}</td>
-        <td style="text-align:right">${formatCurrency(material.price)}</td>
-        <td style="text-align:right">${material.bestOffer.supplier}<br><span style="font-size:7pt;color:#666">${formatCurrency(material.bestOffer.unitPrice)}</span></td>
-        <td style="text-align:right;font-weight:bold">${formatCurrency(material.referenceTotal)}</td>
-      </tr>`).join("");
-    const html = `
-      <h2>Lista de Materiais — ${project?.name || ""}</h2>
-      <p class="sub">Quantitativo automático com cotação IA estimada · NACIF Solutions Eletric · NBR 5410:2004</p>
-      <table>
-        <thead><tr><th style="text-align:center">Desenho</th><th>Material</th><th style="text-align:right">Qtd.</th><th style="text-align:center">Unidade</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Melhor compra</th><th style="text-align:right">Total</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="totals">
-        <div class="grand-total">Total referência: ${formatCurrency(recommendation.referenceTotal)}</div>
-        <div class="grand-total">Menor preço estimado IA: ${formatCurrency(recommendation.mixedTotal)}</div>
-      </div>`;
     openHTMLPrint({
-      htmlContent: html,
       paperSize: size,
       projectName: project?.name,
+      documentTitle: `Lista de Materiais — ${project?.name || "Projeto"}`,
+      subtitle: "Quantitativo automático com cotação de mercado e IA estimada · NBR 5410:2004",
       logoUrl,
+      items: materials.map((m) => ({
+        name: m.name,
+        qty: m.qty,
+        unit: m.unit,
+        price: m.price,
+        category: m.category,
+        brand: m.brand,
+        imageUrl: getMaterialSymbolDataUri(m.name),
+      })),
+      totals: {
+        referenceTotal: recommendation.referenceTotal,
+        mixedTotal: recommendation.mixedTotal,
+        saving: recommendation.mixedSaving,
+        bestSingleSupplier: recommendation.bestSingleSupplier?.name,
+      },
       projectInfo: {
         clientName: project?.client_name,
         address: project?.address,
