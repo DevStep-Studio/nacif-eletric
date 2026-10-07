@@ -188,45 +188,108 @@ function PanelDiagram({ data }) {
         Alimentador Cu {data.feederGauge}mm² · Barramento {data.system.busbar}
       </Text>
 
-      <DeviceBlock
-        x={x + 64}
-        y={y + 96}
-        w={242}
-        title="DISJUNTOR GERAL"
-        value={`${data.generalPoles || data.system.generalPoles}P ${data.generalBreaker}A`}
-        color={colors.blue}
-        sub={`Corrente de projeto ${formatNumber(data.generalCurrent, 1)}A`}
-      />
-      <line x1={center} y1={y + 130} x2={center} y2={y + 152} stroke={colors.ink} strokeWidth="1.3" />
+      {/* Cadeia de Proteção Geral Dinâmica (Disjuntor Geral, DPS, IDR/DR) */}
+      {(() => {
+        const blocks = [];
+        if (data.hasGeneralBreaker !== false && data.generalBreaker > 0) {
+          blocks.push({
+            id: "gen_brk",
+            yTop: y + 96,
+            yBottom: y + 130,
+            render: () => (
+              <DeviceBlock
+                key="gen_brk"
+                x={x + 64}
+                y={y + 96}
+                w={242}
+                title="DISJUNTOR GERAL"
+                value={`${data.generalPoles || data.system.generalPoles}P ${data.generalBreaker}A`}
+                color={colors.blue}
+                sub={`Corrente de projeto ${formatNumber(data.generalCurrent, 1)}A`}
+              />
+            ),
+          });
+        }
+        if (data.dpsCount > 0) {
+          blocks.push({
+            id: "dps",
+            yTop: y + 152,
+            yBottom: y + 186,
+            render: () => (
+              <DeviceBlock
+                key="dps"
+                x={x + 64}
+                y={y + 152}
+                w={242}
+                title="DPS CLASSE II"
+                value={`${data.dpsCount} polo(s)`}
+                color={colors.red}
+                sub={data.dpsDeviceCount ? `${data.dpsDeviceCount} dispositivo(s) no quadro` : "Proteção contra surtos no QD"}
+              />
+            ),
+          });
+        }
+        if (data.drDeviceCount > 0) {
+          blocks.push({
+            id: "dr",
+            yTop: y + 208,
+            yBottom: y + 242,
+            render: () => (
+              <DeviceBlock
+                key="dr"
+                x={x + 64}
+                y={y + 208}
+                w={242}
+                title="IDR / DR"
+                value={`${data.drDeviceCount} disp. · ${data.drCount} circ.`}
+                color={colors.blueDark}
+                sub="30mA para áreas molhadas e tomadas aplicáveis"
+              />
+            ),
+          });
+        }
 
-      <DeviceBlock
-        x={x + 64}
-        y={y + 152}
-        w={242}
-        title="DPS CLASSE II"
-        value={`${data.dpsCount || data.system.phaseCodes.length} polo(s)`}
-        color={colors.red}
-        sub={data.dpsDeviceCount ? `${data.dpsDeviceCount} dispositivo(s) no quadro` : "Proteção contra surtos no QD"}
-      />
-      {data.drDeviceCount > 0 ? (
-        <>
-          <line x1={center} y1={y + 186} x2={center} y2={y + 208} stroke={colors.ink} strokeWidth="1.3" />
-          <DeviceBlock
-            x={x + 64}
-            y={y + 208}
-            w={242}
-            title="IDR / DR"
-            value={`${data.drDeviceCount} disp. · ${data.drCount} circ.`}
-            color={colors.blueDark}
-            sub="30mA para áreas molhadas e tomadas aplicáveis"
-          />
-          <line x1={center} y1={y + 242} x2={center} y2={busTop} stroke={colors.ink} strokeWidth="1.3" />
-        </>
-      ) : (
-        // Sem disjuntor IDR/DR no quadro real (removido pelo usuário no editor) —
-        // o bloco some do diagrama em vez de mostrar uma previsão/placeholder.
-        <line x1={center} y1={y + 186} x2={center} y2={busTop} stroke={colors.ink} strokeWidth="1.3" />
-      )}
+        const lines = [];
+        if (blocks.length === 0) {
+          lines.push(<line key="line-feed-bus" x1={center} y1={y + 78} x2={center} y2={busTop} stroke={colors.ink} strokeWidth="1.3" />);
+        } else {
+          // Line to first block
+          lines.push(<line key="line-feed-first" x1={center} y1={y + 78} x2={center} y2={blocks[0].yTop} stroke={colors.ink} strokeWidth="1.3" />);
+          // Lines between blocks
+          for (let i = 0; i < blocks.length - 1; i++) {
+            lines.push(
+              <line
+                key={`line-block-${i}`}
+                x1={center}
+                y1={blocks[i].yBottom}
+                x2={center}
+                y2={blocks[i + 1].yTop}
+                stroke={colors.ink}
+                strokeWidth="1.3"
+              />
+            );
+          }
+          // Line from last block to busbar
+          lines.push(
+            <line
+              key="line-last-bus"
+              x1={center}
+              y1={blocks[blocks.length - 1].yBottom}
+              x2={center}
+              y2={busTop}
+              stroke={colors.ink}
+              strokeWidth="1.3"
+            />
+          );
+        }
+
+        return (
+          <g key="protection-chain">
+            {lines}
+            {blocks.map((b) => b.render())}
+          </g>
+        );
+      })()}
 
       <rect x={x + 54} y={busTop - 18} width={w - 108} height="24" rx="4" fill={colors.soft} stroke={colors.faint} strokeWidth="0.8" />
       <Text x={center} y={busTop - 2} size={8} weight={900} color={colors.ink} anchor="middle">

@@ -315,24 +315,32 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
         })),
       ];
 
+  const hasCustomLayout = layoutComponents.length > 0;
+  const hasGeneralBreaker = hasCustomLayout
+    ? Boolean(mainBreakerComponent)
+    : (project?.has_general_breaker !== false && Boolean(generalBreaker));
+
   // Proteção geral segue o dimensionamento (métricas); o componente do layout é
   // só fallback quando não há métricas, para bater com editor/diagrama/orçamento.
-  const generalBreakerFromLayout = asNumber(
-    metrics?.generalBreaker,
-    mainBreakerComponent ? asNumber(mainBreakerComponent.current, generalBreaker) : generalBreaker,
-  );
-  const generalPolesFromLayout = asNumber(
-    metrics?.generalBreakerPoles,
-    mainBreakerComponent ? asNumber(mainBreakerComponent.poles, system.generalPoles) : system.generalPoles,
-  );
-  const feederGauge = feederGaugeByCurrent(Math.max(generalCurrent, generalBreakerFromLayout));
-  const dpsPoleCount = dpsComponents.length
+  const generalBreakerFromLayout = hasGeneralBreaker
+    ? asNumber(
+        metrics?.generalBreaker,
+        mainBreakerComponent ? asNumber(mainBreakerComponent.current, generalBreaker) : generalBreaker,
+      )
+    : 0;
+  const generalPolesFromLayout = hasGeneralBreaker
+    ? asNumber(
+        metrics?.generalBreakerPoles,
+        mainBreakerComponent ? asNumber(mainBreakerComponent.poles, system.generalPoles) : system.generalPoles,
+      )
+    : 0;
+  const feederGauge = feederGaugeByCurrent(Math.max(generalCurrent, generalBreakerFromLayout || generalCurrent));
+  const dpsPoleCount = hasCustomLayout
     ? dpsComponents.reduce((sum, component) => sum + asNumber(component.poles, 1), 0)
-    : circuits.length ? Math.max(1, system.phaseCodes.length) : 0;
-  const hasCustomLayout = layoutComponents.length > 0;
+    : (project?.has_dps !== false && project?.dps_omitted !== true && circuits.length ? Math.max(1, system.phaseCodes.length) : 0);
   const drDeviceCount = hasCustomLayout
     ? drComponents.length
-    : (project?.has_dr !== false && circuits.some((circuit) => circuit.needsDr) ? 1 : 0);
+    : (project?.has_dr !== false && project?.no_general_dr !== true && circuits.some((circuit) => circuit.needsDr) ? 1 : 0);
   const drProtectedCount = drDeviceCount > 0
     ? (circuits.filter((circuit) => circuit.needsDr).length || circuits.length)
     : 0;
@@ -358,6 +366,7 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
     imbalancePct: asNumber(metrics?.imbalance_pct),
     neutralCurrent: asNumber(metrics?.neutral_a),
     generalCurrent,
+    hasGeneralBreaker,
     generalBreaker: generalBreakerFromLayout,
     generalPoles: generalPolesFromLayout,
     feederGauge,

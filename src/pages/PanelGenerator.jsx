@@ -417,22 +417,31 @@ const circuitRefForSync = (circuit = {}, index = null) => String(
 
 const componentCircuitRefs = (component = {}) => uniqueStrings([
   component.circuit_id,
+  component.circuitId,
+  component.circuitRef,
   component.source_point_id,
   component.source,
   component.id,
+  component.circuitNumber ? `C${component.circuitNumber}` : null,
+  component.circuitNumber ? `c${component.circuitNumber}` : null,
+  component.circuitNumber ? String(component.circuitNumber) : null,
+  component.circuitLabel,
+  component.name,
+  component.label,
 ]);
 
 const pinReferencesComponent = (pinId = "", componentId = "") => {
   const pin = String(pinId || "");
   const id = String(componentId || "");
   if (!pin || !id) return false;
-  return pin.startsWith(`comp:${id}:`) || pin.startsWith(`load_out:${id}:`);
+  return pin.startsWith(`comp:${id}:`) || pin.startsWith(`load_out:${id}:`) || pin.includes(`:${id}:`);
 };
 
 const wireReferencesComponent = (wire = {}, componentId = "") => (
   pinReferencesComponent(wire.source, componentId)
   || pinReferencesComponent(wire.target, componentId)
   || String(wire.componentId || wire.component_id || "") === String(componentId)
+  || String(wire.circuit_id || "") === String(componentId)
 );
 
 const infrastructureReferencesComponent = (item = {}, componentId = "") => (
@@ -449,11 +458,6 @@ const infrastructureReferencesComponent = (item = {}, componentId = "") => (
 const isProtectedPanelComponent = (component = {}) => (
   !component
   || component.type === "spacer"
-  || component.isGeneral
-  || component.required
-  || component.protected
-  || component.locked
-  || PROTECTED_COMPONENT_IDS.has(String(component.id || ""))
 );
 
 const isSolarCircuit = (circuit = {}) => (
@@ -2000,18 +2004,23 @@ export default function PanelGenerator() {
     layoutSaveFeedbackTimerRef.current = setTimeout(() => setSavedLayout(false), 1400);
   };
 
-  const persistPanelBoards = async (nextBoards, activeId = activeBoardId, { silent = true } = {}) => {
+  const persistPanelBoards = async (nextBoards, activeId = activeBoardId, { silent = true, circuits = null, diagram_layout = undefined, projectUpdates = {} } = {}) => {
     if (!selectedId) return false;
     if (!silent) setSavingLayout(true);
     const activeBoard = nextBoards.find((board) => board.id === activeId) || nextBoards[0];
     const activeLayout = activeBoard?.layout || { rails: [], wires: [], infrastructure: [] };
+    const nextCircuits = circuits !== null ? circuits : project?.circuits;
+    const updates = {
+      panel_boards: nextBoards,
+      panel_layout: activeLayout,
+      ...(circuits !== null ? { circuits: nextCircuits } : {}),
+      ...(diagram_layout !== undefined ? { diagram_layout } : {}),
+      ...projectUpdates,
+    };
     setPanelBoards(nextBoards);
-    setProject((current) => current ? { ...current, panel_boards: nextBoards, panel_layout: activeLayout } : current);
+    setProject((current) => current ? { ...current, ...updates } : current);
     try {
-      await backend.entities.Project.update(selectedId, {
-        panel_boards: nextBoards,
-        panel_layout: activeLayout,
-      });
+      await backend.entities.Project.update(selectedId, updates);
       if (!silent) markPanelLayoutSaved();
       return true;
     } catch (err) {
@@ -4171,7 +4180,7 @@ export default function PanelGenerator() {
     }
   };
 
-  const handleDeleteComponent = (componentId = selectedComponentId) => {
+  const handleDeleteComponent = async (componentId = selectedComponentId) => {
     const targetId = String(componentId || "");
     if (!targetId) return false;
     const placement = findComponentPlacement(targetId);
@@ -4182,11 +4191,11 @@ export default function PanelGenerator() {
 
     const { component } = placement;
     if (isProtectedPanelComponent(component)) {
-      window.alert("Este elemento faz parte da estrutura obrigatória do quadro e não pode ser excluído.");
       setSelectedComponentId("");
       return true;
     }
 
+    // Identificar fios vinculados
     const linkedWires = wires.filter((wire) => wireReferencesComponent(wire, targetId));
     const linkedRouteWireIds = Object.entries(wireRouteMetaRef.current || {})
       .filter(([, meta]) => wireReferencesComponent(meta?.wire, targetId))
@@ -4195,33 +4204,193 @@ export default function PanelGenerator() {
       ...linkedWires.map((wire) => wire.id),
       ...linkedRouteWireIds,
     ].filter(Boolean));
+
+    // Remover componente dos trilhos
     const updatedRails = rails.map((rail) => ({
       ...rail,
       components: (rail.components || []).filter((item) => String(item.id) !== targetId),
     }));
-    const nextWires = wires.filter((wire) => (
+
+    // Verificar dispositivos restantes no quadro
+    const allRemainingComps = updatedRails.flatMap((r) => r.components || []).filter((c) => c && c.type !== "spacer");
+    const hasRemainingDps = allRemainingComps.some((c) => c.type === "dps");
+    const hasRemainingDr = allRemainingComps.some((c) => (
+      c.type === "dr" || c.type === "idr" || c.id === "gen_dr" || /^(idr|dr)(\s|$)/i.test(String(c.label || c.name || ""))
+    ));
+    const hasRemainingMainBreaker = allRemainingComps.some((c) => (
+      c.type === "breaker" && (c.isGeneral || c.id === "gen_brk")
+    ));
+
+    let nextWires = wires.filter((wire) => (
       !wireReferencesComponent(wire, targetId) &&
       !linkedWireIds.includes(String(wire.id || ""))
     ));
-    const removedWireIds = linkedWireIds;
-    removedWireIds.forEach((wireId) => {
+
+    // Limpeza de fios especiais de dispositivos gerais
+    if (component.type === "dr" || component.type === "idr" || targetId === "gen_dr") {
+      nextWires = nextWires.filter((w) => !pinReferencesComponent(w.source, "gen_dr") && !pinReferencesComponent(w.target, "gen_dr"));
+    }
+    if (component.type === "dps" || targetId.startsWith("dps")) {
+      nextWires = nextWires.filter((w) => !pinReferencesComponent(w.source, targetId) && !pinReferencesComponent(w.target, targetId));
+    }
+    if (component.type === "breaker" && (component.isGeneral || targetId === "gen_brk")) {
+      nextWires = nextWires.filter((w) => !pinReferencesComponent(w.source, targetId) && !pinReferencesComponent(w.target, targetId));
+    }
+
+    linkedWireIds.forEach((wireId) => {
       delete wirePathsRef.current[wireId];
       delete wireRouteMetaRef.current[wireId];
     });
+
+    // Mapear e remover circuito correspondente de project.circuits
+    const currentCircuits = Array.isArray(project?.circuits) ? project.circuits : [];
+    const targetCircuitRefs = componentCircuitRefs(component);
+
+    const matchedCircuitIndex = currentCircuits.findIndex((circuit, idx) => {
+      const cId = String(circuit.id || circuit.circuit_id || circuit.source_point_id || "");
+      const cNum = circuit.circuit_number != null ? circuit.circuit_number : (circuit.number != null ? circuit.number : idx + 1);
+      const cLabel = String(circuit.name || circuit.label || "").trim().toLowerCase();
+      const compLabel = String(component.label || component.name || "").trim().toLowerCase();
+      
+      if (cId && (cId === targetId || targetCircuitRefs.includes(cId))) return true;
+      if (component.circuit_id && cId === String(component.circuit_id)) return true;
+      if (component.source_point_id && cId === String(component.source_point_id)) return true;
+      if (component.circuitId && cId === String(component.circuitId)) return true;
+      if (component.circuitRef && cId === String(component.circuitRef)) return true;
+      if (targetId === `circuit_${idx}` || targetId === `circuit-${idx}` || targetId === `c${idx + 1}` || targetId === `C${idx + 1}`) return true;
+      if (component.circuitNumber != null && Number(component.circuitNumber) === Number(cNum)) return true;
+      if (compLabel && (compLabel === cLabel || compLabel.startsWith(`c${cNum} `) || compLabel.startsWith(`c${cNum} -`) || compLabel.startsWith(`c0${cNum} `))) return true;
+      return false;
+    });
+
+    let nextCircuits = currentCircuits;
+    let deletedCircuitObj = null;
+    if (matchedCircuitIndex >= 0) {
+      deletedCircuitObj = currentCircuits[matchedCircuitIndex];
+      nextCircuits = currentCircuits.filter((_, idx) => idx !== matchedCircuitIndex);
+    }
+
+    // Infraestrutura e metadados de layout
     const nextInfrastructureBase = infrastructure.filter((item) => !infrastructureReferencesComponent(item, targetId));
     const nextInfrastructure = upsertPanelLayoutMeta(nextInfrastructureBase, {
       manualDeviceEdits: true,
       lastAction: "delete-component",
       deletedComponentIds: [targetId],
-      deletedCircuitRefs: componentCircuitRefs(component),
-      deletedWireIds: removedWireIds,
+      deletedCircuitRefs: uniqueStrings([
+        ...targetCircuitRefs,
+        deletedCircuitObj ? String(deletedCircuitObj.id || deletedCircuitObj.circuit_id || "") : null,
+      ].filter(Boolean)),
+      deletedWireIds: linkedWireIds,
     });
     const normalizedRails = normalizeRailsLayout(updatedRails);
+
+    // Atualizar Diagrama Unifilar Interativo (diagram_layout)
+    let nextDiagramLayout = project?.diagram_layout;
+    if (nextDiagramLayout) {
+      try {
+        const dl = typeof nextDiagramLayout === "string" ? JSON.parse(nextDiagramLayout) : nextDiagramLayout;
+        if (dl && Array.isArray(dl.nodes)) {
+          let nodesToRemove = new Set();
+          
+          if (component.type === "dps" || targetId.startsWith("dps")) {
+            if (!hasRemainingDps) {
+              nodesToRemove.add("node-dps");
+            }
+            nodesToRemove.add(`node-${targetId}`);
+            nodesToRemove.add(`node-dps-${targetId}`);
+          } else if (component.type === "dr" || component.type === "idr" || targetId === "gen_dr") {
+            if (!hasRemainingDr) {
+              nodesToRemove.add("node-dr");
+            }
+            nodesToRemove.add(`node-${targetId}`);
+          } else if (component.isGeneral || targetId === "gen_brk") {
+            if (!hasRemainingMainBreaker) {
+              nodesToRemove.add("node-general-breaker");
+            }
+            nodesToRemove.add(`node-${targetId}`);
+          } else if (matchedCircuitIndex >= 0 || deletedCircuitObj) {
+            nodesToRemove.add(`node-circuit-${matchedCircuitIndex}`);
+            if (deletedCircuitObj?.id) nodesToRemove.add(`node-circuit-${deletedCircuitObj.id}`);
+            nodesToRemove.add(`node-${targetId}`);
+            dl.nodes.forEach((n) => {
+              if (
+                n.circuit_id === targetId ||
+                n.circuit_id === deletedCircuitObj?.id ||
+                n.id === `node-${targetId}` ||
+                (deletedCircuitObj?.name && n.title === deletedCircuitObj.name)
+              ) {
+                nodesToRemove.add(n.id);
+              }
+            });
+          } else {
+            nodesToRemove.add(`node-${targetId}`);
+          }
+
+          const filteredNodes = dl.nodes.filter((n) => !nodesToRemove.has(n.id));
+          let filteredConnections = (dl.connections || []).filter((c) => (
+            !nodesToRemove.has(c.from) && !nodesToRemove.has(c.to)
+          ));
+
+          // Se node-dr foi removido, reconectar node-general-breaker ao node-busbar
+          if (nodesToRemove.has("node-dr")) {
+            const hasBusbarConn = filteredConnections.some((c) => c.to === "node-busbar");
+            if (!hasBusbarConn && filteredNodes.some((n) => n.id === "node-general-breaker") && filteredNodes.some((n) => n.id === "node-busbar")) {
+              filteredConnections.push({
+                id: "c-breaker-to-busbar",
+                from: "node-general-breaker",
+                to: "node-busbar",
+                type: "fase",
+              });
+            }
+          }
+
+          nextDiagramLayout = {
+            nodes: filteredNodes,
+            connections: filteredConnections,
+          };
+        }
+      } catch (err) {
+        console.error("Erro ao sincronizar diagram_layout no delete:", err);
+      }
+    }
+
+    const layoutObj = { rails: normalizedRails, wires: nextWires, infrastructure: nextInfrastructure };
+    const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
+    const nextBoards = currentBoards.map((board) => (
+      board.id === activeBoardId ? { ...board, layout: layoutObj } : board
+    ));
+
+    const projectUpdates = {
+      circuits: nextCircuits,
+      panel_boards: nextBoards,
+      panel_layout: layoutObj,
+    };
+    if (nextDiagramLayout) {
+      projectUpdates.diagram_layout = nextDiagramLayout;
+    }
+    if (!hasRemainingDr) {
+      projectUpdates.has_dr = false;
+      projectUpdates.no_general_dr = true;
+    }
+    if (!hasRemainingDps) {
+      projectUpdates.has_dps = false;
+      projectUpdates.dps_omitted = true;
+    }
+    if (!hasRemainingMainBreaker) {
+      projectUpdates.has_general_breaker = false;
+      projectUpdates.manual_general_breaker = null;
+    }
+
+    const nextProject = { ...project, ...projectUpdates };
+    const nextMetrics = calcProjectMetrics(nextProject);
 
     setRails(normalizedRails);
     setWires(nextWires);
     setInfrastructure(nextInfrastructure);
-    saveLayoutToDb(normalizedRails, nextWires, nextInfrastructure);
+    setPanelBoards(nextBoards);
+    setProject(nextProject);
+    setMetrics(nextMetrics);
+
     setSelectedComponentId("");
     setSelectedWireId("");
     setSelectedTextWireId("");
@@ -4232,6 +4401,15 @@ export default function PanelGenerator() {
     setWireEndpointDrag(null);
     setWireRoutePointDrag(null);
     setWiringStart("");
+
+    // Persistir no banco de dados
+    await persistPanelBoards(nextBoards, activeBoardId, {
+      silent: true,
+      circuits: nextCircuits,
+      diagram_layout: nextDiagramLayout,
+      projectUpdates,
+    });
+
     return true;
   };
 
@@ -4315,18 +4493,20 @@ export default function PanelGenerator() {
   };
 
   // ADICIONAR COMPONENTE
-  const handleAddComponent = (e) => {
+  const handleAddComponent = async (e) => {
     e.preventDefault();
     const newId = `comp_${Date.now()}`;
     const phaseConfig = phaseTypeConfig[newCompSupplyType] || phaseTypeConfig.Monofásico;
     const normalizedLabel = cleanDisplayText(newCompLabel) || "Circuito sem identificação";
+    const currentList = project?.circuits || [];
+    const nextCircuitNum = currentList.length + 1;
     const comp = {
       id: newId,
       type: newCompType,
       label: normalizedLabel,
       name: normalizedLabel,
       circuitLabel: normalizedLabel,
-      circuitNumber: "",
+      circuitNumber: nextCircuitNum,
       description: "",
       current: parseInt(newCompCurrent, 10) || 16,
       curve: newCompCurve,
@@ -4421,11 +4601,61 @@ export default function PanelGenerator() {
       lastAction: "add-component",
       addedComponentIds: [newId],
     });
+
+    let nextCircuits = currentList;
+    let projectUpdates = {};
+    if (newCompType === "breaker") {
+      const newCircuit = {
+        id: newId,
+        circuit_id: newId,
+        source_point_id: newId,
+        circuit_number: nextCircuitNum,
+        name: normalizedLabel,
+        label: normalizedLabel,
+        type: "Circuito",
+        breaker_a: parseInt(newCompCurrent, 10) || 16,
+        breaker_curve: newCompCurve || "B",
+        breaker_poles: phaseConfig.poles,
+        phase: phaseConfig.phase,
+        supply_type: newCompSupplyType,
+        power_w: (parseInt(newCompCurrent, 10) || 16) * (newCompSupplyType === "Monofásico" ? 127 : 220),
+        wire_gauge: parseInt(newCompCurrent, 10) >= 40 ? "10mm²" : "6mm²",
+      };
+      nextCircuits = [...currentList, newCircuit];
+      projectUpdates.circuits = nextCircuits;
+    } else if (newCompType === "dps") {
+      projectUpdates.has_dps = true;
+      projectUpdates.dps_omitted = false;
+    } else if (newCompType === "dr") {
+      projectUpdates.has_dr = true;
+      projectUpdates.no_general_dr = false;
+    }
+
+    const layoutObj = { rails: normalizedRails, wires: nextWires, infrastructure: nextInfrastructure };
+    const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
+    const nextBoards = currentBoards.map((board) => (
+      board.id === activeBoardId ? { ...board, layout: layoutObj } : board
+    ));
+
+    projectUpdates.panel_boards = nextBoards;
+    projectUpdates.panel_layout = layoutObj;
+
+    const nextProject = { ...project, ...projectUpdates };
+    const nextMetrics = calcProjectMetrics(nextProject);
+
     setRails(normalizedRails);
     setWires(nextWires);
     setInfrastructure(nextInfrastructure);
-    saveLayoutToDb(normalizedRails, nextWires, nextInfrastructure);
+    setPanelBoards(nextBoards);
+    setProject(nextProject);
+    setMetrics(nextMetrics);
     setSelectedComponentId(newId);
+
+    await persistPanelBoards(nextBoards, activeBoardId, {
+      silent: true,
+      circuits: nextCircuits,
+      projectUpdates,
+    });
   };
 
   // EXPORTAR SVG

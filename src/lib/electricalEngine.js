@@ -1076,7 +1076,8 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   const rail1Components = [];
 
   // DPS
-  const dpsCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
+  const hasDPS = Boolean(proj?.has_dps !== false && proj?.dps_omitted !== true);
+  const dpsCount = hasDPS ? (supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1) : 0;
   for (let i = 0; i < dpsCount; i++) {
     rail1Components.push({
       id: `dps_${i}`,
@@ -1090,20 +1091,23 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   }
 
   // Geral
-  rail1Components.push({
-    id: "gen_brk",
-    type: "breaker",
-    label: "DJ GERAL",
-    current: genCurrent || 0,
-    curve: "C",
-    poles: genPoles,
-    isGeneral: true,
-    phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
-    status: hasValidProtection ? "ON" : "OFF",
-  });
+  const hasGeneralBreaker = Boolean(proj?.has_general_breaker !== false);
+  if (hasGeneralBreaker) {
+    rail1Components.push({
+      id: "gen_brk",
+      type: "breaker",
+      label: "DJ GERAL",
+      current: genCurrent || 0,
+      curve: "C",
+      poles: genPoles,
+      isGeneral: true,
+      phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
+      status: hasValidProtection ? "ON" : "OFF",
+    });
+  }
 
   // DR Geral (padrão em quadros de distribuição conforme NBR 5410, exceto se desabilitado)
-  const hasDR = Boolean(proj?.has_dr !== false);
+  const hasDR = Boolean(proj?.has_dr !== false && proj?.no_general_dr !== true);
   if (hasDR) {
     rail1Components.push({
       id: "gen_dr",
@@ -1246,7 +1250,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
         target: "busbar_neutral:0",
         label: "10 mm²"
       });
-    } else if (isMonophase) {
+    } else if (hasGeneralBreaker && isMonophase) {
       wires.push({
         id: "w_neutral_gen_to_bar",
         color: "blue",
@@ -1269,19 +1273,32 @@ export function generateDefaultPanelLayout(proj, options = {}) {
 
   // 4. Alimentação superior por fase
   const feedCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
-  for (let i = 0; i < feedCount; i++) {
-    wires.push({
-      id: `w_phase_feed_${i}`,
-      color: phaseWireColor(i),
-      gauge: "10mm²",
-      source: `terminal_left_top:${i + 1}`,
-      target: `comp:gen_brk:top:${i}`,
-      label: "10 mm²"
-    });
+  if (hasGeneralBreaker) {
+    for (let i = 0; i < feedCount; i++) {
+      wires.push({
+        id: `w_phase_feed_${i}`,
+        color: phaseWireColor(i),
+        gauge: "10mm²",
+        source: `terminal_left_top:${i + 1}`,
+        target: `comp:gen_brk:top:${i}`,
+        label: "10 mm²"
+      });
+    }
+  } else if (hasDR) {
+    for (let i = 0; i < feedCount; i++) {
+      wires.push({
+        id: `w_phase_feed_to_dr_${i}`,
+        color: phaseWireColor(i),
+        gauge: "10mm²",
+        source: `terminal_left_top:${i + 1}`,
+        target: `comp:gen_dr:top:${i}`,
+        label: "10 mm²"
+      });
+    }
   }
 
   // DR Alimentação Fases
-  if (hasDR) {
+  if (hasDR && hasGeneralBreaker) {
     for (let i = 0; i < feedCount; i++) {
       wires.push({
         id: `w_phase_gen_to_dr_${i}`,
@@ -1295,9 +1312,9 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   }
 
   // Distribuição Trilho 2
-  const sourceComp = hasDR ? "gen_dr" : "gen_brk";
+  const sourceComp = hasDR ? "gen_dr" : hasGeneralBreaker ? "gen_brk" : null;
   const distributionBreakers = isSolarProject ? [] : [...rail2Components, ...rail3Components].filter(c => c.type === "breaker");
-  if (distributionBreakers.length > 0) {
+  if (distributionBreakers.length > 0 && sourceComp) {
     const firstBreaker = distributionBreakers[0];
     const distributionGauge = firstBreaker.wire_gauge || "2.5mm²";
     wires.push({
