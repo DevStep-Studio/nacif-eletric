@@ -98,16 +98,18 @@ function BrandLogo({ branding, compact = false, className = "" }) {
 
   if (logo) {
     return (
-      <img
-        src={logo}
-        alt={`${branding.appName} ${branding.appSuffix}`}
-        className={`h-full w-full object-contain ${className}`}
-      />
+      <div className={`flex items-center justify-center shrink-0 ${compact ? "h-8 w-8" : "h-9 max-w-[150px]"} ${className}`}>
+        <img
+          src={logo}
+          alt={`${branding.appName || "Nacif"} ${branding.appSuffix || "Electric"}`}
+          className={`h-full w-full object-contain ${compact ? "object-center" : "object-left"}`}
+        />
+      </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="flex items-center gap-2.5 shrink-0">
       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#00bda1] to-[#00d8b8] text-white font-black shadow-[0_2px_8px_rgba(0,216,184,0.35)]">
         <Zap className="h-5 w-5 fill-current" />
       </div>
@@ -249,12 +251,16 @@ export default function Layout() {
     setMobileDrawerOpen(false);
   }, [location.pathname, location.search]);
 
-  // Atalhos de teclado (Ctrl+K)
+  // Atalhos de teclado (Ctrl+K para busca, Ctrl+B para expandir/recolher menu)
   useEffect(() => {
     const handleShortcut = (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen((open) => !open);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        setSidebarCollapsed((collapsed) => !collapsed);
       }
     };
 
@@ -331,8 +337,8 @@ export default function Layout() {
 
   return (
     <div
-      className={`min-h-screen overflow-x-hidden bg-[#F8FAFC] font-inter text-[#0F172A] transition-[padding] duration-200 ${
-        sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[256px]"
+      className={`min-h-screen overflow-x-hidden bg-[#F8FAFC] font-inter text-[#0F172A] transition-all duration-200 ease-in-out ${
+        sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[260px]"
       }`}
     >
       {/* Onboarding de Primeiro Acesso */}
@@ -349,111 +355,152 @@ export default function Layout() {
         mode={toolsModalMode}
       />
 
-      {/* ── SIDEBAR FIXA (Estilo Shopall com Verde do Projeto) ── */}
+      {/* ── SIDEBAR FIXA ── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-[#E2E8F0] bg-white transition-[width] duration-200 lg:flex ${
-          sidebarCollapsed ? "w-[76px]" : "w-[256px]"
+        className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-[#E2E8F0] bg-white transition-all duration-200 ease-in-out lg:flex ${
+          sidebarCollapsed ? "w-[72px]" : "w-[260px]"
         }`}
       >
-        {/* Topo da Sidebar: Logo & Collapse Button */}
-        <div className="flex h-16 items-center justify-between px-4 border-b border-[#F1F5F9]">
+        {/* Botão Flutuante de Expandir / Recolher na Borda */}
+        <button
+          type="button"
+          aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          className="absolute -right-3.5 top-5 z-50 flex h-7 w-7 items-center justify-center rounded-full border border-[#CBD5E1] bg-white text-[#64748B] shadow-[0_2px_6px_rgba(0,0,0,0.08)] transition-all hover:scale-110 hover:bg-[#00d8b8] hover:text-white hover:border-[#00d8b8] focus:outline-none"
+          title={sidebarCollapsed ? "Expandir menu lateral (Ctrl+B)" : "Recolher menu lateral (Ctrl+B)"}
+        >
+          {sidebarCollapsed ? (
+            <ChevronRight className="h-3.5 w-3.5 stroke-[2.5]" />
+          ) : (
+            <ChevronLeft className="h-3.5 w-3.5 stroke-[2.5]" />
+          )}
+        </button>
+
+        {/* Topo da Sidebar: Logo & Botão Interno */}
+        <div
+          className={`flex h-16 items-center border-b border-[#F1F5F9] transition-all duration-200 ${
+            sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"
+          }`}
+        >
           <Link
             to="/"
-            className={`flex shrink-0 items-center overflow-hidden transition ${
-              sidebarCollapsed ? "h-10 w-10 justify-center" : "h-12 justify-start"
+            className={`flex items-center transition-all ${
+              sidebarCollapsed
+                ? "h-10 w-10 justify-center rounded-xl hover:bg-[#F8FAFC]"
+                : "h-10 items-center gap-3 overflow-hidden"
             }`}
+            title="Nacif Electric - Dashboard"
           >
             <BrandLogo branding={branding} compact={sidebarCollapsed} />
           </Link>
 
-          <button
-            type="button"
-            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-[#F1F5F9] hover:text-[#0F172A]"
-            title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-          >
-            {sidebarCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
-          </button>
+          {!sidebarCollapsed && (
+            <button
+              type="button"
+              aria-label="Recolher menu"
+              onClick={() => setSidebarCollapsed(true)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+              title="Recolher menu lateral"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
-        {/* Workspace / Store Selector Pill Card (Exato da referência 'Capstore') */}
-        {!sidebarCollapsed && (
-          <div className="px-3 pt-3.5 pb-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between gap-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-2.5 text-left transition hover:border-[#CBD5E1] hover:bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#00d8b8] text-white font-black text-xs shadow-sm">
-                      {currentProject ? currentProject.name.slice(0, 1).toUpperCase() : "N"}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-black text-[#0F172A]">
-                        {currentProject ? currentProject.name : "Nacif Studio"}
-                      </p>
-                      <p className="truncate text-[10px] font-bold text-[#64748B]">
-                        {currentProject ? (currentProject.client_name || "Projeto ativo") : "Workspace principal"}
-                      </p>
+        {/* Workspace / Store Selector Pill Card */}
+        <div className={sidebarCollapsed ? "px-2 pt-3 pb-2" : "px-3 pt-3.5 pb-2"}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title={sidebarCollapsed ? (currentProject ? currentProject.name : "Nacif Studio") : undefined}
+                className={`flex items-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] transition hover:border-[#CBD5E1] hover:bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
+                  sidebarCollapsed
+                    ? "h-10 w-10 mx-auto justify-center p-0"
+                    : "w-full justify-between gap-2.5 p-2.5 text-left"
+                }`}
+              >
+                {sidebarCollapsed ? (
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00d8b8] text-white font-black text-xs shadow-sm">
+                    {currentProject ? currentProject.name.slice(0, 1).toUpperCase() : "N"}
+                  </span>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#00d8b8] text-white font-black text-xs shadow-sm">
+                        {currentProject ? currentProject.name.slice(0, 1).toUpperCase() : "N"}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-black text-[#0F172A]">
+                          {currentProject ? currentProject.name : "Nacif Studio"}
+                        </p>
+                        <p className="truncate text-[10px] font-bold text-[#64748B]">
+                          {currentProject ? (currentProject.client_name || "Projeto ativo") : "Workspace principal"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[232px] rounded-xl border-[#E2E8F0] bg-white p-1.5 shadow-xl">
-                <DropdownMenuLabel className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-[#94A3B8]">
-                  Projetos Recentes
-                </DropdownMenuLabel>
-                {shellProjects.slice(0, 5).map((p) => (
-                  <DropdownMenuItem
-                    key={p.id}
-                    onClick={() => navigate(`/projects/${p.id}`)}
-                    className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs font-bold hover:bg-[#F8FAFC]"
-                  >
-                    <span className="truncate">{p.name}</span>
-                    {p.id === currentProjectId && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />
+                  </>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align={sidebarCollapsed ? "start" : "start"}
+              side={sidebarCollapsed ? "right" : "bottom"}
+              className="w-[232px] rounded-xl border-[#E2E8F0] bg-white p-1.5 shadow-xl"
+            >
+              <DropdownMenuLabel className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-[#94A3B8]">
+                Projetos Recentes
+              </DropdownMenuLabel>
+              {shellProjects.slice(0, 5).map((p) => (
                 <DropdownMenuItem
-                  onClick={() => navigate("/projects/new")}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-bold text-[#00d8b8] hover:bg-[#E8FCF8]"
+                  key={p.id}
+                  onClick={() => navigate(`/projects/${p.id}`)}
+                  className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs font-bold hover:bg-[#F8FAFC]"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Criar novo projeto</span>
+                  <span className="truncate">{p.name}</span>
+                  {p.id === currentProjectId && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
+                  )}
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => navigate("/projects/new")}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-bold text-[#00d8b8] hover:bg-[#E8FCF8]"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Criar novo projeto</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         {/* Lista de Navegação por Grupos */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-4">
+        <nav className={`flex-1 overflow-y-auto space-y-4 ${sidebarCollapsed ? "px-2 py-2" : "px-3 py-2"}`}>
           {/* Grupo 1: General */}
           <div className="space-y-1">
-            {!sidebarCollapsed && (
+            {!sidebarCollapsed ? (
               <p className="px-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8]">
                 General
               </p>
+            ) : (
+              <div className="h-1" />
             )}
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               <Link
                 to="/"
                 title={sidebarCollapsed ? "Dashboard" : undefined}
-                className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                  sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                 } ${
                   isItemActive("/")
                     ? "bg-[#0F172A] text-white font-black shadow-sm"
                     : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Home className={`h-4 w-4 shrink-0 ${isItemActive("/") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <Home className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Dashboard</span>}
                 </div>
               </Link>
@@ -461,20 +508,20 @@ export default function Layout() {
               <Link
                 to="/projects"
                 title={sidebarCollapsed ? "Meus Projetos" : undefined}
-                className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                  sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                 } ${
                   isItemActive("/projects")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
                     : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <FolderOpen className={`h-4 w-4 shrink-0 ${isItemActive("/projects") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <FolderOpen className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/projects") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Projetos</span>}
                 </div>
                 {!sidebarCollapsed && shellProjects.length > 0 && (
-                  <span className="rounded-md bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-black text-[#64748B]">
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-black ${isItemActive("/projects") ? "bg-[#1E293B] text-[#00d8b8]" : "bg-[#F1F5F9] text-[#64748B]"}`}>
                     {shellProjects.length}
                   </span>
                 )}
@@ -483,16 +530,16 @@ export default function Layout() {
               <Link
                 to={effectiveProjectId ? `/planta-ia?project=${effectiveProjectId}` : "/planta-ia"}
                 title={sidebarCollapsed ? "Planta Elétrica" : undefined}
-                className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                  sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                 } ${
                   isItemActive("/planta-ia")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
                     : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Compass className={`h-4 w-4 shrink-0 ${isItemActive("/planta-ia") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <Compass className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/planta-ia") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Planta Elétrica</span>}
                 </div>
               </Link>
@@ -500,43 +547,46 @@ export default function Layout() {
               <Link
                 to={effectiveProjectId ? `/panel-generator?project=${effectiveProjectId}` : "/panel-generator"}
                 title={sidebarCollapsed ? "Quadro Elétrico" : undefined}
-                className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                  sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                 } ${
                   isItemActive("/panel-generator")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
                     : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <LayoutGrid className={`h-4 w-4 shrink-0 ${isItemActive("/panel-generator") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <LayoutGrid className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/panel-generator") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Quadro Elétrico</span>}
                 </div>
               </Link>
             </div>
           </div>
 
+          {/* Divisor Visual no modo recolhido */}
+          {sidebarCollapsed && <div className="mx-auto my-1.5 h-px w-6 bg-[#E2E8F0]" />}
+
           {/* Grupo 2: Tools */}
           <div className="space-y-1">
-            {!sidebarCollapsed && (
+            {!sidebarCollapsed ? (
               <p className="px-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#94A3B8]">
                 Tools
               </p>
-            )}
-            <div className="space-y-0.5">
+            ) : null}
+            <div className="space-y-1">
               <Link
                 to={effectiveProjectId ? `/unifilar?project=${effectiveProjectId}` : "/unifilar"}
                 title={sidebarCollapsed ? "Diagrama Unifilar" : undefined}
-                className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                  sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                 } ${
                   isItemActive("/unifilar")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
                     : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <GitBranch className={`h-4 w-4 shrink-0 ${isItemActive("/unifilar") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <GitBranch className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/unifilar") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Diagrama Unifilar</span>}
                 </div>
               </Link>
@@ -544,16 +594,16 @@ export default function Layout() {
               <Link
                 to="/calculator"
                 title={sidebarCollapsed ? "Calculadora" : undefined}
-                className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                  sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                 } ${
                   isItemActive("/calculator")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
                     : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Calculator className={`h-4 w-4 shrink-0 ${isItemActive("/calculator") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <Calculator className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/calculator") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Calculadora</span>}
                 </div>
               </Link>
@@ -561,16 +611,16 @@ export default function Layout() {
               <Link
                 to="/ai-assistant"
                 title={sidebarCollapsed ? "Assistente IA" : undefined}
-                className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                  sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                 } ${
                   isItemActive("/ai-assistant")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
                     : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Sparkles className={`h-4 w-4 shrink-0 ${isItemActive("/ai-assistant") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <Sparkles className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/ai-assistant") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Assistente IA</span>}
                 </div>
               </Link>
@@ -578,16 +628,16 @@ export default function Layout() {
               <Link
                 to="/nbr-library"
                 title={sidebarCollapsed ? "Biblioteca NBR" : undefined}
-                className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                  sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                 } ${
                   isItemActive("/nbr-library")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
                     : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <BookOpen className={`h-4 w-4 shrink-0 ${isItemActive("/nbr-library") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <BookOpen className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/nbr-library") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Biblioteca NBR</span>}
                 </div>
               </Link>
@@ -595,20 +645,20 @@ export default function Layout() {
               <Link
                 to={effectiveProjectId ? `/budget?project=${effectiveProjectId}` : "/budget"}
                 title={sidebarCollapsed ? "Orçamento & Materiais" : undefined}
-                className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                  sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                 } ${
                   isItemActive("/budget")
-                    ? "bg-[#E8FCF8] text-[#0f4f49] font-black"
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
                     : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <FileSpreadsheet className={`h-4 w-4 shrink-0 ${isItemActive("/budget") ? "text-[#00d8b8]" : "text-[#64748B]"}`} />
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <FileSpreadsheet className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/budget") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Orçamento</span>}
                 </div>
                 {!sidebarCollapsed && (
-                  <span className="rounded-md bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-black text-[#64748B]">
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-black ${isItemActive("/budget") ? "bg-[#1E293B] text-[#00d8b8]" : "bg-[#F1F5F9] text-[#64748B]"}`}>
                     2
                   </span>
                 )}
@@ -617,23 +667,26 @@ export default function Layout() {
           </div>
         </nav>
 
-        {/* Rodapé da Sidebar: Account & Profile Pill (Exato da referência 'Hecham GAZHI') */}
-        <div className="border-t border-[#F1F5F9] p-3 space-y-2">
-          <div className="space-y-0.5">
+        {/* Rodapé da Sidebar: Account & Profile Pill */}
+        <div className={`border-t border-[#F1F5F9] space-y-2 ${sidebarCollapsed ? "p-2" : "p-3"}`}>
+          <div className="space-y-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   title={sidebarCollapsed ? "Notificações" : undefined}
-                  className={`flex h-9 w-full items-center rounded-xl text-xs font-bold transition ${
-                    sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
+                  className={`flex items-center rounded-xl text-xs font-bold transition-all ${
+                    sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
                   } text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="relative">
+                  <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                    <div className="relative flex items-center justify-center">
                       <Bell className="h-4 w-4 shrink-0 text-[#64748B]" />
                       {unreadCount > 0 && (
-                        <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#00d8b8]" />
+                        <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00d8b8] opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00d8b8] ring-2 ring-white" />
+                        </span>
                       )}
                     </div>
                     {!sidebarCollapsed && <span className="truncate">Notificações</span>}
@@ -645,7 +698,7 @@ export default function Layout() {
                   )}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80 rounded-2xl border-[#E2E8F0] bg-white p-0 shadow-2xl">
+              <DropdownMenuContent align={sidebarCollapsed ? "start" : "end"} side={sidebarCollapsed ? "right" : "top"} className="w-80 rounded-2xl border-[#E2E8F0] bg-white p-0 shadow-2xl">
                 <div className="flex items-center justify-between border-b border-[#F1F5F9] px-4 py-3">
                   <DropdownMenuLabel className="p-0 text-xs font-black text-[#0F172A]">Notificações</DropdownMenuLabel>
                   <button type="button" onClick={markAllRead} className="text-[11px] font-bold text-[#00d8b8] hover:underline">
@@ -674,8 +727,8 @@ export default function Layout() {
             <Link
               to="/settings"
               title={sidebarCollapsed ? "Configurações" : undefined}
-              className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
-                sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
+              className={`flex items-center rounded-xl text-xs font-bold transition-all ${
+                sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full gap-2.5 px-2.5"
               } text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]`}
             >
               <Settings className="h-4 w-4 shrink-0 text-[#64748B]" />
@@ -686,8 +739,8 @@ export default function Layout() {
               type="button"
               onClick={() => logout()}
               title={sidebarCollapsed ? "Sair" : undefined}
-              className={`flex h-9 w-full items-center rounded-xl text-xs font-bold transition ${
-                sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
+              className={`flex items-center rounded-xl text-xs font-bold transition-all ${
+                sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full gap-2.5 px-2.5"
               } text-[#475467] hover:bg-red-50 hover:text-red-600`}
             >
               <LogOut className="h-4 w-4 shrink-0 text-[#64748B]" />
@@ -701,11 +754,12 @@ export default function Layout() {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className={`flex w-full items-center rounded-xl p-1.5 transition hover:bg-[#F1F5F9] ${
-                    sidebarCollapsed ? "justify-center" : "justify-between gap-2.5"
+                  title={sidebarCollapsed ? `${displayName} (${displayEmail})` : undefined}
+                  className={`flex items-center rounded-xl transition hover:bg-[#F1F5F9] ${
+                    sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "w-full justify-between gap-2.5 p-1.5"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
                     <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#CBD5E1] bg-[#E8FCF8] text-xs font-extrabold text-[#0f4f49]">
                       <AvatarDisplay user={activeUser} initials={initials} className="h-full w-full" />
                       <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border-2 border-white bg-emerald-500" />
@@ -720,7 +774,7 @@ export default function Layout() {
                   {!sidebarCollapsed && <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="top" className="w-60 rounded-2xl border-[#E2E8F0] bg-white p-1.5 shadow-2xl">
+              <DropdownMenuContent align={sidebarCollapsed ? "start" : "start"} side={sidebarCollapsed ? "right" : "top"} className="w-60 rounded-2xl border-[#E2E8F0] bg-white p-1.5 shadow-2xl">
                 <div className="p-2 border-b border-[#F1F5F9]">
                   <p className="text-xs font-black text-[#0F172A] truncate">{displayName}</p>
                   <p className="text-[10px] text-[#64748B] truncate">{displayEmail}</p>
