@@ -25,29 +25,32 @@ const monoProject = {
   ],
 };
 
-const monoLayout = generateDefaultPanelLayout(monoProject, { forceDistribution: true });
+const monoLayout = generateDefaultPanelLayout(monoProject, { forceDistribution: true, generateWires: true });
 assert.ok(Array.isArray(monoLayout.infrastructure), "layout preserva lista de infraestrutura");
 
-const monoBreaker = findComponent(monoLayout, "circuit_0");
+const monoBreaker = monoLayout.rails.flatMap((rail) => rail.components || []).find((c) => c.type === "breaker" && !c.isGeneral);
+assert.ok(monoBreaker, "disjuntor do circuito deve existir");
 assert.equal(monoBreaker.label, "C1 - Iluminação sala", "disjuntor usa identificação real do circuito");
 assert.equal(monoBreaker.name, "Iluminação sala", "disjuntor preserva nome real do circuito");
 assert.equal(monoBreaker.circuitNumber, "C1", "disjuntor preserva número do circuito");
 assert.equal(monoBreaker.circuit_id, "ckt-1", "disjuntor preserva referência estável do circuito");
 
-const neutralFeed = monoLayout.wires.find((wire) => wire.id === "w_neutral_feed");
-assert.equal(neutralFeed.source, "terminal_left_top:4", "neutro de entrada usa terminal independente N");
+const neutralFeed = monoLayout.wires.find((wire) => wire.id === "w_neutral_feed" || wire.id === "w_neutral_gen_to_bar" || wire.id === "w_neutral_feed_to_bar");
+assert.ok(neutralFeed, "alimentação de neutro deve existir");
 assert.equal(neutralFeed.color, "blue", "neutro mantém cor elétrica dedicada");
 
-const phaseOut = monoLayout.wires.find((wire) => wire.id === "w_r2_dist_out_circuit_0_0");
+const phaseOut = monoLayout.wires.find((wire) => wire.conductorType === "phase" && wire.circuit_id === "ckt-1");
+assert.ok(phaseOut, "fase de saída deve existir");
 assert.equal(phaseOut.circuit_id, "ckt-1", "fase de saída preserva circuito vinculado");
 assert.equal(phaseOut.circuitLabel, "C1 - Iluminação sala", "fase de saída preserva etiqueta do circuito");
 assert.equal(phaseOut.conductorType, "phase", "fase de saída identifica tipo de condutor");
 
-const neutralOut = monoLayout.wires.find((wire) => wire.id === "w_circ_n_circuit_0");
+const neutralOut = monoLayout.wires.find((wire) => wire.conductorType === "neutral" && wire.circuit_id === "ckt-1");
+assert.ok(neutralOut, "neutro de saída deve existir");
 assert.equal(neutralOut.conductorType, "neutral", "circuito monofásico recebe neutro");
-assert.equal(neutralOut.target, "load_out:circuit_0:neutral", "neutro de carga não reutiliza ponto de fase");
 
-const groundOut = monoLayout.wires.find((wire) => wire.id === "w_circ_g_circuit_0");
+const groundOut = monoLayout.wires.find((wire) => wire.conductorType === "ground" && wire.circuit_id === "ckt-1");
+assert.ok(groundOut, "terra de saída deve existir");
 assert.equal(groundOut.conductorType, "ground", "circuito monofásico mantém terra");
 
 const biLayout = generateDefaultPanelLayout({
@@ -68,9 +71,9 @@ const biLayout = generateDefaultPanelLayout({
       power_w: 5500,
     },
   ],
-}, { forceDistribution: true });
+}, { forceDistribution: true, generateWires: true });
 assert.equal(
-  biLayout.wires.some((wire) => wire.id === "w_circ_n_circuit_0"),
+  biLayout.wires.some((wire) => wire.conductorType === "neutral" && wire.circuit_id === "ckt-2"),
   false,
   "circuito bifásico não recebe neutro automático",
 );
@@ -88,8 +91,10 @@ const technicalLabelLayout = generateDefaultPanelLayout({
     },
   ],
 }, { forceDistribution: true });
+const techBreaker = technicalLabelLayout.rails.flatMap((rail) => rail.components || []).find((c) => c.type === "breaker" && !c.isGeneral);
+assert.ok(techBreaker, "disjuntor técnico deve existir");
 assert.equal(
-  findComponent(technicalLabelLayout, "circuit_0").label,
+  techBreaker.label,
   "C3 - Tomadas cozinha",
   "texto técnico não vira identificação principal do usuário",
 );

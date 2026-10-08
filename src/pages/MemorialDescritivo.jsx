@@ -569,7 +569,11 @@ export default function MemorialDescritivo() {
   const [searchParams] = useSearchParams();
   const { branding } = useBranding();
   const [projects, setProjects]    = useState([]);
-  const [selectedId, setSelectedId] = useState(searchParams.get("project") || "");
+  const [selectedId, setSelectedId] = useState(() => (
+    searchParams.get("project")
+    || (typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : "")
+    || ""
+  ));
   const [project, setProject]       = useState(null);
   const [metrics, setMetrics]       = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -580,7 +584,40 @@ export default function MemorialDescritivo() {
   const projectRegion = project ? resolveProjectRegion(project) : "";
   const projectGps = project ? resolveProjectGps(project) : "";
 
-  useEffect(() => { backend.entities.Project.list().then(setProjects); }, []);
+  useEffect(() => {
+    const urlProjectId = searchParams.get("project");
+    if (urlProjectId && urlProjectId !== selectedId) {
+      setSelectedId(urlProjectId);
+      try { window.localStorage.setItem("voltai_active_project_id", urlProjectId); } catch {}
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    backend.entities.Project.list("-updated_date", 100).then((list) => {
+      if (cancelled) return;
+      const safeList = Array.isArray(list) ? list : [];
+      setProjects(safeList);
+      const currentUrlId = searchParams.get("project");
+      if (!currentUrlId && !selectedId && safeList.length > 0) {
+        const storedId = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
+        const target = safeList.find((p) => p.id === storedId) || safeList[0];
+        if (target?.id) {
+          setSelectedId(target.id);
+          try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch {}
+        }
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSelectProject = (newId) => {
+    setSelectedId(newId || "");
+    if (newId) {
+      try { window.localStorage.setItem("voltai_active_project_id", newId); } catch {}
+    }
+  };
+
   useEffect(() => {
     if (!selectedId) return;
     setProject(null); setMetrics(null); setGenerated(false);
@@ -610,7 +647,7 @@ export default function MemorialDescritivo() {
         title="Memorial Descritivo"
         subtitle="Geração automática em PDF · NBR 5410:2004 · detalhes de instalação · ART"
       >
-        <Select value={selectedId} onValueChange={setSelectedId}>
+        <Select value={selectedId} onValueChange={handleSelectProject}>
           <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
             <SelectValue placeholder="Escolha o projeto para gerar o memorial..." />
           </SelectTrigger>

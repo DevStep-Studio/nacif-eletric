@@ -171,6 +171,21 @@ export default function Layout() {
     return null;
   }, [location.pathname, searchParams]);
 
+  const storedProjectId = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem("voltai_active_project_id") || null;
+  }, [location.pathname, location.search]);
+
+  const effectiveProjectId = currentProjectId || storedProjectId;
+
+  useEffect(() => {
+    if (currentProjectId && typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("voltai_active_project_id", currentProjectId);
+      } catch {}
+    }
+  }, [currentProjectId]);
+
   useEffect(() => {
     setActiveUser(user);
   }, [user]);
@@ -466,7 +481,7 @@ export default function Layout() {
               </Link>
 
               <Link
-                to={currentProjectId ? `/planta-ia?project=${currentProjectId}` : "/planta-ia"}
+                to={effectiveProjectId ? `/planta-ia?project=${effectiveProjectId}` : "/planta-ia"}
                 title={sidebarCollapsed ? "Planta Elétrica" : undefined}
                 className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
@@ -483,7 +498,7 @@ export default function Layout() {
               </Link>
 
               <Link
-                to={currentProjectId ? `/panel-generator?project=${currentProjectId}` : "/panel-generator"}
+                to={effectiveProjectId ? `/panel-generator?project=${effectiveProjectId}` : "/panel-generator"}
                 title={sidebarCollapsed ? "Quadro Elétrico" : undefined}
                 className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
@@ -510,7 +525,7 @@ export default function Layout() {
             )}
             <div className="space-y-0.5">
               <Link
-                to={currentProjectId ? `/unifilar?project=${currentProjectId}` : "/unifilar"}
+                to={effectiveProjectId ? `/unifilar?project=${effectiveProjectId}` : "/unifilar"}
                 title={sidebarCollapsed ? "Diagrama Unifilar" : undefined}
                 className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
@@ -578,7 +593,7 @@ export default function Layout() {
               </Link>
 
               <Link
-                to={currentProjectId ? `/budget?project=${currentProjectId}` : "/budget"}
+                to={effectiveProjectId ? `/budget?project=${effectiveProjectId}` : "/budget"}
                 title={sidebarCollapsed ? "Orçamento & Materiais" : undefined}
                 className={`flex h-9 items-center rounded-xl text-xs font-bold transition ${
                   sidebarCollapsed ? "justify-center px-0" : "justify-between px-2.5"
@@ -964,7 +979,7 @@ export default function Layout() {
                       <span>Projetos</span>
                     </Link>
                     <Link
-                      to="/planta-ia"
+                      to={effectiveProjectId ? `/planta-ia?project=${effectiveProjectId}` : "/planta-ia"}
                       onClick={() => setMobileDrawerOpen(false)}
                       className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
                     >
@@ -972,7 +987,7 @@ export default function Layout() {
                       <span>Planta Elétrica</span>
                     </Link>
                     <Link
-                      to="/panel-generator"
+                      to={effectiveProjectId ? `/panel-generator?project=${effectiveProjectId}` : "/panel-generator"}
                       onClick={() => setMobileDrawerOpen(false)}
                       className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
                     >
@@ -988,7 +1003,7 @@ export default function Layout() {
                   </p>
                   <div className="space-y-0.5">
                     <Link
-                      to="/unifilar"
+                      to={effectiveProjectId ? `/unifilar?project=${effectiveProjectId}` : "/unifilar"}
                       onClick={() => setMobileDrawerOpen(false)}
                       className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
                     >

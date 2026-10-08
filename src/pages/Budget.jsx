@@ -98,10 +98,28 @@ export default function BudgetPage() {
     });
   };
 
+  const selectProject = (id) => {
+    if (id) {
+      try { window.localStorage.setItem("voltai_active_project_id", id); } catch {}
+      navigate(`/budget?project=${id}`, { replace: true });
+    }
+  };
+
   useEffect(() => {
     setLoadingProjects(true);
     backend.entities.Project.list("-updated_date", 100)
-      .then(setProjects)
+      .then((list) => {
+        const safeList = Array.isArray(list) ? list : [];
+        setProjects(safeList);
+        if (!projectId && safeList.length > 0) {
+          const storedId = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
+          const target = safeList.find((p) => p.id === storedId) || safeList[0];
+          if (target?.id) {
+            try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch {}
+            navigate(`/budget?project=${target.id}`, { replace: true });
+          }
+        }
+      })
       .finally(() => setLoadingProjects(false));
   }, []);
 
@@ -110,15 +128,18 @@ export default function BudgetPage() {
       setProject(null);
       return;
     }
+    try { window.localStorage.setItem("voltai_active_project_id", projectId); } catch {}
     setLoadingProject(true);
     backend.entities.Project.get(projectId)
       .then(setProject)
+      .catch((err) => {
+        console.error("Erro ao carregar projeto no orçamento:", err);
+        setProject(null);
+      })
       .finally(() => setLoadingProject(false));
   }, [projectId]);
 
-  const selectProject = (id) => {
-    navigate(`/budget?project=${id}`);
-  };
+
 
   const updateManualItems = async (nextItems) => {
     if (!projectId) return;

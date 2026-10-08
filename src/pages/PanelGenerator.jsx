@@ -371,7 +371,7 @@ const createPanelBoard = (project, index = 1, layout = null) => {
   const supply = project?.supply_type || "Monofásico";
 
   const rawBoard = {
-    id: `board_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `board_${index}`,
     name: index === 1 ? "QD-01 Principal" : `QD-${String(index).padStart(2, "0")}`,
     location: index === 1 ? "Entrada / Distribuição" : "Distribuição",
     type,
@@ -1566,7 +1566,11 @@ export default function PanelGenerator() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
-  const [selectedId, setSelectedId] = useState(searchParams.get("project") || "");
+  const [selectedId, setSelectedId] = useState(() => (
+    searchParams.get("project")
+    || (typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : "")
+    || ""
+  ));
   const [project, setProject] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [panelBoards, setPanelBoards] = useState([]);
@@ -1873,10 +1877,57 @@ export default function PanelGenerator() {
     latestPanelLayoutRef.current = { rails, wires, infrastructure };
   }, [infrastructure, rails, wires]);
 
-  // Carregar projetos
+  // Sincronizar selectedId quando os parâmetros de busca na URL mudam
   useEffect(() => {
-    backend.entities.Project.list().then(setProjects);
+    const urlProjectId = searchParams.get("project");
+    if (urlProjectId && urlProjectId !== selectedId) {
+      setSelectedId(urlProjectId);
+      try {
+        window.localStorage.setItem("voltai_active_project_id", urlProjectId);
+      } catch {}
+    }
+  }, [searchParams]);
+
+  // Carregar lista de projetos com auto-seleção inteligente
+  useEffect(() => {
+    let cancelled = false;
+    backend.entities.Project.list("-updated_date", 100).then((list) => {
+      if (cancelled) return;
+      const safeList = Array.isArray(list) ? list : [];
+      setProjects(safeList);
+
+      const currentUrlId = searchParams.get("project");
+      if (!currentUrlId && !selectedId && safeList.length > 0) {
+        const storedId = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
+        const target = safeList.find((p) => p.id === storedId) || safeList[0];
+        if (target?.id) {
+          setSelectedId(target.id);
+          try {
+            window.localStorage.setItem("voltai_active_project_id", target.id);
+          } catch {}
+          navigate(`/panel-generator?project=${target.id}`, { replace: true });
+        }
+      }
+    }).catch((err) => {
+      console.error("Erro ao listar projetos no quadro:", err);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const handleSelectProject = (newId) => {
+    setSelectedId(newId || "");
+    if (newId) {
+      try {
+        window.localStorage.setItem("voltai_active_project_id", newId);
+      } catch {}
+      navigate(`/panel-generator?project=${newId}`, { replace: true });
+    } else {
+      navigate("/panel-generator", { replace: true });
+    }
+  };
 
   // Carregar projeto selecionado e decodificar layout do banco local
   useEffect(() => {
@@ -1890,8 +1941,10 @@ export default function PanelGenerator() {
       setInfrastructure([]);
       return;
     }
-    
+
+    let cancelled = false;
     backend.entities.Project.get(selectedId).then(p => {
+      if (cancelled || !p) return;
       const calculatedMetrics = calcProjectMetrics(p);
       const distributionCircuits = getDistributionCircuits(calculatedMetrics.circuits);
       let projectForPanel = { ...p, circuits: calculatedMetrics.circuits };
@@ -1949,7 +2002,22 @@ export default function PanelGenerator() {
             };
         backend.entities.Project.update(selectedId, payload).catch((error) => console.error("Erro ao normalizar quadro:", error));
       }
+    }).catch((err) => {
+      console.error("Erro ao carregar projeto selecionado:", err);
+      if (!cancelled) {
+        setProject(null);
+        setMetrics(null);
+        setPanelBoards([]);
+        setActiveBoardId("");
+        setRails([]);
+        setWires([]);
+        setInfrastructure([]);
+      }
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedId]);
 
   useEffect(() => {
@@ -8563,7 +8631,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
           <div className="h-5 w-px bg-[#CDEFE8] mx-1" />
 
-          <Select value={selectedId} onValueChange={setSelectedId}>
+          <Select value={selectedId} onValueChange={handleSelectProject}>
             <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none">
               <SelectValue placeholder="Selecionar projeto..." />
             </SelectTrigger>

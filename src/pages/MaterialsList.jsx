@@ -383,7 +383,11 @@ function MaterialProductCard({ material }) {
 export default function MaterialsList() {
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
-  const [selected, setSelected] = useState(searchParams.get("project") || "");
+  const [selected, setSelected] = useState(() => (
+    searchParams.get("project")
+    || (typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : "")
+    || ""
+  ));
   const [project, setProject] = useState(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -391,12 +395,51 @@ export default function MaterialsList() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiInsight, setAiInsight] = useState(null);
 
-  useEffect(() => { backend.entities.Project.list().then(setProjects); }, []);
   useEffect(() => {
-    if (!selected) return;
+    const urlProjectId = searchParams.get("project");
+    if (urlProjectId && urlProjectId !== selected) {
+      setSelected(urlProjectId);
+      try { window.localStorage.setItem("voltai_active_project_id", urlProjectId); } catch {}
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    backend.entities.Project.list("-updated_date", 100).then((list) => {
+      if (cancelled) return;
+      const safeList = Array.isArray(list) ? list : [];
+      setProjects(safeList);
+      const currentUrlId = searchParams.get("project");
+      if (!currentUrlId && !selected && safeList.length > 0) {
+        const storedId = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
+        const target = safeList.find((p) => p.id === storedId) || safeList[0];
+        if (target?.id) {
+          setSelected(target.id);
+          try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch {}
+        }
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSelectProject = (newId) => {
+    setSelected(newId || "");
+    if (newId) {
+      try { window.localStorage.setItem("voltai_active_project_id", newId); } catch {}
+    }
+  };
+
+  useEffect(() => {
+    if (!selected) {
+      setProject(null);
+      setAiInsight(null);
+      return;
+    }
     backend.entities.Project.get(selected).then((value) => {
       setProject(value);
       setAiInsight(null);
+    }).catch((err) => {
+      console.error("Erro ao carregar projeto:", err);
     });
   }, [selected]);
 
@@ -536,7 +579,7 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
           </>
         }
       >
-        <Select value={selected} onValueChange={setSelected}>
+        <Select value={selected} onValueChange={handleSelectProject}>
           <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
             <SelectValue placeholder="Selecionar projeto..." />
           </SelectTrigger>

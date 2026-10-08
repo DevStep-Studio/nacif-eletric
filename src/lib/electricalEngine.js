@@ -1262,6 +1262,7 @@ export function generateDefaultPanelWires(proj, options = {}) {
   };
 
   const hasDR = Boolean(proj?.has_dr !== false);
+  const hasGeneralBreaker = Boolean(proj?.has_general_breaker !== false);
   const dpsCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
   const feedCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
 

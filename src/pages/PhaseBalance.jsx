@@ -34,16 +34,61 @@ function BalanceTooltip({ active, payload }) {
 export default function PhaseBalance() {
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
-  const [selected, setSelected] = useState(searchParams.get("project") || "");
+  const [selected, setSelected] = useState(() => (
+    searchParams.get("project")
+    || (typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : "")
+    || ""
+  ));
   const [project, setProject]   = useState(null);
   const [metrics, setMetrics]   = useState(null);
 
-  useEffect(() => { backend.entities.Project.list().then(setProjects); }, []);
   useEffect(() => {
-    if (!selected) return;
+    const urlProjectId = searchParams.get("project");
+    if (urlProjectId && urlProjectId !== selected) {
+      setSelected(urlProjectId);
+      try { window.localStorage.setItem("voltai_active_project_id", urlProjectId); } catch {}
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    backend.entities.Project.list("-updated_date", 100).then((list) => {
+      if (cancelled) return;
+      const safeList = Array.isArray(list) ? list : [];
+      setProjects(safeList);
+      const currentUrlId = searchParams.get("project");
+      if (!currentUrlId && !selected && safeList.length > 0) {
+        const storedId = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
+        const target = safeList.find((p) => p.id === storedId) || safeList[0];
+        if (target?.id) {
+          setSelected(target.id);
+          try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch {}
+        }
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSelectProject = (newId) => {
+    setSelected(newId || "");
+    if (newId) {
+      try { window.localStorage.setItem("voltai_active_project_id", newId); } catch {}
+    }
+  };
+
+  useEffect(() => {
+    if (!selected) {
+      setProject(null);
+      setMetrics(null);
+      return;
+    }
     backend.entities.Project.get(selected).then(p => {
       setProject(p);
       setMetrics(calcProjectMetrics(p));
+    }).catch((err) => {
+      console.error("Erro ao carregar projeto no balanceamento:", err);
+      setProject(null);
+      setMetrics(null);
     });
   }, [selected]);
 
@@ -83,7 +128,7 @@ export default function PhaseBalance() {
         title="Balanceamento de Fases"
         subtitle="Distribuição automática A, B, C · NBR 5410"
       >
-        <Select value={selected} onValueChange={setSelected}>
+        <Select value={selected} onValueChange={handleSelectProject}>
           <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
             <SelectValue placeholder="Selecionar projeto..." />
           </SelectTrigger>

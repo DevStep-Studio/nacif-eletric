@@ -499,19 +499,63 @@ function ValidationPanel({ metrics, validations, onAutoFix, saving = false, canA
 export default function CircuitEditor() {
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
-  const [selectedId, setSelectedId] = useState(searchParams.get("project") || "");
+  const [selectedId, setSelectedId] = useState(() => (
+    searchParams.get("project")
+    || (typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : "")
+    || ""
+  ));
   const [project, setProject] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [saving, setSaving] = useState(false);
   const [autoFixFeedback, setAutoFixFeedback] = useState(null);
 
-  useEffect(() => { backend.entities.Project.list().then(setProjects); }, []);
   useEffect(() => {
-    if (selectedId) backend.entities.Project.get(selectedId).then(p => {
-      setProject(p);
-      setMetrics(calcProjectMetrics(p));
-      setAutoFixFeedback(null);
+    const urlProjectId = searchParams.get("project");
+    if (urlProjectId && urlProjectId !== selectedId) {
+      setSelectedId(urlProjectId);
+      try { window.localStorage.setItem("voltai_active_project_id", urlProjectId); } catch {}
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    backend.entities.Project.list("-updated_date", 100).then((list) => {
+      if (cancelled) return;
+      const safeList = Array.isArray(list) ? list : [];
+      setProjects(safeList);
+      const currentUrlId = searchParams.get("project");
+      if (!currentUrlId && !selectedId && safeList.length > 0) {
+        const storedId = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
+        const target = safeList.find((p) => p.id === storedId) || safeList[0];
+        if (target?.id) {
+          setSelectedId(target.id);
+          try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch {}
+        }
+      }
     });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSelectProject = (newId) => {
+    setSelectedId(newId || "");
+    if (newId) {
+      try { window.localStorage.setItem("voltai_active_project_id", newId); } catch {}
+    }
+  };
+
+  useEffect(() => {
+    if (selectedId) {
+      backend.entities.Project.get(selectedId).then(p => {
+        setProject(p);
+        setMetrics(calcProjectMetrics(p));
+        setAutoFixFeedback(null);
+      }).catch((err) => {
+        console.error("Erro ao carregar projeto:", err);
+      });
+    } else {
+      setProject(null);
+      setMetrics(null);
+    }
   }, [selectedId]);
 
   const saveCircuits = async (circuits) => {
@@ -626,7 +670,7 @@ export default function CircuitEditor() {
           </>
         )}
       >
-        <Select value={selectedId} onValueChange={setSelectedId}>
+        <Select value={selectedId} onValueChange={handleSelectProject}>
           <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
             <SelectValue placeholder="Selecionar projeto..." />
           </SelectTrigger>
