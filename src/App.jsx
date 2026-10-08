@@ -1,12 +1,11 @@
-import { Toaster } from "@/components/ui/toaster"
-import { QueryClientProvider } from '@tanstack/react-query'
-import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import PageNotFound from './lib/PageNotFound';
+import React from 'react';
+import { Toaster } from "@/components/ui/toaster";
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClientInstance } from '@/lib/query-client';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Projects from './pages/Projects';
@@ -36,7 +35,42 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import { BrandingBoot } from './lib/appPreferences';
 import { hasFullSystemAccess } from './lib/professionalAccess';
-import React from 'react';
+
+// Error & System Pages
+import NotFoundPage from './pages/system/NotFound';
+import ForbiddenPage from './pages/system/Forbidden';
+import UnauthorizedPage from './pages/system/Unauthorized';
+import ServerErrorPage from './pages/system/ServerError';
+import ServiceUnavailablePage from './pages/system/ServiceUnavailable';
+import MaintenancePage from './pages/system/Maintenance';
+import OfflinePage from './pages/system/Offline';
+import UnsupportedBrowserPage from './pages/system/UnsupportedBrowser';
+
+// Legal & Compliance Pages
+import TermsOfServicePage from './pages/legal/TermsOfService';
+import PrivacyPolicyPage from './pages/legal/PrivacyPolicy';
+import CookiePolicyPage from './pages/legal/CookiePolicy';
+import SecurityPolicyPage from './pages/legal/SecurityPolicy';
+import LgpdRightsPage from './pages/legal/LgpdRights';
+
+// Support & Institutional Pages
+import HelpCenterPage from './pages/support/HelpCenter';
+import ContactPage from './pages/support/Contact';
+import SystemStatusPage from './pages/support/SystemStatus';
+import ChangelogPage from './pages/support/Changelog';
+import AboutPage from './pages/institutional/About';
+import ReportProblemPage from './pages/support/ReportProblem';
+
+// Billing & Account Pages
+import PaymentSuccessPage from './pages/billing/PaymentSuccess';
+import PaymentFailedPage from './pages/billing/PaymentFailed';
+import PaymentPendingPage from './pages/billing/PaymentPending';
+import CancelSubscriptionPage from './pages/billing/CancelSubscription';
+import DeleteAccountPage from './pages/account/DeleteAccount';
+import ExportDataPage from './pages/account/ExportData';
+
+// System Components
+import CookieConsentBanner from './components/system/CookieConsentBanner';
 
 class AppErrorBoundary extends React.Component {
   constructor(props) {
@@ -54,26 +88,7 @@ class AppErrorBoundary extends React.Component {
 
   render() {
     if (this.state.error) {
-      return (
-        <div className="min-h-screen bg-background px-6 py-10 text-foreground">
-          <div className="mx-auto max-w-xl rounded-[8px] border border-destructive/25 bg-card p-6 shadow-sm">
-            <h1 className="text-xl font-extrabold text-destructive">Erro ao carregar a tela</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Atualize a página. Se continuar, abra o console do navegador para ver o detalhe técnico.
-            </p>
-            <pre className="mt-4 max-h-48 overflow-auto rounded-[6px] bg-muted p-3 text-xs text-muted-foreground">
-              {this.state.error?.message || "Erro desconhecido"}
-            </pre>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-4 rounded-[8px] bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
-            >
-              Recarregar
-            </button>
-          </div>
-        </div>
-      );
+      return <ServerErrorPage error={this.state.error} />;
     }
 
     return this.props.children;
@@ -99,7 +114,6 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
       navigateToLogin();
       return null;
     }
@@ -108,10 +122,46 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
+      {/* Auth Public Routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+
+      {/* Institutional & Support Public Routes */}
+      <Route path="/termos" element={<TermsOfServicePage />} />
+      <Route path="/privacidade" element={<PrivacyPolicyPage />} />
+      <Route path="/cookies" element={<CookiePolicyPage />} />
+      <Route path="/seguranca" element={<SecurityPolicyPage />} />
+      <Route path="/privacidade/direitos" element={<LgpdRightsPage />} />
+      <Route path="/ajuda" element={<HelpCenterPage />} />
+      <Route path="/suporte" element={<HelpCenterPage />} />
+      <Route path="/contato" element={<ContactPage />} />
+      <Route path="/status" element={<SystemStatusPage />} />
+      <Route path="/novidades" element={<ChangelogPage />} />
+      <Route path="/changelog" element={<ChangelogPage />} />
+      <Route path="/sobre" element={<AboutPage />} />
+      <Route path="/reportar-problema" element={<ReportProblemPage />} />
+
+      {/* System Error & Status Routes */}
+      <Route path="/404" element={<NotFoundPage />} />
+      <Route path="/403" element={<ForbiddenPage />} />
+      <Route path="/401" element={<UnauthorizedPage />} />
+      <Route path="/500" element={<ServerErrorPage />} />
+      <Route path="/503" element={<ServiceUnavailablePage />} />
+      <Route path="/manutencao" element={<MaintenancePage />} />
+      <Route path="/offline" element={<OfflinePage />} />
+      <Route path="/navegador-nao-suportado" element={<UnsupportedBrowserPage />} />
+
+      {/* Billing Public Feedback Routes */}
+      <Route path="/billing/sucesso" element={<PaymentSuccessPage />} />
+      <Route path="/billing/erro" element={<PaymentFailedPage />} />
+      <Route path="/billing/pendente" element={<PaymentPendingPage />} />
+      <Route path="/pagamento/aprovado" element={<PaymentSuccessPage />} />
+      <Route path="/pagamento/falha" element={<PaymentFailedPage />} />
+      <Route path="/pagamento/pendente" element={<PaymentPendingPage />} />
+
+      {/* Protected App Routes */}
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route element={<Layout />}>
           <Route path="/" element={fullAccess ? <Home /> : <Navigate to="/planta-ia" replace />} />
@@ -137,18 +187,21 @@ const AuthenticatedApp = () => {
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/billing" element={<Subscription />} />
           <Route path="/billing/plans" element={<Subscription />} />
+          <Route path="/billing/cancelar" element={<CancelSubscriptionPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/configuracoes/excluir-conta" element={<DeleteAccountPage />} />
+          <Route path="/configuracoes/exportar-dados" element={<ExportDataPage />} />
           <Route path="/admin" element={requireFullAccess(<AdminPanel />)} />
         </Route>
       </Route>
-      <Route path="*" element={<PageNotFound />} />
+
+      {/* Wildcard Fallback */}
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 };
 
-
 function App() {
-
   return (
     <AppErrorBoundary>
       <AuthProvider>
@@ -156,12 +209,13 @@ function App() {
           <BrandingBoot />
           <Router>
             <AuthenticatedApp />
+            <CookieConsentBanner />
           </Router>
           <Toaster />
         </QueryClientProvider>
       </AuthProvider>
     </AppErrorBoundary>
-  )
+  );
 }
 
-export default App
+export default App;

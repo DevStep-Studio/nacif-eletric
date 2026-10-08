@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="switchPlate" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f1f5f9"/>
+    </linearGradient>
+    <linearGradient id="rockerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <filter id="switchShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <!-- Wall Plate -->
+  <rect x="45" y="15" width="110" height="170" rx="12" fill="url(#switchPlate)" stroke="#cbd5e1" stroke-width="2" filter="url(#switchShadow)"/>
+  <!-- Inner Bevel -->
+  <rect x="55" y="25" width="90" height="150" rx="8" fill="none" stroke="#e2e8f0" stroke-width="1.5"/>
+  <!-- Switch Rocker Frame -->
+  <rect x="70" y="55" width="60" height="90" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <!-- Rocker Button (Tecla) -->
+  <rect x="74" y="60" width="52" height="80" rx="4" fill="url(#rockerGrad)" stroke="#94a3b8" stroke-width="1.5"/>
+  <!-- Rocker Divider Groove & Indicator -->
+  <line x1="74" y1="100" x2="126" y2="100" stroke="#cbd5e1" stroke-width="1.5"/>
+  <circle cx="100" cy="78" r="3" fill="#0284c7" opacity="0.8"/>
+  <!-- Spec Text -->
+  <text x="100" y="158" font-family="system-ui, sans-serif" font-size="8.5" font-weight="800" fill="#64748b" text-anchor="middle">10A · 250V~</text>
+</svg>

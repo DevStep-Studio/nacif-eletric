@@ -11,6 +11,7 @@
     "test:cables": "node scripts/manual-cable-editor-smoke.mjs",
     "test:editor-foundation": "node scripts/editor-foundation-smoke.mjs",
     "test:panel-generator": "node scripts/panel-generator-smoke.mjs",
+    "test:orthogonal-router": "node scripts/orthogonal-router-tests.mjs",
     "test:budget": "node scripts/budget-materials-smoke.mjs",
     "test:main-protection": "node scripts/main-protection-smoke.mjs",
     "test:electrical-audit": "node scripts/electrical-engine-audit-smoke.mjs",

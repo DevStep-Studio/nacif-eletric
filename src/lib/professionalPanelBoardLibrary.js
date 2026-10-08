@@ -239,15 +239,167 @@ const buildBranchRowsFromLayout = (components, circuits, reserveModules) => {
     .filter((circuit) => !used.has(circuit.index))
     .map((circuit) => ({ type: "circuit", circuit }));
 
+  const reserveCount = Math.min(6, Math.max(2, reserveModules));
+  const reserveRows = Array.from({ length: reserveCount }, (_, index) => ({
+    type: "reserve",
+    label: `Reserva ${index + 1}`,
+  }));
+
   return [
     ...circuitRows,
     ...remainingRows,
-    ...Array.from({ length: Math.min(6, Math.max(2, reserveModules)) }, (_, index) => ({
-      type: "reserve",
-      label: `Reserva ${index + 1}`,
-    })),
-  ].slice(0, 20);
+    ...reserveRows,
+  ];
 };
+
+export function buildProfessionalPanelBoardSheets(project = {}, metrics = {}) {
+  const baseData = buildProfessionalPanelBoard(project, metrics);
+  const totalCircuits = baseData.circuits.length;
+  const { branchRows, tableRows, circuits } = baseData;
+
+  // Decisão de layout adaptativo:
+  // <= 12 circuitos: Prancha Única Combinada (Diagrama + Tabela + Resumo + Notas + Carimbo)
+  // > 12 circuitos: Sistema Multi-Pranchas (Diagrama(s) dedicado(s) + Quadro(s) de Cargas dedicado(s))
+  if (totalCircuits <= 12) {
+    const singleSheet = {
+      id: "sheet-1",
+      sheetIndex: 1,
+      totalSheets: 1,
+      sheetType: "combined",
+      title: "DIAGRAMA UNIFILAR E QUADRO DE CARGAS",
+      subtitle: "Prancha Única · NBR 5410",
+      sheetCode: `${baseData.drawingCode}-01`,
+      branchRows,
+      tableRows,
+      circuits,
+      startCircuitIndex: 0,
+      endCircuitIndex: totalCircuits,
+      isFirstDiagramSheet: true,
+      isLastDiagramSheet: true,
+      isFirstTableSheet: true,
+      isLastTableSheet: true,
+      hasSummary: true,
+      hasNotes: true,
+      hasCharacteristics: true,
+      hasTitleBlock: true,
+    };
+    return {
+      ...baseData,
+      sheets: [singleSheet],
+      totalSheets: 1,
+    };
+  }
+
+  // Multi-pranchas para quadros com 13+ circuitos
+  const sheets = [];
+  const DIAGRAM_PAGE_CAPACITY = 18; // circuitos por folha de diagrama (9 pares de derivações com 42px cada)
+  const TABLE_PAGE_CAPACITY = 25;   // circuitos por folha de quadro de cargas
+
+  // 1. Gerar folhas de diagrama unifilar
+  const totalDiagramSheets = Math.max(1, Math.ceil(circuits.length / DIAGRAM_PAGE_CAPACITY));
+  for (let i = 0; i < totalDiagramSheets; i++) {
+    const startIdx = i * DIAGRAM_PAGE_CAPACITY;
+    const endIdx = Math.min(circuits.length, (i + 1) * DIAGRAM_PAGE_CAPACITY);
+    const sheetCircuits = circuits.slice(startIdx, endIdx);
+    
+    // Filtra branchRows correspondentes a estes circuitos
+    const sheetCircuitIds = new Set(sheetCircuits.map((c) => c.id));
+    const sheetBranchRows = branchRows.filter((row) => (
+      row.type === "circuit" ? sheetCircuitIds.has(row.circuit?.id) : (i === totalDiagramSheets - 1)
+    ));
+
+    const isFirst = i === 0;
+    const isLast = i === totalDiagramSheets - 1;
+    const nextStartId = !isLast && circuits[endIdx] ? circuits[endIdx].id : null;
+
+    sheets.push({
+      id: `sheet-diagram-${i + 1}`,
+      sheetIndex: sheets.length + 1,
+      sheetType: isFirst ? "diagram" : "diagram_continuation",
+      title: isFirst ? "DIAGRAMA UNIFILAR PRINCIPAL" : "DIAGRAMA UNIFILAR — CONTINUAÇÃO",
+      subtitle: `Circuitos ${sheetCircuits[0]?.id || "C01"} a ${sheetCircuits[sheetCircuits.length - 1]?.id || sheetCircuits[0]?.id || "C01"}`,
+      sheetCode: `${baseData.drawingCode}-${String(sheets.length + 1).padStart(2, "0")}`,
+      branchRows: sheetBranchRows,
+      circuits: sheetCircuits,
+      startCircuitIndex: startIdx,
+      endCircuitIndex: endIdx,
+      isFirstDiagramSheet: isFirst,
+      isLastDiagramSheet: isLast,
+      nextStartCircuitId: nextStartId,
+      hasSummary: false,
+      hasNotes: true,
+      hasCharacteristics: isFirst,
+      hasTitleBlock: true,
+    });
+  }
+
+  // 2. Gerar folhas de quadro de cargas
+  const totalTableSheets = Math.max(1, Math.ceil(circuits.length / TABLE_PAGE_CAPACITY));
+  for (let i = 0; i < totalTableSheets; i++) {
+    const startIdx = i * TABLE_PAGE_CAPACITY;
+    const endIdx = Math.min(circuits.length, (i + 1) * TABLE_PAGE_CAPACITY);
+    const sheetCircuits = circuits.slice(startIdx, endIdx);
+    const isFirst = i === 0;
+    const isLast = i === totalTableSheets - 1;
+
+    // Table rows correspondentes
+    const sheetTableRows = [
+      ...sheetCircuits,
+      ...(isLast
+        ? Array.from({ length: Math.max(0, 4) }, (_, idx) => ({
+            id: `R${String(idx + 1).padStart(2, "0")}`,
+            description: "RESERVA TÉCNICA",
+            type: "Reserva",
+            powerW: "",
+            voltage: "",
+            projectCurrent: "",
+            groupFactor: "",
+            correctedCurrent: "",
+            breaker: "",
+            wireGauge: "",
+            phaseSet: [],
+            dinModules: "",
+            voltageDropPct: "",
+            voltageDropOk: true,
+            isReserve: true,
+          }))
+        : []),
+    ];
+
+    sheets.push({
+      id: `sheet-table-${i + 1}`,
+      sheetIndex: sheets.length + 1,
+      sheetType: isFirst ? "load_table" : "load_table_continuation",
+      title: isFirst ? "QUADRO DE CARGAS E DIMENSIONAMENTO" : "QUADRO DE CARGAS — CONTINUAÇÃO",
+      subtitle: `Circuitos ${sheetCircuits[0]?.id || "C01"} a ${sheetCircuits[sheetCircuits.length - 1]?.id || sheetCircuits[0]?.id || "C01"}`,
+      sheetCode: `${baseData.drawingCode}-${String(sheets.length + 1).padStart(2, "0")}`,
+      tableRows: sheetTableRows,
+      circuits: sheetCircuits,
+      startCircuitIndex: startIdx,
+      endCircuitIndex: endIdx,
+      isFirstTableSheet: isFirst,
+      isLastTableSheet: isLast,
+      hasSummary: isLast,
+      hasNotes: isLast,
+      hasCharacteristics: isLast,
+      hasTitleBlock: true,
+    });
+  }
+
+  // Atualiza os índices e totais de folhas em cada prancha
+  const totalSheets = sheets.length;
+  sheets.forEach((sheet, idx) => {
+    sheet.sheetIndex = idx + 1;
+    sheet.totalSheets = totalSheets;
+    sheet.sheetCode = `${baseData.drawingCode}-${String(idx + 1).padStart(2, "0")}`;
+  });
+
+  return {
+    ...baseData,
+    sheets,
+    totalSheets,
+  };
+}
 
 export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
   const rawCircuits = Array.isArray(metrics?.circuits)
@@ -283,10 +435,10 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
   const address = normalizeText(project?.address || project?.project_address, "Endereço da obra");
   const today = new Date().toLocaleDateString("pt-BR");
 
-  const circuitRows = circuits.slice(0, 18);
+  // Mantém todas as linhas de circuitos sem corte artificial
   const tableRows = [
-    ...circuitRows,
-    ...Array.from({ length: Math.max(0, 10 - circuitRows.length) }, (_, index) => ({
+    ...circuits,
+    ...Array.from({ length: Math.max(0, 8 - circuits.length) }, (_, index) => ({
       id: `R${String(index + 1).padStart(2, "0")}`,
       description: "RESERVA TÉCNICA",
       type: "Reserva",
@@ -308,7 +460,7 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
   const branchRows = layoutComponents.length
     ? buildBranchRowsFromLayout(layoutComponents, circuits, reserveModules)
     : [
-        ...circuits.slice(0, 14).map((circuit) => ({ type: "circuit", circuit })),
+        ...circuits.map((circuit) => ({ type: "circuit", circuit })),
         ...Array.from({ length: Math.min(6, Math.max(2, reserveModules)) }, (_, index) => ({
           type: "reserve",
           label: `Reserva ${index + 1}`,
@@ -360,8 +512,8 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
     circuits,
     tableRows,
     branchRows,
-    hiddenCircuits: Math.max(0, circuits.length - 18),
-    hiddenBranches: Math.max(0, circuits.length - 14),
+    hiddenCircuits: 0,
+    hiddenBranches: 0,
     phaseLoads,
     imbalancePct: asNumber(metrics?.imbalance_pct),
     neutralCurrent: asNumber(metrics?.neutral_a),

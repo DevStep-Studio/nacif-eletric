@@ -8,7 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import PageHeader from "@/components/PageHeader";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
-import MaterialSymbol, { getMaterialSymbolDataUri } from "@/components/MaterialSymbol";
+import MaterialProductThumb from "@/components/MaterialProductThumb";
+import {
+  CATEGORY_STYLES,
+  getMaterialProductInfo,
+  getMaterialDataUriForPrint,
+} from "@/lib/materialProductCatalog";
 import {
   buildProjectBudgetMaterials,
   estimateLocalMaterialPrice,
@@ -17,9 +22,7 @@ import {
 } from "@/lib/projectBudgetMaterials";
 
 function MaterialThumb({ material, size = "normal" }) {
-  const sizeClass = size === "small" ? "h-8 w-8" : "h-11 w-11";
-
-  return <MaterialSymbol name={material.name} className={sizeClass} />;
+  return <MaterialProductThumb material={material} size={size === "small" ? "compact" : "normal"} />;
 }
 
 const formatCurrencyBR = (value = 0) => `R$ ${Number(value || 0).toLocaleString("pt-BR", {
@@ -63,6 +66,7 @@ export default function BudgetPage() {
   };
 
   const handlePrint = (size) => {
+
     openHTMLPrint({
       paperSize: size,
       projectName: project?.name,
@@ -368,18 +372,30 @@ export default function BudgetPage() {
             <div className="divide-y divide-border/40">
               {materials.length === 0 ? (
                 <div className="p-6 text-center text-sm font-semibold text-muted-foreground">Nenhum material calculado para este projeto.</div>
-              ) : materials.map((m, i) => (
-                <div key={`${m.name}-${i}`} className="grid gap-3 px-4 py-3 text-sm md:grid-cols-[minmax(220px,1fr)_72px_80px_116px_116px] md:items-center md:px-6">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <MaterialThumb material={m} />
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold text-[#0f172a]">{m.name}</span>
-                      <span className="mt-1 flex flex-wrap gap-1">
-                        <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black uppercase text-slate-500">{m.category || "material"}</span>
-                        {m.manual ? <span className="inline-flex rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-black uppercase text-primary">manual</span> : null}
+              ) : materials.map((m, i) => {
+                const normCategory = String(m.category || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+                const badgeConfig = CATEGORY_STYLES[normCategory] || CATEGORY_STYLES.material;
+                return (
+                  <div key={`${m.name}-${i}`} className="grid gap-3 px-4 py-3 text-sm md:grid-cols-[minmax(220px,1fr)_72px_80px_116px_116px] md:items-center md:px-6">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <MaterialProductThumb material={m} size="compact" />
+                      <span className="min-w-0">
+                        <span className="block truncate font-extrabold text-[#0f172a]">{m.name}</span>
+                        <span className="mt-0.5 block truncate text-xs font-semibold text-[#64748b]">
+                          {m.brand}{m.specShort ? ` · ${m.specShort}` : ""}
+                        </span>
+                        <span className="mt-1 flex flex-wrap gap-1">
+                          <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-black uppercase ${badgeConfig.badgeClass}`}>
+                            {badgeConfig.label}
+                          </span>
+                          {m.manual ? (
+                            <span className="inline-flex rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-primary">
+                              manual
+                            </span>
+                          ) : null}
+                        </span>
                       </span>
-                    </span>
-                  </div>
+                    </div>
                   <div className="grid grid-cols-2 gap-2 text-xs font-semibold text-muted-foreground sm:grid-cols-4 md:contents">
                     <div className="rounded-lg bg-[#F8FAFC] p-2 md:bg-transparent md:p-0 md:text-center">
                       <span className="block text-[9px] font-black uppercase tracking-[0.1em] text-slate-400 md:hidden">Qtd.</span>
@@ -399,7 +415,8 @@ export default function BudgetPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
             <div className="border-t border-border/50 bg-[#FCFEFF] px-6 py-4">
               <div className="flex justify-between text-sm">

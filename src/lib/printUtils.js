@@ -34,12 +34,13 @@ function buildTitleBlock(projectName, logoUrl, paperSize, projectInfo = {}, page
   const displayLogo = logoUrl || DEFAULT_LOGO_URL;
   const clientName = projectInfo.clientName || projectInfo.client_name || projectInfo.client || "";
   const address = projectInfo.address || projectInfo.project_address || "";
+  const sheet = projectInfo.sheetNumber || "1 / 1";
   const fields = [
     ["Formato", paperSize],
     ["Data", date],
     ["Escala", "S/E"],
-    ["Rev.", "01"],
-    ["Folha", `${pageIndex} / ${totalPages}`],
+    ["Rev.", projectInfo.revision || "01"],
+    ["Folha", projectInfo.sheetNumber || `${pageIndex} / ${totalPages}`],
   ];
 
   return `
@@ -102,12 +103,36 @@ function prepareSVG(svgContent) {
 }
 
 /**
- * Impressão / Plotagem de Pranchas CAD e Diagramas SVG
+ * Impressão / Plotagem de Pranchas CAD e Diagramas SVG (Individual ou Múltiplas Folhas)
  */
-export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", logoUrl = "", projectInfo = {} }) {
+export function openSVGPrint({ svgContent, svgContents, paperSize = "A4", projectName = "", logoUrl = "", projectInfo = {} }) {
   const paper = PAPER_SIZES[paperSize] || PAPER_SIZES.A4;
-  const isFullCadSheet = /PRANCHA|QE-|QGBT-|TitleBlock|QUADRO DE CARGAS|DIAGRAMA UNIFILAR PRINCIPAL|data\.sheet/i.test(svgContent);
-  const preparedSVG = prepareSVG(svgContent);
+  const rawList = Array.isArray(svgContents) && svgContents.length > 0 ? svgContents : (svgContent ? [svgContent] : []);
+  const totalPages = rawList.length || 1;
+
+  const pagesHtml = rawList.map((content, idx) => {
+    const isFullCadSheet = /PRANCHA|QE-|QGBT-|TitleBlock|QUADRO DE CARGAS|DIAGRAMA UNIFILAR PRINCIPAL|data\.sheet/i.test(content);
+    const prepared = prepareSVG(content);
+    const infoWithSheet = {
+      ...projectInfo,
+      sheetNumber: `${idx + 1} / ${totalPages}`,
+    };
+
+    return `
+      <div class="sheet-page">
+        ${isFullCadSheet ? `
+          <div class="cad-prancha-wrap">
+            ${prepared}
+          </div>
+        ` : `
+          <div class="sheet-frame">
+            <div class="drawing-area">${prepared}</div>
+            ${buildTitleBlock(projectName, logoUrl, paperSize, infoWithSheet, idx + 1, totalPages)}
+          </div>
+        `}
+      </div>
+    `;
+  }).join("");
   const win = window.open("", "_blank");
   if (!win) return;
 
@@ -124,9 +149,7 @@ export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", l
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: ${paper.w}mm;
-      height: ${paper.h}mm;
-      min-height: 0;
-      overflow: hidden;
+      min-height: ${paper.h}mm;
       background: white;
       font-family: Arial, Helvetica, sans-serif;
       -webkit-print-color-adjust: exact;
@@ -143,6 +166,12 @@ export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", l
       overflow: hidden;
       box-sizing: border-box;
       background: white;
+      break-after: page;
+      page-break-after: always;
+    }
+    .sheet-page:last-child {
+      break-after: auto;
+      page-break-after: auto;
     }
     ${isFullCadSheet ? `
       .cad-prancha-wrap {
@@ -311,18 +340,7 @@ export function openSVGPrint({ svgContent, paperSize = "A4", projectName = "", l
   </style>
 </head>
 <body>
-  <div class="sheet-page">
-    ${isFullCadSheet ? `
-      <div class="cad-prancha-wrap">
-        ${preparedSVG}
-      </div>
-    ` : `
-      <div class="sheet-frame">
-        <div class="drawing-area">${preparedSVG}</div>
-        ${buildTitleBlock(projectName, logoUrl, paperSize, projectInfo, 1, 1)}
-      </div>
-    `}
-  </div>
+  ${pagesHtml}
 </body>
 </html>`);
   win.document.close();

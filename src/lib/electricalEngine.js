@@ -1205,7 +1205,111 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     rails.push({ id: "rail_3", name: "Trilho DIN Inferior (Distribuição)", components: rail3Components });
   }
 
-  // Fiação automática
+  // Novo quadro inicia com fiação limpa por padrão (wires = [])
+  // Fiação só é gerada quando explicitamente requisitado por options.generateWires
+  const wires = options.generateWires ? generateDefaultPanelWires(proj, options) : [];
+
+  return { rails, wires, infrastructure: [] };
+}
+
+// ─── Geração de Fiação Recomendada do Quadro ──────────────────────────────────────────────
+export function generateDefaultPanelWires(proj, options = {}) {
+  if (!proj) return [];
+  const isSolarProject = !options.forceDistribution && (proj.project_type === "Solar" || Boolean(proj.solar_config));
+  const supply = proj.supply_type || "Monofásico";
+  const isMonophase = supply === "Monofásico";
+  const hasNeutralConductor = supply === "Monofásico" || supply === "Trifásico";
+  const circuits = proj.circuits || [];
+  const phaseWireColor = (poleIndex = 0) => ["black", "red", "brown"][poleIndex] || "black";
+  const formatWireLabel = (gauge = "") => String(gauge || "").replace("mm²", " mm²");
+  const cleanDisplayText = (value = "") => String(value ?? "").replace(/\s+/g, " ").trim();
+  const isTechnicalDisplayText = (value = "") => {
+    const text = cleanDisplayText(value);
+    if (!text) return true;
+    return /^(retorno|conex[aã]o|fase|sa[ií]da)$/i.test(text)
+      || /^(circuit|circuit_group|breaker|busbar|load_out|comp|wire)[_: -]?\w*$/i.test(text);
+  };
+  const getCircuitNumber = (circuit = {}, index = null) => {
+    const explicit = cleanDisplayText(
+      circuit.circuitNumber
+      ?? circuit.circuit_number
+      ?? circuit.number
+      ?? circuit.circuit_no
+      ?? circuit.ref
+      ?? "",
+    );
+    if (explicit) return explicit;
+    return Number.isFinite(Number(index)) ? `C${Number(index) + 1}` : "";
+  };
+  const getCircuitLabel = (circuit = {}, index = null) => {
+    const label = cleanDisplayText(circuit.label ?? circuit.circuit_label ?? "");
+    if (label && !isTechnicalDisplayText(label)) return label;
+    const number = getCircuitNumber(circuit, index);
+    const name = cleanDisplayText(circuit.name ?? circuit.circuit_name ?? "");
+    if (number && name && !isTechnicalDisplayText(name)) return `${number} - ${name}`;
+    if (name && !isTechnicalDisplayText(name)) return name;
+    return number || "Circuito sem identificação";
+  };
+  const phaseCountForBreaker = (breaker) => {
+    if (breaker?.supply_type === "Trifásico" || breaker?.phase === "ABC" || Number(breaker?.poles) >= 3) return 3;
+    if (breaker?.supply_type === "Bifásico" || breaker?.phase === "AB" || Number(breaker?.poles) === 2) return 2;
+    return 1;
+  };
+  const breakerNeedsNeutral = (breaker) => {
+    if (breaker?.supply_type) return breaker.supply_type === "Monofásico";
+    const phase = String(breaker?.phase || "");
+    return phase.length === 1 && phase !== "N" && Number(breaker?.poles || 1) <= 1;
+  };
+
+  const hasDR = Boolean(proj?.has_dr !== false);
+  const dpsCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
+  const feedCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
+
+  const ROW_MAX = 18;
+  const distributionCircuits = circuits.filter((c) => {
+    const isSolar = isSolarProject && (
+      c.is_solar_circuit
+      || /inversor|solar fotovoltaico/i.test(`${c.name || ""} ${c.type || ""}`)
+    );
+    return !isSolar;
+  });
+
+  const rail2Components = [];
+  const rail3Components = [];
+  let r2Poles = 0;
+  let r3Poles = 0;
+
+  distributionCircuits.forEach((c, idx) => {
+    const poles = c.breaker_poles || (c.supply_type === "Trifásico" ? 3 : c.supply_type === "Bifásico" ? 2 : 1);
+    const bId = `brk_${idx + 1}`;
+    const circuitNumber = getCircuitNumber(c, idx);
+    const circuitLabel = getCircuitLabel(c, idx);
+    const breakerObj = {
+      id: bId,
+      type: "breaker",
+      label: circuitNumber || `DJ ${idx + 1}`,
+      circuitLabel,
+      circuitNumber,
+      name: c.name || `Circuito ${idx + 1}`,
+      current: c.breaker_a || 16,
+      curve: c.breaker_curve || "B",
+      poles,
+      phase: c.phase || (supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A"),
+      supply_type: c.supply_type || supply,
+      circuit_id: c.id || `circ_${idx + 1}`,
+      wire_gauge: c.cable_section_mm2 ? `${c.cable_section_mm2}mm²` : "2.5mm²",
+      status: "ON",
+    };
+
+    if (r2Poles + poles <= ROW_MAX) {
+      rail2Components.push(breakerObj);
+      r2Poles += poles;
+    } else if (r3Poles + poles <= ROW_MAX) {
+      rail3Components.push(breakerObj);
+      r3Poles += poles;
+    }
+  });
+
   const wires = [];
 
   // 1. Terra alimentação externa ao barramento
@@ -1272,7 +1376,6 @@ export function generateDefaultPanelLayout(proj, options = {}) {
   }
 
   // 4. Alimentação superior por fase
-  const feedCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
   if (hasGeneralBreaker) {
     for (let i = 0; i < feedCount; i++) {
       wires.push({
@@ -1386,7 +1489,7 @@ export function generateDefaultPanelLayout(proj, options = {}) {
     });
   });
 
-  return { rails, wires, infrastructure: [] };
+  return wires;
 }
 
 export function isSolarProject(project) {
@@ -1465,27 +1568,18 @@ function withSolarRailReserve(components, id, label = "RESERVA TÉCNICA") {
   return used >= SOLAR_RAIL_MAX_POLES ? components : [...components, { id, type: "spacer", poles: SOLAR_RAIL_MAX_POLES - used, label }];
 }
 
-export function buildSolarAcCircuitLayout(project = {}, existingWires = []) {
+export function generateSolarAcCircuitWires(project = {}, existingWires = []) {
   const supply = project?.solar_config?.ac_supply_type || "Bifásico";
   const phaseCount = solarAcPhaseCount(supply);
-  const poles = solarAcPoles(supply);
   const solarCircuit = findSolarInverterCircuit(project?.circuits);
   const breakerCurrent = Number(solarCircuit?.breaker_a) || 32;
-  const breakerCurve = solarCircuit?.breaker_curve || "C";
-  const phase = supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A";
   const feederGauge = breakerCurrent > 63 ? "16mm²" : breakerCurrent > 40 ? "10mm²" : breakerCurrent > 25 ? "6mm²" : "4mm²";
 
-  const feederBreaker = { id: "solar_feeder_breaker", type: "breaker", label: "DJ ENTRADA CA", current: breakerCurrent, curve: breakerCurve, poles, isSolarFeeder: true, phase, supply_type: supply, status: "ON" };
-  const serviceBreaker = { id: "solar_service_breaker", type: "breaker", label: "DJ SAÍDA CA", current: breakerCurrent, curve: breakerCurve, poles, isSolarServiceDisconnect: true, phase, supply_type: supply, status: "ON" };
-  const inverterBreaker = { id: "solar_main_breaker", type: "breaker", label: "DJ INVERSOR CA", current: breakerCurrent, curve: breakerCurve, poles, phase, supply_type: supply, status: "ON" };
+  const feederBreakerId = "solar_feeder_breaker";
+  const serviceBreakerId = "solar_service_breaker";
+  const inverterBreakerId = "solar_main_breaker";
   const dpsComponents = Array.from({ length: phaseCount }, (_, index) => ({
     id: `solar_dps_${index}`,
-    type: "dps",
-    label: `DPS CA ${String.fromCharCode(65 + index)}`,
-    poles: 1,
-    phase: String.fromCharCode(65 + index),
-    status: "ON",
-    dpsStatus: "OK",
   }));
 
   const groundStart = nextBusbarIndex(existingWires, "busbar_ground");
@@ -1501,17 +1595,44 @@ export function buildSolarAcCircuitLayout(project = {}, existingWires = []) {
   });
 
   if (supply === "Monofásico") {
-    wires.push({ id: "solar_neutral_feed", color: "blue", gauge: feederGauge, source: `busbar_neutral:${neutralIndex}`, target: `comp:${feederBreaker.id}:top:1`, label: "" });
-    wires.push({ id: "solar_neutral_feeder_to_inverter", color: "blue", gauge: feederGauge, source: `comp:${feederBreaker.id}:bottom:1`, target: `comp:${inverterBreaker.id}:top:1`, label: "" });
-    wires.push({ id: "solar_neutral_load", color: "blue", gauge: feederGauge, source: `comp:${inverterBreaker.id}:bottom:1`, target: "load_out:solar_inverter:neutral", label: "" });
+    wires.push({ id: "solar_neutral_feed", color: "blue", gauge: feederGauge, source: `busbar_neutral:${neutralIndex}`, target: `comp:${feederBreakerId}:top:1`, label: "" });
+    wires.push({ id: "solar_neutral_feeder_to_inverter", color: "blue", gauge: feederGauge, source: `comp:${feederBreakerId}:bottom:1`, target: `comp:${inverterBreakerId}:top:1`, label: "" });
+    wires.push({ id: "solar_neutral_load", color: "blue", gauge: feederGauge, source: `comp:${inverterBreakerId}:bottom:1`, target: "load_out:solar_inverter:neutral", label: "" });
   }
 
   for (let index = 0; index < phaseCount; index += 1) {
-    wires.push({ id: `solar_phase_feed_${index}`, color: SOLAR_PHASE_COLORS[index], gauge: feederGauge, source: `terminal_left_top:${index + 1}`, target: `comp:${feederBreaker.id}:top:${index}`, label: "" });
-    wires.push({ id: `solar_phase_feeder_to_service_${index}`, color: SOLAR_PHASE_COLORS[index], gauge: feederGauge, source: `comp:${feederBreaker.id}:bottom:${index}`, target: `comp:${serviceBreaker.id}:top:${index}`, label: "" });
-    wires.push({ id: `solar_phase_service_to_inverter_${index}`, color: SOLAR_PHASE_COLORS[index], gauge: feederGauge, source: `comp:${serviceBreaker.id}:bottom:${index}`, target: `comp:${inverterBreaker.id}:top:${index}`, label: "" });
-    wires.push({ id: `solar_phase_load_${index}`, color: SOLAR_PHASE_COLORS[index], gauge: feederGauge, source: `comp:${inverterBreaker.id}:bottom:${index}`, target: `load_out:solar_inverter:${index}`, label: "" });
+    wires.push({ id: `solar_phase_feed_${index}`, color: SOLAR_PHASE_COLORS[index], gauge: feederGauge, source: `terminal_left_top:${index + 1}`, target: `comp:${feederBreakerId}:top:${index}`, label: "" });
+    wires.push({ id: `solar_phase_feeder_to_service_${index}`, color: SOLAR_PHASE_COLORS[index], gauge: feederGauge, source: `comp:${feederBreakerId}:bottom:${index}`, target: `comp:${serviceBreakerId}:top:${index}`, label: "" });
+    wires.push({ id: `solar_phase_service_to_inverter_${index}`, color: SOLAR_PHASE_COLORS[index], gauge: feederGauge, source: `comp:${serviceBreakerId}:bottom:${index}`, target: `comp:${inverterBreakerId}:top:${index}`, label: "" });
+    wires.push({ id: `solar_phase_load_${index}`, color: SOLAR_PHASE_COLORS[index], gauge: feederGauge, source: `comp:${inverterBreakerId}:bottom:${index}`, target: `load_out:solar_inverter:${index}`, label: "" });
   }
+
+  return wires;
+}
+
+export function buildSolarAcCircuitLayout(project = {}, existingWires = [], options = {}) {
+  const supply = project?.solar_config?.ac_supply_type || "Bifásico";
+  const phaseCount = solarAcPhaseCount(supply);
+  const poles = solarAcPoles(supply);
+  const solarCircuit = findSolarInverterCircuit(project?.circuits);
+  const breakerCurrent = Number(solarCircuit?.breaker_a) || 32;
+  const breakerCurve = solarCircuit?.breaker_curve || "C";
+  const phase = supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A";
+
+  const feederBreaker = { id: "solar_feeder_breaker", type: "breaker", label: "DJ ENTRADA CA", current: breakerCurrent, curve: breakerCurve, poles, isSolarFeeder: true, phase, supply_type: supply, status: "ON" };
+  const serviceBreaker = { id: "solar_service_breaker", type: "breaker", label: "DJ SAÍDA CA", current: breakerCurrent, curve: breakerCurve, poles, isSolarServiceDisconnect: true, phase, supply_type: supply, status: "ON" };
+  const inverterBreaker = { id: "solar_main_breaker", type: "breaker", label: "DJ INVERSOR CA", current: breakerCurrent, curve: breakerCurve, poles, phase, supply_type: supply, status: "ON" };
+  const dpsComponents = Array.from({ length: phaseCount }, (_, index) => ({
+    id: `solar_dps_${index}`,
+    type: "dps",
+    label: `DPS CA ${String.fromCharCode(65 + index)}`,
+    poles: 1,
+    phase: String.fromCharCode(65 + index),
+    status: "ON",
+    dpsStatus: "OK",
+  }));
+
+  const wires = options.generateWires ? generateSolarAcCircuitWires(project, existingWires) : [];
 
   return {
     rails: [
@@ -1522,19 +1643,33 @@ export function buildSolarAcCircuitLayout(project = {}, existingWires = []) {
   };
 }
 
-export function mergeSolarLayoutIntoPrincipal(project, layout, { forceRegenerate = false } = {}) {
+export function mergeSolarLayoutIntoPrincipal(project, layout, { forceRegenerate = false, generateWires = false } = {}) {
   if (!isSolarProject(project)) return layout;
   const rails = Array.isArray(layout?.rails) ? layout.rails : [];
   const wires = Array.isArray(layout?.wires) ? layout.wires : [];
-  const alreadyMerged = rails.some((rail) => rail.id === "rail_solar_1" || rail.id === "rail_solar_2");
+  const hasSolarComponents = rails.some((rail) =>
+    (rail.components || []).some((c) => String(c?.id || "").startsWith("solar_"))
+  );
+  const alreadyMerged = rails.some((rail) => rail.id === "rail_solar_1" || rail.id === "rail_solar_2")
+    || hasSolarComponents
+    || layout?.meta?.manualDeviceEdits;
 
   if (alreadyMerged && !forceRegenerate) return { ...layout, rails, wires };
 
   const baseRails = alreadyMerged ? rails.filter((rail) => rail.id !== "rail_solar_1" && rail.id !== "rail_solar_2") : rails;
   const baseWires = alreadyMerged ? wires.filter((wire) => !String(wire?.id || "").startsWith("solar_")) : wires;
-  const solar = buildSolarAcCircuitLayout(project, baseWires);
+  const solar = buildSolarAcCircuitLayout(project, baseWires, { generateWires });
 
   return { ...layout, rails: [...baseRails, ...solar.rails], wires: [...baseWires, ...solar.wires] };
+}
+
+export function generateAllPanelWires(project, options = {}) {
+  const baseWires = generateDefaultPanelWires(project, options);
+  if (isSolarProject(project)) {
+    const solarWires = generateSolarAcCircuitWires(project, baseWires);
+    return [...baseWires, ...solarWires];
+  }
+  return baseWires;
 }
 
 export function buildPanelBoardsWithLayout(project, panelLayout = generateDefaultPanelLayout(project, { forceDistribution: true })) {

@@ -37,7 +37,6 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Upload,
   Zap,
@@ -274,10 +273,6 @@ export default function Home() {
         <section className="relative overflow-hidden rounded-2xl border border-[#00bda1]/20 bg-[#00d8b8] p-5 sm:p-6 text-slate-950 shadow-sm">
           <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1.5 max-w-2xl">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-950/10 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-950">
-                <Sparkles className="h-3.5 w-3.5 fill-current" />
-                <span>Recursos Pro & Inteligência NBR 5410</span>
-              </div>
               <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-950">
                 Dimensionamento elétrico profissional e instantâneo
               </h2>

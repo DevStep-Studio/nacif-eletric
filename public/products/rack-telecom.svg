@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="rackGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <filter id="rackShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  <!-- 19 Inch Wall Rack Housing -->
+  <rect x="35" y="25" width="130" height="150" rx="8" fill="url(#rackGrad)" stroke="#475569" stroke-width="2" filter="url(#rackShadow)"/>
+  <!-- Acrylic / Glass Door with Bevel -->
+  <rect x="47" y="37" width="106" height="126" rx="4" fill="#0284c7" fill-opacity="0.1" stroke="#38bdf8" stroke-width="1.5"/>
+  <!-- 19 Inch Mounting Rails -->
+  <rect x="52" y="42" width="10" height="116" fill="#475569"/>
+  <rect x="138" y="42" width="10" height="116" fill="#475569"/>
+  <!-- 1U Equipment Slots -->
+  <rect x="66" y="50" width="68" height="16" rx="2" fill="#0f172a" stroke="#64748b" stroke-width="1"/>
+  <circle cx="72" cy="58" r="2" fill="#22c55e"/>
+  <circle cx="78" cy="58" r="2" fill="#22c55e"/>
+  <rect x="66" y="74" width="68" height="16" rx="2" fill="#0f172a" stroke="#64748b" stroke-width="1"/>
+  <circle cx="72" cy="82" r="2" fill="#3b82f6"/>
+  <rect x="66" y="98" width="68" height="16" rx="2" fill="#0f172a" stroke="#64748b" stroke-width="1"/>
+  <!-- Lock Keyhole -->
+  <circle cx="146" cy="100" r="3" fill="#cbd5e1"/>
+  <!-- Text -->
+  <text x="100" y="140" font-family="system-ui, sans-serif" font-size="8.5" font-weight="900" fill="#94a3b8" text-anchor="middle">RACK 19" 6U</text>
+</svg>

@@ -198,6 +198,20 @@ label.rounded-full,
   outline: none;
 }
 
+.solar-designer-map--drawing,
+.solar-designer-map--drawing .leaflet-container,
+.solar-designer-map--drawing .leaflet-grab,
+.solar-designer-map--drawing .leaflet-pane {
+  cursor: crosshair !important;
+}
+
+.solar-draw-vertex-marker,
+.solar-roof-vertex-handle,
+.solar-roof-midpoint-handle {
+  background: transparent !important;
+  border: 0 !important;
+}
+
 .solar-edge-workspace {
   background-color: #172637;
   background-image:
@@ -241,18 +255,23 @@ label.rounded-full,
 }
 
 .solar-panel-shape {
-  filter: drop-shadow(0 0.7px 0.7px rgba(0, 0, 0, 0.32));
-  pointer-events: none;
-  stroke-linejoin: round;
+  filter: drop-shadow(0 0.8px 1.4px rgba(0, 0, 0, 0.45));
+  stroke-linejoin: miter;
+  transition: filter 0.15s ease, stroke 0.15s ease;
+  pointer-events: auto;
+}
+
+.solar-panel-shape:hover {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.65)) brightness(1.22);
+}
+
+.solar-panel-shape.solar-panel--selected {
+  filter: drop-shadow(0 2px 5px rgba(0, 216, 184, 0.45));
 }
 
 .solar-panel-cell-lines {
   pointer-events: none;
   stroke-linecap: square;
-}
-
-.solar-designer-map [class*="solar-panels"] {
-  pointer-events: none;
 }
 
 .solar-measure-label {

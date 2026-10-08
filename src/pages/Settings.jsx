@@ -168,6 +168,29 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <section className="mx-auto w-full max-w-5xl rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-[0_16px_45px_rgba(15,23,42,0.04)] space-y-4">
+        <div>
+          <h2 className="text-xl font-extrabold text-[#0f1728]">
+            Privacidade & Dados (LGPD)
+          </h2>
+          <p className="mt-1 text-sm font-medium text-[#5f6877]">
+            Portabilidade de dados, direitos do titular e controle de conta.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 pt-2">
+          <Button asChild variant="outline" className="h-10 rounded-[12px] text-xs font-bold">
+            <Link to="/configuracoes/exportar-dados">Exportar meus dados (JSON)</Link>
+          </Button>
+          <Button asChild variant="outline" className="h-10 rounded-[12px] text-xs font-bold">
+            <Link to="/privacidade/direitos">Portal do Titular (LGPD)</Link>
+          </Button>
+          <Button asChild variant="outline" className="h-10 rounded-[12px] text-xs font-bold text-red-600 border-red-200 hover:bg-red-50">
+            <Link to="/configuracoes/excluir-conta">Excluir conta</Link>
+          </Button>
+        </div>
+      </section>
+
       <Button variant="outline" className="mx-auto h-11 w-full max-w-5xl rounded-[12px] font-extrabold" onClick={() => logout()}>
         <LogOut className="h-4 w-4" />
         Sair da conta

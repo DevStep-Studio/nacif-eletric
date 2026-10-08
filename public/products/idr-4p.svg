@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="50%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="blueToggle" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <!-- Background panel / device housing -->
+  <rect x="25" y="20" width="150" height="160" rx="8" fill="url(#bodyGrad)" stroke="#cbd5e1" stroke-width="2" filter="url(#shadow)"/>
+  <!-- Top Screw Terminals -->
+  <circle cx="48" cy="36" r="9" fill="#94a3b8" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="42" y1="36" x2="54" y2="36" stroke="#334155" stroke-width="2.5"/>
+  <circle cx="82" cy="36" r="9" fill="#94a3b8" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="76" y1="36" x2="88" y2="36" stroke="#334155" stroke-width="2.5"/>
+  <circle cx="118" cy="36" r="9" fill="#94a3b8" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="112" y1="36" x2="124" y2="36" stroke="#334155" stroke-width="2.5"/>
+  <circle cx="152" cy="36" r="9" fill="#94a3b8" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="146" y1="36" x2="158" y2="36" stroke="#334155" stroke-width="2.5"/>
+  <!-- Labels 1 3 5 N -->
+  <text x="48" y="55" font-family="system-ui, sans-serif" font-size="9" font-weight="800" fill="#64748b" text-anchor="middle">1</text>
+  <text x="82" y="55" font-family="system-ui, sans-serif" font-size="9" font-weight="800" fill="#64748b" text-anchor="middle">3</text>
+  <text x="118" y="55" font-family="system-ui, sans-serif" font-size="9" font-weight="800" fill="#64748b" text-anchor="middle">5</text>
+  <text x="152" y="55" font-family="system-ui, sans-serif" font-size="9" font-weight="800" fill="#0284c7" text-anchor="middle">N</text>
+  <!-- Middle Faceplate -->
+  <rect x="35" y="62" width="130" height="76" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+  <!-- Branding & Specs -->
+  <text x="50" y="78" font-family="system-ui, sans-serif" font-size="11" font-weight="900" fill="#0f172a">IDR · DR 4P</text>
+  <text x="50" y="90" font-family="system-ui, sans-serif" font-size="9" font-weight="700" fill="#0369a1">40A / 30mA</text>
+  <text x="50" y="100" font-family="system-ui, sans-serif" font-size="7.5" font-weight="600" fill="#64748b">400V~ Tetrapolar</text>
+  <!-- Test Button (T) -->
+  <rect x="50" y="108" width="22" height="18" rx="3" fill="#eab308" stroke="#ca8a04" stroke-width="1.2"/>
+  <text x="61" y="121" font-family="system-ui, sans-serif" font-size="11" font-weight="900" fill="#ffffff" text-anchor="middle">T</text>
+  <!-- Main Lever Switch (Tetrapolar connected) -->
+  <rect x="88" y="94" width="70" height="26" rx="4" fill="url(#blueToggle)" stroke="#075985" stroke-width="1.5"/>
+  <rect x="92" y="98" width="62" height="8" rx="2" fill="#38bdf8" opacity="0.6"/>
+  <text x="123" y="111" font-family="system-ui, sans-serif" font-size="9" font-weight="900" fill="#ffffff" text-anchor="middle">I-ON</text>
+  <!-- Bottom Screw Terminals -->
+  <circle cx="48" cy="164" r="9" fill="#94a3b8" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="42" y1="164" x2="54" y2="164" stroke="#334155" stroke-width="2.5"/>
+  <circle cx="82" cy="164" r="9" fill="#94a3b8" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="76" y1="164" x2="88" y2="164" stroke="#334155" stroke-width="2.5"/>
+  <circle cx="118" cy="164" r="9" fill="#94a3b8" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="112" y1="164" x2="124" y2="164" stroke="#334155" stroke-width="2.5"/>
+  <circle cx="152" cy="164" r="9" fill="#94a3b8" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="146" y1="164" x2="158" y2="164" stroke="#334155" stroke-width="2.5"/>
+</svg>

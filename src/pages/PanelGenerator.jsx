@@ -11,6 +11,8 @@ import {
   calcMainProtection,
   calcProjectMetrics,
   generateDefaultPanelLayout,
+  generateDefaultPanelWires,
+  generateAllPanelWires,
   getPrimaryPanelBoard,
   isDedicatedSolarBoard,
   isSolarProject,
@@ -18,6 +20,29 @@ import {
   nextBusbarIndex,
   remapBusbarIndices,
 } from "@/lib/electricalEngine";
+import { useToast } from "@/components/ui/use-toast";
+import {
+  calculateOrthogonalRoute,
+  normalizeSavedBoard,
+  extractPanelObstacles,
+  resolvePinPosition,
+  resolveTerminalPosition,
+  getNeutralBusLayout,
+  getGroundBusLayout,
+  getThreePhaseOutputPin,
+  THREE_PHASE_OUTPUT,
+  THREE_PHASE_TERMINALS,
+  NEUTRAL_BUS,
+  GROUND_BUS,
+  inferTerminalDirection,
+  simplifyOrthogonalPoints,
+  isOrthogonalPath,
+  ROUTING_GRID_SIZE,
+  PORT_EXIT_OFFSET,
+  OBSTACLE_PADDING,
+  WIRE_SPACING,
+  DEFAULT_CORNER_RADIUS,
+} from "@/lib/orthogonalRouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +67,22 @@ import {
   ChevronRight,
   Save,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Zap,
+  AlertTriangle,
+  Copy,
+  RotateCcw,
+  Compass,
+  Eye,
+  EyeOff,
+  Layers,
+  Activity,
+  Sparkles,
+  ShieldCheck,
+  HelpCircle,
+  Crosshair,
+  Minus,
+  Scissors
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 
@@ -102,23 +142,7 @@ const isCombToothVisible = (toothX, busX, busWidth) => {
   return toothX >= busX && toothX + COMB_TOOTH_WIDTH <= busX + width;
 };
 
-const THREE_PHASE_OUTPUT = {
-  x: 54,
-  y: 44,
-  width: 214,
-  height: 38,
-  pinStartX: 82,
-  pinY: 66,
-  pinGap: 34,
-};
 
-const THREE_PHASE_TERMINALS = [
-  { index: 0, label: "PE", kind: "ground", fill: "#16a34a" },
-  { index: 4, label: "N", kind: "neutral", fill: "#38bdf8" },
-  { index: 1, label: "L1", kind: "power", fill: "#111827" },
-  { index: 2, label: "L2", kind: "power", fill: "#dc2626" },
-  { index: 3, label: "L3", kind: "power", fill: "#7c2d12" },
-];
 
 // Paleta visual realista do quadro
 const COLORS = {
@@ -154,6 +178,62 @@ const WIRE_COLOR_OPTIONS = [
 const WIRE_COLOR_VALUES = WIRE_COLOR_OPTIONS.map((option) => option.value);
 const WIRE_COLOR_HEX = WIRE_COLOR_OPTIONS.reduce((acc, option) => ({ ...acc, [option.value]: option.hex }), {});
 
+export function wireDisplayColor(displayColor) {
+  return (
+    displayColor === "black" ? COLORS.phaseA :
+    displayColor === "red" ? COLORS.phaseB :
+    displayColor === "brown" ? COLORS.phaseC :
+    displayColor === "orange" ? WIRE_COLOR_HEX.orange :
+    displayColor === "blue" ? COLORS.neutral :
+    displayColor === "yellow" ? COLORS.returnWire :
+    displayColor === "gray" ? COLORS.parallel :
+    displayColor === "white" ? WIRE_COLOR_HEX.white :
+    displayColor === "purple" ? WIRE_COLOR_HEX.purple :
+    displayColor === "pink" ? WIRE_COLOR_HEX.pink :
+    COLORS.ground
+  );
+}
+
+export function cableEdgeColor(baseColor) {
+  if (baseColor === COLORS.neutral) return "#075985";
+  if (baseColor === COLORS.ground) return "#166534";
+  if (baseColor === COLORS.phaseB) return "#7f1d1d";
+  if (baseColor === COLORS.phaseC) return "#431407";
+  if (baseColor === WIRE_COLOR_HEX.orange) return "#9a3412";
+  if (baseColor === COLORS.returnWire) return "#854d0e";
+  if (baseColor === COLORS.parallel) return "#475569";
+  if (baseColor === WIRE_COLOR_HEX.white) return "#64748b";
+  if (baseColor === WIRE_COLOR_HEX.purple) return "#4c1d95";
+  if (baseColor === WIRE_COLOR_HEX.pink) return "#831843";
+  return "#020617";
+}
+
+export function cableHighlightColor(baseColor) {
+  return baseColor === COLORS.phaseA || baseColor === COLORS.phaseC ? "#ffffff" : "#f8fafc";
+}
+
+export function isValidWirePoint(point) {
+  return Boolean(point && Number.isFinite(point.x) && Number.isFinite(point.y) && (point.x !== 0 || point.y !== 0));
+}
+
+export function findComponentPlacement(componentId, sourceRails = []) {
+  const id = String(componentId || "");
+  if (!id || !Array.isArray(sourceRails)) return null;
+  for (let railIndex = 0; railIndex < sourceRails.length; railIndex += 1) {
+    const rail = sourceRails[railIndex];
+    const componentIndex = (rail?.components || []).findIndex((item) => String(item.id) === id);
+    if (componentIndex >= 0) {
+      return {
+        component: rail.components[componentIndex],
+        rail,
+        railId: rail.id,
+        railIndex,
+        componentIndex,
+      };
+    }
+  }
+  return null;
+}
 const WIRE_THICKNESS_OPTIONS = [
   { value: "auto", label: "Automática" },
   { value: "1.2", label: "Muito fino" },
@@ -255,22 +335,29 @@ const reconcileMainProtection = (parsed, project, options = {}) => {
 
 const parsePanelLayout = (layout, project = null, options = {}) => {
   if (layout && typeof layout === "object") {
-    return reconcileMainProtection({
+    const reconciled = reconcileMainProtection({
       rails: Array.isArray(layout.rails) ? layout.rails : [],
       wires: Array.isArray(layout.wires) ? layout.wires : [],
       infrastructure: Array.isArray(layout.infrastructure) ? layout.infrastructure : [],
+      meta: layout.meta || {},
     }, project, options);
+    const normalizedBoard = normalizeSavedBoard({ layout: reconciled }, project, options);
+    return normalizedBoard?.layout || reconciled;
   }
 
   if (layout && typeof layout === "string") {
     try {
       return parsePanelLayout(JSON.parse(layout), project, options);
     } catch {
-      return generateDefaultPanelLayout(project, options);
+      const def = generateDefaultPanelLayout(project, options);
+      const normalizedBoard = normalizeSavedBoard({ layout: def }, project, options);
+      return normalizedBoard?.layout || def;
     }
   }
 
-  return generateDefaultPanelLayout(project, options);
+  const def = generateDefaultPanelLayout(project, options);
+  const normalizedBoard = normalizeSavedBoard({ layout: def }, project, options);
+  return normalizedBoard?.layout || def;
 };
 
 // A geração/mesclagem da proteção CA do inversor solar agora vem de uma fonte
@@ -283,7 +370,7 @@ const createPanelBoard = (project, index = 1, layout = null) => {
   const parsedLayout = parsePanelLayout(layout, project, { forceDistribution: true });
   const supply = project?.supply_type || "Monofásico";
 
-  return {
+  const rawBoard = {
     id: `board_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name: index === 1 ? "QD-01 Principal" : `QD-${String(index).padStart(2, "0")}`,
     location: index === 1 ? "Entrada / Distribuição" : "Distribuição",
@@ -291,6 +378,8 @@ const createPanelBoard = (project, index = 1, layout = null) => {
     supply_type: supply,
     layout: index === 1 ? mergeSolarLayoutIntoPrincipal(project, parsedLayout) : parsedLayout,
   };
+
+  return normalizeSavedBoard(rawBoard, project) || rawBoard;
 };
 
 const normalizePanelBoards = (project) => {
@@ -339,7 +428,7 @@ const normalizePanelBoards = (project) => {
       }
     }
 
-    return {
+    const rawBoard = {
       id: board.id || `board_${index + 1}`,
       name: (board.name && !isDedicatedSolarBoard(board)) ? board.name : (index === 0 ? "QD-01 Principal" : `QD-${String(index + 1).padStart(2, "0")}`),
       location: board.location || (index === 0 ? "Entrada / Distribuição" : "Distribuição"),
@@ -347,6 +436,8 @@ const normalizePanelBoards = (project) => {
       supply_type: supply,
       layout,
     };
+
+    return normalizeSavedBoard(rawBoard, project) || rawBoard;
   });
 };
 
@@ -480,6 +571,9 @@ const panelLayoutNeedsCircuitSync = (project, boards, calculatedCircuits = null)
   const layout = primaryBoard?.layout || project?.panel_layout || {};
   const layoutMeta = getPanelLayoutMeta(layout);
   if (layoutMeta.manualDeviceEdits) return false;
+  if (Array.isArray(layout.rails) && layout.rails.some((r) => (r.components || []).some((c) => c.type !== "spacer"))) {
+    return false;
+  }
 
   const deletedCircuitRefs = new Set((layoutMeta.deletedCircuitRefs || []).map(String));
   const activeCircuits = circuits.filter((circuit, index) => !deletedCircuitRefs.has(circuitRefForSync(circuit, index)));
@@ -517,6 +611,50 @@ const phaseTypeConfig = {
 };
 
 const phaseWireColor = (poleIndex = 0) => ["black", "red", "brown"][poleIndex] || "black";
+
+const pinPoleIndex = (pinId = "") => {
+  const match = String(pinId).match(/^comp:[^:]+:(?:top|bottom):(\d+)$/);
+  return match ? Number(match[1]) : null;
+};
+
+const normalizedWireColor = (wire = {}) => {
+  const id = String(wire.id || "").toLowerCase();
+  const source = String(wire.source || "");
+  const target = String(wire.target || "");
+  const lowerTarget = target.toLowerCase();
+  const explicitColor = String(wire.color || "").toLowerCase();
+
+  if (WIRE_COLOR_VALUES.includes(explicitColor)) return explicitColor;
+
+  if (
+    id.includes("neutral") ||
+    id.includes("_n_") ||
+    source.startsWith("busbar_neutral:") ||
+    target.startsWith("busbar_neutral:") ||
+    lowerTarget.endsWith(":neutral")
+  ) {
+    return "blue";
+  }
+
+  if (
+    id.includes("ground") ||
+    id.includes("_g_") ||
+    source.startsWith("busbar_ground:") ||
+    target.startsWith("busbar_ground:") ||
+    lowerTarget.endsWith(":ground")
+  ) {
+    return "green";
+  }
+
+  const idPhase = id.match(/(?:solar_dps_phase|solar_phase_feed|solar_phase_feeder_to_service|solar_phase_service_to_inverter|solar_phase_load|phase_feed|phase_to_dps|phase_gen_to_dr|qgbt_phase_to_dps)_(\d+)/);
+  if (idPhase) return phaseWireColor(Number(idPhase[1]));
+
+  const pole = pinPoleIndex(target) ?? pinPoleIndex(source);
+  if (pole !== null && pole !== undefined) return phaseWireColor(pole);
+
+  return phaseWireColor(0);
+};
+
 
 const supplyTypeFromBreaker = (component = {}) => {
   if (component.supply_type) return component.supply_type;
@@ -620,48 +758,6 @@ const drPoleLabel = (component = {}, poleIndex = 0) => {
   return `L${poleIndex + 1}`;
 };
 
-const pinPoleIndex = (pinId = "") => {
-  const match = String(pinId).match(/^comp:[^:]+:(?:top|bottom):(\d+)$/);
-  return match ? Number(match[1]) : null;
-};
-
-const normalizedWireColor = (wire = {}) => {
-  const id = String(wire.id || "").toLowerCase();
-  const source = String(wire.source || "");
-  const target = String(wire.target || "");
-  const lowerTarget = target.toLowerCase();
-  const explicitColor = String(wire.color || "").toLowerCase();
-
-  if (WIRE_COLOR_VALUES.includes(explicitColor)) return explicitColor;
-
-  if (
-    id.includes("neutral") ||
-    id.includes("_n_") ||
-    source.startsWith("busbar_neutral:") ||
-    target.startsWith("busbar_neutral:") ||
-    lowerTarget.endsWith(":neutral")
-  ) {
-    return "blue";
-  }
-
-  if (
-    id.includes("ground") ||
-    id.includes("_g_") ||
-    source.startsWith("busbar_ground:") ||
-    target.startsWith("busbar_ground:") ||
-    lowerTarget.endsWith(":ground")
-  ) {
-    return "green";
-  }
-
-  const idPhase = id.match(/(?:solar_dps_phase|solar_phase_feed|solar_phase_feeder_to_service|solar_phase_service_to_inverter|solar_phase_load|phase_feed|phase_to_dps|phase_gen_to_dr|qgbt_phase_to_dps)_(\d+)/);
-  if (idPhase) return phaseWireColor(Number(idPhase[1]));
-
-  const pole = pinPoleIndex(target) ?? pinPoleIndex(source);
-  if (pole !== null && pole !== undefined) return phaseWireColor(pole);
-
-  return phaseWireColor(0);
-};
 
 const getBoardGeneralBreaker = (board) => {
   const components = (board?.layout?.rails || []).flatMap((rail) => rail.components || []);
@@ -885,77 +981,7 @@ const PROFESSIONAL_BUS = {
   branchRadius: 3,
 };
 
-const NEUTRAL_BUS = {
-  x: PANEL_W - 455,
-  y: 62,
-  width: 286,
-  height: 18,
-  pinCount: 12,
-  pinGap: 22,
-  pinStartX: PANEL_W - 435,
-  pinY: 71,
-};
 
-const GROUND_BUS = {
-  x: 240,
-  width: 390,
-  pinCount: 12,
-  pinGap: 30,
-  pinStartX: 262,
-};
-
-const getNeutralBusLayout = (infrastructure = []) => {
-  const item = (infrastructure || []).find((entry) => entry?.id === "neutral-bus") || {};
-  const width = Math.max(180, Math.min(520, Number(item.width) || NEUTRAL_BUS.width));
-  const rawX = Number(item.x);
-  const rawY = Number(item.y);
-  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : NEUTRAL_BUS.x));
-  const y = Math.max(20, Number.isFinite(rawY) ? rawY : NEUTRAL_BUS.y);
-  const pinGap = Math.max(14, Math.min(32, (width - 40) / Math.max(1, NEUTRAL_BUS.pinCount - 1)));
-
-  return {
-    x,
-    y,
-    width,
-    height: NEUTRAL_BUS.height,
-    pinStartX: x + 20,
-    pinY: y + (NEUTRAL_BUS.pinY - NEUTRAL_BUS.y),
-    pinGap,
-  };
-};
-
-const getGroundBusLayout = (infrastructure = [], panelH = 820) => {
-  const item = (infrastructure || []).find((entry) => entry?.id === "ground-bus") || {};
-  const width = Math.max(260, Math.min(520, Number(item.width) || GROUND_BUS.width));
-  const rawX = Number(item.x ?? item.busX);
-  const rawY = Number(item.y);
-  const x = Math.max(20, Math.min(PANEL_W - width - 20, Number.isFinite(rawX) ? rawX : GROUND_BUS.x));
-  const y = Math.max(20, Math.min(panelH - 44, Number.isFinite(rawY) ? rawY : (panelH - 68)));
-  const pinGap = Math.max(20, Math.min(38, (width - 60) / Math.max(1, GROUND_BUS.pinCount - 1)));
-
-  return {
-    x,
-    y,
-    width,
-    pinStartX: x + 22,
-    pinY: y + 14,
-    pinGap,
-  };
-};
-
-const getThreePhaseOutputPin = (terminalIndex = 0) => {
-  const index = Number(terminalIndex);
-  const terminalSlot = index === 4
-    ? 1
-    : index > 0
-      ? index + 1
-      : 0;
-  const safeIndex = Math.max(0, Math.min(4, Number.isFinite(terminalSlot) ? terminalSlot : 0));
-  return {
-    x: THREE_PHASE_OUTPUT.pinStartX + safeIndex * THREE_PHASE_OUTPUT.pinGap,
-    y: THREE_PHASE_OUTPUT.pinY,
-  };
-};
 
 const SHOW_WIRE_GAUGE_TAGS = false;
 
@@ -1516,11 +1542,12 @@ const phaseLaneOffset = (color = "") => {
 };
 
 const referenceFeedLaneY = (descriptor = {}) => {
-  if (descriptor.kind === "ground") return 70;
-  if (descriptor.kind === "neutral") return 92;
-  if (descriptor.color === "red") return 114;
-  if (descriptor.color === "brown" || descriptor.color === "orange") return 138;
-  return 90;
+  if (descriptor.kind === "ground") return 50;
+  if (descriptor.kind === "neutral") return 66;
+  if (descriptor.color === "black") return 86;
+  if (descriptor.color === "red") return 98;
+  if (descriptor.color === "brown" || descriptor.color === "orange") return 110;
+  return 86;
 };
 
 const compareCircuitDescriptors = (a, b) => (
@@ -1530,118 +1557,10 @@ const compareCircuitDescriptors = (a, b) => (
   || String(a.wire?.id || "").localeCompare(String(b.wire?.id || ""))
 );
 
-// ─── LOCALIZADOR DE COORDENADAS DE PINO DE CONEXÃO ─────────────────────────────
-const getPinCoords = (pinId, rails, panelH, infrastructure = []) => {
-  if (!pinId) return { x: 0, y: 0 };
-
-  if (pinId.startsWith("loose:")) {
-    const parts = pinId.split(":");
-    return {
-      x: Number(parts[1]) || 0,
-      y: Number(parts[2]) || 0,
-    };
-  }
-  
-  if (pinId.startsWith("busbar_neutral:")) {
-    const idx = parseInt(pinId.split(":")[1], 10);
-    const neutralBus = getNeutralBusLayout(infrastructure);
-    return {
-      x: neutralBus.pinStartX + (Math.abs(Number(idx) || 0) % NEUTRAL_BUS.pinCount) * neutralBus.pinGap,
-      y: neutralBus.pinY,
-    };
-  }
-  
-  if (pinId === "backbone_ground:start") return { x: getGroundBackboneLeftX(), y: 78 };
-  if (pinId === "backbone_ground:end") {
-    const groundBus = getGroundBusLayout(infrastructure, panelH);
-    return { x: groundBus.x + groundBus.width - 18, y: groundBus.pinY };
-  }
-
-  if (pinId.startsWith("busbar_ground:")) {
-    const idx = parseInt(pinId.split(":")[1], 10);
-    const groundBus = getGroundBusLayout(infrastructure, panelH);
-    return {
-      x: groundBus.pinStartX + (Math.abs(Number(idx) || 0) % GROUND_BUS.pinCount) * groundBus.pinGap,
-      y: groundBus.pinY,
-    };
-  }
-  
-  if (pinId.startsWith("terminal_left_top:")) {
-    return getThreePhaseOutputPin(parseInt(pinId.split(":")[1], 10), infrastructure);
-  }
-
-  if (pinId.startsWith("load_out:")) {
-    const parts = pinId.split(":");
-    const compId = parts[1];
-    const poleToken = parts[2] || "0";
-    const poleIdx = poleToken === "neutral" ? 3 : poleToken === "ground" ? 4 : parseInt(poleToken || "0", 10);
-    const circuitMatch = String(compId || "").match(/circuit_(\d+)/i);
-    const outputIndex = circuitMatch ? Number(circuitMatch[1]) : 0;
-
-    for (let rIdx = 0; rIdx < rails.length; rIdx++) {
-      const rail = rails[rIdx];
-      const railY = 190 + rIdx * 240;
-      let currentX = 160;
-
-      for (const comp of rail.components || []) {
-        const compW = comp.poles * MOD;
-        if (componentMatchesLoadTarget(compId, comp)) {
-          const terminalPole = Number.isFinite(poleIdx) ? Math.max(0, Math.min(Number(poleIdx) || 0, comp.poles - 1)) : 0;
-          const terminalX = currentX + terminalPole * MOD + MOD / 2;
-
-          if (poleToken === "neutral") {
-            return {
-              x: terminalX,
-              y: snapWireGrid(railY + 136 + (outputIndex % 4) * 6),
-            };
-          }
-
-          if (poleToken === "ground") {
-            const baseX = PANEL_W - 140; // Direita do barramento (combed layout default invertido)
-            const baseY = panelH - 240; // Inicia mais alto para empilhar para baixo
-            return {
-              x: baseX,
-              y: snapWireGrid(baseY + outputIndex * 16),
-            };
-          }
-
-          return {
-            x: terminalX,
-            y: snapWireGrid(railY + 132 + (terminalPole % 2) * 8),
-          };
-        }
-        currentX += compW + 2;
-      }
-    }
-
-    return getFallbackLoadPoint(poleToken, rails, panelH);
-  }
-  
-  if (pinId.startsWith("comp:")) {
-    const parts = pinId.split(":");
-    const compId = parts[1];
-    const termType = parts[2]; // "top" | "bottom"
-    const poleIdx = parseInt(parts[3] || "0", 10);
-    
-    for (let rIdx = 0; rIdx < rails.length; rIdx++) {
-      const rail = rails[rIdx];
-      const railY = 190 + rIdx * 240;
-      let currentX = 160;
-      
-      for (const comp of rail.components) {
-        const compW = comp.poles * MOD;
-        if (comp.id === compId) {
-          const x = currentX + poleIdx * MOD + MOD / 2;
-          const y = termType === "top" ? railY - 37 : railY + 57;
-          return { x, y };
-        }
-        currentX += compW + 2;
-      }
-    }
-  }
-  
-  return { x: 0, y: 0 };
-};
+// ─── LOCALIZADOR DE COORDENADAS DE PINO DE CONEXÃO (SSOT) ─────────────────────
+const getPinCoords = (pinId, rails, panelH, infrastructure = []) => (
+  resolvePinPosition(pinId, rails, panelH, infrastructure) || { x: 0, y: 0 }
+);
 
 export default function PanelGenerator() {
   const navigate = useNavigate();
@@ -1705,6 +1624,19 @@ export default function PanelGenerator() {
   const [newCompPhase, setNewCompPhase] = useState("A");
   const [newCompSupplyType, setNewCompSupplyType] = useState("Monofásico");
   const [newCompRail, setNewCompRail] = useState("rail_2");
+  const [autoRepeatInsert, setAutoRepeatInsert] = useState(false);
+
+  // NOVO: CIRCUIT TRACKING & ISOLATION & DIAGNOSTICS & INSPECTOR STATE
+  const { toast } = useToast();
+  const [tracedCircuitId, setTracedCircuitId] = useState(null);
+  const [isIsolatedView, setIsIsolatedView] = useState(false);
+  const [deviceInspectorTab, setDeviceInspectorTab] = useState("geral"); // geral | eletrica | montagem | conexoes
+  const [wireInteractionMode, setWireInteractionMode] = useState("select"); // select | edit_route
+  const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
+  const [showDiagnosticsDetail, setShowDiagnosticsDetail] = useState(false);
+  const [showClearWiresModal, setShowClearWiresModal] = useState(false);
+  const [showAutoConnectModal, setShowAutoConnectModal] = useState(false);
+  const [wireFilterType, setWireFilterType] = useState("all"); // all | phase | neutral | ground
 
   const svgRef = useRef(null);
   const containerRef = useRef(null);
@@ -1712,27 +1644,53 @@ export default function PanelGenerator() {
   const activeBoard = panelBoards.find((board) => board.id === activeBoardId) || panelBoards[0];
   const activeSupplyType = activeBoard?.supply_type || project?.supply_type || "Monofásico";
   const isPrincipalBoard = activeBoard === getPrimaryCircuitBoard(panelBoards);
+
+  // Fiação visível: inicia limpa em novos quadros e preserva cabos reais criados ou salvos
   const visibleWires = useMemo(() => {
-    const allWires = [...wires];
-    const backbones = [
-      { id: "ground-main", name: "Aterramento Principal", color: "green", gauge: "16mm²" },
-      { id: "ground-bus-tie", name: "Interligação PE", color: "green", gauge: "10mm²" }
-    ];
-    for (const bb of backbones) {
-      if (!allWires.some(w => w.id === bb.id)) {
-        allWires.push({
-          id: bb.id,
-          name: bb.name,
-          color: bb.color,
-          gauge: bb.gauge,
-          source: `backbone_${bb.id.split("-")[0]}:start`,
-          target: `backbone_${bb.id.split("-")[0]}:end`,
-        });
-      }
-    }
-    return allWires.filter((w) => !w.deleted && isCableVisible(w) && !w.visual_only && w.source && w.target && !w.id.includes("-ground-") && !w.id.includes("-neutral-"));
+    return (wires || []).filter((w) => !w.deleted && isCableVisible(w) && !w.visual_only && w.source && w.target && !w.id.includes("-ground-") && !w.id.includes("-neutral-"));
   }, [wires]);
   const qgbtSourceCount = panelBoards.filter((board) => board.type !== "qgbt").length;
+
+  const autoConnectPreview = useMemo(() => {
+    if (!project) return { phaseCount: 0, neutralCount: 0, groundCount: 0, total: 0, wires: [] };
+    const simulatedWires = generateAllPanelWires(project, { forceDistribution: activeBoard?.type !== "qgbt" });
+    const phaseCount = simulatedWires.filter((w) => w.conductorType === "phase" || (!w.color?.includes("green") && !w.color?.includes("blue"))).length;
+    const neutralCount = simulatedWires.filter((w) => w.conductorType === "neutral" || w.color?.includes("blue")).length;
+    const groundCount = simulatedWires.filter((w) => w.conductorType === "ground" || w.color?.includes("green")).length;
+    return {
+      phaseCount,
+      neutralCount,
+      groundCount,
+      total: simulatedWires.length,
+      wires: simulatedWires,
+    };
+  }, [project, activeBoard?.type]);
+
+  const handleClearWiresConfirm = () => {
+    updateWires([]);
+    setSelectedWireId("");
+    setSelectedRoutePoint(null);
+    setWiringMode(false);
+    setWiringStart("");
+    setWireEndpointDrag(null);
+    setShowClearWiresModal(false);
+    toast({
+      title: "Fiação limpa com sucesso",
+      description: "As ligações visuais foram removidas. Componentes, trilhos e parâmetros elétricos foram 100% preservados.",
+    });
+  };
+
+  const handleAutoConnectConfirm = () => {
+    const nextWires = autoConnectPreview.wires.length > 0
+      ? autoConnectPreview.wires
+      : generateAllPanelWires(project, { forceDistribution: activeBoard?.type !== "qgbt" });
+    updateWires(nextWires);
+    setShowAutoConnectModal(false);
+    toast({
+      title: "Ligações criadas com sucesso",
+      description: `${nextWires.length} condutores foram conectados e organizados conforme o projeto.`,
+    });
+  };
 
   const [infrastructure, setInfrastructure] = useState([]);
   const [selectedInfrastructureId, setSelectedInfrastructureId] = useState("");
@@ -1902,6 +1860,7 @@ export default function PanelGenerator() {
     setHoveredPinId("");
     setHoveredWireId("");
     setWiringStart("");
+    setWireInteractionMode("select");
     if (exitWiringMode) setWiringMode(false);
   }, []);
 
@@ -2063,10 +2022,74 @@ export default function PanelGenerator() {
     pendingEditHistoryRef.current = null;
   };
 
+  const enrichWiresWithComputedRoutes = useCallback((currentWires, currentRails, currentInfra) => {
+    const obstacles = extractPanelObstacles(currentRails, currentInfra);
+    const pHeight = 180 + currentRails.length * 240 + 100;
+
+    return currentWires.map((wire, wireIndex) => {
+      if (wire.deleted) return wire;
+      const p1 = resolvePinPosition(wire.source, currentRails, pHeight, currentInfra);
+      const p2 = resolvePinPosition(wire.target, currentRails, pHeight, currentInfra);
+
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) {
+        return {
+          ...wire,
+          route: { mode: "orthogonal", points: [] },
+          route_points: [],
+        };
+      }
+
+      const visualRoute = wirePathsRef.current[wire.id] || wireRouteMetaRef.current[wire.id]?.routePoints;
+      const savedRoute = Array.isArray(wire.route?.points) && wire.route.points.length >= 2 && isOrthogonalPath(wire.route.points)
+        ? wire.route.points
+        : Array.isArray(wire.route_points) && wire.route_points.length > 0
+          ? [p1, ...wire.route_points, p2]
+          : Array.isArray(visualRoute) && visualRoute.length >= 2 && isOrthogonalPath(visualRoute)
+            ? visualRoute
+            : null;
+
+      let points = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : null;
+      if (!points || points.length < 2) {
+        const sourceSide = inferTerminalDirection(wire.source, p1, currentRails, pHeight);
+        const targetSide = inferTerminalDirection(wire.target, p2, currentRails, pHeight);
+        const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+        points = calculateOrthogonalRoute(p1, p2, obstacles, {
+          sourceSide,
+          targetSide,
+          laneOffset,
+          sourcePin: wire.source,
+          targetPin: wire.target,
+        });
+      }
+
+      const cleanPoints = points && points.length >= 2 ? simplifyOrthogonalPoints(points) : [];
+      const waypointsOnly = cleanPoints.length > 2 ? cleanPoints.slice(1, -1) : [];
+
+      return {
+        ...wire,
+        route: {
+          mode: "orthogonal",
+          points: cleanPoints,
+        },
+        route_points: waypointsOnly,
+      };
+    });
+  }, []);
+
   // Salvar automaticamente no banco de dados local ao alterar trilhos/fiação
   const saveLayoutToDb = async (updatedRails, updatedWires, updatedInfra = infrastructure, options = {}) => {
     if (!selectedId) return;
-    const layoutObj = { rails: updatedRails, wires: updatedWires, infrastructure: updatedInfra };
+    const enrichedWires = enrichWiresWithComputedRoutes(updatedWires, updatedRails, updatedInfra);
+    const layoutObj = {
+      rails: updatedRails,
+      wires: enrichedWires,
+      infrastructure: updatedInfra,
+      meta: {
+        manualDeviceEdits: true,
+        savedAt: new Date().toISOString(),
+        version: "2.0-orthogonal",
+      },
+    };
     if (options.history !== false && !restoringLayoutRef.current) {
       const before = makeLayoutSnapshot();
       const after = makeLayoutSnapshot(layoutObj);
@@ -2085,7 +2108,17 @@ export default function PanelGenerator() {
   const panelBoardsWithCurrentLayout = () => {
     const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
     const activeId = activeBoardId || currentBoards[0]?.id || "";
-    const layoutObj = { rails, wires, infrastructure };
+    const enrichedWires = enrichWiresWithComputedRoutes(wires, rails, infrastructure);
+    const layoutObj = {
+      rails,
+      wires: enrichedWires,
+      infrastructure,
+      meta: {
+        manualDeviceEdits: true,
+        savedAt: new Date().toISOString(),
+        version: "2.0-orthogonal",
+      },
+    };
     return {
       activeId,
       boards: currentBoards.map((board) => (
@@ -2469,24 +2502,21 @@ export default function PanelGenerator() {
       });
     });
 
-    rails.forEach((rail, railIndex) => {
-      const railY = 190 + railIndex * 240;
-      let currentX = 160;
+    rails.forEach((rail) => {
       (rail.components || []).forEach((component) => {
         const poles = Number(component.poles || 1);
-        const width = poles * MOD;
         if (component.type !== "spacer") {
           Array.from({ length: poles }).forEach((_, poleIndex) => {
-            const x = currentX + poleIndex * MOD + MOD / 2;
             const topId = `comp:${component.id}:top:${poleIndex}`;
             const bottomId = `comp:${component.id}:bottom:${poleIndex}`;
+            const topPoint = getPinCoords(topId, rails, panelHeight, infrastructure);
+            const bottomPoint = getPinCoords(bottomId, rails, panelHeight, infrastructure);
             const displayLabel = getComponentDisplayLabel(component);
             const labelBase = `${displayLabel} P${poleIndex + 1}`;
-            addPin({ id: topId, x, y: railY - 37, label: `${labelBase} sup.`, kind: normalizedWireColor({ id: topId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
-            addPin({ id: bottomId, x, y: railY + 57, label: `${labelBase} inf.`, kind: normalizedWireColor({ id: bottomId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
+            addPin({ id: topId, ...topPoint, label: `${labelBase} sup.`, kind: normalizedWireColor({ id: topId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
+            addPin({ id: bottomId, ...bottomPoint, label: `${labelBase} inf.`, kind: normalizedWireColor({ id: bottomId, color: component.phase === "N" ? "blue" : "" }), group: displayLabel || "Dispositivo" });
           });
         }
-        currentX += width + 2;
       });
     });
 
@@ -2713,11 +2743,6 @@ export default function PanelGenerator() {
 
   const selectEditableWire = (wireId) => {
     if (!wireId) return;
-    ensureWireRecord(wireId, {
-      __captureVisualRoute: true,
-      routeMode: "manual",
-      routingMode: "manual",
-    });
     setSelectedWireId(wireId);
     setSelectedRoutePoint(null);
     setSelectedComponentId("");
@@ -2725,46 +2750,371 @@ export default function PanelGenerator() {
     setSelectedAnnotationId("");
     setSelectedTextWireId("");
     setActiveTab("wiring");
+    setWireInteractionMode("select");
+  };
+
+  const handleAutoRouteWire = (wireId) => {
+    const targetWireId = wireId || selectedWireId;
+    if (!targetWireId) return;
+    const wire = getEditableWire(targetWireId);
+    if (!wire || isCableLocked(wire)) return;
+
+    const p1 = getPinCoords(wire.source, rails, panelHeight, infrastructure);
+    const p2 = getPinCoords(wire.target, rails, panelHeight, infrastructure);
+    if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return;
+
+    const obstacles = extractPanelObstacles(rails, infrastructure);
+    const sourceSide = inferTerminalDirection(wire.source, p1, rails, panelHeight);
+    const targetSide = inferTerminalDirection(wire.target, p2, rails, panelHeight);
+    const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+
+    const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
+      sourceSide,
+      targetSide,
+      laneOffset,
+      sourcePin: wire.source,
+      targetPin: wire.target,
+    });
+
+    const cleanRoute = simplifyOrthogonalPoints(newRoute);
+    delete wirePathsRef.current[targetWireId];
+    delete wireRouteMetaRef.current[targetWireId];
+
+    let found = false;
+    const nextWires = wires.map((w) => {
+      if (w.id === targetWireId) {
+        found = true;
+        return {
+          ...w,
+          route: { mode: "orthogonal", points: cleanRoute },
+          route_points: [],
+          routeMode: "automatic",
+          routingMode: "automatic",
+          points: buildCablePointList(cleanRoute),
+        };
+      }
+      return w;
+    });
+
+    if (!found) {
+      nextWires.push(buildWireRecordFromVisual(targetWireId, {
+        route: { mode: "orthogonal", points: cleanRoute },
+        route_points: [],
+        routeMode: "automatic",
+        routingMode: "automatic",
+        points: buildCablePointList(cleanRoute),
+      }));
+    }
+
+    if (wireRouteMetaRef.current[targetWireId]) {
+      wireRouteMetaRef.current[targetWireId].routePoints = cleanRoute;
+    }
+    updateWires(nextWires);
+    setWireInteractionMode("select");
+  };
+
+  const handleSimplifyWireRoute = (wireId) => {
+    const targetWireId = wireId || selectedWireId;
+    if (!targetWireId) return;
+    const wire = getEditableWire(targetWireId);
+    if (!wire || isCableLocked(wire)) return;
+
+    const currentRoute = getCurrentVisualWireRoute(targetWireId);
+    if (currentRoute.length < 3) return;
+
+    const simplified = simplifyOrthogonalPoints(currentRoute);
+    const waypointsOnly = simplified.length > 2 ? simplified.slice(1, -1) : [];
+
+    setWireRoutePoints(targetWireId, waypointsOnly, { routeMode: waypointsOnly.length ? "manual" : "automatic" });
+  };
+
+  const handleAddWireBendPoint = (wireId) => {
+    const targetWireId = wireId || selectedWireId;
+    if (!targetWireId) return;
+    const currentRoute = getCurrentVisualWireRoute(targetWireId);
+    if (currentRoute.length < 2) return;
+
+    const midpoint = getRouteMidpoint(currentRoute);
+    if (!midpoint) return;
+
+    const existingBends = getWireRouteBends(getEditableWire(targetWireId));
+    const nextBends = [...existingBends, midpoint];
+    setWireRoutePoints(targetWireId, nextBends, { routeMode: "manual" });
+    setSelectedRoutePoint({ wireId: targetWireId, index: nextBends.length - 1 });
+    setWireInteractionMode("edit_route");
+  };
+
+  const handleRemoveWireBendPoint = (wireId, index) => {
+    const targetWireId = wireId || selectedWireId;
+    if (!targetWireId) return;
+    const wire = getEditableWire(targetWireId);
+    const existingBends = getWireRouteBends(wire);
+    const targetIdx = Number.isInteger(index) ? index : selectedRoutePoint?.index;
+    if (!Number.isInteger(targetIdx) || targetIdx < 0 || targetIdx >= existingBends.length) return;
+
+    const nextBends = existingBends.filter((_, i) => i !== targetIdx);
+    setWireRoutePoints(targetWireId, nextBends, { routeMode: nextBends.length ? "manual" : "automatic" });
+    setSelectedRoutePoint(null);
+  };
+
+  const handleAutoOrganizeAllWires = () => {
+    const obstacles = extractPanelObstacles(rails, infrastructure);
+    let changed = false;
+    const nextWires = wires.map((wire) => {
+      if (wire.deleted || isCableLocked(wire) || wire.routeMode === "manual") return wire;
+      const p1 = getPinCoords(wire.source, rails, panelHeight, infrastructure);
+      const p2 = getPinCoords(wire.target, rails, panelHeight, infrastructure);
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const sourceSide = inferTerminalDirection(wire.source, p1, rails, panelHeight);
+      const targetSide = inferTerminalDirection(wire.target, p2, rails, panelHeight);
+      const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+
+      const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin: wire.source,
+        targetPin: wire.target,
+      });
+
+      const cleanRoute = simplifyOrthogonalPoints(newRoute);
+      changed = true;
+      return {
+        ...wire,
+        route: { mode: "orthogonal", points: cleanRoute },
+        route_points: [],
+        routeMode: "automatic",
+        routingMode: "automatic",
+        points: buildCablePointList(cleanRoute),
+      };
+    });
+
+    if (changed) {
+      updateWires(nextWires);
+    }
+  };
+
+  const handleDuplicateComponent = (componentId = selectedComponentId) => {
+    const targetId = componentId || selectedComponentId;
+    if (!targetId) return;
+    const placement = findComponentPlacement(targetId);
+    if (!placement?.component) return;
+
+    const { component, railIndex } = placement;
+    const poles = Number(component.poles || 1);
+    const newId = `comp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    
+    // Auto-suggest next label
+    let nextLabel = `${component.label || "Dispositivo"} (Cópia)`;
+    const matchNum = String(component.label || "").match(/(\d+)/);
+    if (matchNum) {
+      const nextNum = parseInt(matchNum[1], 10) + 1;
+      nextLabel = String(component.label || "").replace(matchNum[1], String(nextNum));
+    }
+
+    const clonedComp = {
+      ...component,
+      id: newId,
+      label: nextLabel,
+      circuitNumber: component.circuitNumber ? `C${parseInt(component.circuitNumber.replace(/\D/g, "") || "0", 10) + 1}` : undefined,
+      isGeneral: false,
+    };
+
+    // Find rail with capacity
+    let targetRailIdx = railIndex;
+    const currentRailUsed = (rails[targetRailIdx]?.components || []).filter(c => c.type !== "spacer").reduce((sum, c) => sum + Number(c.poles || 1), 0);
+    if (currentRailUsed + poles > 18 && rails.length > 1) {
+      targetRailIdx = rails.findIndex((r) => {
+        const used = (r.components || []).filter(c => c.type !== "spacer").reduce((sum, c) => sum + Number(c.poles || 1), 0);
+        return used + poles <= 18;
+      });
+      if (targetRailIdx === -1) targetRailIdx = railIndex;
+    }
+
+    const nextRails = rails.map((r, idx) => {
+      if (idx !== targetRailIdx) return r;
+      const active = (r.components || []).filter(c => c.type !== "spacer");
+      return {
+        ...r,
+        components: [...active, clonedComp],
+      };
+    });
+
+    const normalized = normalizeRailsLayout(nextRails);
+    setRails(normalized);
+    saveLayoutToDb(normalized, wires, infrastructure);
+    setSelectedComponentId(newId);
+    setSelectedWireId("");
+  };
+
+  const handleTrackCircuit = (circuitRef) => {
+    if (!circuitRef) {
+      setTracedCircuitId(null);
+      return;
+    }
+    if (tracedCircuitId === circuitRef) {
+      setTracedCircuitId(null);
+    } else {
+      setTracedCircuitId(circuitRef);
+    }
+  };
+
+  const handleToggleIsolateView = () => {
+    setIsIsolatedView((curr) => !curr);
+  };
+
+  const isComponentMatchingCircuit = (c, circuitRef) => {
+    if (!circuitRef || !c) return false;
+    const target = String(circuitRef).trim().toLowerCase();
+    const cNum = String(c.circuitNumber || "").trim().toLowerCase();
+    const cLabel = String(c.circuitLabel || "").trim().toLowerCase();
+    const label = String(c.label || "").trim().toLowerCase();
+    const name = String(c.name || "").trim().toLowerCase();
+    return cNum === target || cLabel === target || label.includes(target) || name.includes(target) || (c.isGeneral && (target === "geral" || target === "qgbt"));
+  };
+
+  const isWireMatchingCircuit = (wire, circuitRef) => {
+    if (!circuitRef || !wire) return false;
+    const target = String(circuitRef).trim().toLowerCase();
+    const wName = String(wire.name || "").trim().toLowerCase();
+    const destLabel = String(destinationCircuitLabel(wire) || "").trim().toLowerCase();
+    const text = String(wire.labelMeta?.text || "").trim().toLowerCase();
+    const source = String(wire.source || "").toLowerCase();
+    const targetPin = String(wire.target || "").toLowerCase();
+    return wName.includes(target) || destLabel.includes(target) || text.includes(target) || source.includes(target) || targetPin.includes(target);
+  };
+
+  const handleFocusElement = (type, id) => {
+    if (!id) return;
+    if (type === "component") {
+      setSelectedComponentId(id);
+      setSelectedWireId("");
+      setActiveTab("components");
+      const placement = findComponentPlacement(id);
+      if (placement && panelViewportRef.current) {
+        const railY = 190 + placement.railIndex * 240;
+        panelViewportRef.current.scrollTo({
+          top: Math.max(0, railY - 160),
+          behavior: "smooth"
+        });
+      }
+    } else if (type === "wire") {
+      selectEditableWire(id);
+      const wire = getEditableWire(id);
+      const p1 = getPinCoords(wire?.source, rails, panelHeight, infrastructure);
+      if (isValidWirePoint(p1) && panelViewportRef.current) {
+        panelViewportRef.current.scrollTo({
+          top: Math.max(0, p1.y - 160),
+          behavior: "smooth"
+        });
+      }
+    }
   };
 
   const commitWireEndpointMove = (wireId, endpoint, pinId) => {
     if (!wireId || !endpoint || !pinId) return;
-    if (isCableLocked(getEditableWire(wireId))) return;
+    const currentWire = getEditableWire(wireId);
+    if (isCableLocked(currentWire)) return;
+
+    captureEditHistoryStart(`wire-endpoint:${wireId}`);
+
+    // Limpa referências cacheadas do cabo para forçar reconstrução imediata
+    delete wirePathsRef.current[wireId];
+    delete wireRouteMetaRef.current[wireId];
+
     const endpointPoint = getPinCoords(pinId, rails, panelHeight, infrastructure);
-    const currentRoute = getCurrentVisualWireRoute(wireId);
-    const routeWithEndpoint = currentRoute.length >= 2 && isValidWirePoint(endpointPoint)
-      ? currentRoute.map((point, index, list) => (
-          (endpoint === "source" && index === 0) || (endpoint === "target" && index === list.length - 1)
-            ? endpointPoint
-            : point
-        ))
-      : currentRoute;
+    if (!isValidWirePoint(endpointPoint)) {
+      setWireMoveMode("");
+      setWireEndpointDrag(null);
+      setEndpointDragCoords(null);
+      setHoveredPinId("");
+      return;
+    }
+
+    const otherEndpoint = endpoint === "source" ? "target" : "source";
+    const otherPinId = currentWire[otherEndpoint] || (endpoint === "source" ? currentWire.target : currentWire.source) || "";
+    const otherPoint = otherPinId ? getPinCoords(otherPinId, rails, panelHeight, infrastructure) : null;
+
+    const sourcePoint = endpoint === "source" ? endpointPoint : otherPoint;
+    const targetPoint = endpoint === "target" ? endpointPoint : otherPoint;
+    const sourcePin = endpoint === "source" ? pinId : otherPinId;
+    const targetPin = endpoint === "target" ? pinId : otherPinId;
+
+    let cleanRoute = [];
+    if (isValidWirePoint(sourcePoint) && isValidWirePoint(targetPoint)) {
+      const obstacles = extractPanelObstacles(rails, infrastructure);
+      const sourceSide = inferTerminalDirection(sourcePin, sourcePoint, rails, panelHeight);
+      const targetSide = inferTerminalDirection(targetPin, targetPoint, rails, panelHeight);
+      const color = normalizedWireColor(currentWire);
+      const laneOffset = color === "black" ? -WIRE_SPACING : color === "brown" || color === "orange" ? WIRE_SPACING : 0;
+
+      const ortho = calculateOrthogonalRoute(sourcePoint, targetPoint, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin,
+        targetPin,
+      });
+      cleanRoute = simplifyOrthogonalPoints(ortho);
+    } else {
+      cleanRoute = [sourcePoint, targetPoint].filter(isValidWirePoint);
+    }
+
+    const nextBends = cleanRoute.length > 2 ? cleanRoute.slice(1, -1) : [];
+    const fullRoute = cleanRoute.length >= 2 ? cleanRoute : [sourcePoint, targetPoint].filter(isValidWirePoint);
+
     let found = false;
     const nextWires = wires.map((wire) => {
       if (wire.id === wireId) {
         found = true;
-        return buildWireRecordFromVisual(wireId, {
+        return {
           ...wire,
-          [endpoint]: pinId,
-          [`${endpoint}PortId`]: pinId,
-          [`${endpoint}ComponentId`]: getCableComponentId(pinId),
-          points: buildCablePointList(routeWithEndpoint, wire.points),
-        });
+          source: sourcePin,
+          target: targetPin,
+          sourceComponentId: getCableComponentId(sourcePin),
+          sourcePortId: sourcePin,
+          targetComponentId: getCableComponentId(targetPin),
+          targetPortId: targetPin,
+          originId: sourcePin,
+          destinationId: targetPin,
+          route_points: nextBends,
+          route: { mode: "orthogonal", points: fullRoute },
+          routeMode: "automatic",
+          routingMode: "automatic",
+          points: buildCablePointList(fullRoute, wire.points),
+        };
       }
       return wire;
     });
+
     if (!found) {
-       nextWires.push(buildWireRecordFromVisual(wireId, {
-         [endpoint]: pinId,
-         [`${endpoint}PortId`]: pinId,
-         [`${endpoint}ComponentId`]: getCableComponentId(pinId),
-         points: buildCablePointList(routeWithEndpoint),
-       }));
+      const baseRecord = buildWireRecordFromVisual(wireId, {
+        ...currentWire,
+        id: wireId,
+        source: sourcePin,
+        target: targetPin,
+        sourceComponentId: getCableComponentId(sourcePin),
+        sourcePortId: sourcePin,
+        targetComponentId: getCableComponentId(targetPin),
+        targetPortId: targetPin,
+        originId: sourcePin,
+        destinationId: targetPin,
+        route_points: nextBends,
+        route: { mode: "orthogonal", points: fullRoute },
+        routeMode: "automatic",
+        routingMode: "automatic",
+        points: buildCablePointList(fullRoute),
+      });
+      nextWires.push(baseRecord);
     }
+
+    commitEditHistory(`wire-endpoint:${wireId}`);
     updateWires(nextWires);
     setSelectedWireId(wireId);
     setWireMoveMode("");
     setWireEndpointDrag(null);
+    setEndpointDragCoords(null);
     setHoveredPinId("");
   };
 
@@ -2773,17 +3123,17 @@ export default function PanelGenerator() {
     if (isCableLocked(getEditableWire(selectedWireId))) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     ensureWireRecord(selectedWireId);
     setActiveTab("wiring");
     setWireMoveMode(endpoint);
     setWireEndpointDrag({ wireId: selectedWireId, endpoint });
     const point = getSvgCursorPoint(event);
     setHoveredPinId(findNearestConnectionPin(point)?.id || "");
-    if (point) setEndpointDragCoords({ x: point.x, y: point.y });
+    if (point) setEndpointDragCoords({ x: Math.round(point.x), y: Math.round(point.y) });
   };
 
-  const setWireRoutePoints = (wireId, routePoints, options = {}) => {
+  function setWireRoutePoints(wireId, routePoints, options = {}) {
     if (!options.force && isCableLocked(getEditableWire(wireId))) return;
     const cleanedPoints = normalizeWireRoutePoints(routePoints);
     const nextRouteMode = options.routeMode || (cleanedPoints.length ? "manual" : "automatic");
@@ -3282,7 +3632,7 @@ export default function PanelGenerator() {
       setSelectedRoutePoint(null);
       return;
     }
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`wire-route:${wireId}`);
     setSelectedWireId(wireId);
     setSelectedComponentId("");
@@ -3321,7 +3671,7 @@ export default function PanelGenerator() {
 
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`wire-route:${wireId}`);
     selectEditableWire(wireId);
     setWireRoutePointDrag(null);
@@ -3390,7 +3740,7 @@ export default function PanelGenerator() {
     if (wiringMode || wireMoveMode) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`infra:${infraId}`);
     selectInfrastructure(infraId);
     const pt = getSvgCursorPoint(event);
@@ -3408,7 +3758,7 @@ export default function PanelGenerator() {
     event.preventDefault();
     const pt = getSvgCursorPoint(event);
     if (!pt) return;
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`infra:${infraId}`);
     selectInfrastructure(infraId);
     setTextDrag(null);
@@ -3448,7 +3798,7 @@ export default function PanelGenerator() {
     if (!wireId) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`wire-label:${wireId}`);
     setSelectedTextWireId(wireId);
     setSelectedAnnotationId("");
@@ -3471,7 +3821,7 @@ export default function PanelGenerator() {
     if (wiringMode || wireMoveMode) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`annotation:${annotationId}`);
     setSelectedAnnotationId(annotationId);
     setSelectedTextWireId("");
@@ -3496,7 +3846,7 @@ export default function PanelGenerator() {
     if (wiringMode || wireMoveMode) return;
     event.stopPropagation();
     event.preventDefault();
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(historyKey);
     onSelect?.();
     const point = getSvgCursorPoint(event);
@@ -3673,7 +4023,7 @@ export default function PanelGenerator() {
           movedComponent = component;
           return false;
         }
-        return true;
+        return component.type !== "spacer";
       });
       return { ...rail, components };
     });
@@ -3715,8 +4065,40 @@ export default function PanelGenerator() {
     const nextRails = withoutComponent.map((rail, index) => (
       index === targetRailIndex ? { ...rail, components: nextComponents } : rail
     ));
+    const normalizedRails = normalizeRailsLayout(nextRails);
+    const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
+    const pHeight = 180 + normalizedRails.length * 240 + 100;
 
-    updateRails(nextRails);
+    const nextWires = wires.map((wire) => {
+      const isSourceAffected = String(wire.source || "").includes(componentId) || String(wire.sourceComponentId || "") === componentId;
+      const isTargetAffected = String(wire.target || "").includes(componentId) || String(wire.targetComponentId || "") === componentId;
+      if (!isSourceAffected && !isTargetAffected) {
+        return wire;
+      }
+      const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
+      const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
+      const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
+      const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+      const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin: wire.source,
+        targetPin: wire.target,
+      });
+      return {
+        ...wire,
+        route: { mode: "orthogonal", points: newRoute },
+        route_points: newRoute.length > 2 ? newRoute.slice(1, -1) : [],
+      };
+    });
+
+    setRails(normalizedRails);
+    setWires(nextWires);
+    saveLayoutToDb(normalizedRails, nextWires, infrastructure);
     setSelectedComponentId(componentId);
     setSelectedWireId("");
     setActiveTab("components");
@@ -3726,7 +4108,7 @@ export default function PanelGenerator() {
     if (event.button !== 0 || wiringMode || wireMoveMode || wireEndpointDrag || wireRoutePointDrag || wireSegmentDrag || infraResizeDrag) return;
     const point = getSvgCursorPoint(event);
     if (!point) return;
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     captureEditHistoryStart(`component:${componentId}:move`);
     setComponentDrag({
       componentId,
@@ -3743,7 +4125,7 @@ export default function PanelGenerator() {
     event.preventDefault();
     const point = getSvgCursorPoint(event);
     if (!point) return;
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
     setLegendDrag({
       offsetX: point.x - legendPosition.x,
       offsetY: point.y - legendPosition.y,
@@ -3816,6 +4198,12 @@ export default function PanelGenerator() {
   };
 
   const handleSvgPointerUp = (event) => {
+    try {
+      if (event.pointerId && svgRef.current?.hasPointerCapture?.(event.pointerId)) {
+        svgRef.current?.releasePointerCapture?.(event.pointerId);
+      }
+    } catch (_) {}
+
     const point = getSvgCursorPoint(event);
 
     if (legendDrag) {
@@ -3923,6 +4311,10 @@ export default function PanelGenerator() {
     event.stopPropagation();
     if (wireEndpointDrag) {
       commitWireEndpointMove(wireEndpointDrag.wireId, wireEndpointDrag.endpoint, pinId);
+      return;
+    }
+    if (wireMoveMode && selectedWireId) {
+      commitWireEndpointMove(selectedWireId, wireMoveMode, pinId);
       return;
     }
     handlePinClick(pinId);
@@ -4081,6 +4473,101 @@ export default function PanelGenerator() {
   }, [ductedWiringPlan.neutralBranches, panelHeight]);
   const showNeutralBackbone = false;
 
+  // NOVO: AUDITOR E DIAGNÓSTICO TÉCNICO DE CONEXÕES DO QUADRO
+  const panelDiagnostics = useMemo(() => {
+    const issues = [];
+    let totalConnections = 0;
+    let correctConnections = 0;
+
+    // 1. Auditar componentes em cada trilho DIN
+    rails.forEach((rail, railIndex) => {
+      (rail.components || []).forEach((comp) => {
+        if (comp.type === "spacer") return;
+        const poles = Number(comp.poles || 1);
+        const isBreaker = comp.type === "breaker";
+        const isDps = comp.type === "dps";
+        const isDr = comp.type === "dr";
+
+        const topPins = Array.from({ length: poles }).map((_, pIdx) => `comp:${comp.id}:top:${pIdx}`);
+        const bottomPins = Array.from({ length: poles }).map((_, pIdx) => `comp:${comp.id}:bottom:${pIdx}`);
+
+        const topConnected = topPins.every(pin => 
+          wires.some(w => !w.deleted && (w.source === pin || w.target === pin))
+          || (ductedWiringPlan.servicePower || []).some(d => d.wire?.source === pin || d.wire?.target === pin)
+          || (ductedWiringPlan.phaseDistributionGroups || []).some(g => g.descriptors.some(d => d.wire?.source === pin || d.wire?.target === pin))
+          || (ductedWiringPlan.solarIncomingPhaseGroups || []).some(g => g.descriptors.some(d => d.wire?.source === pin || d.wire?.target === pin))
+        );
+
+        const bottomConnected = bottomPins.every(pin => 
+          wires.some(w => !w.deleted && (w.source === pin || w.target === pin))
+          || (ductedWiringPlan.phaseOutputs || []).some(d => d.wire?.source === pin || d.wire?.target === pin)
+          || (ductedWiringPlan.groundBranches || []).some(d => d.wire?.source === pin || d.wire?.target === pin)
+          || (ductedWiringPlan.neutralBranches || []).some(d => d.wire?.source === pin || d.wire?.target === pin)
+        );
+
+        totalConnections += poles * 2;
+        if (topConnected && bottomConnected) {
+          correctConnections += poles * 2;
+        } else {
+          if (!topConnected && !bottomConnected) {
+            issues.push({
+              id: `comp_disc_${comp.id}`,
+              type: "warning",
+              title: `${comp.label || comp.id} sem condutores`,
+              description: `Dispositivo em T${railIndex + 1} aguarda ligação de alimentação e saída.`,
+              componentId: comp.id,
+            });
+          } else if (!topConnected) {
+            issues.push({
+              id: `comp_notop_${comp.id}`,
+              type: "info",
+              title: `${comp.label || comp.id} (entrada livre)`,
+              description: `Terminal superior disponível para fase ou barramento.`,
+              componentId: comp.id,
+            });
+            correctConnections += poles;
+          } else if (!bottomConnected) {
+            issues.push({
+              id: `comp_nobot_${comp.id}`,
+              type: "info",
+              title: `${comp.label || comp.id} (saída para carga livre)`,
+              description: `Terminal inferior disponível para saída do circuito.`,
+              componentId: comp.id,
+            });
+            correctConnections += poles;
+          }
+        }
+      });
+    });
+
+    // 2. Auditar fios para terminais flutuantes ou inválidos
+    wires.forEach((wire) => {
+      if (wire.deleted) return;
+      totalConnections += 1;
+      const p1 = getPinCoords(wire.source, rails, panelHeight, infrastructure);
+      const p2 = getPinCoords(wire.target, rails, panelHeight, infrastructure);
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) {
+        issues.push({
+          id: `wire_float_${wire.id}`,
+          type: "error",
+          title: `Cabo ${wire.name || wire.id} desconectado`,
+          description: `Terminal de origem ou destino não localizado no painel.`,
+          wireId: wire.id,
+        });
+      } else {
+        correctConnections += 1;
+      }
+    });
+
+    return {
+      total: Math.max(1, totalConnections),
+      correct: correctConnections,
+      incomplete: issues.filter(i => i.type === "error" || i.type === "warning").length,
+      attention: issues.filter(i => i.type === "info").length,
+      issues,
+    };
+  }, [rails, wires, ductedWiringPlan, infrastructure, panelHeight]);
+
   const activeScale = clampPanelScale(scale ?? fitScale);
   useEffect(() => {
     const node = containerRef.current;
@@ -4109,25 +4596,6 @@ export default function PanelGenerator() {
   };
 
   // AÇÕES DO COMPONENTE SELECIONADO
-  const findComponentPlacement = (componentId, sourceRails = rails) => {
-    const id = String(componentId || "");
-    if (!id) return null;
-    for (let railIndex = 0; railIndex < sourceRails.length; railIndex += 1) {
-      const rail = sourceRails[railIndex];
-      const componentIndex = (rail.components || []).findIndex((item) => String(item.id) === id);
-      if (componentIndex >= 0) {
-        return {
-          component: rail.components[componentIndex],
-          rail,
-          railId: rail.id,
-          railIndex,
-          componentIndex,
-        };
-      }
-    }
-    return null;
-  };
-
   const getSelectedComponent = () => findComponentPlacement(selectedComponentId);
 
   const handleUpdateComponent = (field, value, options = {}) => {
@@ -4418,78 +4886,139 @@ export default function PanelGenerator() {
     if (!sel) return;
     const { component, railId } = sel;
     
+    let hasMoved = false;
     const updated = rails.map(r => {
       if (r.id !== railId) return r;
-      const index = r.components.findIndex(c => c.id === component.id);
-      const nextComponents = [...r.components];
+      const activeComponents = (r.components || []).filter(c => c.type !== "spacer");
+      const index = activeComponents.findIndex(c => c.id === component.id);
+      if (index === -1) return r;
       
+      const nextActive = [...activeComponents];
       if (direction === "left" && index > 0) {
-        // Swap left
-        const temp = nextComponents[index - 1];
-        nextComponents[index - 1] = nextComponents[index];
-        nextComponents[index] = temp;
-      } else if (direction === "right" && index < nextComponents.length - 1) {
-        // Swap right
-        const temp = nextComponents[index + 1];
-        nextComponents[index + 1] = nextComponents[index];
-        nextComponents[index] = temp;
+        const temp = nextActive[index - 1];
+        nextActive[index - 1] = nextActive[index];
+        nextActive[index] = temp;
+        hasMoved = true;
+      } else if (direction === "right" && index < nextActive.length - 1) {
+        const temp = nextActive[index + 1];
+        nextActive[index + 1] = nextActive[index];
+        nextActive[index] = temp;
+        hasMoved = true;
       }
 
-      let nextDinPosition = 1;
-      const compactedComponents = nextComponents.map((item) => {
-        if (item.type === "spacer") return item;
-        const dinSize = Math.max(1, Number(item.poles) || 1);
-        const compacted = {
-          ...item,
-          dinPosition: nextDinPosition,
-          startDin: nextDinPosition,
-          slot: nextDinPosition,
-          moduleWidth: dinSize,
-          dinSize,
-          poles: dinSize,
-        };
-        nextDinPosition += dinSize;
-        return compacted;
-      });
-      
-      return { ...r, components: compactedComponents };
+      return { ...r, components: nextActive };
     });
-    updateRails(updated);
+
+    if (!hasMoved) return;
+
+    const normalizedRails = normalizeRailsLayout(updated);
+    const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
+    const pHeight = 180 + normalizedRails.length * 240 + 100;
+
+    const nextWires = wires.map((wire) => {
+      const isSourceAffected = String(wire.source || "").includes(component.id) || String(wire.sourceComponentId || "") === component.id;
+      const isTargetAffected = String(wire.target || "").includes(component.id) || String(wire.targetComponentId || "") === component.id;
+      if (!isSourceAffected && !isTargetAffected) return wire;
+
+      const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
+      const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
+      const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
+      const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+      const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin: wire.source,
+        targetPin: wire.target,
+      });
+      return {
+        ...wire,
+        route: { mode: "orthogonal", points: newRoute },
+        route_points: newRoute.length > 2 ? newRoute.slice(1, -1) : [],
+      };
+    });
+
+    setRails(normalizedRails);
+    setWires(nextWires);
+    saveLayoutToDb(normalizedRails, nextWires, infrastructure);
   };
 
-  const handleMoveToRail = (targetRailId) => {
-    const sel = getSelectedComponent();
-    if (!sel) return;
-    const { component, railId } = sel;
-    if (railId === targetRailId) return;
+  const handleMoveToRail = (targetRailId, targetComponentId = selectedComponentId) => {
+    const componentId = targetComponentId || selectedComponentId;
+    if (!componentId) return;
+    let foundComp = null;
+    let sourceRailId = "";
+    rails.forEach((r) => {
+      const c = (r.components || []).find((item) => item.id === componentId && item.type !== "spacer");
+      if (c) {
+        foundComp = c;
+        sourceRailId = r.id;
+      }
+    });
+    if (!foundComp || sourceRailId === targetRailId) return;
 
-    const updated = rails.map(r => {
-      if (r.id === railId) {
-        return { ...r, components: r.components.filter(c => c.id !== component.id) };
+    const withoutComponent = rails.map((r) => {
+      const active = (r.components || []).filter((c) => c.type !== "spacer");
+      if (r.id === sourceRailId) {
+        return { ...r, components: active.filter((c) => c.id !== foundComp.id) };
       }
       if (r.id === targetRailId) {
-        // Remove reserva se for o único spacer
-        const hasComponents = r.components.some(c => c.type !== "spacer");
-        const list = hasComponents ? r.components : [];
-        return { ...r, components: [...list, component] };
+        return { ...r, components: [...active, { ...foundComp, railId: targetRailId }] };
       }
-      return r;
+      return { ...r, components: active };
     });
-    updateRails(updated);
+
+    const normalizedRails = normalizeRailsLayout(withoutComponent);
+    const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
+    const pHeight = 180 + normalizedRails.length * 240 + 100;
+
+    const nextWires = wires.map((wire) => {
+      const isSourceAffected = String(wire.source || "").includes(componentId) || String(wire.sourceComponentId || "") === componentId;
+      const isTargetAffected = String(wire.target || "").includes(componentId) || String(wire.targetComponentId || "") === componentId;
+      if (!isSourceAffected && !isTargetAffected) return wire;
+
+      const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
+      const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
+      const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
+      const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+      const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin: wire.source,
+        targetPin: wire.target,
+      });
+      return {
+        ...wire,
+        route: { mode: "orthogonal", points: newRoute },
+        route_points: newRoute.length > 2 ? newRoute.slice(1, -1) : [],
+      };
+    });
+
+    setRails(normalizedRails);
+    setWires(nextWires);
+    saveLayoutToDb(normalizedRails, nextWires, infrastructure);
+    setSelectedComponentId(componentId);
   };
 
   const handleToggleRail = (cId) => {
     let currentRailIdx = -1;
     for (let i = 0; i < rails.length; i++) {
-      if (rails[i].components.some(item => item.id === cId)) {
+      if ((rails[i].components || []).some((item) => item.id === cId)) {
         currentRailIdx = i;
         break;
       }
     }
-    if (currentRailIdx === -1) return;
+    if (currentRailIdx === -1 || rails.length <= 1) return;
     const nextRailIdx = (currentRailIdx + 1) % rails.length;
     const targetRailId = rails[nextRailIdx].id;
-    handleMoveToRail(targetRailId);
+    handleMoveToRail(targetRailId, cId);
   };
 
   // ADICIONAR COMPONENTE
@@ -4672,7 +5201,7 @@ export default function PanelGenerator() {
   };
 
   // WIRING INTERATIVO
-  const handlePinClick = (pinId) => {
+  function handlePinClick(pinId) {
     if (wireMoveMode === "source" && selectedWireId) {
       if (isCableLocked(getEditableWire(selectedWireId))) return;
       commitWireEndpointMove(selectedWireId, "source", pinId);
@@ -4753,9 +5282,7 @@ export default function PanelGenerator() {
   };
 
   const handleClearWires = () => {
-    if (window.confirm("Excluir toda a fiação?")) {
-      updateWires([]);
-    }
+    setShowClearWiresModal(true);
   };
 
   // Helper para atualizar propriedades do fio selecionado
@@ -5236,13 +5763,16 @@ export default function PanelGenerator() {
           const id = item.id;
           const bx = Number.isFinite(Number(item.x)) ? Number(item.x) : 220;
           const by = Number.isFinite(Number(item.y)) ? Number(item.y) : 360;
-          const bw = clampNumber(item.width, 18, PANEL_W - 40, 40);
+          const bw = clampNumber(item.width, 18, PANEL_W - 40, 48);
           const bh = clampNumber(item.height, 18, panelHeight - 100, 300);
           const rotation = Number(item.rotation) || 0;
           const cx = bx + bw / 2;
           const cy = by + bh / 2;
           const isSelected = selectedInfrastructureId === id;
           const transform = rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined;
+          const barW = Math.max(6, (bw - 16) / 3);
+          const phaseColors = [COLORS.phaseA, COLORS.phaseB, COLORS.phaseC];
+          const phaseLabels = ["L1", "L2", "L3"];
           
           return (
             <g
@@ -5256,16 +5786,40 @@ export default function PanelGenerator() {
                 if (!wiringMode && !wireMoveMode) selectInfrastructure(id);
               }}
             >
-              <title>Barramento Trifásico</title>
+              <title>Barramento Trifásico Industrial</title>
               {isSelected && (
                 <rect x={bx - 6} y={by - 6} width={bw + 12} height={bh + 12} rx="4" fill="none" stroke="#00d8b8" strokeWidth="1.5" strokeDasharray="4,3" pointerEvents="none" />
               )}
-              {/* Backplate */}
-              <rect x={bx} y={by} width={bw} height={bh} rx="2" fill="#1e293b" opacity="0.4" />
-              {/* 3 Copper Bars */}
-              <rect x={bx + bw*0.1} y={by + 4} width={bw*0.2} height={bh - 8} rx="1" fill="#b87333" stroke="#854d0e" strokeWidth="0.5" />
-              <rect x={bx + bw*0.4} y={by + 4} width={bw*0.2} height={bh - 8} rx="1" fill="#b87333" stroke="#854d0e" strokeWidth="0.5" />
-              <rect x={bx + bw*0.7} y={by + 4} width={bw*0.2} height={bh - 8} rx="1" fill="#b87333" stroke="#854d0e" strokeWidth="0.5" />
+              {/* Placa isoladora base em Poliéster reforçado com fibra de vidro (DMC vermelho/cinza escuro) */}
+              <rect x={bx} y={by} width={bw} height={bh} rx="3" fill="#1e293b" stroke="#0f172a" strokeWidth="0.8" filter="url(#shadow)" />
+              <rect x={bx + 2} y={by + 2} width={bw - 4} height={bh - 4} rx="2" fill="#334155" />
+              
+              {/* 3 Barras de Cobre Eletrolítico Maciço com Terminais Parafusados */}
+              {[0, 1, 2].map((pIdx) => {
+                const px = bx + 4 + pIdx * (barW + 3);
+                return (
+                  <g key={`copper-bar-${pIdx}`}>
+                    {/* Barra de Cobre */}
+                    <rect x={px} y={by + 6} width={barW} height={bh - 12} rx="1.5" fill="url(#brassGrad)" stroke="#92400e" strokeWidth="0.5" />
+                    {/* Tarja de identificação de fase no topo */}
+                    <rect x={px} y={by + 8} width={barW} height="5" rx="1" fill={phaseColors[pIdx]} />
+                    <text x={px + barW / 2} y={by + 12} fill="#ffffff" fontSize="4.5" fontWeight="950" textAnchor="middle" pointerEvents="none">
+                      {phaseLabels[pIdx]}
+                    </text>
+                    {/* Parafusos de fixação M6 ao longo da barra */}
+                    {Array.from({ length: Math.max(2, Math.floor((bh - 30) / 45)) }).map((_, si) => {
+                      const sy = by + 26 + si * 45;
+                      return (
+                        <g key={`screw-${pIdx}-${si}`}>
+                          <circle cx={px + barW / 2} cy={sy} r="3" fill="#1e293b" />
+                          <circle cx={px + barW / 2} cy={sy} r="2.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.25" />
+                          <line x1={px + barW / 2 - 1.5} y1={sy} x2={px + barW / 2 + 1.5} y2={sy} stroke="#f1f5f9" strokeWidth="0.5" />
+                        </g>
+                      );
+                    })}
+                  </g>
+                );
+              })}
               
               {isSelected && (
                 <g>
@@ -5301,12 +5855,13 @@ export default function PanelGenerator() {
           const bx = Number.isFinite(Number(item.x)) ? Number(item.x) : 220;
           const by = Number.isFinite(Number(item.y)) ? Number(item.y) : 360;
           const bw = clampNumber(item.width, 18, PANEL_W - 40, 180);
-          const bh = clampNumber(item.height, 10, 40, 24);
+          const bh = clampNumber(item.height, 10, 40, 28);
           const rotation = Number(item.rotation) || 0;
           const cx = bx + bw / 2;
           const cy = by + bh / 2;
           const isSelected = selectedInfrastructureId === id;
           const transform = rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined;
+          const slotCount = Math.floor((bw - 30) / 24);
           
           return (
             <g
@@ -5320,15 +5875,29 @@ export default function PanelGenerator() {
                 if (!wiringMode && !wireMoveMode) selectInfrastructure(id);
               }}
             >
-              <title>Trilho DIN Livre</title>
+              <title>Trilho DIN Livre EN 50022</title>
               {isSelected && (
-                <rect x={bx - 4} y={by - 4} width={bw + 8} height={bh + 8} rx="2" fill="none" stroke="#00d8b8" strokeWidth="1.5" strokeDasharray="4,3" pointerEvents="none" />
+                <rect x={bx - 4} y={by - 4} width={bw + 8} height={bh + 8} rx="3" fill="none" stroke="#00d8b8" strokeWidth="1.5" strokeDasharray="4,3" pointerEvents="none" />
               )}
-              {/* Rail drawing */}
-              <rect x={bx} y={by} width={bw} height={bh} rx="2" fill="url(#railGrad)" stroke="#475569" strokeWidth="0.8" filter="url(#shadow)" />
-              <rect x={bx + 2} y={by + 2} width={Math.max(0, bw - 4)} height="4" fill="#ffffff" fillOpacity="0.25" pointerEvents="none" />
-              <circle cx={bx + 10} cy={by + bh/2} r="3" fill="#334155" pointerEvents="none" />
-              <circle cx={bx + bw - 10} cy={by + bh/2} r="3" fill="#334155" pointerEvents="none" />
+              {/* Sombra de profundidade */}
+              <rect x={bx} y={by} width={bw} height={bh} rx="2" fill="#0f172a" fillOpacity="0.12" filter="url(#railShadow)" />
+              {/* Perfil metálico zincado */}
+              <rect x={bx} y={by} width={bw} height={bh} rx="2" fill="url(#dinRailTopHat)" stroke="#475569" strokeWidth="0.85" />
+              <line x1={bx + 2} y1={by + 2} x2={bx + bw - 2} y2={by + 2} stroke="#ffffff" strokeOpacity="0.8" strokeWidth="0.8" />
+              <line x1={bx + 2} y1={by + bh - 2} x2={bx + bw - 2} y2={by + bh - 2} stroke="#334155" strokeOpacity="0.8" strokeWidth="0.8" />
+              
+              {/* Canal central com rasgos oblongos */}
+              <rect x={bx + 2} y={by + bh / 2 - 4.5} width={bw - 4} height="9" fill="#64748b" fillOpacity="0.25" />
+              {Array.from({ length: Math.max(1, slotCount) }).map((_, si) => {
+                const sx = bx + 16 + si * 24;
+                return (
+                  <rect key={`free-slot-${si}`} x={sx - 5} y={by + bh / 2 - 2.5} width="10" height="5" rx="2.5" fill="url(#dinSlotHole)" stroke="#334155" strokeWidth="0.4" />
+                );
+              })}
+
+              {/* Parafusos de extremidade */}
+              <circle cx={bx + 8} cy={by + bh / 2} r="3.2" fill="url(#metallicScrew)" stroke="#1e293b" strokeWidth="0.4" pointerEvents="none" />
+              <circle cx={bx + bw - 8} cy={by + bh / 2} r="3.2" fill="url(#metallicScrew)" stroke="#1e293b" strokeWidth="0.4" pointerEvents="none" />
               
               {isSelected && (
                 <g>
@@ -5357,13 +5926,16 @@ export default function PanelGenerator() {
     );
   };
 
-  // Renders de componentes no SVG
+  // Renders de componentes no SVG com Alto Realismo Técnico Industrial
   const renderBreaker = (c, x, y, isSelected) => {
     const W = c.poles * MOD;
     const isGen = c.isGeneral;
     const col = isGen ? "#ef4444" : (c.phase === "A" ? COLORS.phaseA : c.phase === "B" ? COLORS.phaseB : COLORS.phaseC);
     const displayLabel = getComponentDisplayLabel(c);
     const shortLabel = getCircuitShortLabel(getComponentCircuit(c) || c);
+    const isTraced = tracedCircuitId && isComponentMatchingCircuit(c, tracedCircuitId);
+    const isDimmed = tracedCircuitId && !isTraced;
+    const compOpacity = isDimmed ? (isIsolatedView ? 0.08 : 0.38) : 1;
     
     // Clique para alternar alavanca
     const toggleBreaker = (e) => {
@@ -5374,6 +5946,7 @@ export default function PanelGenerator() {
     return (
       <g
         key={c.id}
+        opacity={compOpacity}
         className="cursor-pointer"
         onPointerDown={(event) => startComponentDrag(event, c.id)}
         onClick={() => selectComponent(c.id)}
@@ -5390,20 +5963,45 @@ export default function PanelGenerator() {
         })}
         onMouseLeave={() => setHoveredItem(null)}
       >
-        {/* Sombra de projeção 3D */}
-        <rect x={x+1} y={y+2} width={W-2} height={BRK_H} rx="5" fill="#000000" fillOpacity="0.12" />
+        {/* Sombra de projeção técnica sobre o trilho */}
+        <rect x={x + 1} y={y + 2} width={W - 2} height={BRK_H} rx="5" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
 
-        {/* Corpo externo com gradiente metálico industrial */}
-        <rect x={x} y={y} width={W} height={BRK_H} rx="5" fill="url(#breakerBody)" stroke={isSelected ? "#00d8b8" : "#475569"} strokeWidth={isSelected ? "2.5" : "1.2"} />
+        {/* Corpo externo em Poliamida RAL 7035 com gradiente industrial */}
+        <rect
+          x={x}
+          y={y}
+          width={W}
+          height={BRK_H}
+          rx="5"
+          fill="url(#breakerBody)"
+          stroke={isSelected ? "#00d8b8" : "#475569"}
+          strokeWidth={isSelected ? "2.5" : "1.1"}
+        />
         
-        {/* Bevel interno de iluminação */}
-        <rect x={x+1} y={y+1} width={W-2} height={BRK_H-2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.7" strokeWidth="0.8" />
+        {/* Bevel interno de estamparia plástica */}
+        <rect x={x + 1} y={y + 1} width={W - 2} height={BRK_H - 2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.75" strokeWidth="0.8" />
         
-        {/* Trilho guia de fixação lateral */}
-        <path d={`M ${x} ${y+15} L ${x+4} ${y+15} M ${x+W-4} ${y+15} L ${x+W} ${y+15}`} stroke="#475569" strokeWidth="2.5" />
-        <path d={`M ${x} ${y+BRK_H-15} L ${x+4} ${y+BRK_H-15} M ${x+W-4} ${y+BRK_H-15} L ${x+W} ${y+BRK_H-15}`} stroke="#475569" strokeWidth="2.5" />
+        {/* Ranhuras de ventilação e guias mecânicas laterais DIN */}
+        <line x1={x} y1={y + 14} x2={x + 3.5} y2={y + 14} stroke="#64748b" strokeWidth="1.8" />
+        <line x1={x + W - 3.5} y1={y + 14} x2={x + W} y2={y + 14} stroke="#64748b" strokeWidth="1.8" />
+        <line x1={x} y1={y + BRK_H - 14} x2={x + 3.5} y2={y + BRK_H - 14} stroke="#64748b" strokeWidth="1.8" />
+        <line x1={x + W - 3.5} y1={y + BRK_H - 14} x2={x + W} y2={y + BRK_H - 14} stroke="#64748b" strokeWidth="1.8" />
 
-        {/* Polos e parafusos de terminais */}
+        {/* Divisórias modulares para disjuntores multipolares */}
+        {c.poles > 1 && Array.from({ length: c.poles - 1 }).map((_, divIdx) => (
+          <line
+            key={`div-${divIdx}`}
+            x1={x + (divIdx + 1) * MOD}
+            y1={y + 2}
+            x2={x + (divIdx + 1) * MOD}
+            y2={y + BRK_H - 2}
+            stroke="#94a3b8"
+            strokeWidth="0.9"
+            strokeDasharray="4,2"
+          />
+        ))}
+
+        {/* Polos, gaiolas de fixação e parafusos de terminais */}
         {Array.from({ length: c.poles }).map((_, pi) => {
           const px = x + pi * MOD;
           const pinTopId = `comp:${c.id}:top:${pi}`;
@@ -5411,93 +6009,177 @@ export default function PanelGenerator() {
           
           return (
             <g key={pi}>
-              {/* Parafuso Topo */}
-              <rect x={px+2} y={y+4} width={MOD-4} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
-              <circle cx={px+MOD/2} cy={y+14} r="6" fill="#0f172a" />
-              <circle cx={px+MOD/2} cy={y+14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-              {/* Fenda cruzada */}
-              <line x1={px+MOD/2-3} y1={y+14} x2={px+MOD/2+3} y2={y+14} stroke="#cbd5e1" strokeWidth="1.2" />
-              <line x1={px+MOD/2} y1={y+14-3} x2={px+MOD/2} y2={y+14+3} stroke="#cbd5e1" strokeWidth="1.2" />
+              {/* Funil guia de entrada do cabo - Topo */}
+              <path d={`M ${px + 5} ${y} L ${px + MOD - 5} ${y} L ${px + MOD - 6} ${y + 3} L ${px + 6} ${y + 3} Z`} fill="#334155" />
+              {/* Gaiola metálica do parafuso Topo */}
+              <rect x={px + 2.5} y={y + 4} width={MOD - 5} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="5.5" fill="#0f172a" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              {/* Fenda combinada Pozidriv */}
+              <line x1={px + MOD / 2 - 2.8} y1={y + 14} x2={px + MOD / 2 + 2.8} y2={y + 14} stroke="#cbd5e1" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + 14 - 2.8} x2={px + MOD / 2} y2={y + 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
-              {/* Parafuso Base */}
-              <rect x={px+2} y={y+BRK_H-24} width={MOD-4} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
-              <circle cx={px+MOD/2} cy={y+BRK_H-14} r="6" fill="#0f172a" />
-              <circle cx={px+MOD/2} cy={y+BRK_H-14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-              <line x1={px+MOD/2-3} y1={y+BRK_H-14} x2={px+MOD/2+3} y2={y+BRK_H-14} stroke="#cbd5e1" strokeWidth="1.2" />
-              <line x1={px+MOD/2} y1={y+BRK_H-14-3} x2={px+MOD/2} y2={y+BRK_H-14+3} stroke="#cbd5e1" strokeWidth="1.2" />
+              {/* Funil guia de saída do cabo - Base */}
+              <path d={`M ${px + 5} ${y + BRK_H} L ${px + MOD - 5} ${y + BRK_H} L ${px + MOD - 6} ${y + BRK_H - 3} L ${px + 6} ${y + BRK_H - 3} Z`} fill="#334155" />
+              {/* Gaiola metálica do parafuso Base */}
+              <rect x={px + 2.5} y={y + BRK_H - 24} width={MOD - 5} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="5.5" fill="#0f172a" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              <line x1={px + MOD / 2 - 2.8} y1={y + BRK_H - 14} x2={px + MOD / 2 + 2.8} y2={y + BRK_H - 14} stroke="#cbd5e1" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + BRK_H - 14 - 2.8} x2={px + MOD / 2} y2={y + BRK_H - 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
-              {/* Indicador de fase */}
-              <text x={px+MOD/2} y={y+31} fill="#1e293b" fontSize="7.2" textAnchor="middle" fontWeight="900">
+              {/* Indicador de fase gravado no polo */}
+              <text x={px + MOD / 2} y={y + 31} fill="#334155" fontSize="7.2" textAnchor="middle" fontWeight="900">
                 {polePhaseLabel(c, pi)}
               </text>
 
               {/* Pinos interativos de fiação */}
               {(wiringMode || !!wireMoveMode) && (
                 <>
-                  <circle cx={px+MOD/2} cy={y+14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-                  <circle cx={px+MOD/2} cy={y+BRK_H-14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
+                  <circle cx={px + MOD / 2} cy={y + 14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
+                  <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
                 </>
               )}
             </g>
           );
         })}
 
-        {/* Linha divisória interna */}
-        <line x1={x+3} y1={y+36} x2={x+W-3} y2={y+36} stroke="#cbd5e1" strokeWidth="1" />
+        {/* Linha técnica de recuo frontal da carcaça */}
+        <line x1={x + 3} y1={y + 36} x2={x + W - 3} y2={y + 36} stroke="#cbd5e1" strokeWidth="1" />
 
-        {/* Cavidade da alavanca */}
-        <rect x={x + W/2 - 7} y={y + 39} width="14" height="28" rx="2" fill="#0f172a" stroke="#475569" strokeWidth="0.5" />
-        {/* Alavanca de controle */}
-        <rect
-          x={x + W/2 - 5}
-          y={c.status === "ON" ? y + 41 : y + 51}
-          width="10"
-          height="14"
-          rx="1.5"
-          fill={col}
-          stroke="#450a0a"
-          strokeWidth="0.5"
-          className="transition-all duration-150 cursor-pointer"
-          onClick={toggleBreaker}
-        />
-        <rect
-          x={x + W/2 - 5}
-          y={c.status === "ON" ? y + 41 : y + 51}
-          width="10"
-          height="14"
-          rx="1.5"
-          fill="url(#toggleGlow)"
-          className="transition-all duration-150 pointer-events-none"
-        />
-        
-        {/* Marcações técnicas liga/desliga integradas */}
-        <text x={x+W/2} y={y+37} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
-        <text x={x+W/2} y={y+73} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
-        
-        {/* Indicador visual de estado de cor (Vermelho = Ligado, Verde = Desligado) */}
-        <rect x={x + W/2 - (W > MOD ? 16 : 11)} y={y+48} width="4" height="6" rx="0.5" fill={c.status === "ON" ? "#ef4444" : "#22c55e"} stroke="#475569" strokeWidth="0.3" />
+        {/* Cavidades individuais de cada manopla com ranhura de operação */}
+        {Array.from({ length: c.poles }).map((_, pi) => {
+          const px = x + pi * MOD;
+          return (
+            <rect
+              key={`cavity-${pi}`}
+              x={px + MOD / 2 - 5.5}
+              y={y + 39}
+              width="11"
+              height="28"
+              rx="2"
+              fill="#0f172a"
+              stroke="#475569"
+              strokeWidth="0.5"
+            />
+          );
+        })}
 
-        {/* Cartão de etiqueta de identificação embutido na face */}
-        <rect x={x+3} y={y+68} width={W-6} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
+        {/* Manopla(s) e Barra de Intertravamento Mecânico para disjuntores multipolares */}
         {c.poles === 1 ? (
-          <text x={x+W/2} y={y+78.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
+          <g onClick={toggleBreaker} className="cursor-pointer">
+            {/* Alavanca monopolar */}
+            <rect
+              x={x + W / 2 - 4.5}
+              y={c.status === "ON" ? y + 41 : y + 51}
+              width="9"
+              height="14"
+              rx="1.5"
+              fill={col}
+              stroke="#1e293b"
+              strokeWidth="0.6"
+              className="transition-all duration-150"
+            />
+            {/* Ranhuras ergonômicas da alavanca */}
+            <line x1={x + W / 2 - 3} y1={c.status === "ON" ? y + 45 : y + 55} x2={x + W / 2 + 3} y2={c.status === "ON" ? y + 45 : y + 55} stroke="#ffffff" strokeOpacity="0.6" strokeWidth="0.8" />
+            <line x1={x + W / 2 - 3} y1={c.status === "ON" ? y + 48 : y + 58} x2={x + W / 2 + 3} y2={c.status === "ON" ? y + 48 : y + 58} stroke="#ffffff" strokeOpacity="0.6" strokeWidth="0.8" />
+            <line x1={x + W / 2 - 3} y1={c.status === "ON" ? y + 51 : y + 61} x2={x + W / 2 + 3} y2={c.status === "ON" ? y + 51 : y + 61} stroke="#ffffff" strokeOpacity="0.6" strokeWidth="0.8" />
+            <rect
+              x={x + W / 2 - 4.5}
+              y={c.status === "ON" ? y + 41 : y + 51}
+              width="9"
+              height="14"
+              rx="1.5"
+              fill="url(#toggleGlow)"
+              className="transition-all duration-150 pointer-events-none"
+            />
+          </g>
+        ) : (
+          <g onClick={toggleBreaker} className="cursor-pointer">
+            {/* Alavancas de cada polo */}
+            {Array.from({ length: c.poles }).map((_, pi) => {
+              const px = x + pi * MOD;
+              return (
+                <rect
+                  key={`lever-p-${pi}`}
+                  x={px + MOD / 2 - 4.5}
+                  y={c.status === "ON" ? y + 41 : y + 51}
+                  width="9"
+                  height="14"
+                  rx="1.5"
+                  fill={col}
+                  stroke="#1e293b"
+                  strokeWidth="0.6"
+                  className="transition-all duration-150"
+                />
+              );
+            })}
+            {/* Barra de acoplamento mecânico multipolar (Gang Bar) */}
+            <rect
+              x={x + MOD / 2 - 4.5}
+              y={c.status === "ON" ? y + 44 : y + 54}
+              width={(c.poles - 1) * MOD + 9}
+              height="8"
+              rx="2"
+              fill="#1e293b"
+              stroke="#0f172a"
+              strokeWidth="0.7"
+              className="transition-all duration-150"
+            />
+            {/* Friso de reforço na barra de união */}
+            <line
+              x1={x + MOD / 2 - 2}
+              y1={c.status === "ON" ? y + 48 : y + 58}
+              x2={x + (c.poles - 1) * MOD + MOD / 2 + 2}
+              y2={c.status === "ON" ? y + 48 : y + 58}
+              stroke="#475569"
+              strokeWidth="1"
+              className="transition-all duration-150 pointer-events-none"
+            />
+          </g>
+        )}
+        
+        {/* Marcações técnicas liga/desliga I / O (Norma IEC 60898-1) */}
+        <text x={x + W / 2} y={y + 37.5} fill="#64748b" fontSize="6.5" textAnchor="middle" fontWeight="950">I</text>
+        <text x={x + W / 2} y={y + 73.5} fill="#64748b" fontSize="6.5" textAnchor="middle" fontWeight="950">O</text>
+        
+        {/* Janela de inspeção de estado mecânico (Vermelho = Ligado / Verde = Desligado) */}
+        <rect
+          x={x + W / 2 - (W > MOD ? 17 : 11)}
+          y={y + 48}
+          width="4.5"
+          height="6.5"
+          rx="1"
+          fill={c.status === "ON" ? "#ef4444" : "#22c55e"}
+          stroke="#1e293b"
+          strokeWidth="0.4"
+        />
+
+        {/* Cartão de etiqueta de identificação técnica embutido na face */}
+        <rect x={x + 2.5} y={y + 68} width={W - 5} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
+        {c.poles === 1 ? (
+          <text x={x + W / 2} y={y + 78.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
             {(shortLabel || displayLabel).slice(0, 10)} · {c.current}A
           </text>
         ) : (
           <g>
-            <text x={x+W/2} y={y+75.5} fill="#0f172a" fontSize="6.5" fontWeight="900" textAnchor="middle">
+            <text x={x + W / 2} y={y + 75.5} fill="#0f172a" fontSize="6.5" fontWeight="900" textAnchor="middle">
               {displayLabel.slice(0, 18)}
             </text>
-            <text x={x+W/2} y={y+81.5} fill="#dc2626" fontSize="5.6" fontWeight="950" textAnchor="middle">
+            <text x={x + W / 2} y={y + 81.5} fill="#dc2626" fontSize="5.6" fontWeight="950" textAnchor="middle">
               {c.current}A/{c.curve} · {c.poles}P
             </text>
           </g>
         )}
         
-        {/* Norma técnica nos multipolos */}
-        <text x={x+W/2} y={y+27.5} fill="#64748b" fontSize="5" fontWeight="900" textAnchor="middle">NBR</text>
+        {/* Especificações normativas estampadas a laser */}
+        <text x={x + W / 2} y={y + 27.5} fill="#64748b" fontSize="5.2" fontWeight="900" textAnchor="middle">NBR NM 60898</text>
         {c.poles > 1 && (
-          <text x={x+W/2} y={y+33.5} fill="#94a3b8" fontSize="3.8" fontWeight="bold" textAnchor="middle">IEC 60898-1</text>
+          <g>
+            {/* Retângulo de capacidade de ruptura 3000A / 6000A */}
+            <rect x={x + W / 2 - 8} y={y + 29.5} width="16" height="5" fill="none" stroke="#64748b" strokeWidth="0.5" />
+            <text x={x + W / 2} y={y + 33.5} fill="#475569" fontSize="3.8" fontWeight="950" textAnchor="middle">3000 [3]</text>
+          </g>
         )}
 
         {/* Controles Flutuantes se Selecionado */}
@@ -5510,6 +6192,9 @@ export default function PanelGenerator() {
     const W = MOD;
     const pinTopId = `comp:${c.id}:top:0`;
     const pinBottomId = `comp:${c.id}:bottom:0`;
+    const isTraced = tracedCircuitId && isComponentMatchingCircuit(c, tracedCircuitId);
+    const isDimmed = tracedCircuitId && !isTraced;
+    const compOpacity = isDimmed ? (isIsolatedView ? 0.08 : 0.38) : 1;
     
     const toggleStatus = (e) => {
       e.stopPropagation();
@@ -5519,64 +6204,99 @@ export default function PanelGenerator() {
     return (
       <g
         key={c.id}
+        opacity={compOpacity}
         className="cursor-pointer"
         onPointerDown={(event) => startComponentDrag(event, c.id)}
         onClick={() => selectComponent(c.id)}
       >
         {/* Sombra */}
-        <rect x={x+1} y={y+2} width={W-2} height={BRK_H} rx="5" fill="#000000" fillOpacity="0.12" />
+        <rect x={x + 1} y={y + 2} width={W - 2} height={BRK_H} rx="5" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
 
-        {/* Corpo vermelho característico de DPS com gradiente */}
-        <rect x={x} y={y} width={W} height={BRK_H} rx="5" fill="url(#dpsBody)" stroke={isSelected ? "#00d8b8" : "#7f1d1d"} strokeWidth={isSelected ? "2.5" : "1.2"} />
-        <rect x={x+1} y={y+1} width={W-2} height={BRK_H-2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.4" strokeWidth="0.8" />
-
-        {/* Parafuso Topo */}
-        <rect x={x+2} y={y+4} width={W-4} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
-        <circle cx={x+W/2} cy={y+14} r="6" fill="#1e293b" />
-        <circle cx={x+W/2} cy={y+14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-        <line x1={x+W/2-3} y1={y+14} x2={x+W/2+3} y2={y+14} stroke="#fecaca" strokeWidth="1.2" />
-
-        {/* Parafuso Base */}
-        <rect x={x+2} y={y+BRK_H-24} width={W-4} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
-        <circle cx={x+W/2} cy={y+BRK_H-14} r="6" fill="#1e293b" />
-        <circle cx={x+W/2} cy={y+BRK_H-14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-        <line x1={x+W/2-3} y1={y+BRK_H-14} x2={x+W/2+3} y2={y+BRK_H-14} stroke="#fecaca" strokeWidth="1.2" />
-
-        {/* Janela de Status activa (verde/vermelha) */}
-        <rect x={x+4} y={y+25} width={W-8} height="12" rx="2" fill="#0f172a" />
+        {/* Corpo vermelho característico de DPS Classe II com gradiente */}
         <rect
-          x={x+5}
-          y={y+26}
-          width={W-10}
-          height="10"
+          x={x}
+          y={y}
+          width={W}
+          height={BRK_H}
+          rx="5"
+          fill="url(#dpsBody)"
+          stroke={isSelected ? "#00d8b8" : "#7f1d1d"}
+          strokeWidth={isSelected ? "2.5" : "1.2"}
+        />
+        <rect x={x + 1} y={y + 1} width={W - 2} height={BRK_H - 2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.35" strokeWidth="0.8" />
+
+        {/* Guias do cartucho plugável */}
+        <line x1={x + 3} y1={y + 24} x2={x + W - 3} y2={y + 24} stroke="#7f1d1d" strokeWidth="1" />
+        <line x1={x + 3} y1={y + 64} x2={x + W - 3} y2={y + 64} stroke="#7f1d1d" strokeWidth="1" />
+
+        {/* Parafuso Topo (Entrada de Linha) */}
+        <path d={`M ${x + 5} ${y} L ${x + W - 5} ${y} L ${x + W - 6} ${y + 3} L ${x + 6} ${y + 3} Z`} fill="#334155" />
+        <rect x={x + 2.5} y={y + 4} width={W - 5} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
+        <circle cx={x + W / 2} cy={y + 14} r="5.5" fill="#1e293b" />
+        <circle cx={x + W / 2} cy={y + 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+        <line x1={x + W / 2 - 2.8} y1={y + 14} x2={x + W / 2 + 2.8} y2={y + 14} stroke="#fecaca" strokeWidth="1.1" />
+        <line x1={x + W / 2} y1={y + 14 - 2.8} x2={x + W / 2} y2={y + 14 + 2.8} stroke="#fecaca" strokeWidth="1.1" />
+
+        {/* Parafuso Base (Saída de Terra PE) */}
+        <path d={`M ${x + 5} ${y + BRK_H} L ${x + W - 5} ${y + BRK_H} L ${x + W - 6} ${y + BRK_H - 3} L ${x + 6} ${y + BRK_H - 3} Z`} fill="#334155" />
+        <rect x={x + 2.5} y={y + BRK_H - 24} width={W - 5} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
+        <circle cx={x + W / 2} cy={y + BRK_H - 14} r="5.5" fill="#1e293b" />
+        <circle cx={x + W / 2} cy={y + BRK_H - 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+        <line x1={x + W / 2 - 2.8} y1={y + BRK_H - 14} x2={x + W / 2 + 2.8} y2={y + BRK_H - 14} stroke="#fecaca" strokeWidth="1.1" />
+        <line x1={x + W / 2} y1={y + BRK_H - 14 - 2.8} x2={x + W / 2} y2={y + BRK_H - 14 + 2.8} stroke="#fecaca" strokeWidth="1.1" />
+
+        {/* Janela de Status Óptica do Varistor (Verde = OK / Vermelho = DEFEITO) */}
+        <rect x={x + 3.5} y={y + 26} width={W - 7} height="13" rx="2" fill="#0f172a" stroke="#450a0a" strokeWidth="0.6" />
+        <rect
+          x={x + 4.5}
+          y={y + 27}
+          width={W - 9}
+          height="11"
           rx="1.5"
           fill={c.dpsStatus === "OK" ? COLORS.dpsGreen : "#ef4444"}
           onClick={toggleStatus}
           className="transition-colors duration-150"
         />
-        <text x={x+W/2} y={y+33.5} fill="#ffffff" fontSize="6.2" fontWeight="950" textAnchor="middle" pointerEvents="none">
+        {/* Brilho da lente da janela óptica */}
+        <rect x={x + 5.5} y={y + 28} width={W - 11} height="4" rx="1" fill="#ffffff" fillOpacity="0.4" pointerEvents="none" />
+        <text x={x + W / 2} y={y + 35} fill="#ffffff" fontSize="6.2" fontWeight="950" textAnchor="middle" pointerEvents="none">
           {c.dpsStatus}
         </text>
 
-        {/* Raio indicador */}
+        {/* Símbolo de Raio de Alta Tensão */}
         <polygon
-          points={`${x+W/2},${y+40} ${x+W/2+4},${y+48} ${x+W/2+1.5},${y+48} ${x+W/2+3},${y+58} ${x+W/2-4},${y+49} ${x+W/2-1.5},${y+49}`}
+          points={`${x + W / 2},${y + 42} ${x + W / 2 + 4.5},${y + 49} ${x + W / 2 + 1.5},${y + 49} ${x + W / 2 + 3.5},${y + 59} ${x + W / 2 - 4.5},${y + 50} ${x + W / 2 - 1.5},${y + 50}`}
           fill="#fbbf24"
-          stroke="#d97706"
-          strokeWidth="0.5"
+          stroke="#b45309"
+          strokeWidth="0.6"
         />
 
-        {/* Cartão de etiqueta embutido */}
-        <rect x={x+3} y={y+67} width={W-6} height="17" fill="#ffffff" rx="2" stroke="#7f1d1d" strokeWidth="0.85" />
-        <text x={x+W/2} y={y+74.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">DPS-{c.phase}</text>
-        <text x={x+W/2} y={y+81} fill="#b91c1c" fontSize="5.6" fontWeight="950" textAnchor="middle">Uc 275V</text>
+        {/* Cartão de etiqueta técnica com normas IEC 61643-11 */}
+        <rect x={x + 2.5} y={y + 67} width={W - 5} height="17" fill="#ffffff" rx="2" stroke="#7f1d1d" strokeWidth="0.85" />
+        <text x={x + W / 2} y={y + 74.5} fill="#0f172a" fontSize="6.6" fontWeight="900" textAnchor="middle">DPS-{c.phase}</text>
+        <text x={x + W / 2} y={y + 81} fill="#b91c1c" fontSize="5.5" fontWeight="950" textAnchor="middle">Uc 275V·20kA</text>
 
         {/* Pinos interativos de fiação */}
         {(wiringMode || !!wireMoveMode) && (
           <>
-            <circle cx={x+W/2} cy={y+14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-            <circle cx={x+W/2} cy={y+BRK_H-14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
+            <circle cx={x + W / 2} cy={y + 14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
+            <circle cx={x + W / 2} cy={y + BRK_H - 14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
           </>
+        )}
+
+        {isTraced && (
+          <rect
+            x={x - 3}
+            y={y - 3}
+            width={W + 6}
+            height={BRK_H + 6}
+            rx="7"
+            fill="none"
+            stroke="#00d8b8"
+            strokeWidth="2.5"
+            strokeDasharray="6,3"
+            pointerEvents="none"
+          />
         )}
 
         {/* Controles Flutuantes se Selecionado */}
@@ -5587,6 +6307,9 @@ export default function PanelGenerator() {
 
   const renderDR = (c, x, y, isSelected) => {
     const W = c.poles * MOD;
+    const isTraced = tracedCircuitId && isComponentMatchingCircuit(c, tracedCircuitId);
+    const isDimmed = tracedCircuitId && !isTraced;
+    const compOpacity = isDimmed ? (isIsolatedView ? 0.08 : 0.38) : 1;
     
     const toggleDR = (e) => {
       e.stopPropagation();
@@ -5596,16 +6319,40 @@ export default function PanelGenerator() {
     return (
       <g
         key={c.id}
+        opacity={compOpacity}
         className="cursor-pointer"
         onPointerDown={(event) => startComponentDrag(event, c.id)}
         onClick={() => selectComponent(c.id)}
       >
         {/* Sombra */}
-        <rect x={x+1} y={y+2} width={W-2} height={BRK_H} rx="5" fill="#000000" fillOpacity="0.12" />
+        <rect x={x + 1} y={y + 2} width={W - 2} height={BRK_H} rx="5" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
 
-        {/* Corpo cinza robusto com gradiente */}
-        <rect x={x} y={y} width={W} height={BRK_H} rx="5" fill="url(#drBody)" stroke={isSelected ? "#00d8b8" : "#475569"} strokeWidth={isSelected ? "2.5" : "1.2"} />
-        <rect x={x+1} y={y+1} width={W-2} height={BRK_H-2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.7" strokeWidth="0.8" />
+        {/* Corpo robusto em Poliamida cinza com gradiente */}
+        <rect
+          x={x}
+          y={y}
+          width={W}
+          height={BRK_H}
+          rx="5"
+          fill="url(#drBody)"
+          stroke={isSelected ? "#00d8b8" : "#475569"}
+          strokeWidth={isSelected ? "2.5" : "1.2"}
+        />
+        <rect x={x + 1} y={y + 1} width={W - 2} height={BRK_H - 2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.75" strokeWidth="0.8" />
+
+        {/* Divisórias entre polos */}
+        {c.poles > 1 && Array.from({ length: c.poles - 1 }).map((_, divIdx) => (
+          <line
+            key={`dr-div-${divIdx}`}
+            x1={x + (divIdx + 1) * MOD}
+            y1={y + 2}
+            x2={x + (divIdx + 1) * MOD}
+            y2={y + BRK_H - 2}
+            stroke="#cbd5e1"
+            strokeWidth="0.8"
+            strokeDasharray="4,2"
+          />
+        ))}
 
         {/* Parafusos de terminais */}
         {Array.from({ length: c.poles }).map((_, pi) => {
@@ -5615,43 +6362,49 @@ export default function PanelGenerator() {
           
           return (
             <g key={pi}>
-              <rect x={px+2} y={y+4} width={MOD-4} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
-              <circle cx={px+MOD/2} cy={y+14} r="6" fill="#0f172a" />
-              <circle cx={px+MOD/2} cy={y+14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-              <line x1={px+MOD/2-3} y1={y+14} x2={px+MOD/2+3} y2={y+14} stroke="#cbd5e1" strokeWidth="1.2" />
-              <line x1={px+MOD/2} y1={y+14-3} x2={px+MOD/2} y2={y+14+3} stroke="#cbd5e1" strokeWidth="1.2" />
+              <path d={`M ${px + 5} ${y} L ${px + MOD - 5} ${y} L ${px + MOD - 6} ${y + 3} L ${px + 6} ${y + 3} Z`} fill="#334155" />
+              <rect x={px + 2.5} y={y + 4} width={MOD - 5} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="5.5" fill="#0f172a" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              <line x1={px + MOD / 2 - 2.8} y1={y + 14} x2={px + MOD / 2 + 2.8} y2={y + 14} stroke="#cbd5e1" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + 14 - 2.8} x2={px + MOD / 2} y2={y + 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
-              <rect x={px+2} y={y+BRK_H-24} width={MOD-4} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
-              <circle cx={px+MOD/2} cy={y+BRK_H-14} r="6" fill="#0f172a" />
-              <circle cx={px+MOD/2} cy={y+BRK_H-14} r="4.5" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-              <line x1={px+MOD/2-3} y1={y+BRK_H-14} x2={px+MOD/2+3} y2={y+BRK_H-14} stroke="#cbd5e1" strokeWidth="1.2" />
-              <line x1={px+MOD/2} y1={y+BRK_H-14-3} x2={px+MOD/2} y2={y+BRK_H-14+3} stroke="#cbd5e1" strokeWidth="1.2" />
+              <path d={`M ${px + 5} ${y + BRK_H} L ${px + MOD - 5} ${y + BRK_H} L ${px + MOD - 6} ${y + BRK_H - 3} L ${px + 6} ${y + BRK_H - 3} Z`} fill="#334155" />
+              <rect x={px + 2.5} y={y + BRK_H - 24} width={MOD - 5} height="20" rx="3" fill="url(#screwCageGrad)" stroke="#334155" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="5.5" fill="#0f172a" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              <line x1={px + MOD / 2 - 2.8} y1={y + BRK_H - 14} x2={px + MOD / 2 + 2.8} y2={y + BRK_H - 14} stroke="#cbd5e1" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + BRK_H - 14 - 2.8} x2={px + MOD / 2} y2={y + BRK_H - 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
-              <text x={px+MOD/2} y={y+31} fill="#1e293b" fontSize="7.5" textAnchor="middle" fontWeight="900">
+              <text x={px + MOD / 2} y={y + 31} fill="#1e293b" fontSize="7.5" textAnchor="middle" fontWeight="900">
                 {drPoleLabel(c, pi)}
               </text>
 
               {/* Pinos interativos de fiação */}
               {(wiringMode || !!wireMoveMode) && (
                 <>
-                  <circle cx={px+MOD/2} cy={y+14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-                  <circle cx={px+MOD/2} cy={y+BRK_H-14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
+                  <circle cx={px + MOD / 2} cy={y + 14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
+                  <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
                 </>
               )}
             </g>
           );
         })}
 
-        {/* Botão de Teste azul brilhante (com posição corrigida para não sobrepor fiação) */}
-        <rect x={x+6} y={y+35} width="15" height="12" rx="2.5" fill="#00d8b8" stroke="#0f766e" strokeWidth="0.8" filter="url(#shadow)" />
-        <text x={x+13.5} y={y+43.5} fill="#ffffff" fontSize="7.2" fontWeight="950" textAnchor="middle" pointerEvents="none">T</text>
+        {/* Botão de Teste mecânico "T" com textura ergonômica */}
+        <g id={`dr-test-btn-${c.id}`}>
+          <rect x={x + 5.5} y={y + 36} width="15" height="12" rx="2.5" fill="#00d8b8" stroke="#0f766e" strokeWidth="0.8" />
+          <rect x={x + 7} y={y + 37.5} width="12" height="3" fill="#ffffff" fillOpacity="0.4" rx="1" />
+          <text x={x + 13} y={y + 44.5} fill="#ffffff" fontSize="7.5" fontWeight="950" textAnchor="middle" pointerEvents="none">T</text>
+          <text x={x + 13} y={y + 53} fill="#64748b" fontSize="4.2" fontWeight="800" textAnchor="middle" pointerEvents="none">Test Mensal</text>
+        </g>
 
-        {/* Cavidade da alavanca */}
-        <rect x={x + W/2 - 7} y={y + 39} width="14" height="28" rx="2" fill="#0f172a" stroke="#475569" strokeWidth="0.5" />
+        {/* Cavidade e Alavanca do DR */}
+        <rect x={x + W / 2 + 1} y={y + 39} width="12" height="28" rx="2" fill="#0f172a" stroke="#475569" strokeWidth="0.5" />
         <rect
-          x={x + W/2 - 5}
+          x={x + W / 2 + 2.5}
           y={c.status === "ON" ? y + 41 : y + 51}
-          width="10"
+          width="9"
           height="14"
           rx="1.5"
           fill="#00d8b8"
@@ -5661,27 +6414,42 @@ export default function PanelGenerator() {
           onClick={toggleDR}
         />
         <rect
-          x={x + W/2 - 5}
+          x={x + W / 2 + 2.5}
           y={c.status === "ON" ? y + 41 : y + 51}
-          width="10"
+          width="9"
           height="14"
           rx="1.5"
           fill="url(#toggleGlow)"
           className="transition-all duration-150 pointer-events-none"
         />
         
-        {/* Indicadores de liga/desliga da alavanca */}
-        <text x={x+W/2} y={y+37} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
-        <text x={x+W/2} y={y+73} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
+        {/* Indicadores I / O */}
+        <text x={x + W / 2 + 7} y={y + 37.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
+        <text x={x + W / 2 + 7} y={y + 73.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
 
-        {/* Cartão de etiqueta de identificação embutido na face */}
-        <rect x={x+3} y={y+68} width={W-6} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
-        <text x={x+W/2} y={y+75.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
+        {/* Cartão de etiqueta de identificação embutido */}
+        <rect x={x + 2.5} y={y + 68} width={W - 5} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
+        <text x={x + W / 2} y={y + 75.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
           {c.label.slice(0, 14)}
         </text>
-        <text x={x+W/2} y={y+81.5} fill="#0284c7" fontSize="5.6" fontWeight="950" textAnchor="middle">
+        <text x={x + W / 2} y={y + 81.5} fill="#0284c7" fontSize="5.6" fontWeight="950" textAnchor="middle">
           {c.current}A / IΔn 30mA
         </text>
+
+        {isTraced && (
+          <rect
+            x={x - 3}
+            y={y - 3}
+            width={W + 6}
+            height={BRK_H + 6}
+            rx="7"
+            fill="none"
+            stroke="#00d8b8"
+            strokeWidth="2.5"
+            strokeDasharray="6,3"
+            pointerEvents="none"
+          />
+        )}
 
         {/* Controles Flutuantes se Selecionado */}
         {isSelected && renderFloatingControls(c, x, y, W)}
@@ -5692,28 +6460,48 @@ export default function PanelGenerator() {
   const renderSpacer = (c, x, y) => {
     const W = c.poles * MOD;
     const badgeW = Math.min(W - 8, Math.max(96, (c.label || "").length * 8.8 + 20));
+    const isTraced = tracedCircuitId && isComponentMatchingCircuit(c, tracedCircuitId);
+    const isDimmed = tracedCircuitId && !isTraced;
+    const compOpacity = isDimmed ? (isIsolatedView ? 0.08 : 0.38) : 1;
     return (
-      <g key={c.id}>
-        <rect x={x+1} y={y} width={W-2} height={BRK_H} rx="4" fill="#f8fafc" fillOpacity="0.08" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="6,4" pointerEvents="none" />
-        {/* Badge de contraste central para manter 100% legível sobre o trilho */}
+      <g key={c.id} opacity={compOpacity}>
+        {/* Área tracejada discreta de reserva deixando transparecer o trilho DIN */}
         <rect
-          x={x + W/2 - badgeW / 2}
-          y={y + BRK_H/2 - 17}
-          width={badgeW}
-          height="34"
-          rx="6"
-          fill="#ffffff"
-          fillOpacity="0.94"
-          stroke="#cbd5e1"
-          strokeWidth="0.9"
+          x={x + 1}
+          y={y}
+          width={W - 2}
+          height={BRK_H}
+          rx="4"
+          fill="#f8fafc"
+          fillOpacity="0.05"
+          stroke="#94a3b8"
+          strokeWidth="1.1"
+          strokeDasharray="5,4"
           pointerEvents="none"
         />
-        <text x={x+W/2} y={y+BRK_H/2-3} fill="#1e293b" fontSize="9" fontWeight="900" textAnchor="middle" pointerEvents="none">
-          {c.label}
-        </text>
-        <text x={x+W/2} y={y+BRK_H/2+10} fill="#475569" fontSize="7.8" fontWeight="800" textAnchor="middle" pointerEvents="none">
-          {c.poles} Módulos DIN
-        </text>
+        {/* Badge de contraste central para manter 100% legível sobre o trilho */}
+        {showLegend && (
+          <>
+            <rect
+              x={x + W / 2 - badgeW / 2}
+              y={y + BRK_H / 2 - 17}
+              width={badgeW}
+              height="34"
+              rx="6"
+              fill="#ffffff"
+              fillOpacity="0.95"
+              stroke="#cbd5e1"
+              strokeWidth="0.9"
+              pointerEvents="none"
+            />
+            <text x={x + W / 2} y={y + BRK_H / 2 - 3} fill="#1e293b" fontSize="9" fontWeight="900" textAnchor="middle" pointerEvents="none">
+              {c.label || "RESERVA"}
+            </text>
+            <text x={x + W / 2} y={y + BRK_H / 2 + 10} fill="#475569" fontSize="7.8" fontWeight="800" textAnchor="middle" pointerEvents="none">
+              {c.poles} Módulos DIN ({W}mm)
+            </text>
+          </>
+        )}
       </g>
     );
   };
@@ -5722,19 +6510,24 @@ export default function PanelGenerator() {
     const W = 14;
     const pinTopId = `comp:${c.id}:top:0`;
     const pinBottomId = `comp:${c.id}:bottom:0`;
+    const isTraced = tracedCircuitId && isComponentMatchingCircuit(c, tracedCircuitId);
+    const isDimmed = tracedCircuitId && !isTraced;
+    const compOpacity = isDimmed ? (isIsolatedView ? 0.08 : 0.38) : 1;
     
     // Cor-código técnica para Bornes baseados em função (Neutro = Azul, Terra = Verde/Amarelo, Fase = Cinza/Marrom)
-    let bodyColor = "#78350f"; // Padrão marrom
-    let centerColor = "#b45309";
+    let bodyColor = "#475569";
+    let centerColor = "#64748b";
     let textColor = "#ffffff";
+    let isGroundTwoTone = false;
     
-    const labelUpper = c.label.toUpperCase();
+    const labelUpper = (c.label || "").toUpperCase();
     if (labelUpper.includes("N")) {
-      bodyColor = "#1e3a8a"; // Azul Neutro escuro
+      bodyColor = "#1e3a8a"; // Azul Neutro
       centerColor = "#00d8b8";
     } else if (labelUpper.includes("PE") || labelUpper.includes("TERRA") || labelUpper.includes("G")) {
-      bodyColor = "#14532d"; // Verde Terra escuro
+      bodyColor = "#14532d"; // Verde Terra
       centerColor = "#16a34a";
+      isGroundTwoTone = true;
     } else {
       bodyColor = "#475569"; // Cinza Fase
       centerColor = "#64748b";
@@ -5743,33 +6536,73 @@ export default function PanelGenerator() {
     return (
       <g
         key={c.id}
+        opacity={compOpacity}
         className="cursor-pointer"
         onPointerDown={(event) => startComponentDrag(event, c.id)}
         onClick={() => selectComponent(c.id)}
       >
         {/* Sombra */}
-        <rect x={x+0.5} y={y+2} width={W-1} height={BRK_H} rx="2" fill="#000000" fillOpacity="0.12" />
+        <rect x={x + 0.5} y={y + 2} width={W - 1} height={BRK_H} rx="2" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
 
-        {/* Corpo do Borne com gradiente */}
-        <rect x={x} y={y} width={W} height={BRK_H} rx="2" fill={bodyColor} stroke={isSelected ? "#00d8b8" : "#1e293b"} strokeWidth={isSelected ? "2.5" : "0.8"} />
-        <rect x={x+2} y={y+4} width={W-4} height={BRK_H-8} fill={centerColor} rx="1" />
+        {/* Corpo modular do borne SAK */}
+        <rect
+          x={x}
+          y={y}
+          width={W}
+          height={BRK_H}
+          rx="2"
+          fill={bodyColor}
+          stroke={isSelected ? "#00d8b8" : "#1e293b"}
+          strokeWidth={isSelected ? "2.5" : "0.8"}
+        />
+        {/* Faixa central de contraste */}
+        <rect x={x + 2} y={y + 4} width={W - 4} height={BRK_H - 8} fill={centerColor} rx="1" />
         
-        {/* Bevel metálico clamp interno */}
-        <rect x={x+3} y={y+12} width={W-6} height="12" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" rx="1" />
-        <circle cx={x+W/2} cy={y+18} r="2.5" fill="#1e293b" />
-        <rect x={x+3} y={y+BRK_H-24} width={W-6} height="12" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" rx="1" />
-        <circle cx={x+W/2} cy={y+BRK_H-18} r="2.5" fill="#1e293b" />
+        {/* Se for terra, listras verde-amarelas técnicas */}
+        {isGroundTwoTone && (
+          <g pointerEvents="none">
+            <line x1={x + 2} y1={y + 32} x2={x + W - 2} y2={y + 32} stroke="#facc15" strokeWidth="4" />
+            <line x1={x + 2} y1={y + BRK_H - 32} x2={x + W - 2} y2={y + BRK_H - 32} stroke="#facc15" strokeWidth="4" />
+          </g>
+        )}
+        
+        {/* Ponto de teste e parafuso de fixação do borne Topo */}
+        <rect x={x + 2.5} y={y + 11} width={W - 5} height="14" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.35" rx="1.5" />
+        <circle cx={x + W / 2} cy={y + 18} r="2.8" fill="#1e293b" />
+        <line x1={x + W / 2 - 1.8} y1={y + 18} x2={x + W / 2 + 1.8} y2={y + 18} stroke="#94a3b8" strokeWidth="0.7" />
 
-        <text x={x+W/2} y={y+BRK_H/2+3} fill={textColor} fontSize="7" fontWeight="900" textAnchor="middle" transform={`rotate(-90 ${x+W/2} ${y+BRK_H/2})`}>
+        {/* Ponto de teste e parafuso de fixação do borne Base */}
+        <rect x={x + 2.5} y={y + BRK_H - 25} width={W - 5} height="14" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.35" rx="1.5" />
+        <circle cx={x + W / 2} cy={y + BRK_H - 18} r="2.8" fill="#1e293b" />
+        <line x1={x + W / 2 - 1.8} y1={y + BRK_H - 18} x2={x + W / 2 + 1.8} y2={y + BRK_H - 18} stroke="#94a3b8" strokeWidth="0.7" />
+
+        {/* Tag de identificação vertical */}
+        <rect x={x + 1.5} y={y + BRK_H / 2 - 14} width={W - 3} height="28" rx="1.5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.5" />
+        <text x={x + W / 2} y={y + BRK_H / 2 + 3} fill="#0f172a" fontSize="7" fontWeight="950" textAnchor="middle" transform={`rotate(-90 ${x + W / 2} ${y + BRK_H / 2})`}>
           {c.label}
         </text>
 
         {/* Pinos interativos de fiação */}
         {(wiringMode || !!wireMoveMode) && (
           <>
-            <circle cx={x+W/2} cy={y+14} r="8" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-            <circle cx={x+W/2} cy={y+BRK_H-14} r="8" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
+            <circle cx={x + W / 2} cy={y + 18} r="8" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
+            <circle cx={x + W / 2} cy={y + BRK_H - 18} r="8" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
           </>
+        )}
+
+        {isTraced && (
+          <rect
+            x={x - 3}
+            y={y - 3}
+            width={W + 6}
+            height={BRK_H + 6}
+            rx="5"
+            fill="none"
+            stroke="#00d8b8"
+            strokeWidth="2.5"
+            strokeDasharray="6,3"
+            pointerEvents="none"
+          />
         )}
 
         {/* Controles Flutuantes se Selecionado */}
@@ -5777,38 +6610,6 @@ export default function PanelGenerator() {
       </g>
     );
   };
-
-  const wireDisplayColor = (displayColor) => (
-    displayColor === "black" ? COLORS.phaseA :
-    displayColor === "red" ? COLORS.phaseB :
-    displayColor === "brown" ? COLORS.phaseC :
-    displayColor === "orange" ? WIRE_COLOR_HEX.orange :
-    displayColor === "blue" ? COLORS.neutral :
-    displayColor === "yellow" ? COLORS.returnWire :
-    displayColor === "gray" ? COLORS.parallel :
-    displayColor === "white" ? WIRE_COLOR_HEX.white :
-    displayColor === "purple" ? WIRE_COLOR_HEX.purple :
-    displayColor === "pink" ? WIRE_COLOR_HEX.pink :
-    COLORS.ground
-  );
-
-  const cableEdgeColor = (baseColor) => {
-    if (baseColor === COLORS.neutral) return "#075985";
-    if (baseColor === COLORS.ground) return "#166534";
-    if (baseColor === COLORS.phaseB) return "#7f1d1d";
-    if (baseColor === COLORS.phaseC) return "#431407";
-    if (baseColor === WIRE_COLOR_HEX.orange) return "#9a3412";
-    if (baseColor === COLORS.returnWire) return "#854d0e";
-    if (baseColor === COLORS.parallel) return "#475569";
-    if (baseColor === WIRE_COLOR_HEX.white) return "#64748b";
-    if (baseColor === WIRE_COLOR_HEX.purple) return "#4c1d95";
-    if (baseColor === WIRE_COLOR_HEX.pink) return "#831843";
-    return "#020617";
-  };
-
-  const cableHighlightColor = (baseColor) => (
-    baseColor === COLORS.phaseA || baseColor === COLORS.phaseC ? "#ffffff" : "#f8fafc"
-  );
 
   const getCableLabelAnchor = (routePoints = []) => {
     if (!routePoints || routePoints.length < 2) return null;
@@ -5908,9 +6709,16 @@ export default function PanelGenerator() {
 
     const pin = String(pinId || "");
 
+    // Determina a direção ortogonal pura (0°, 90°, 180°, -90°)
     let angle = 90;
     if (adjacentPoint && (adjacentPoint.x !== point.x || adjacentPoint.y !== point.y)) {
-      angle = Math.atan2(point.y - adjacentPoint.y, point.x - adjacentPoint.x) * (180 / Math.PI);
+      const dx = point.x - adjacentPoint.x;
+      const dy = point.y - adjacentPoint.y;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        angle = dx > 0 ? 0 : 180;
+      } else {
+        angle = dy > 0 ? 90 : -90;
+      }
     }
 
     let isDouble = false;
@@ -5922,54 +6730,198 @@ export default function PanelGenerator() {
       isDouble = count > 1;
     }
 
-    if (isDouble && pin.includes("comp:")) {
-      angle = pin.includes(":top:") ? -90 : 90;
-    }
-
     const type = requestedType || (isDouble ? "duplo" : "agulha");
 
-    const pinLength = Math.max(5, thickness * 1.6);
-    const collarLength = Math.max(8, thickness * 2.5);
-    const pinHeight = Math.max(2, thickness * 0.7);
-    const collarHeight = Math.max(3.5, thickness * 1.2 + (type === "duplo" ? 3.5 : 1.5));
-    
+    // Dimensões proporcionais de precisão industrial (DIN 46228)
+    const effectiveTh = Math.max(1.0, Math.min(8.0, Number(thickness) || 1.8));
+    const pinLength = Math.max(7.5, Math.min(13, effectiveTh * 2.0));
+    const collarLength = Math.max(8.5, Math.min(14, effectiveTh * 2.4));
+    const pinHeight = Math.max(2.8, Math.min(6.5, effectiveTh * 0.95));
+    const collarHeight = Math.max(effectiveTh + 3.2, (type === "duplo" ? 8.5 : 5.8));
+    const totalLength = pinLength + collarLength;
+
+    // Código de cores padrão industrial DIN 46228-4 para ilhós
     const getFerruleColor = (th) => {
-      if (th <= 2.5) return "#ef4444";
-      if (th <= 4) return "#00d8b8";
-      if (th <= 6) return "#64748b";
-      if (th <= 10) return "#eab308";
-      return "#ef4444"; 
+      if (th <= 1.8) return "#dc2626"; // 1.0mm² / 1.5mm² - Vermelho
+      if (th <= 2.8) return "#0284c7"; // 2.5mm² - Azul
+      if (th <= 4.2) return "#64748b"; // 4.0mm² - Cinza
+      if (th <= 6.2) return "#eab308"; // 6.0mm² - Amarelo
+      if (th <= 10.0) return "#dc2626"; // 10.0mm² - Vermelho / Laranja
+      return "#2563eb"; // 16.0mm² - Azul escuro
     };
-    const ferruleColor = getFerruleColor(thickness);
+    const ferruleColor = getFerruleColor(effectiveTh);
 
     let graphic = null;
 
-    if (type === "agulha" || type === "duplo") {
+    if (type === "agulha" || type === "duplo" || type === "tubular") {
       graphic = (
         <g>
-          <path d={`M ${-pinLength} ${-pinHeight/2} L 0 ${-pinHeight/2 + 0.4} L 0 ${pinHeight/2 - 0.4} L ${-pinLength} ${pinHeight/2} Z`} fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.5" />
-          <rect x={-pinLength - collarLength} y={-collarHeight/2} width={collarLength} height={collarHeight} rx="1.5" fill={ferruleColor} stroke="rgba(0,0,0,0.15)" strokeWidth="0.8" />
-          <rect x={-pinLength - collarLength} y={-collarHeight/2 + 0.5} width={collarLength} height={collarHeight/3} fill="#ffffff" fillOpacity="0.3" rx="1" />
+          {/* 1. MÁSCARA OPACA: bloqueia completamente o traço do cabo por baixo para não vazar pela ponta */}
+          <rect
+            x={-totalLength - 1.5}
+            y={-Math.max(collarHeight, effectiveTh * 2.2) / 2}
+            width={totalLength + 2.5}
+            height={Math.max(collarHeight, effectiveTh * 2.2)}
+            fill="#0f172a"
+            fillOpacity="0.001"
+          />
+
+          {/* 2. TUBO METÁLICO ESTANHADO (Pino de Cobre Estanhado / Ponteira) */}
+          {/* Corpo metálico sólido opaco */}
+          <path
+            d={`M ${-pinLength} ${-pinHeight / 2} 
+                L -0.8 ${-pinHeight / 2} 
+                L 0 ${-pinHeight / 2 + 0.6} 
+                L 0 ${pinHeight / 2 - 0.6} 
+                L -0.8 ${pinHeight / 2} 
+                L ${-pinLength} ${pinHeight / 2} 
+                Z`}
+            fill="#f1f5f9"
+            stroke="#475569"
+            strokeWidth="0.75"
+            strokeLinejoin="round"
+          />
+          {/* Brilho reflexivo metálico cilíndrico */}
+          <line
+            x1={-pinLength + 0.8}
+            y1={-pinHeight * 0.16}
+            x2={-1.2}
+            y2={-pinHeight * 0.16}
+            stroke="#ffffff"
+            strokeWidth={Math.max(0.6, pinHeight * 0.28)}
+            strokeLinecap="round"
+          />
+          {/* Marca de prensagem / crimpagem mecânica */}
+          <line
+            x1={-pinLength * 0.52}
+            y1={-pinHeight / 2 + 0.5}
+            x2={-pinLength * 0.52}
+            y2={pinHeight / 2 - 0.5}
+            stroke="#94a3b8"
+            strokeWidth="0.8"
+            strokeLinecap="round"
+          />
+          {type === "duplo" && (
+            <line
+              x1={-pinLength * 0.25}
+              y1={-pinHeight / 2 + 0.5}
+              x2={-pinLength * 0.25}
+              y2={pinHeight / 2 - 0.5}
+              stroke="#94a3b8"
+              strokeWidth="0.8"
+              strokeLinecap="round"
+            />
+          )}
+
+          {/* 3. LUVA ISOLANTE DE POLIPROPILENO (Colar Plástico com Funil de Entrada) */}
+          <path
+            d={`M ${-totalLength} ${-collarHeight * 0.56} 
+                L ${-pinLength - collarLength * 0.72} ${-collarHeight * 0.5} 
+                L ${-pinLength} ${-collarHeight * 0.5} 
+                L ${-pinLength} ${collarHeight * 0.5} 
+                L ${-pinLength - collarLength * 0.72} ${collarHeight * 0.5} 
+                L ${-totalLength} ${collarHeight * 0.56} 
+                Z`}
+            fill={ferruleColor}
+            stroke="#0f172a"
+            strokeWidth="0.8"
+            strokeLinejoin="round"
+          />
+          {/* Brilho sutil no topo do plástico */}
+          <path
+            d={`M ${-totalLength + 1.2} ${-collarHeight * 0.38} 
+                L ${-pinLength - 0.8} ${-collarHeight * 0.34}`}
+            stroke="#ffffff"
+            strokeWidth={Math.max(0.6, collarHeight * 0.2)}
+            strokeOpacity="0.55"
+            strokeLinecap="round"
+          />
+          {/* Borda interna do funil de entrada do condutor */}
+          <line
+            x1={-totalLength}
+            y1={-collarHeight * 0.42}
+            x2={-totalLength}
+            y2={collarHeight * 0.42}
+            stroke="rgba(0,0,0,0.35)"
+            strokeWidth="0.8"
+          />
         </g>
       );
-    } else if (type === "ilhais") {
-      const ringRadius = Math.max(3.5, thickness * 1.2);
+    } else if (type === "ilhais" || type === "olhal") {
+      const ringRadius = Math.max(4.2, effectiveTh * 1.35);
+      const neckLength = Math.max(5, effectiveTh * 1.5);
       graphic = (
         <g>
-          <circle cx={-ringRadius} cy={0} r={ringRadius} fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.8" />
-          <circle cx={-ringRadius} cy={0} r={ringRadius * 0.45} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.4" />
-          <rect x={-ringRadius * 1.8 - collarLength} y={-collarHeight/2} width={collarLength} height={collarHeight} rx="1.5" fill={ferruleColor} stroke="rgba(0,0,0,0.15)" strokeWidth="0.8" />
-          <rect x={-ringRadius * 1.8 - collarLength} y={-collarHeight/2 + 0.5} width={collarLength} height={collarHeight/3} fill="#ffffff" fillOpacity="0.3" rx="1" />
+          {/* Terminal Olhal concêntrico com o centro do parafuso (0, 0) */}
+          <path
+            d={`M ${-ringRadius - neckLength} ${-pinHeight * 0.8} 
+                L ${-ringRadius * 0.8} ${-pinHeight * 0.8} 
+                L ${-ringRadius * 0.8} ${pinHeight * 0.8} 
+                L ${-ringRadius - neckLength} ${pinHeight * 0.8} 
+                Z`}
+            fill="#f1f5f9"
+            stroke="#475569"
+            strokeWidth="0.75"
+          />
+          <circle cx={0} cy={0} r={ringRadius} fill="#f1f5f9" stroke="#475569" strokeWidth="0.85" />
+          <circle cx={0} cy={0} r={ringRadius * 0.48} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.5" />
+          {/* Luva isolante */}
+          <rect
+            x={-ringRadius - neckLength - collarLength}
+            y={-collarHeight / 2}
+            width={collarLength}
+            height={collarHeight}
+            rx="1.5"
+            fill={ferruleColor}
+            stroke="#0f172a"
+            strokeWidth="0.8"
+          />
+          <rect
+            x={-ringRadius - neckLength - collarLength + 1}
+            y={-collarHeight / 2 + 0.6}
+            width={collarLength - 2}
+            height={collarHeight / 3}
+            fill="#ffffff"
+            fillOpacity="0.45"
+            rx="1"
+          />
         </g>
       );
-    } else if (type === "compressao") {
-      const barrelLength = Math.max(8, thickness * 2.0);
-      const ringRadius = Math.max(4, thickness * 1.3);
+    } else if (type === "compressao" || type === "garfo") {
+      const barrelLength = Math.max(9, effectiveTh * 2.2);
+      const forkRadius = Math.max(4.5, effectiveTh * 1.4);
       graphic = (
         <g>
-          <path d={`M ${-ringRadius * 2} ${-pinHeight*0.8} L ${-ringRadius*2 - barrelLength} ${-pinHeight*1.1} L ${-ringRadius*2 - barrelLength} ${pinHeight*1.1} L ${-ringRadius * 2} ${pinHeight*0.8} Z`} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.6" />
-          <circle cx={-ringRadius} cy={0} r={ringRadius} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.8" />
-          <circle cx={-ringRadius} cy={0} r={ringRadius * 0.4} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.4" />
+          {/* Terminal de Compressão/Garfo concêntrico com o centro do parafuso (0, 0) */}
+          <path
+            d={`M ${-forkRadius} ${-pinHeight * 0.8} 
+                L ${-forkRadius - barrelLength} ${-pinHeight * 1.1} 
+                L ${-forkRadius - barrelLength} ${pinHeight * 1.1} 
+                L ${-forkRadius} ${pinHeight * 0.8} 
+                Z`}
+            fill="#cbd5e1"
+            stroke="#475569"
+            strokeWidth="0.75"
+          />
+          <circle cx={0} cy={0} r={forkRadius} fill="#cbd5e1" stroke="#475569" strokeWidth="0.85" />
+          <circle cx={0} cy={0} r={forkRadius * 0.45} fill="#ffffff" stroke="#94a3b8" strokeWidth="0.5" />
+          {/* Marcas de compressão sextavada */}
+          <line
+            x1={-forkRadius - barrelLength * 0.4}
+            y1={-pinHeight}
+            x2={-forkRadius - barrelLength * 0.4}
+            y2={pinHeight}
+            stroke="#64748b"
+            strokeWidth="0.9"
+          />
+          <line
+            x1={-forkRadius - barrelLength * 0.75}
+            y1={-pinHeight}
+            x2={-forkRadius - barrelLength * 0.75}
+            y2={pinHeight}
+            stroke="#64748b"
+            strokeWidth="0.9"
+          />
         </g>
       );
     }
@@ -5981,7 +6933,7 @@ export default function PanelGenerator() {
     );
   };
 
-  const destinationCircuitLabel = (wire = {}) => {
+  function destinationCircuitLabel(wire = {}) {
     const raw = `${wire.source || ""}:${wire.target || ""}`;
     const circuit = getWireCircuit(wire);
     if (circuit) {
@@ -6212,10 +7164,19 @@ export default function PanelGenerator() {
     const showCaps = Boolean(label);
     const firstPoint = activeRoute?.[0];
     const lastPoint = activeRoute?.[activeRoute.length - 1];
+    const isTraced = tracedCircuitId && (
+      String(tracedCircuitId).toLowerCase().includes("terra") ||
+      String(tracedCircuitId).toLowerCase().includes("pe") ||
+      String(tracedCircuitId).toLowerCase().includes("neutro") ||
+      String(tracedCircuitId).toLowerCase() === "geral"
+    );
+    const isDimmed = tracedCircuitId && !isTraced;
+    const backboneOpacity = isDimmed ? (isIsolatedView ? 0.06 : 0.32) : 1;
 
     return (
       <g
         key={id}
+        opacity={backboneOpacity}
         data-wire-backbone={id}
         pointerEvents="auto"
         className="cursor-pointer group"
@@ -6224,7 +7185,7 @@ export default function PanelGenerator() {
           selectEditableWire(id);
         }}
       >
-        {renderCablePath(pathStr, activeColor, activeThickness, `${id}-path`, isSelected, { lineStyle: getCableLineStyle(activeWire) })}
+        {renderCablePath(pathStr, activeColor, activeThickness, `${id}-path`, isSelected || isTraced, { lineStyle: getCableLineStyle(activeWire) })}
         {showCaps && firstPoint && (
           <circle cx={firstPoint.x} cy={firstPoint.y} r={Math.max(3, activeThickness * 0.56)} fill="#ffffff" stroke={cableEdgeColor(activeColor)} strokeWidth="1.5" />
         )}
@@ -6249,15 +7210,21 @@ export default function PanelGenerator() {
     const thickness = hasEditableThickness
       ? getEffectiveWireThickness(activeWire, fallbackThickness)
       : fallbackThickness;
-    const hasCustomRoute = Boolean(
-      storedWire?.route_points?.length
-      || getCableControlPoints(storedWire || {}).length
-      || activeWire.route_points?.length
-      || getCableControlPoints(activeWire).length
-    );
-    const baseRoutePoints = hasCustomRoute
-      ? routePoints
-      : cleanRoutePoints([routePoints[0], routePoints[routePoints.length - 1]]);
+
+    const candidateSavedPoints = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+      ? storedWire.route.points
+      : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
+        ? [routePoints[0], ...storedWire.route_points, routePoints[routePoints.length - 1]]
+        : Array.isArray(activeWire?.route?.points) && activeWire.route.points.length >= 2 && isOrthogonalPath(activeWire.route.points)
+          ? activeWire.route.points
+          : Array.isArray(activeWire?.route_points) && activeWire.route_points.length > 0
+            ? [routePoints[0], ...activeWire.route_points, routePoints[routePoints.length - 1]]
+            : null;
+
+    const baseRoutePoints = (candidateSavedPoints && candidateSavedPoints.length >= 2 && isOrthogonalPath(candidateSavedPoints))
+      ? candidateSavedPoints
+      : routePoints;
+
     const registeredRoutePoints = registerWireRoute(activeWire, baseRoutePoints, {
       descriptor,
       color: baseColor,
@@ -6265,15 +7232,20 @@ export default function PanelGenerator() {
       thickness,
     });
     const editableRoutePoints = getEditableWireRoutePoints(activeWire, registeredRoutePoints);
+    if (!editableRoutePoints || editableRoutePoints.length < 2) return null;
     const pathStr = getRoundedPath(editableRoutePoints, getCableCornerRadius(activeWire, options.radius ?? DEFAULT_CABLE_CORNER_RADIUS));
-	    const isHighlighted = selectedWireId === descriptor.wire.id || hoveredWireId === descriptor.wire.id;
-	    const tapPoint = options.showTap ? editableRoutePoints[0] : null;
-	    const explicitTextLabel = cleanDisplayText(activeWire?.labelMeta?.text || "");
-	    const shouldShowTextLabel = Boolean(options.showLabel || explicitTextLabel);
+    const isTraced = tracedCircuitId && isWireMatchingCircuit(activeWire || descriptor.wire, tracedCircuitId);
+    const isDimmed = tracedCircuitId && !isTraced;
+    const wireOpacity = isDimmed ? (isIsolatedView ? 0.06 : 0.32) : 1;
+    const isHighlighted = selectedWireId === descriptor.wire.id || hoveredWireId === descriptor.wire.id || isTraced;
+    const tapPoint = options.showTap ? editableRoutePoints[0] : null;
+    const explicitTextLabel = cleanDisplayText(activeWire?.labelMeta?.text || "");
+    const shouldShowTextLabel = Boolean(options.showLabel || explicitTextLabel);
 
-	    return (
+    return (
       <g
         key={key}
+        opacity={wireOpacity}
         className="cursor-pointer group"
         data-wire-id={descriptor.wire.id}
         data-wire-kind={descriptor.kind}
@@ -6349,42 +7321,24 @@ export default function PanelGenerator() {
 
   const routeServicePowerDescriptor = (descriptor) => {
     const { p1, p2, sourceMeta, targetMeta } = descriptor;
+    if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return [];
+    const obstacles = extractPanelObstacles(rails, infrastructure);
 
-    if (isTerminalFeedWire(descriptor)) {
-      const sourceIsTerminal = String(descriptor.wire.source || "").startsWith("terminal_left_top:");
-      const terminal = sourceIsTerminal ? p1 : p2;
-      const device = sourceIsTerminal ? p2 : p1;
-      const laneY = referenceFeedLaneY(descriptor);
-      return sourceIsTerminal
-        ? cleanRoutePoints([
-            terminal,
-            { x: terminal.x, y: laneY },
-            { x: device.x, y: laneY },
-            device,
-          ])
-        : cleanRoutePoints([
-            device,
-            { x: device.x, y: laneY },
-            { x: terminal.x, y: laneY },
-            terminal,
-          ]);
+    const storedWire = getStoredWire(descriptor.wire?.id);
+    if (Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)) {
+      return storedWire.route.points;
     }
 
-    const sameRail = sourceMeta?.railIndex === targetMeta?.railIndex;
-    if (sameRail && sourceMeta?.term === "bottom" && targetMeta?.term === "top") {
-      return routeLocalDeviceJumper(descriptor);
-    }
+    const sourceSide = isTerminalFeedWire(descriptor) || String(descriptor.wire?.source || "").startsWith("terminal_") ? "DOWN" : sourceMeta?.term === "bottom" ? "DOWN" : "UP";
+    const targetSide = targetMeta?.term === "bottom" ? "DOWN" : "UP";
 
-    const railIndex = Math.max(0, targetMeta?.railIndex ?? sourceMeta?.railIndex ?? 0);
-    const ductSide = sourceMeta?.term === "bottom" && targetMeta?.term === "bottom" ? "bottom" : "top";
-    const ductY = getRailDuctY(railIndex, ductSide, phaseLaneOffset(descriptor.color));
-
-    return cleanRoutePoints([
-      p1,
-      { x: p1.x, y: ductY },
-      { x: p2.x, y: ductY },
-      p2,
-    ]);
+    return calculateOrthogonalRoute(p1, p2, obstacles, {
+      sourceSide,
+      targetSide,
+      laneOffset: phaseLaneOffset(descriptor.color),
+      sourcePin: descriptor.wire?.source,
+      targetPin: descriptor.wire?.target,
+    });
   };
 
   const renderPowerServiceWire = (descriptor) => (
@@ -6432,8 +7386,8 @@ export default function PanelGenerator() {
           colorName: group.color,
           name: `Tronco ${phaseLabel} entrada`,
         })}
-        {renderCableTextTag({ x: terminal.x + 34, y: laneY }, phaseLabel, color, `solar-incoming-phase-${group.key}-${groupIndex}-phase`)}
-        {groupIndex === 1 && renderCableTextTag({ x: terminal.x + 82, y: laneY - 18 }, "ENTRADA DA REDE", COLORS.phaseA, `solar-incoming-phase-${group.key}-${groupIndex}-origin`)}
+        {renderCableTextTag({ x: terminal.x, y: terminal.y + 12 }, phaseLabel, color, `solar-incoming-phase-${group.key}-${groupIndex}-phase`)}
+        {groupIndex === 0 && renderCableTextTag({ x: 260, y: 56 }, "ENTRADA DA REDE", COLORS.phaseA, `solar-incoming-phase-${group.key}-${groupIndex}-origin`)}
         {endpoints.map(({ descriptor, device }) => {
           const branch = cleanRoutePoints([
             { x: device.x, y: laneY },
@@ -6486,8 +7440,8 @@ export default function PanelGenerator() {
           colorName: group.color,
           name: `Tronco ${phaseLabel} proteção`,
         })}
-        {renderCableTextTag({ x: source.x + 30, y: busY }, phaseLabel, color, `solar-protection-phase-${group.key}-${groupIndex}-phase`)}
-        {groupIndex === 1 && renderCableTextTag({ x: (source.x + endX) / 2, y: busY + 18 }, "DJ ENTRADA -> DJ SAIDA", COLORS.phaseA, `solar-protection-phase-${group.key}-${groupIndex}-label`)}
+        {renderCableTextTag({ x: source.x, y: source.y + 14 }, phaseLabel, color, `solar-protection-phase-${group.key}-${groupIndex}-phase`)}
+        {groupIndex === 0 && renderCableTextTag({ x: (source.x + endX) / 2, y: railY + 120 }, "DJ ENTRADA -> DJ SAÍDA", COLORS.phaseA, `solar-protection-phase-${group.key}-${groupIndex}-label`)}
         {descriptors.map((descriptor) => {
           const branch = cleanRoutePoints([
             { x: descriptor.p2.x, y: busY },
@@ -6515,12 +7469,13 @@ export default function PanelGenerator() {
       descriptor.sourceMeta?.railIndex === descriptor.targetMeta?.railIndex
     ));
     const railIndex = Math.max(0, descriptors[0].targetMeta?.railIndex ?? descriptors[0].sourceMeta?.railIndex ?? 0);
+    const midY = (descriptors[0].p1.y + descriptors[0].p2.y) / 2;
     const labelAnchor = {
       x: (Math.min(...descriptors.map((descriptor) => descriptor.p1.x), ...descriptors.map((descriptor) => descriptor.p2.x))
         + Math.max(...descriptors.map((descriptor) => descriptor.p1.x), ...descriptors.map((descriptor) => descriptor.p2.x))) / 2,
-      y: sameRail
+      y: Number.isFinite(midY) ? midY : (sameRail
         ? getRailDuctY(railIndex, "top", -52)
-        : getRailDuctY(railIndex, "top", -44),
+        : getRailDuctY(railIndex, "top", -44)),
     };
 
     return (
@@ -6553,7 +7508,7 @@ export default function PanelGenerator() {
             endTerminal: true,
           });
         })}
-        {renderCableTextTag(labelAnchor, "DJ SAIDA -> DJ INVERSOR", COLORS.phaseA, `solar-service-inverter-${group.key}-${groupIndex}-label`)}
+        {renderCableTextTag(labelAnchor, "DJ SAÍDA -> DJ INVERSOR", COLORS.phaseA, `solar-service-inverter-${group.key}-${groupIndex}-label`)}
       </g>
     );
   };
@@ -6563,6 +7518,7 @@ export default function PanelGenerator() {
     if (!descriptors.length) return null;
 
     const color = wireDisplayColor(group.color);
+    const obstacles = extractPanelObstacles(rails, infrastructure);
 
     return (
       <g
@@ -6570,15 +7526,27 @@ export default function PanelGenerator() {
         className="cursor-pointer"
         data-wire-bundle="phase-distribution"
       >
-        {descriptors.map((descriptor) => {
-          const routePoints = cleanRoutePoints([
-            descriptor.p1,
-            descriptor.p2,
-          ]);
+        {descriptors.map((descriptor, descriptorIndex) => {
+          const storedWire = getStoredWire(descriptor.wire.id);
+          const savedRoute = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+            ? storedWire.route.points
+            : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
+              ? [descriptor.p1, ...storedWire.route_points, descriptor.p2]
+              : null;
+
+          const laneOffset = (descriptorIndex - (descriptors.length - 1) / 2) * WIRE_SPACING;
+          const routePoints = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : calculateOrthogonalRoute(descriptor.p1, descriptor.p2, obstacles, {
+            sourceSide: descriptor.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
+            targetSide: descriptor.targetMeta?.term === "bottom" ? "DOWN" : "UP",
+            laneOffset,
+            sourcePin: descriptor.wire?.source,
+            targetPin: descriptor.wire?.target,
+          });
+
           return renderDescriptorPath(descriptor, routePoints, `${descriptor.wire.id}-distribution-independent`, {
             color,
             thickness: descriptor.thickness,
-            radius: 1,
+            radius: DEFAULT_CORNER_RADIUS,
             startTerminal: true,
             endTerminal: true,
           });
@@ -6591,13 +7559,23 @@ export default function PanelGenerator() {
     const loadEndpoint = getLoadEndpoint(descriptor);
     if (!loadEndpoint) return null;
     const devicePoint = descriptor.sourceMeta?.type === "load" ? descriptor.p2 : descriptor.p1;
-    const dropY = snapWireGrid(devicePoint.y + 68 + phaseLaneOffset(descriptor.color));
-    const routePoints = cleanRoutePoints([
-      devicePoint,
-      { x: devicePoint.x, y: dropY },
-      { x: loadEndpoint.point.x, y: dropY },
-      loadEndpoint.point,
-    ]);
+    if (!isValidWirePoint(devicePoint) || !isValidWirePoint(loadEndpoint.point)) return null;
+
+    const obstacles = extractPanelObstacles(rails, infrastructure);
+    const storedWire = getStoredWire(descriptor.wire.id);
+    const savedRoute = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+      ? storedWire.route.points
+      : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
+        ? [devicePoint, ...storedWire.route_points, loadEndpoint.point]
+        : null;
+
+    const routePoints = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : calculateOrthogonalRoute(devicePoint, loadEndpoint.point, obstacles, {
+      sourceSide: "DOWN",
+      targetSide: "DOWN",
+      sourcePin: descriptor.wire?.source,
+      targetPin: descriptor.wire?.target,
+      laneOffset: phaseLaneOffset(descriptor.color),
+    });
 
     return renderDescriptorPath(descriptor, routePoints, `${descriptor.wire.id}-output`, {
       radius: 2,
@@ -6618,78 +7596,54 @@ export default function PanelGenerator() {
   };
 
   const routeNeutralDescriptorBranches = (descriptor) => {
-
     const endpoints = getBusbarBranchEndpoints(descriptor);
     const busPoint = getNeutralBusPoint(descriptor);
+    const obstacles = extractPanelObstacles(rails, infrastructure);
 
     if (endpoints.length === 2 || !endpoints.length) {
-      return [routeLocalDeviceJumper(descriptor)];
+      const p1 = descriptor.p1;
+      const p2 = descriptor.p2;
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return [];
+      return [calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide: descriptor.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
+        targetSide: descriptor.targetMeta?.term === "bottom" ? "DOWN" : "UP",
+        sourcePin: descriptor.wire?.source,
+        targetPin: descriptor.wire?.target,
+      })];
     }
 
     return endpoints.map(({ point, pin, meta }, branchIndex) => {
       const start = busPoint || { x: getNeutralBackboneX(), y: getNeutralBackboneTopY() };
+      if (!isValidWirePoint(start) || !isValidWirePoint(point)) return [];
 
-      if (String(pin).startsWith("load_out:")) {
-        const branchY = snapWireGrid(point.y);
-        return cleanRoutePoints([
-          start,
-          { x: start.x, y: branchY },
-          { x: point.x, y: branchY },
-          point,
-        ]);
-      }
-
-      if (meta?.type === "component" && meta?.term === "top" && Number(meta?.railIndex) === 0) {
-        const laneY = snapWireGrid((busPoint?.y ?? NEUTRAL_BUS.pinY) + 34 + (branchIndex % 3) * 8);
-        return cleanRoutePoints([
-          start,
-          { x: start.x, y: laneY },
-          { x: point.x, y: laneY },
-          point,
-        ]);
-      }
-
-      const laneY = getNeutralBranchLaneY(point, meta, descriptor, branchIndex);
-      return cleanRoutePoints([
-        start,
-        { x: start.x, y: laneY },
-        { x: point.x, y: laneY },
-        point,
-      ]);
-    });
+      const targetSide = String(pin).startsWith("load_out:") ? "DOWN" : meta?.term === "bottom" ? "DOWN" : "UP";
+      return calculateOrthogonalRoute(start, point, obstacles, {
+        sourceSide: "DOWN",
+        targetSide,
+        laneOffset: (branchIndex % 3) * 6,
+        sourcePin: descriptor.wire?.source,
+        targetPin: pin || descriptor.wire?.target,
+      });
+    }).filter(r => r && r.length >= 2);
   };
 
   const renderNeutralBranchWire = (descriptor) => {
     if (descriptor.wire?.id?.includes("main") || descriptor.wire?.id?.includes("backbone") || descriptor.wire?.id?.includes("tie")) return null;
-    return routeNeutralDescriptorBranches(descriptor).map((routePoints, index) => {
+    const branches = routeNeutralDescriptorBranches(descriptor);
+    return branches.map((routePoints, index) => {
       const branchId = `${descriptor.wire.id}-neutral-${index}`;
-      const customWire = wires.find(w => w.id === branchId);
+      const customWire = wires.find(w => w.id === branchId || w.id === descriptor.wire.id);
       if (customWire?.deleted) return null;
-      let finalStart = routePoints[0];
-      let finalEnd = routePoints[routePoints.length - 1];
-      if (customWire?.source) finalStart = getPinCoords(customWire.source, rails, panelHeight, infrastructure) || finalStart;
-      if (customWire?.target) finalEnd = getPinCoords(customWire.target, rails, panelHeight, infrastructure) || finalEnd;
 
-      let innerPoints = customWire?.route_points?.length > 0 ? [...customWire.route_points] : [...routePoints.slice(1, -1)];
-      
-      if (!(customWire?.route_points?.length > 0) && innerPoints.length > 0) {
-        const lastInner = innerPoints[innerPoints.length - 1];
-        const origEnd = routePoints[routePoints.length - 1];
-        const origPrev = routePoints[routePoints.length - 2];
-        if (Math.abs(origPrev.y - origEnd.y) < 2) lastInner.y = finalEnd.y;
-        else if (Math.abs(origPrev.x - origEnd.x) < 2) lastInner.x = finalEnd.x;
+      const savedRoute = Array.isArray(customWire?.route?.points) && customWire.route.points.length >= 2 && isOrthogonalPath(customWire.route.points)
+        ? customWire.route.points
+        : Array.isArray(customWire?.route_points) && customWire.route_points.length > 0
+          ? [routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]]
+          : null;
 
-        const firstInner = innerPoints[0];
-        const origStart = routePoints[0];
-        const origNext = routePoints[1];
-        if (Math.abs(origNext.y - origStart.y) < 2) firstInner.y = finalStart.y;
-        else if (Math.abs(origNext.x - origStart.x) < 2) firstInner.x = finalStart.x;
-      }
-      
-      const activeRoutePoints = [finalStart, ...innerPoints, finalEnd];
-      
-      const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId, route_points: [] } };
-      
+      const activeRoutePoints = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : routePoints;
+      const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId } };
+
       return renderDescriptorPath(branchDesc, activeRoutePoints, branchId, {
         color: customWire?.color ? wireDisplayColor(customWire.color) : COLORS.neutral,
         radius: PROFESSIONAL_BUS.branchRadius,
@@ -6719,82 +7673,54 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     if (isTerminalFeedWire(descriptor)) return [];
 
     const endpoints = getBusbarBranchEndpoints(descriptor);
-    
     const groundLayout = getGroundBusLayout(infrastructure, panelHeight);
     const bottomY = groundLayout.pinY;
-
     const busPoint = getGroundBusPoint(descriptor, infrastructure, panelHeight) || { x: PROFESSIONAL_BUS.groundLeftX, y: bottomY };
+    const obstacles = extractPanelObstacles(rails, infrastructure);
 
     if (endpoints.length === 2 || !endpoints.length) {
-      return [routeLocalDeviceJumper(descriptor)];
+      const p1 = descriptor.p1;
+      const p2 = descriptor.p2;
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return [];
+      return [calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide: descriptor.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
+        targetSide: descriptor.targetMeta?.term === "bottom" ? "DOWN" : "UP",
+        sourcePin: descriptor.wire?.source,
+        targetPin: descriptor.wire?.target,
+      })];
     }
 
     return endpoints.map(({ point, pin, meta }, branchIndex) => {
-      if (String(pin).startsWith("load_out:") || point.y >= panelHeight - 140) {
-        const branchY = snapWireGrid(point.y);
+      if (!isValidWirePoint(busPoint) || !isValidWirePoint(point)) return [];
 
-        return cleanRoutePoints([
-          busPoint,
-          { x: busPoint.x, y: branchY },
-          { x: point.x, y: branchY },
-          point,
-        ]);
-      }
-
-      const riserX = PROFESSIONAL_BUS.groundLeftX;
-      const isDpsGround = /dps/i.test(`${descriptor.wire?.id || ""}:${pin || ""}`);
-      if (isDpsGround) {
-        const railIndex = Math.max(0, meta?.railIndex ?? descriptor.sourceMeta?.railIndex ?? descriptor.targetMeta?.railIndex ?? 0);
-        const laneY = getRailDuctY(railIndex, "bottom", -8 + (branchIndex % 2) * 6);
-        return cleanRoutePoints([
-          busPoint,
-          { x: busPoint.x, y: laneY },
-          { x: riserX, y: laneY },
-          { x: point.x, y: laneY },
-          { x: point.x, y: point.y },
-          point,
-        ]);
-      }
-
-      return cleanRoutePoints([
-        busPoint,
-        { x: busPoint.x, y: point.y },
-        point,
-      ]);
-    });
+      const targetSide = String(pin).startsWith("load_out:") ? "DOWN" : meta?.term === "bottom" ? "DOWN" : "UP";
+      return calculateOrthogonalRoute(busPoint, point, obstacles, {
+        sourceSide: "UP",
+        targetSide,
+        laneOffset: (branchIndex % 3) * 6,
+        sourcePin: descriptor.wire?.source,
+        targetPin: pin || descriptor.wire?.target,
+      });
+    }).filter(r => r && r.length >= 2);
   };
 
   const renderGroundBranchWire = (descriptor) => {
     if (descriptor.wire?.id?.includes("main") || descriptor.wire?.id?.includes("backbone") || descriptor.wire?.id?.includes("tie")) return null;
-    return routeGroundDescriptorBranches(descriptor).map((routePoints, index) => {
+    const branches = routeGroundDescriptorBranches(descriptor);
+    return branches.map((routePoints, index) => {
       const branchId = `${descriptor.wire.id}-ground-${index}`;
-      const customWire = wires.find(w => w.id === branchId);
+      const customWire = wires.find(w => w.id === branchId || w.id === descriptor.wire.id);
       if (customWire?.deleted) return null;
-      let finalStart = routePoints[0];
-      let finalEnd = routePoints[routePoints.length - 1];
-      if (customWire?.source) finalStart = getPinCoords(customWire.source, rails, panelHeight, infrastructure) || finalStart;
-      if (customWire?.target) finalEnd = getPinCoords(customWire.target, rails, panelHeight, infrastructure) || finalEnd;
 
-      let innerPoints = customWire?.route_points?.length > 0 ? [...customWire.route_points] : [...routePoints.slice(1, -1)];
-      
-      if (!(customWire?.route_points?.length > 0) && innerPoints.length > 0) {
-        const lastInner = innerPoints[innerPoints.length - 1];
-        const origEnd = routePoints[routePoints.length - 1];
-        const origPrev = routePoints[routePoints.length - 2];
-        if (Math.abs(origPrev.y - origEnd.y) < 2) lastInner.y = finalEnd.y;
-        else if (Math.abs(origPrev.x - origEnd.x) < 2) lastInner.x = finalEnd.x;
+      const savedRoute = Array.isArray(customWire?.route?.points) && customWire.route.points.length >= 2 && isOrthogonalPath(customWire.route.points)
+        ? customWire.route.points
+        : Array.isArray(customWire?.route_points) && customWire.route_points.length > 0
+          ? [routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]]
+          : null;
 
-        const firstInner = innerPoints[0];
-        const origStart = routePoints[0];
-        const origNext = routePoints[1];
-        if (Math.abs(origNext.y - origStart.y) < 2) firstInner.y = finalStart.y;
-        else if (Math.abs(origNext.x - origStart.x) < 2) firstInner.x = finalStart.x;
-      }
-      
-      const activeRoutePoints = [finalStart, ...innerPoints, finalEnd];
-      
-      const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId, route_points: [] } };
-      
+      const activeRoutePoints = (savedRoute && isOrthogonalPath(savedRoute)) ? savedRoute : routePoints;
+      const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId } };
+
       return renderDescriptorPath(branchDesc, activeRoutePoints, branchId, {
         color: customWire?.color ? wireDisplayColor(customWire.color) : COLORS.ground,
         radius: PROFESSIONAL_BUS.branchRadius,
@@ -6812,10 +7738,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
   const getSolarReferenceComponent = (predicate) => getSolarComponents().find(predicate);
 
-  const isValidWirePoint = (point) => (
-    point && Number.isFinite(point.x) && Number.isFinite(point.y) && (point.x !== 0 || point.y !== 0)
-  );
-
+  
   const getSolarPinPoint = (componentId, term, poleIndex = 0) => (
     getPinCoords(`comp:${componentId}:${term}:${poleIndex}`, rails, panelHeight, infrastructure)
   );
@@ -6854,7 +7777,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     );
   };
 
-  const renderReferenceRoute = (id, routePoints, baseColor, thickness = 4.7, options = {}) => {
+  function renderReferenceRoute(id, routePoints, baseColor, thickness = 4.7, options = {}) {
     let fallbackPoints = cleanRoutePoints(routePoints);
     if (fallbackPoints.length < 2) return null;
     const radius = options.radius ?? 6;
@@ -6872,15 +7795,17 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       if (isValidWirePoint(targetPoint)) anchoredPoints[anchoredPoints.length - 1] = targetPoint;
       fallbackPoints = cleanRoutePoints(anchoredPoints);
     }
-    const hasCustomRoute = Boolean(
-      storedWire?.route_points?.length
-      || getCableControlPoints(storedWire || {}).length
-      || activeWire.route_points?.length
-      || getCableControlPoints(activeWire).length
-    );
-    if (wireId && !hasCustomRoute && fallbackPoints.length >= 2) {
-      fallbackPoints = cleanRoutePoints([fallbackPoints[0], fallbackPoints[fallbackPoints.length - 1]]);
-    }
+    const candidateSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+      ? storedWire.route.points
+      : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
+        ? [fallbackPoints[0], ...storedWire.route_points, fallbackPoints[fallbackPoints.length - 1]]
+        : Array.isArray(activeWire?.route?.points) && activeWire.route.points.length >= 2 && isOrthogonalPath(activeWire.route.points)
+          ? activeWire.route.points
+          : Array.isArray(activeWire?.route_points) && activeWire.route_points.length > 0
+            ? [fallbackPoints[0], ...activeWire.route_points, fallbackPoints[fallbackPoints.length - 1]]
+            : null;
+    const effectiveRoutePoints = (candidateSaved && isOrthogonalPath(candidateSaved)) ? candidateSaved : fallbackPoints;
+    fallbackPoints = cleanRoutePoints(effectiveRoutePoints);
     const baseDisplayColor = storedWire?.color
       ? wireDisplayColor(normalizedWireColor(storedWire))
       : baseColor;
@@ -7224,7 +8149,8 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     );
   };
 
-  const renderDuctedWiringPlan = () => (
+  function renderDuctedWiringPlan() {
+    return (
     <g id="ducted-wiring-plan">
       {ductedWiringPlan.solarIncomingPhaseGroups.map(renderSolarIncomingPhaseGroup)}
       {ductedWiringPlan.servicePower.map(renderPowerServiceWire)}
@@ -7235,7 +8161,8 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       {ductedWiringPlan.neutralBranches.map(renderNeutralBranchWire)}
       {ductedWiringPlan.groundBranches.map(renderGroundBranchWire)}
     </g>
-  );
+    );
+  }
 
   const connectionPinColor = (pin = {}) => {
     if (pin.kind === "neutral" || pin.kind === "blue") return COLORS.neutral;
@@ -7322,86 +8249,65 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     );
   };
 
+  const renderDebugTerminals = () => {
+    const isDebugActive = typeof window !== "undefined" && (
+      window.__DEBUG_TERMINALS === true
+      || window.location?.search?.includes("debug_terminals=1")
+    );
+    if (!isDebugActive) return null;
+
+    return (
+      <g id="debug-terminal-anchors" pointerEvents="none" opacity={0.95}>
+        {connectionPins.map((pin) => (
+          <g key={`debug-pin-${pin.id}`}>
+            <line x1={pin.x - 6} y1={pin.y} x2={pin.x + 6} y2={pin.y} stroke="#ff0055" strokeWidth={1.2} />
+            <line x1={pin.x} y1={pin.y - 6} x2={pin.x} y2={pin.y + 6} stroke="#ff0055" strokeWidth={1.2} />
+            <circle cx={pin.x} cy={pin.y} r={2.5} fill="#ff0055" stroke="#ffffff" strokeWidth={0.6} />
+            <rect x={pin.x + 4} y={pin.y - 12} width={Math.max(38, String(pin.id).length * 4.8 + 8)} height={12} rx={2} fill="#0f172a" fillOpacity={0.9} />
+            <text x={pin.x + 8} y={pin.y - 3} fill="#00ffcc" fontSize={6.2} fontFamily="monospace" fontWeight="bold">
+              {pin.id}
+            </text>
+          </g>
+        ))}
+      </g>
+    );
+  };
+
   const renderSelectedWireEndpointHandles = () => {
-    const visualMeta = wireRouteMetaRef.current[selectedWireId];
     const selectedWire = getEditableWire(selectedWireId);
     if (!isCableVisible(selectedWire) || isCableLocked(selectedWire)) return null;
-
-    if (visualMeta?.routePoints?.length >= 2) {
-      const sourcePoint = wireEndpointDrag?.endpoint === "source" && endpointDragCoords
-        ? endpointDragCoords
-        : visualMeta.sourcePoint;
-      const targetPoint = wireEndpointDrag?.endpoint === "target" && endpointDragCoords
-        ? endpointDragCoords
-        : visualMeta.targetPoint;
-      const handles = [
-        { endpoint: "source", label: "Origem", point: sourcePoint, color: "#00d8b8", pin: selectedWire.source },
-        { endpoint: "target", label: "Destino", point: targetPoint, color: "#f97316", pin: selectedWire.target },
-      ].filter((handle) => isValidWirePoint(handle.point));
-
-      return (
-        <g id="selected-wire-endpoint-handles">
-          {handles.map((handle) => {
-            const isDragging = wireEndpointDrag?.endpoint === handle.endpoint;
-            const labelWidth = Math.max(36, handle.label.length * 5.4 + 12);
-            return (
-              <g
-                key={handle.endpoint}
-                className="cursor-grab active:cursor-grabbing"
-                onPointerDown={(event) => startWireEndpointDrag(event, handle.endpoint)}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setActiveTab("wiring");
-                  setWireMoveMode(handle.endpoint);
-                }}
-              >
-                <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_HANDLE_HIT_RADIUS} fill="transparent" />
-                <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.outer} fill={handle.color} fillOpacity="0.14" stroke={handle.color} strokeWidth="1.15" strokeDasharray={isDragging ? "0" : "3,2.5"} />
-                <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.inner} fill="#ffffff" stroke={handle.color} strokeWidth="1.55" />
-                <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.dot} fill={handle.color} />
-                <rect
-                  x={handle.point.x - labelWidth / 2}
-                  y={handle.point.y + 10}
-                  width={labelWidth}
-                  height="13.5"
-                  rx="4"
-                  fill={handle.color}
-                  filter="url(#shadow)"
-                />
-                <text x={handle.point.x} y={handle.point.y + 19.6} fill="#ffffff" fontSize="5.8" fontWeight="950" textAnchor="middle" pointerEvents="none">
-                  {handle.label}
-                </text>
-                {isDragging && hoveredPinId && (
-                  <text x={handle.point.x} y={handle.point.y - 15} fill={handle.color} fontSize="6" fontWeight="950" textAnchor="middle" pointerEvents="none">
-                    Solte no borne destacado
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </g>
-      );
-    }
+    const visualMeta = wireRouteMetaRef.current[selectedWireId];
 
     let descriptor = selectedWireDescriptor;
-    
     if (!descriptor && (String(selectedWireId).includes("-ground-") || String(selectedWireId).includes("-neutral-"))) {
       const isGround = String(selectedWireId).includes("-ground-");
       const parentId = String(selectedWireId).split(isGround ? "-ground-" : "-neutral-")[0];
       descriptor = routedWires.find(d => d.wire?.id === parentId);
     }
-    
-    if (!descriptor) return null;
+
+    const currentSource = selectedWire.source || visualMeta?.wire?.source || descriptor?.wire?.source;
+    const currentTarget = selectedWire.target || visualMeta?.wire?.target || descriptor?.wire?.target;
+
+    const sourcePoint = wireEndpointDrag?.endpoint === "source" && endpointDragCoords
+      ? endpointDragCoords
+      : (currentSource ? getPinCoords(currentSource, rails, panelHeight, infrastructure) : visualMeta?.sourcePoint || descriptor?.p1);
+
+    const targetPoint = wireEndpointDrag?.endpoint === "target" && endpointDragCoords
+      ? endpointDragCoords
+      : (currentTarget ? getPinCoords(currentTarget, rails, panelHeight, infrastructure) : visualMeta?.targetPoint || descriptor?.p2);
 
     const handles = [
-      { endpoint: "source", label: "Origem", point: wireEndpointDrag?.endpoint === "source" && endpointDragCoords ? endpointDragCoords : descriptor.p1, color: "#00d8b8", pin: descriptor.wire.source },
-      { endpoint: "target", label: "Destino", point: wireEndpointDrag?.endpoint === "target" && endpointDragCoords ? endpointDragCoords : descriptor.p2, color: "#f97316", pin: descriptor.wire.target },
+      { endpoint: "source", label: "Origem", point: sourcePoint, color: "#00d8b8", pin: currentSource },
+      { endpoint: "target", label: "Destino", point: targetPoint, color: "#f97316", pin: currentTarget },
     ].filter((handle) => isValidWirePoint(handle.point));
+
+    if (!handles.length) return null;
 
     return (
       <g id="selected-wire-endpoint-handles">
         {handles.map((handle) => {
           const isDragging = wireEndpointDrag?.endpoint === handle.endpoint;
+          const isCurrentMoveMode = wireMoveMode === handle.endpoint;
           const labelWidth = Math.max(36, handle.label.length * 5.4 + 12);
           return (
             <g
@@ -7411,11 +8317,20 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
               onClick={(event) => {
                 event.stopPropagation();
                 setActiveTab("wiring");
-                setWireMoveMode(handle.endpoint);
+                setWireMoveMode(isCurrentMoveMode ? "" : handle.endpoint);
               }}
             >
               <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_HANDLE_HIT_RADIUS} fill="transparent" />
-              <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.outer} fill={handle.color} fillOpacity="0.14" stroke={handle.color} strokeWidth="1.15" strokeDasharray={isDragging ? "0" : "3,2.5"} />
+              <circle
+                cx={handle.point.x}
+                cy={handle.point.y}
+                r={WIRE_ENDPOINT_HANDLE_RADIUS.outer}
+                fill={handle.color}
+                fillOpacity={isCurrentMoveMode || isDragging ? "0.32" : "0.14"}
+                stroke={handle.color}
+                strokeWidth={isCurrentMoveMode || isDragging ? "2" : "1.15"}
+                strokeDasharray={isDragging ? "0" : "3,2.5"}
+              />
               <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.inner} fill="#ffffff" stroke={handle.color} strokeWidth="1.55" />
               <circle cx={handle.point.x} cy={handle.point.y} r={WIRE_ENDPOINT_HANDLE_RADIUS.dot} fill={handle.color} />
               <rect
@@ -7864,13 +8779,18 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                   </Button>
                   <Button
                     variant={showLegend ? "secondary" : "outline"}
-                    size="icon"
-                    className="h-9 w-9 rounded-lg"
+                    size="sm"
+                    className={`h-9 rounded-lg font-bold text-xs gap-1.5 px-3 transition-colors ${
+                      !showLegend
+                        ? "border-[#00d8b8] bg-[#EEF7FC] text-[#005188] hover:bg-[#E0F2FE]"
+                        : "border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
                     onClick={() => setShowLegend((current) => !current)}
-                    aria-label={showLegend ? "Ocultar legenda" : "Mostrar legenda"}
-                    title={showLegend ? "Ocultar legenda" : "Mostrar legenda"}
+                    aria-label={showLegend ? "Ocultar legendas e ver só o quadro" : "Mostrar legendas do quadro"}
+                    title={showLegend ? "Ocultar legendas e ver só o quadro" : "Mostrar legendas do quadro"}
                   >
-                    <Info className="h-4 w-4" />
+                    {showLegend ? <EyeOff className="h-4 w-4 text-slate-600" /> : <Eye className="h-4 w-4 text-[#00d8b8]" />}
+                    <span>{showLegend ? "Ocultar Legendas" : "Mostrar Legendas"}</span>
                   </Button>
                   <Button
                     variant={wiringMode ? "destructive" : "secondary"}
@@ -7944,62 +8864,110 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       if (!wireEndpointDrag) setHoveredPinId("");
                     }}
                   >
-                    {/* Definições de Gradientes Metálicos e Brilhos */}
+                    {/* Definições de Gradientes Metálicos, Texturas e Efeitos de Profundidade */}
                     <defs>
-                      <linearGradient id="railGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#475569" />
-                        <stop offset="30%" stopColor="#cbd5e1" />
-                        <stop offset="50%" stopColor="#f1f5f9" />
-                        <stop offset="70%" stopColor="#cbd5e1" />
-                        <stop offset="100%" stopColor="#334155" />
-                      </linearGradient>
-                      <linearGradient id="brassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#b45309" />
-                        <stop offset="30%" stopColor="#fbbf24" />
-                        <stop offset="70%" stopColor="#f59e0b" />
-                        <stop offset="100%" stopColor="#78350f" />
-                      </linearGradient>
-                      <linearGradient id="screwCageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#94a3b8" />
-                        <stop offset="50%" stopColor="#cbd5e1" />
-                        <stop offset="100%" stopColor="#475569" />
-                      </linearGradient>
-                      <linearGradient id="metallicScrew" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#cbd5e1" />
-                        <stop offset="50%" stopColor="#64748b" />
-                        <stop offset="100%" stopColor="#334155" />
-                      </linearGradient>
-                      <linearGradient id="breakerBody" x1="0%" y1="0%" x2="100%" y2="0%">
+                      {/* Gradiente da chapa de fundo do gabinete eletrostático (RAL 7035 Industrial) */}
+                      <linearGradient id="chassisPlateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#f8fafc" />
-                        <stop offset="15%" stopColor="#f1f5f9" />
-                        <stop offset="85%" stopColor="#e2e8f0" />
+                        <stop offset="40%" stopColor="#f1f5f9" />
+                        <stop offset="80%" stopColor="#e2e8f0" />
                         <stop offset="100%" stopColor="#cbd5e1" />
                       </linearGradient>
+                      {/* Borda chanfrada de estampagem metálica do gabinete */}
+                      <linearGradient id="chassisBevelGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#cbd5e1" />
+                        <stop offset="50%" stopColor="#94a3b8" />
+                        <stop offset="100%" stopColor="#64748b" />
+                      </linearGradient>
+                      {/* Trilho DIN 35x7.5mm perfil ômega de aço zincado bicromatizado (EN 50022 / IEC 60715) */}
+                      <linearGradient id="dinRailTopHat" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#64748b" />
+                        <stop offset="14%" stopColor="#cbd5e1" />
+                        <stop offset="28%" stopColor="#f8fafc" />
+                        <stop offset="48%" stopColor="#94a3b8" />
+                        <stop offset="52%" stopColor="#64748b" />
+                        <stop offset="72%" stopColor="#f1f5f9" />
+                        <stop offset="88%" stopColor="#cbd5e1" />
+                        <stop offset="100%" stopColor="#475569" />
+                      </linearGradient>
+                      <linearGradient id="dinSlotHole" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#0f172a" />
+                        <stop offset="50%" stopColor="#1e293b" />
+                        <stop offset="100%" stopColor="#334155" />
+                      </linearGradient>
+                      {/* Canaleta perfurada industrial cinza chumbo (PVC finger duct) */}
+                      <linearGradient id="fingerDuctBody" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#334155" />
+                        <stop offset="25%" stopColor="#475569" />
+                        <stop offset="80%" stopColor="#334155" />
+                        <stop offset="100%" stopColor="#1e293b" />
+                      </linearGradient>
+                      {/* Latão usinado polido para barramentos de neutro e terra */}
+                      <linearGradient id="brassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#78350f" />
+                        <stop offset="20%" stopColor="#d97706" />
+                        <stop offset="45%" stopColor="#fde047" />
+                        <stop offset="75%" stopColor="#f59e0b" />
+                        <stop offset="100%" stopColor="#78350f" />
+                      </linearGradient>
+                      {/* Gaiola metálica niquelada do terminal de parafuso */}
+                      <linearGradient id="screwCageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#475569" />
+                        <stop offset="40%" stopColor="#cbd5e1" />
+                        <stop offset="70%" stopColor="#e2e8f0" />
+                        <stop offset="100%" stopColor="#334155" />
+                      </linearGradient>
+                      {/* Cabeça de parafuso usinada em aço com fenda combinada Pozidriv */}
+                      <linearGradient id="metallicScrew" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#e2e8f0" />
+                        <stop offset="35%" stopColor="#94a3b8" />
+                        <stop offset="70%" stopColor="#64748b" />
+                        <stop offset="100%" stopColor="#1e293b" />
+                      </linearGradient>
+                      {/* Poliamida cinza industrial fosca para disjuntores (RAL 7035) */}
+                      <linearGradient id="breakerBody" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#ffffff" />
+                        <stop offset="10%" stopColor="#f8fafc" />
+                        <stop offset="80%" stopColor="#f1f5f9" />
+                        <stop offset="95%" stopColor="#e2e8f0" />
+                        <stop offset="100%" stopColor="#cbd5e1" />
+                      </linearGradient>
+                      {/* Cartucho vermelho industrial Classe II para DPS */}
                       <linearGradient id="dpsBody" x1="0%" y1="0%" x2="100%" y2="0%">
                         <stop offset="0%" stopColor="#ef4444" />
-                        <stop offset="25%" stopColor="#dc2626" />
-                        <stop offset="85%" stopColor="#b91c1c" />
-                        <stop offset="100%" stopColor="#991b1b" />
+                        <stop offset="20%" stopColor="#dc2626" />
+                        <stop offset="80%" stopColor="#b91c1c" />
+                        <stop offset="100%" stopColor="#7f1d1d" />
                       </linearGradient>
+                      {/* Corpo do IDR com textura de plástico de engenharia */}
                       <linearGradient id="drBody" x1="0%" y1="0%" x2="100%" y2="0%">
                         <stop offset="0%" stopColor="#ffffff" />
-                        <stop offset="20%" stopColor="#f8fafc" />
+                        <stop offset="15%" stopColor="#f8fafc" />
                         <stop offset="85%" stopColor="#f1f5f9" />
                         <stop offset="100%" stopColor="#e2e8f0" />
                       </linearGradient>
+                      {/* Alavanca de desarme ergonômica com sombreamento tátil */}
                       <linearGradient id="toggleGlow" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
-                        <stop offset="40%" stopColor="#ffffff" stopOpacity="0.1" />
-                        <stop offset="100%" stopColor="#000000" stopOpacity="0.4" />
+                        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+                        <stop offset="35%" stopColor="#ffffff" stopOpacity="0.15" />
+                        <stop offset="100%" stopColor="#000000" stopOpacity="0.45" />
                       </linearGradient>
+                      {/* Capa isolante amarela de barramento pente (Comb Busbar) */}
                       <linearGradient id="combBusbar" x1="0%" y1="0%" x2="0%" y2="100%">
                         <stop offset="0%" stopColor="#fef08a" />
-                        <stop offset="30%" stopColor="#fde047" />
-                        <stop offset="70%" stopColor="#eab308" />
-                        <stop offset="100%" stopColor="#ca8a04" />
+                        <stop offset="25%" stopColor="#facc15" />
+                        <stop offset="75%" stopColor="#eab308" />
+                        <stop offset="100%" stopColor="#a16207" />
                       </linearGradient>
+                      {/* Sombra de profundidade técnica */}
                       <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
-                        <feDropShadow dx="2" dy="5" stdDeviation="4" floodOpacity="0.15" />
+                        <feDropShadow dx="1.5" dy="3.5" stdDeviation="3" floodColor="#0f172a" floodOpacity="0.12" />
+                      </filter>
+                      <filter id="railShadow" x="-3%" y="-15%" width="106%" height="130%">
+                        <feDropShadow dx="0" dy="4" stdDeviation="3.5" floodColor="#0f172a" floodOpacity="0.16" />
+                      </filter>
+                      <filter id="deviceShadow" x="-4%" y="-3%" width="108%" height="108%">
+                        <feDropShadow dx="1" dy="3.5" stdDeviation="2.5" floodColor="#0f172a" floodOpacity="0.18" />
                       </filter>
                       <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
                         <feGaussianBlur stdDeviation="3" result="blur" />
@@ -8007,25 +8975,60 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       </filter>
                     </defs>
 
-                    {/* 1. ESTRUTURA DO GABINETE (ENCLOSURE) */}
-                    {/* Borda Externa */}
-                    <rect x="15" y="15" width={PANEL_W-30} height={panelHeight-30} rx="12" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2.5" filter="url(#shadow)" />
-                    {/* Quadro Interno */}
-                    <rect x="25" y="25" width={PANEL_W-50} height={panelHeight-50} rx="10" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1.5" />
+                    {/* 1. ESTRUTURA DO GABINETE METÁLICO (CHASSIS BACKPLATE & CANALETAS) */}
+                    {/* Borda externa com profundidade de estamparia */}
+                    <rect x="14" y="14" width={PANEL_W - 28} height={panelHeight - 28} rx="14" fill="url(#chassisBevelGrad)" stroke="#64748b" strokeWidth="1.2" filter="url(#shadow)" />
+                    {/* Chapa de fundo do quadro eletrostático */}
+                    <rect x="18" y="18" width={PANEL_W - 36} height={panelHeight - 36} rx="11" fill="url(#chassisPlateGrad)" stroke="#cbd5e1" strokeWidth="1" />
                     
-                    {/* Canaletas Passa-fios Laterais (Pentes organizadores amarelos na borda) */}
-                    {/* Canaleta Direita */}
-                    {Array.from({ length: Math.ceil(panelHeight / 40) }).map((_, i) => (
-                      <rect key={`y-r-${i}`} x={PANEL_W - 40} y={40 + i * 40} width="12" height="15" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.5" />
+                    {/* Furos de fixação mecânica nos 4 cantos da chapa de fundo */}
+                    {[
+                      { cx: 32, cy: 32 },
+                      { cx: PANEL_W - 32, cy: 32 },
+                      { cx: 32, cy: panelHeight - 32 },
+                      { cx: PANEL_W - 32, cy: panelHeight - 32 },
+                    ].map((cornerScrew, idx) => (
+                      <g key={`corner-screw-${idx}`}>
+                        <circle cx={cornerScrew.cx} cy={cornerScrew.cy} r="6" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.8" />
+                        <circle cx={cornerScrew.cx} cy={cornerScrew.cy} r="4.2" fill="url(#metallicScrew)" stroke="#475569" strokeWidth="0.5" />
+                        <line x1={cornerScrew.cx - 2.5} y1={cornerScrew.cy - 2.5} x2={cornerScrew.cx + 2.5} y2={cornerScrew.cy + 2.5} stroke="#334155" strokeWidth="0.9" />
+                        <line x1={cornerScrew.cx - 2.5} y1={cornerScrew.cy + 2.5} x2={cornerScrew.cx + 2.5} y2={cornerScrew.cy - 2.5} stroke="#334155" strokeWidth="0.9" />
+                      </g>
                     ))}
-                    {/* Canaleta Esquerda */}
-                    {Array.from({ length: Math.ceil(panelHeight / 40) }).map((_, i) => (
-                      <rect key={`y-l-${i}`} x={28} y={40 + i * 40} width="12" height="15" rx="1.5" fill={COLORS.yellowComb} stroke="#d97706" strokeWidth="0.5" />
-                    ))}
-                    
-                    {/* Pinos amarelos de teto e chão */}
-                    <rect x={60} y={26} width={15} height="12" rx="1" fill={COLORS.yellowComb} />
-                    <rect x={PANEL_W - 75} y={26} width={15} height="12" rx="1" fill={COLORS.yellowComb} />
+
+                    {/* Ponto de Aterramento da Carcaça do Painel (Canto inferior esquerdo) */}
+                    <g id="chassis-ground-point" transform={`translate(48, ${panelHeight - 32})`}>
+                      <circle cx="0" cy="0" r="5" fill="url(#brassGrad)" stroke="#92400e" strokeWidth="0.8" />
+                      <circle cx="0" cy="0" r="3" fill="#fbbf24" />
+                      <line x1="-2" y1="0" x2="2" y2="0" stroke="#78350f" strokeWidth="0.8" />
+                      <line x1="0" y1="-2" x2="0" y2="2" stroke="#78350f" strokeWidth="0.8" />
+                      <text x="8" y="2.8" fill="#475569" fontSize="6.5" fontWeight="900">⏚ PE</text>
+                    </g>
+
+                    {/* Canaletas Passa-fios Perfuradas Industriais (Finger Ducts nas laterais) */}
+                    {/* Canaleta Lateral Esquerda */}
+                    <g id="left-finger-duct">
+                      <rect x="26" y="44" width="22" height={panelHeight - 88} rx="3" fill="url(#fingerDuctBody)" stroke="#1e293b" strokeWidth="0.8" />
+                      <rect x="44" y="46" width="3" height={panelHeight - 92} fill="#0f172a" fillOpacity="0.4" />
+                      {Array.from({ length: Math.floor((panelHeight - 100) / 22) }).map((_, i) => (
+                        <g key={`duct-l-slot-${i}`}>
+                          <rect x="36" y={52 + i * 22} width="11" height="8" rx="2" fill="#0f172a" stroke="#1e293b" strokeWidth="0.5" />
+                          <line x1="28" y1={56 + i * 22} x2="36" y2={56 + i * 22} stroke="#64748b" strokeWidth="0.8" />
+                        </g>
+                      ))}
+                    </g>
+
+                    {/* Canaleta Lateral Direita */}
+                    <g id="right-finger-duct">
+                      <rect x={PANEL_W - 48} y="44" width="22" height={panelHeight - 88} rx="3" fill="url(#fingerDuctBody)" stroke="#1e293b" strokeWidth="0.8" />
+                      <rect x={PANEL_W - 47} y="46" width="3" height={panelHeight - 92} fill="#0f172a" fillOpacity="0.4" />
+                      {Array.from({ length: Math.floor((panelHeight - 100) / 22) }).map((_, i) => (
+                        <g key={`duct-r-slot-${i}`}>
+                          <rect x={PANEL_W - 47} y={52 + i * 22} width="11" height="8" rx="2" fill="#0f172a" stroke="#1e293b" strokeWidth="0.5" />
+                          <line x1={PANEL_W - 36} y1={56 + i * 22} x2={PANEL_W - 28} y2={56 + i * 22} stroke="#64748b" strokeWidth="0.8" />
+                        </g>
+                      ))}
+                    </g>
 
                     {/* Saída no topo esquerdo (PE + N + L1 + L2 + L3) */}
                     <g id="three-phase-output" className="cursor-default">
@@ -8115,56 +9118,58 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             />
                           )}
                           {/* Suportes plásticos azuis */}
+                          {/* Suportes plásticos azuis antichama */}
                           <rect
-                            x={neutralLayout.x - 13}
+                            x={neutralLayout.x - 14}
                             y={neutralLayout.y - 4}
-                            width="18"
+                            width="20"
                             height="28"
-                            rx="2"
-                            fill="#00d8b8"
-                            stroke={isSelected ? "#00d8b8" : "#00d8b8"}
-                            strokeWidth={isSelected ? 1.5 : 0.8}
+                            rx="3"
+                            fill="#0284c7"
+                            stroke={isSelected ? "#00d8b8" : "#0369a1"}
+                            strokeWidth={isSelected ? 1.8 : 0.9}
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           />
                           <rect
-                            x={neutralLayout.x + neutralLayout.width - 5}
+                            x={neutralLayout.x + neutralLayout.width - 6}
                             y={neutralLayout.y - 4}
-                            width="18"
+                            width="20"
                             height="28"
-                            rx="2"
-                            fill="#00d8b8"
-                            stroke={isSelected ? "#00d8b8" : "#00d8b8"}
-                            strokeWidth={isSelected ? 1.5 : 0.8}
+                            rx="3"
+                            fill="#0284c7"
+                            stroke={isSelected ? "#00d8b8" : "#0369a1"}
+                            strokeWidth={isSelected ? 1.8 : 0.9}
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           />
-                          {/* Barra azul superior */}
+                          {/* Barra de Latão Maciço com Gradiente Realista */}
                           <rect
                             x={neutralLayout.x}
                             y={neutralLayout.y}
                             width={neutralLayout.width}
                             height={neutralLayout.height}
-                            rx="1.5"
-                            fill="#0ea5e9"
-                            stroke={isSelected ? "#00d8b8" : "#0369a1"}
-                            strokeWidth={isSelected ? 1.35 : 0.8}
+                            rx="2"
+                            fill="url(#brassGrad)"
+                            stroke={isSelected ? "#00d8b8" : "#b45309"}
+                            strokeWidth={isSelected ? 1.5 : 0.8}
                             onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                           />
-                          <rect x={neutralLayout.x + 4} y={neutralLayout.y + 3} width={neutralLayout.width - 8} height="3" fill="#e0f2fe" fillOpacity="0.5" pointerEvents="none" />
-                          {/* Parafusos */}
+                          <rect x={neutralLayout.x + 2} y={neutralLayout.y + 2} width={neutralLayout.width - 4} height="3" fill="#fef08a" fillOpacity="0.6" pointerEvents="none" />
+                          {/* Parafusos de fixação dos condutores de neutro */}
                           {Array.from({ length: NEUTRAL_BUS.pinCount }).map((_, i) => {
                             const sx = neutralLayout.pinStartX + i * neutralLayout.pinGap;
                             const pinId = `busbar_neutral:${i}`;
                             return (
                               <g key={i}>
-                                <circle cx={sx} cy={neutralLayout.pinY} r="4.2" fill="#e0f2fe" stroke="#075985" strokeWidth="0.8" />
-                                <line x1={sx-2} y1={neutralLayout.pinY} x2={sx+2} y2={neutralLayout.pinY} stroke="#075985" strokeWidth="0.9" />
+                                <circle cx={sx} cy={neutralLayout.pinY} r="4.6" fill="#1e293b" />
+                                <circle cx={sx} cy={neutralLayout.pinY} r="3.6" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+                                <line x1={sx - 2.2} y1={neutralLayout.pinY} x2={sx + 2.2} y2={neutralLayout.pinY} stroke="#f1f5f9" strokeWidth="0.8" />
                                 {(wiringMode || !!wireMoveMode) && (
                                   <circle
                                     cx={sx}
                                     cy={neutralLayout.pinY}
-                                    r="8"
+                                    r="8.5"
                                     fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"}
-                                    fillOpacity="0.8"
+                                    fillOpacity="0.85"
                                     className="animate-pulse cursor-pointer"
                                     onClick={(event) => {
                                       event.stopPropagation();
@@ -8175,32 +9180,34 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               </g>
                             );
                           })}
-                          <g
-                            className="cursor-move"
-                            onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
-                          >
-                            <rect
-                              x={(neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 12)) - 4}
-                              y={(neutralBus.labelY ?? (neutralLayout.y + 11)) - 11}
-                              width="18"
-                              height="17"
-                              rx="4"
-                              fill="#ffffff"
-                              fillOpacity="0.94"
-                              stroke="#bae6fd"
-                              strokeWidth="0.85"
-                            />
-                            <text
-                              x={neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 17)}
-                              y={neutralBus.labelY ?? (neutralLayout.y + 12)}
-                              fill={neutralBus.color || "#0369a1"}
-                              fontSize={neutralBus.fontSize || 9.5}
-                              fontWeight="900"
-                              textAnchor="middle"
+                          {showLegend && (
+                            <g
+                              className="cursor-move"
+                              onPointerDown={(event) => startInfraTextDrag(event, "neutral-bus", neutralLayout.x, neutralLayout.y)}
                             >
-                              {neutralBus.label || "N"}
-                            </text>
-                          </g>
+                              <rect
+                                x={(neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 12)) - 4}
+                                y={(neutralBus.labelY ?? (neutralLayout.y + 11)) - 11}
+                                width="22"
+                                height="19"
+                                rx="4.5"
+                                fill="#ffffff"
+                                fillOpacity="0.96"
+                                stroke="#bae6fd"
+                                strokeWidth="0.9"
+                              />
+                              <text
+                                x={neutralBus.labelX ?? (neutralLayout.x + neutralLayout.width + 17)}
+                                y={neutralBus.labelY ?? (neutralLayout.y + 12.5)}
+                                fill={neutralBus.color || "#0369a1"}
+                                fontSize={neutralBus.fontSize || 9.5}
+                                fontWeight="950"
+                                textAnchor="middle"
+                              >
+                                {neutralBus.label || "N"}
+                              </text>
+                            </g>
+                          )}
                         </g>
                       );
                     })()}
@@ -8239,26 +9246,28 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               pointerEvents="none"
                             />
                           )}
-                          {/* Suportes plásticos verdes */}
-                          <rect x={groundLayout.x - 16} y={groundY} width="22" height="28" rx="2" fill="#16a34a" stroke={isSelected ? "#00d8b8" : "#15803d"} strokeWidth={isSelected ? 2 : 0.8} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
-                          <rect x={groundLayout.x + groundLayout.width - 6} y={groundY} width="22" height="28" rx="2" fill="#16a34a" stroke={isSelected ? "#00d8b8" : "#15803d"} strokeWidth={isSelected ? 2 : 0.8} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
-                          {/* Barra de latão */}
-                          <rect x={groundLayout.x} y={groundY + 6} width={groundLayout.width} height="15" rx="1.5" fill="url(#brassGrad)" stroke={isSelected ? "#00d8b8" : "#d97706"} strokeWidth={isSelected ? 1.3 : 0.6} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
-                          {/* Parafusos */}
+                          {/* Suportes plásticos verdes antichama */}
+                          <rect x={groundLayout.x - 16} y={groundY} width="22" height="28" rx="3" fill="#15803d" stroke={isSelected ? "#00d8b8" : "#14532d"} strokeWidth={isSelected ? 1.8 : 0.9} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
+                          <rect x={groundLayout.x + groundLayout.width - 6} y={groundY} width="22" height="28" rx="3" fill="#15803d" stroke={isSelected ? "#00d8b8" : "#14532d"} strokeWidth={isSelected ? 1.8 : 0.9} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
+                          {/* Barra de Latão Maciço com Gradiente Realista */}
+                          <rect x={groundLayout.x} y={groundY + 6} width={groundLayout.width} height="15" rx="2" fill="url(#brassGrad)" stroke={isSelected ? "#00d8b8" : "#b45309"} strokeWidth={isSelected ? 1.4 : 0.7} onPointerDown={(event) => startInfraTextDrag(event, "ground-bus", groundLayout.x, groundLayout.y)} />
+                          <rect x={groundLayout.x + 2} y={groundY + 8} width={groundLayout.width - 4} height="3" fill="#fef08a" fillOpacity="0.6" pointerEvents="none" />
+                          {/* Parafusos dos condutores de proteção terra */}
                           {Array.from({ length: GROUND_BUS.pinCount }).map((_, i) => {
                             const sx = groundLayout.pinStartX + i * groundLayout.pinGap;
                             const pinId = `busbar_ground:${i}`;
                             return (
                               <g key={i}>
-                                <circle cx={sx} cy={groundLayout.pinY} r="4.5" fill="#334155" stroke="#cbd5e1" strokeWidth="0.5" />
-                                <line x1={sx-2} y1={groundLayout.pinY} x2={sx+2} y2={groundLayout.pinY} stroke="#cbd5e1" strokeWidth="0.8" />
+                                <circle cx={sx} cy={groundLayout.pinY} r="4.6" fill="#1e293b" />
+                                <circle cx={sx} cy={groundLayout.pinY} r="3.6" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+                                <line x1={sx - 2.2} y1={groundLayout.pinY} x2={sx + 2.2} y2={groundLayout.pinY} stroke="#f1f5f9" strokeWidth="0.8" />
                                 {(wiringMode || !!wireMoveMode) && (
-                                  <circle cx={sx} cy={groundLayout.pinY} r="8" fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"} fillOpacity="0.8" className="animate-pulse cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePinClick(pinId); }} />
+                                  <circle cx={sx} cy={groundLayout.pinY} r="8.5" fill={wiringStart === pinId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePinClick(pinId); }} />
                                 )}
                               </g>
                             );
                           })}
-                          {(() => {
+                          {showLegend && (() => {
                             const labelText = groundBus.label || "BARRAMENTO DE PROTEÇÃO TERRA (PE)";
                             const labelXPos = groundBus.labelX ?? (groundLayout.x + groundLayout.width / 2);
                             const labelYPos = groundBus.labelY ?? (groundY - 8);
@@ -8296,33 +9305,70 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       );
                     })()}
 
-                    {/* 4. RENDERIZAÇÃO DOS TRILHOS DIN */}
+                    {/* 4. RENDERIZAÇÃO DOS TRILHOS DIN EN 50022 */}
                     {rails.map((r, rIdx) => {
                       const railY = 190 + rIdx * 240;
+                      const railX = 138;
+                      const railWidth = PANEL_W - 276;
+                      const slotCount = Math.floor((railWidth - 70) / 24);
+                      const slotStartX = railX + 35;
+
                       return (
-                        <g key={r.id}>
-                          {/* Trilho DIN Metálico */}
-                          <rect x="140" y={railY - 12} width={PANEL_W - 280} height="24" rx="2" fill="url(#railGrad)" stroke="#475569" strokeWidth="0.8" />
-                          <rect x="142" y={railY - 10} width={PANEL_W - 284} height="4" fill="#ffffff" fillOpacity="0.25" />
-                          
-                          {/* Parafusos de fixação do trilho */}
-                          <circle cx="150" cy={railY} r="3" fill="#334155" />
-                          <circle cx={PANEL_W - 150} cy={railY} r="3" fill="#334155" />
+                        <g key={r.id} id={`din-rail-${r.id}`}>
+                          {/* Sombra de profundidade do trilho na chapa de fundo */}
+                          <rect x={railX} y={railY - 14} width={railWidth} height="28" rx="2.5" fill="#0f172a" fillOpacity="0.14" filter="url(#railShadow)" />
+
+                          {/* Perfil Ômega Top-Hat EN 50022 em Aço Zincado */}
+                          <rect x={railX} y={railY - 14} width={railWidth} height="28" rx="2" fill="url(#dinRailTopHat)" stroke="#475569" strokeWidth="0.85" />
+
+                          {/* Aba superior chanfrada de fixação com specular highlight */}
+                          <line x1={railX + 2} y1={railY - 13} x2={railX + railWidth - 2} y2={railY - 13} stroke="#ffffff" strokeOpacity="0.85" strokeWidth="0.8" />
+                          <line x1={railX + 2} y1={railY - 7.5} x2={railX + railWidth - 2} y2={railY - 7.5} stroke="#334155" strokeOpacity="0.6" strokeWidth="0.6" />
+
+                          {/* Canaleta central rebaixada onde ficam os rasgos oblongos */}
+                          <rect x={railX + 4} y={railY - 6.5} width={railWidth - 8} height="13" fill="#64748b" fillOpacity="0.28" stroke="#334155" strokeWidth="0.5" />
+
+                          {/* Ranhuras oblongas industriais (6.2x18mm slots espaçados a cada 24px) */}
+                          {Array.from({ length: slotCount }).map((_, si) => {
+                            const sx = slotStartX + si * 24;
+                            return (
+                              <g key={`slot-${r.id}-${si}`}>
+                                <rect x={sx - 7} y={railY - 3.5} width="14" height="7" rx="3.5" fill="url(#dinSlotHole)" stroke="#334155" strokeWidth="0.5" />
+                                <rect x={sx - 6} y={railY - 2.5} width="12" height="5" rx="2.5" fill="#0f172a" />
+                              </g>
+                            );
+                          })}
+
+                          {/* Aba inferior de retenção com chanfro de luz */}
+                          <line x1={railX + 2} y1={railY + 7.5} x2={railX + railWidth - 2} y2={railY + 7.5} stroke="#ffffff" strokeOpacity="0.5" strokeWidth="0.6" />
+                          <line x1={railX + 2} y1={railY + 13} x2={railX + railWidth - 2} y2={railY + 13} stroke="#334155" strokeOpacity="0.75" strokeWidth="0.8" />
+
+                          {/* Parafusos de fixação mecânica do trilho na chapa de fundo */}
+                          {[railX + 16, railX + Math.floor(railWidth / 2), railX + railWidth - 16].map((screwX, idx) => (
+                            <g key={`rail-screw-${r.id}-${idx}`}>
+                              <circle cx={screwX} cy={railY} r="5.5" fill="#cbd5e1" stroke="#64748b" strokeWidth="0.6" />
+                              <circle cx={screwX} cy={railY} r="4" fill="url(#metallicScrew)" stroke="#1e293b" strokeWidth="0.4" />
+                              <line x1={screwX - 2.5} y1={railY} x2={screwX + 2.5} y2={railY} stroke="#0f172a" strokeWidth="0.9" />
+                              <line x1={screwX} y1={railY - 2.5} x2={screwX} y2={railY + 2.5} stroke="#0f172a" strokeWidth="0.9" />
+                            </g>
+                          ))}
                         </g>
                       );
                     })}
 
                     {/* 5. CABEAMENTO PROFISSIONAL ATRÁS DOS DISJUNTORES */}
-                    <g id="professional-wiring-under-devices">
-                      {showNeutralBackbone && renderBackbonePath("neutral-main", getNeutralBackboneRoute(panelHeight, neutralBackboneEndY), COLORS.neutral, 5.6)}
-                      {showNeutralBackbone && renderBackbonePath("neutral-bus-tie", getNeutralBusTieRoute(infrastructure), COLORS.neutral, 4.8)}
-                      {renderBackbonePath("ground-main", getGroundBackboneRoute(panelHeight, infrastructure), COLORS.ground, 5.8)}
-                      {renderBackbonePath("ground-bus-tie", getGroundBusTieRoute(panelHeight, infrastructure), COLORS.ground, 4.8)}
-                      {renderDuctedWiringPlan()}
-                    </g>
+                    {visibleWires.length > 0 && (
+                      <g id="professional-wiring-under-devices">
+                        {showNeutralBackbone && visibleWires.some(w => w.id === "neutral-main") && renderBackbonePath("neutral-main", getNeutralBackboneRoute(panelHeight, neutralBackboneEndY), COLORS.neutral, 5.6)}
+                        {showNeutralBackbone && visibleWires.some(w => w.id === "neutral-bus-tie") && renderBackbonePath("neutral-bus-tie", getNeutralBusTieRoute(infrastructure), COLORS.neutral, 4.8)}
+                        {visibleWires.some(w => w.id === "ground-main" || (w.conductorType === "ground" && w.source?.includes("terminal_left_top:0"))) && renderBackbonePath("ground-main", getGroundBackboneRoute(panelHeight, infrastructure), COLORS.ground, 5.8)}
+                        {visibleWires.some(w => w.id === "ground-bus-tie") && renderBackbonePath("ground-bus-tie", getGroundBusTieRoute(panelHeight, infrastructure), COLORS.ground, 4.8)}
+                        {renderDuctedWiringPlan()}
+                      </g>
+                    )}
 
                     {/* TÍTULOS DOS TRILHOS DIN COM BADGE DE ALTA LEGIBILIDADE */}
-                    {rails.map((r, rIdx) => {
+                    {showLegend && rails.map((r, rIdx) => {
                       const railY = 190 + rIdx * 240;
                       const titleText = r.name.toUpperCase();
                       const titleW = titleText.length * 6.6 + 24;
@@ -8386,6 +9432,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     {renderTextAnnotations()}
                     {renderComponentDragPreview()}
                     {renderConnectionHotspots()}
+                    {renderDebugTerminals()}
                     {renderSelectedWireRouteHandles()}
                     {renderSelectedWireEndpointHandles()}
                     {/* Preview line enquanto arrasta endpoint */}
@@ -8416,7 +9463,50 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       );
                     })()}
                     {showLegend && renderWiringLegend()}
-                    {!showLegend && renderLegendToggle()}
+
+                    {/* Tooltip flutuante inteligente de cabo */}
+                    {hoveredWireId && (() => {
+                      const wire = wires.find(w => w.id === hoveredWireId) || getEditableWire(hoveredWireId);
+                      const info = getWireDisplayInfo(wire);
+                      const visualMeta = wireRouteMetaRef.current[hoveredWireId];
+                      const pts = visualMeta?.routePoints || (wire?.route_points?.length ? wire.route_points : null);
+                      if (!pts || pts.length < 2) return null;
+                      const midIdx = Math.floor(pts.length / 2);
+                      const anchorX = pts[midIdx]?.x ?? 200;
+                      const anchorY = (pts[midIdx]?.y ?? 200) - 16;
+                      const tooltipW = 180;
+                      const tooltipH = 58;
+                      const clampedX = Math.max(12, Math.min(PANEL_W - tooltipW - 12, anchorX - tooltipW / 2));
+                      const clampedY = Math.max(12, Math.min(panelHeight - tooltipH - 12, anchorY - tooltipH));
+
+                      return (
+                        <g transform={`translate(${clampedX}, ${clampedY})`} pointerEvents="none" className="animate-in fade-in duration-150">
+                          <rect
+                            width={tooltipW}
+                            height={tooltipH}
+                            rx="6"
+                            fill="#0f172a"
+                            fillOpacity="0.94"
+                            stroke="#334155"
+                            strokeWidth="1"
+                            filter="url(#shadow)"
+                          />
+                          <circle cx="14" cy="15" r="4" fill={wireDisplayColor(normalizedWireColor(wire))} stroke="#ffffff" strokeWidth="0.8" />
+                          <text x="24" y="18" fill="#f8fafc" fontSize="8" fontWeight="900">
+                            {(info.main || "Cabo de Potência").slice(0, 22)}
+                          </text>
+                          <text x="14" y="30" fill="#94a3b8" fontSize="7" fontWeight="700">
+                            Bitola: <tspan fill="#38bdf8" fontWeight="900">{wire.gauge || "2.5mm²"}</tspan> • {wire.routingMode === "manual" ? "Manual" : "Ortogonal"}
+                          </text>
+                          <text x="14" y="41" fill="#cbd5e1" fontSize="6.5" fontWeight="600">
+                            Origem: {(info.origin || "-").slice(0, 22)}
+                          </text>
+                          <text x="14" y="51" fill="#cbd5e1" fontSize="6.5" fontWeight="600">
+                            Destino: {(info.destination || "-").slice(0, 22)}
+                          </text>
+                        </g>
+                      );
+                    })()}
                   </svg>
                 </div>
               </div>
@@ -8488,315 +9578,541 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
             {/* CONTEÚDO TAB: COMPONENTES */}
             {activeTab === "components" && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 
                 {/* COMPONENTE SELECIONADO ATUAL */}
                 {selectedComponentId ? (
                   (() => {
                     const sel = getSelectedComponent();
                     if (!sel) return null;
-                    const { component } = sel;
+                    const { component, railIndex } = sel;
                     const isCircuitBreaker = component.type === "breaker" && !component.isGeneral;
                     const displayLabel = getComponentDisplayLabel(component);
                     const identityEditKey = `component:${component.id}:identity`;
-                    return (
-                      <div className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-5 shadow-sm space-y-4 animate-in fade-in duration-200">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="text-[10px] font-extrabold text-primary uppercase tracking-wider">Selecionado</span>
-                            <h3 className="text-base font-extrabold text-slate-800 uppercase mt-0.5">{displayLabel}</h3>
-                            <p className="mt-1 text-[10px] font-semibold leading-normal text-slate-500">
-                              Arraste este dispositivo no quadro para trocar trilho ou posição.
-                            </p>
-                          </div>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600" onClick={() => setSelectedComponentId("")}>
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">{isCircuitBreaker ? "Identificação do circuito" : "Nome do Dispositivo"}</Label>
-                            <Input
-                              value={isCircuitBreaker ? (component.circuitLabel || component.label || "") : (component.label || "")}
-                              onFocus={() => captureEditHistoryStart(identityEditKey)}
-                              onBlur={() => commitEditHistory(identityEditKey)}
-                              onChange={(e) => {
-                                if (isCircuitBreaker) {
-                                  handleUpdateComponentFields({
-                                    label: e.target.value,
-                                    circuitLabel: e.target.value,
-                                  }, { history: false });
-                                } else {
-                                  handleUpdateComponent("label", e.target.value, { history: false });
-                                }
-                              }}
-                              className="bg-white rounded-lg h-9 font-bold text-slate-800"
-                              placeholder={isCircuitBreaker ? "Ex: C1 - Iluminação sala" : "Nome do dispositivo"}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Tipo</Label>
-                            <Input value={component.type.toUpperCase()} disabled className="bg-slate-200 rounded-lg h-9 font-bold text-slate-500" />
-                          </div>
+                    const currentRail = rails[railIndex] || { components: [] };
+                    const railOccupied = currentRail.components.reduce((acc, c) => acc + (Number(c.poles) || 1), 0);
+                    const railFree = Math.max(0, 18 - railOccupied);
+                    const circuitRef = component.circuitNumber || component.circuitLabel || component.label;
 
-                          {isCircuitBreaker && (
-                            <>
-                              <div className="space-y-1">
-                                <Label className="text-[10px] font-bold text-slate-500">Número</Label>
-                                <Input
-                                  value={component.circuitNumber || ""}
-                                  onFocus={() => captureEditHistoryStart(identityEditKey)}
-                                  onBlur={() => commitEditHistory(identityEditKey)}
-                                  onChange={(e) => handleUpdateComponentFields({ circuitNumber: e.target.value }, { history: false })}
-                                  className="bg-white rounded-lg h-9 font-bold text-slate-800"
-                                  placeholder="Ex: C1"
-                                />
+                    return (
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3.5 animate-in fade-in duration-200">
+                        {/* Header Compacto do Dispositivo */}
+                        <div className="flex justify-between items-start pb-2 border-b border-slate-100">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                                {component.type.toUpperCase()}
+                              </span>
+                              <span className="text-[9px] font-extrabold text-slate-400">
+                                {component.poles} DIN ({component.poles * 18}mm)
+                              </span>
+                              <span className="text-[9px] font-extrabold text-slate-400">
+                                • Trilho T{railIndex + 1}
+                              </span>
+                            </div>
+                            <h3 className="text-sm font-black text-slate-800 uppercase mt-1 truncate">{displayLabel}</h3>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 ml-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                              onClick={() => handleDuplicateComponent(component.id)}
+                              title="Duplicar dispositivo"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDeleteComponent()}
+                              title="Excluir dispositivo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600"
+                              onClick={() => setSelectedComponentId("")}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Sub-Tabs do Inspector de Dispositivo */}
+                        <div className="grid grid-cols-4 gap-1 p-0.5 rounded-lg bg-slate-100 text-[10.5px] font-bold text-slate-600">
+                          {[
+                            { id: "geral", label: "Geral" },
+                            { id: "eletrica", label: "Elétrica" },
+                            { id: "montagem", label: "Montagem" },
+                            { id: "ligacoes", label: "Ligações" }
+                          ].map(tab => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setDeviceInspectorTab(tab.id)}
+                              className={`py-1.5 rounded-md transition-all ${
+                                deviceInspectorTab === tab.id ? "bg-white text-slate-900 shadow-sm font-black" : "text-slate-500 hover:text-slate-800"
+                              }`}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* SUB-TAB: GERAL */}
+                        {deviceInspectorTab === "geral" && (
+                          <div className="space-y-3 text-xs">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold text-slate-500">
+                                {isCircuitBreaker ? "Identificação" : "Nome do Dispositivo"}
+                              </Label>
+                              <Input
+                                value={isCircuitBreaker ? (component.circuitLabel || component.label || "") : (component.label || "")}
+                                onFocus={() => captureEditHistoryStart(identityEditKey)}
+                                onBlur={() => commitEditHistory(identityEditKey)}
+                                onChange={(e) => {
+                                  if (isCircuitBreaker) {
+                                    handleUpdateComponentFields({
+                                      label: e.target.value,
+                                      circuitLabel: e.target.value,
+                                    }, { history: false });
+                                  } else {
+                                    handleUpdateComponent("label", e.target.value, { history: false });
+                                  }
+                                }}
+                                className="bg-slate-50 rounded-lg h-8 font-bold text-slate-800 text-xs"
+                                placeholder={isCircuitBreaker ? "Ex: C1 - Iluminação" : "Nome do dispositivo"}
+                              />
+                            </div>
+
+                            {isCircuitBreaker && (
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] font-bold text-slate-500">Nº Circuito</Label>
+                                  <Input
+                                    value={component.circuitNumber || ""}
+                                    onFocus={() => captureEditHistoryStart(identityEditKey)}
+                                    onBlur={() => commitEditHistory(identityEditKey)}
+                                    onChange={(e) => handleUpdateComponentFields({ circuitNumber: e.target.value }, { history: false })}
+                                    className="bg-slate-50 rounded-lg h-8 font-bold text-slate-800 text-xs"
+                                    placeholder="Ex: C1"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] font-bold text-slate-500">Nome</Label>
+                                  <Input
+                                    value={component.name || ""}
+                                    onFocus={() => captureEditHistoryStart(identityEditKey)}
+                                    onBlur={() => commitEditHistory(identityEditKey)}
+                                    onChange={(e) => handleUpdateComponentFields({ name: e.target.value }, { history: false })}
+                                    className="bg-slate-50 rounded-lg h-8 font-bold text-slate-800 text-xs"
+                                    placeholder="Ex: Iluminação Sala"
+                                  />
+                                </div>
                               </div>
+                            )}
+
+                            {isCircuitBreaker && (
                               <div className="space-y-1">
-                                <Label className="text-[10px] font-bold text-slate-500">Nome do circuito</Label>
-                                <Input
-                                  value={component.name || ""}
-                                  onFocus={() => captureEditHistoryStart(identityEditKey)}
-                                  onBlur={() => commitEditHistory(identityEditKey)}
-                                  onChange={(e) => handleUpdateComponentFields({ name: e.target.value }, { history: false })}
-                                  className="bg-white rounded-lg h-9 font-bold text-slate-800"
-                                  placeholder="Ex: Iluminação sala"
-                                />
-                              </div>
-                              <div className="space-y-1 col-span-2">
-                                <Label className="text-[10px] font-bold text-slate-500">Descrição curta</Label>
+                                <Label className="text-[10px] font-bold text-slate-500">Descrição / Local</Label>
                                 <Input
                                   value={component.description || ""}
                                   onFocus={() => captureEditHistoryStart(identityEditKey)}
                                   onBlur={() => commitEditHistory(identityEditKey)}
                                   onChange={(e) => handleUpdateComponentFields({ description: e.target.value }, { history: false })}
-                                  className="bg-white rounded-lg h-9 font-bold text-slate-800"
+                                  className="bg-slate-50 rounded-lg h-8 font-bold text-slate-800 text-xs"
                                   placeholder="Ex: Pavimento térreo, cozinha ou suíte"
                                 />
                               </div>
-                            </>
-                          )}
-                          
-                          {component.type === "breaker" && (
-                            <>
-                              <div className="space-y-1 col-span-2">
-                                <Label className="text-[10px] font-bold text-slate-500">Tipo de fase do disjuntor</Label>
-                                <Select
-                                  value={supplyTypeFromBreaker(component)}
-                                  onValueChange={(val) => {
-                                    const config = phaseTypeConfig[val] || phaseTypeConfig.Monofásico;
-                                    handleUpdateComponentFields({
-                                      supply_type: val,
-                                      phase: config.phase,
-                                      poles: config.poles,
-                                    });
-                                  }}
-                                >
-                                  <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    {Object.entries(phaseTypeConfig).map(([value, config]) => (
-                                      <SelectItem key={value} value={value}>{config.label}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-[10px] font-bold text-slate-500">Corrente (A)</Label>
-                                {component.isGeneral ? (
-                                  <>
-                                    <Input value={`${component.current}A`} disabled className="bg-slate-200 rounded-lg h-9 font-bold text-slate-500" />
-                                    <p className="text-[9px] font-semibold text-slate-400 leading-snug">
-                                      Dimensionado automaticamente pela carga do projeto (Ib ≤ In) — não editável.
-                                    </p>
-                                  </>
-                                ) : (
-                                  <Select value={String(component.current)} onValueChange={(val) => handleUpdateComponent("current", parseInt(val, 10))}>
-                                    <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
+                            )}
+                          </div>
+                        )}
+
+                        {/* SUB-TAB: ELÉTRICA */}
+                        {deviceInspectorTab === "eletrica" && (
+                          <div className="space-y-3 text-xs">
+                            {component.type === "breaker" && (
+                              <>
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] font-bold text-slate-500">Fase</Label>
+                                  <Select
+                                    value={supplyTypeFromBreaker(component)}
+                                    onValueChange={(val) => {
+                                      const config = phaseTypeConfig[val] || phaseTypeConfig.Monofásico;
+                                      handleUpdateComponentFields({
+                                        supply_type: val,
+                                        phase: config.phase,
+                                        poles: config.poles,
+                                      });
+                                    }}
+                                  >
+                                    <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                      {[6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125].map(val => (
-                                        <SelectItem key={val} value={String(val)}>{val}A</SelectItem>
+                                      {Object.entries(phaseTypeConfig).map(([value, config]) => (
+                                        <SelectItem key={value} value={value}>{config.label}</SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold text-slate-500">Corrente (A)</Label>
+                                    {component.isGeneral ? (
+                                      <Input value={`${component.current}A (Geral)`} disabled className="bg-slate-100 rounded-lg h-8 font-bold text-slate-500 text-xs" />
+                                    ) : (
+                                      <Select value={String(component.current)} onValueChange={(val) => handleUpdateComponent("current", parseInt(val, 10))}>
+                                        <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          {[6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125].map(val => (
+                                            <SelectItem key={val} value={String(val)}>{val} A</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold text-slate-500">Curva</Label>
+                                    <Select value={component.curve || "C"} onValueChange={(val) => handleUpdateComponent("curve", val)}>
+                                      <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="B">Curva B</SelectItem>
+                                        <SelectItem value="C">Curva C</SelectItem>
+                                        <SelectItem value="D">Curva D</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+
+                            {component.type === "dps" && (
+                              <div className="space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                <div className="text-[10px] font-bold text-slate-700">DPS Classe II - Proteção Contra Surtos</div>
+                                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                  <div><span className="text-slate-400">Tensão Uc:</span> <strong className="text-slate-800">275 V</strong></div>
+                                  <div><span className="text-slate-400">Imax:</span> <strong className="text-slate-800">20 kA</strong></div>
+                                  <div><span className="text-slate-400">Varistor:</span> <strong className={component.dpsStatus === "OK" ? "text-emerald-600" : "text-red-500"}>{component.dpsStatus || "OK"}</strong></div>
+                                  <div><span className="text-slate-400">Pólo:</span> <strong className="text-slate-800">Fase {component.phase}</strong></div>
+                                </div>
                               </div>
+                            )}
+
+                            {component.type === "dr" && (
+                              <div className="space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                <div className="text-[10px] font-bold text-slate-700">Interruptor Diferencial Residual (IDR)</div>
+                                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                  <div><span className="text-slate-400">Sensibilidade:</span> <strong className="text-slate-800">30 mA</strong></div>
+                                  <div><span className="text-slate-400">Corrente In:</span> <strong className="text-slate-800">{component.current || 40} A</strong></div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* SUB-TAB: MONTAGEM */}
+                        {deviceInspectorTab === "montagem" && (
+                          <div className="space-y-3 text-xs">
+                            {component.type !== "spacer" && (
                               <div className="space-y-1">
-                                <Label className="text-[10px] font-bold text-slate-500">Curva de Disparo</Label>
-                                <Select value={component.curve} onValueChange={(val) => handleUpdateComponent("curve", val)}>
-                                  <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
+                                <Label className="text-[10px] font-bold text-slate-500">Módulos DIN (Largura)</Label>
+                                <Select value={String(component.poles)} onValueChange={(val) => {
+                                  const poles = parseInt(val, 10);
+                                  if (component.type === "breaker") {
+                                    const supplyType = poles >= 3 ? "Trifásico" : poles === 2 ? "Bifásico" : "Monofásico";
+                                    const config = phaseTypeConfig[supplyType] || phaseTypeConfig.Monofásico;
+                                    handleUpdateComponentFields({
+                                      poles,
+                                      supply_type: supplyType,
+                                      phase: config.phase,
+                                    });
+                                  } else {
+                                    handleUpdateComponent("poles", poles);
+                                  }
+                                }}>
+                                  <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
                                   <SelectContent>
-                                    {["B", "C", "D"].map(val => (
-                                      <SelectItem key={val} value={val}>Curva {val}</SelectItem>
+                                    {[1, 2, 3, 4].map(val => (
+                                      <SelectItem key={val} value={String(val)}>{val} DIN ({val * 18} mm)</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               </div>
-                            </>
-                          )}
-                          
-                          {component.type !== "spacer" && (
-                            <div className="space-y-1 col-span-2">
-                              <Label className="text-[10px] font-bold text-slate-500">Pólos DIN (Largura)</Label>
-                              <Select value={String(component.poles)} onValueChange={(val) => {
-                                const poles = parseInt(val, 10);
-                                if (component.type === "breaker") {
-                                  const supplyType = poles >= 3 ? "Trifásico" : poles === 2 ? "Bifásico" : "Monofásico";
-                                  const config = phaseTypeConfig[supplyType] || phaseTypeConfig.Monofásico;
-                                  handleUpdateComponentFields({
-                                    poles,
-                                    supply_type: supplyType,
-                                    phase: config.phase,
-                                  });
-                                } else {
-                                  handleUpdateComponent("poles", poles);
-                                }
-                              }}>
-                                <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {(component.type === "breaker" ? [1, 2, 3] : [1, 2, 3, 4]).map(val => (
-                                    <SelectItem key={val} value={String(val)}>{val} DIN ({val * 18}mm)</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                            )}
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-bold text-slate-500">Posição no Trilho DIN</Label>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" className="flex-1 rounded-lg h-8 font-bold text-xs" onClick={() => handleMoveComponent("left")}>
+                                  <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                                  Esquerda
+                                </Button>
+                                <Button size="sm" variant="outline" className="flex-1 rounded-lg h-8 font-bold text-xs" onClick={() => handleMoveComponent("right")}>
+                                  Direita
+                                  <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                                </Button>
+                              </div>
                             </div>
-                          )}
-                        </div>
 
-                        {/* Controles de Posicionamento */}
-                        <div className="pt-2 space-y-2.5">
-                          <Label className="text-[10px] font-bold text-slate-500 block">Posição no Trilho DIN</Label>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" className="flex-1 rounded-lg h-9 font-bold text-xs" onClick={() => handleMoveComponent("left")}>
-                              <ChevronLeft className="w-4 h-4 mr-1" />
-                              Esquerda
-                            </Button>
-                            <Button size="sm" variant="outline" className="flex-1 rounded-lg h-9 font-bold text-xs" onClick={() => handleMoveComponent("right")}>
-                              Direita
-                              <ChevronRight className="w-4 h-4 ml-1" />
-                            </Button>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-bold text-slate-500">Trilho Destino</Label>
+                              <div className="grid grid-cols-4 gap-1">
+                                {rails.map((r, idx) => (
+                                  <Button
+                                    key={r.id}
+                                    size="sm"
+                                    variant={railIndex === idx ? "default" : "secondary"}
+                                    className="rounded-lg h-7 text-[10px] font-extrabold"
+                                    onClick={() => handleMoveToRail(r.id)}
+                                  >
+                                    T{idx + 1}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Ocupação do Trilho Atual */}
+                            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[10px] space-y-1">
+                              <div className="flex justify-between font-bold text-slate-600">
+                                <span>Trilho T{railIndex + 1}</span>
+                                <span>{railOccupied} / 18 DIN ({railFree} livres)</span>
+                              </div>
+                              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-primary h-full transition-all" style={{ width: `${Math.min(100, (railOccupied / 18) * 100)}%` }} />
+                              </div>
+                            </div>
                           </div>
-                          
-                          <div className="grid grid-cols-3 gap-2">
-                            {rails.map((r, idx) => (
-                              <Button key={r.id} size="sm" variant="secondary" className="rounded-lg h-8 text-[9px] font-extrabold" onClick={() => handleMoveToRail(r.id)}>
-                                Mover T{idx + 1}
+                        )}
+
+                        {/* SUB-TAB: LIGAÇÕES / CONEXÕES */}
+                        {deviceInspectorTab === "ligacoes" && (
+                          <div className="space-y-3 text-xs">
+                            <div className="space-y-2 rounded-xl bg-slate-50 p-3 border border-slate-200">
+                              <div className="text-[10px] font-black uppercase text-slate-500">Conexões Técnicas</div>
+                              <div className="space-y-1.5 text-[10px]">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 font-bold">Alimentação (Topo):</span>
+                                  <span className="font-extrabold text-slate-800">Barramento Fase {component.phase || "L1"}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 font-bold">Saída de Carga (Base):</span>
+                                  <span className="font-extrabold text-slate-800">Circuito {circuitRef || "C1"}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button
+                                size="sm"
+                                variant={tracedCircuitId === circuitRef ? "default" : "outline"}
+                                className="h-8 rounded-lg text-[10px] font-extrabold"
+                                onClick={() => handleTrackCircuit(circuitRef)}
+                              >
+                                <Eye className="w-3.5 h-3.5 mr-1" />
+                                {tracedCircuitId === circuitRef ? "Destacado" : "Rastrear"}
                               </Button>
-                            ))}
-                          </div>
-                        </div>
+                              <Button
+                                size="sm"
+                                variant={isIsolatedView && tracedCircuitId === circuitRef ? "default" : "outline"}
+                                className="h-8 rounded-lg text-[10px] font-extrabold"
+                                onClick={() => {
+                                  if (tracedCircuitId !== circuitRef) handleTrackCircuit(circuitRef);
+                                  handleToggleIsolateView();
+                                }}
+                              >
+                                <Crosshair className="w-3.5 h-3.5 mr-1" />
+                                Isolar
+                              </Button>
+                            </div>
 
-                        {/* Botão Excluir */}
-                        <Button type="button" variant="destructive" size="sm" className="w-full rounded-lg h-9 font-bold text-xs" onClick={() => handleDeleteComponent()}>
-                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                          Excluir Dispositivo
-                        </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="w-full h-8 rounded-lg text-[10px] font-extrabold"
+                              onClick={() => handleFocusElement("component", component.id)}
+                            >
+                              <Maximize2 className="w-3.5 h-3.5 mr-1.5" />
+                              Centralizar no Quadro
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })()
                 ) : (
-                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-center text-xs font-semibold text-slate-500">
-                    Clique em um disjuntor ou DPS para editar. Segure e arraste no quadro para mover a posição.
+                  <div className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-sm space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Capacidade dos Trilhos</span>
+                      <Badge variant="outline" className="text-[9px] font-black">{rails.length} Trilhos</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {rails.map((r, idx) => {
+                        const occupied = r.components.reduce((acc, c) => acc + (Number(c.poles) || 1), 0);
+                        const free = Math.max(0, 18 - occupied);
+                        return (
+                          <div key={r.id} className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-[10px]">
+                            <div className="flex justify-between font-bold">
+                              <span>T{idx + 1}</span>
+                              <span className="text-slate-500">{occupied}/18 DIN</span>
+                            </div>
+                            <div className="text-[9px] text-emerald-600 font-extrabold mt-0.5">{free} DIN livres</div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
-                {/* ADICIONAR COMPONENTE MANUALMENTE */}
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-                  <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Adicionar Novo Dispositivo</h3>
-                  <form onSubmit={handleAddComponent} className="space-y-4 text-xs">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-slate-500">Tipo de Dispositivo</Label>
-                      <Select value={newCompType} onValueChange={(val) => {
-                        setNewCompType(val);
-                        if (val === "dps") {
-                          setNewCompLabel("DPS FASE");
-                          setNewCompPoles(1);
-                        } else if (val === "dr") {
-                          setNewCompLabel("IDR GERAL");
-                          setNewCompPoles(2);
-                        } else if (val === "borne") {
-                          setNewCompLabel("BORNE X1");
-                          setNewCompPoles(1);
-                        } else if (val === "spacer") {
-                          setNewCompLabel("RESERVA");
-                          setNewCompPoles(1);
-                        } else {
-                          setNewCompLabel("DISJUNTOR");
-                          setNewCompSupplyType("Monofásico");
-                          setNewCompPhase(phaseTypeConfig.Monofásico.phase);
-                          setNewCompPoles(phaseTypeConfig.Monofásico.poles);
-                        }
-                      }}>
-                        <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="breaker">Disjuntor Termomagnético</SelectItem>
-                          <SelectItem value="dps">DPS (Surtos)</SelectItem>
-                          <SelectItem value="dr">IDR (Diferencial Residual)</SelectItem>
-                          <SelectItem value="borne">Borne / Terminal</SelectItem>
-                          <SelectItem value="spacer">Espaçador / Reserva</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                {/* ADICIONAR NOVO COMPONENTE */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3.5">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Adicionar Dispositivo</h3>
+                    <Badge variant="outline" className="text-[9px] font-bold text-slate-500">Módulos DIN</Badge>
+                  </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-slate-500">Etiqueta Identificadora</Label>
-                      <Input
-                        value={newCompLabel}
-                        onChange={(e) => setNewCompLabel(e.target.value)}
-                        className="bg-white rounded-lg h-9 font-bold"
-                        placeholder="Ex: C02 CHUVEIRO"
-                      />
+                  {/* Presets Rápidos */}
+                  <div className="space-y-1.5">
+                    <span className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">Presets Rápidos:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        { label: "DJ 10A B", type: "breaker", current: "10", curve: "B", poles: 1, supply: "Monofásico" },
+                        { label: "DJ 16A C", type: "breaker", current: "16", curve: "C", poles: 1, supply: "Monofásico" },
+                        { label: "DJ 20A C", type: "breaker", current: "20", curve: "C", poles: 1, supply: "Monofásico" },
+                        { label: "DJ 32A C", type: "breaker", current: "32", curve: "C", poles: 2, supply: "Bifásico" },
+                        { label: "DPS", type: "dps", poles: 1, labelText: "DPS FASE" },
+                        { label: "IDR 40A", type: "dr", poles: 2, labelText: "IDR GERAL" },
+                        { label: "Reserva", type: "spacer", poles: 1, labelText: "RESERVA" },
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setNewCompType(preset.type);
+                            if (preset.type === "breaker") {
+                              setNewCompCurrent(preset.current);
+                              setNewCompCurve(preset.curve);
+                              setNewCompPoles(preset.poles);
+                              setNewCompSupplyType(preset.supply);
+                              setNewCompLabel(`C${(project?.circuits?.length || 0) + 1} DISJUNTOR`);
+                            } else if (preset.type === "dps") {
+                              setNewCompLabel("DPS FASE");
+                              setNewCompPoles(1);
+                            } else if (preset.type === "dr") {
+                              setNewCompLabel("IDR GERAL");
+                              setNewCompPoles(2);
+                            } else if (preset.type === "spacer") {
+                              setNewCompLabel("RESERVA");
+                              setNewCompPoles(preset.poles || 1);
+                            }
+                          }}
+                          className="px-2 py-1 rounded-md bg-slate-100 hover:bg-primary/10 hover:text-primary text-[10px] font-bold text-slate-600 transition-colors"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
                     </div>
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      {newCompType === "breaker" && (
-                        <>
-                          <div className="space-y-1 col-span-2">
-                            <Label className="text-[10px] font-bold text-slate-500">Tipo de fase do disjuntor</Label>
-                            <Select
-                              value={newCompSupplyType}
-                              onValueChange={(val) => {
-                                const config = phaseTypeConfig[val] || phaseTypeConfig.Monofásico;
-                                setNewCompSupplyType(val);
-                                setNewCompPhase(config.phase);
-                                setNewCompPoles(config.poles);
-                              }}
-                            >
-                              <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {Object.entries(phaseTypeConfig).map(([value, config]) => (
-                                  <SelectItem key={value} value={value}>{config.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Corrente (A)</Label>
-                            <Select value={newCompCurrent} onValueChange={setNewCompCurrent}>
-                              <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {[6, 10, 16, 20, 25, 32, 40, 50, 63].map(val => (
-                                  <SelectItem key={val} value={String(val)}>{val} A</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Curva</Label>
-                            <Select value={newCompCurve} onValueChange={setNewCompCurve}>
-                              <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="B">Curva B</SelectItem>
-                                <SelectItem value="C">Curva C</SelectItem>
-                                <SelectItem value="D">Curva D</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </>
-                      )}
+                  <form onSubmit={handleAddComponent} className="space-y-3 text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-slate-500">Tipo</Label>
+                        <Select value={newCompType} onValueChange={(val) => {
+                          setNewCompType(val);
+                          if (val === "dps") {
+                            setNewCompLabel("DPS FASE");
+                            setNewCompPoles(1);
+                          } else if (val === "dr") {
+                            setNewCompLabel("IDR GERAL");
+                            setNewCompPoles(2);
+                          } else if (val === "borne") {
+                            setNewCompLabel("BORNE X1");
+                            setNewCompPoles(1);
+                          } else if (val === "spacer") {
+                            setNewCompLabel("RESERVA");
+                            setNewCompPoles(1);
+                          } else {
+                            setNewCompLabel("DISJUNTOR");
+                            setNewCompSupplyType("Monofásico");
+                            setNewCompPhase(phaseTypeConfig.Monofásico.phase);
+                            setNewCompPoles(phaseTypeConfig.Monofásico.poles);
+                          }
+                        }}>
+                          <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="breaker">Disjuntor Termomagnético</SelectItem>
+                            <SelectItem value="dps">DPS (Surtos)</SelectItem>
+                            <SelectItem value="dr">IDR (Residual)</SelectItem>
+                            <SelectItem value="borne">Borne SAK</SelectItem>
+                            <SelectItem value="spacer">Espaçador / Reserva</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
 
                       <div className="space-y-1">
-                        <Label className="text-[10px] font-bold text-slate-500">Pólos DIN</Label>
+                        <Label className="text-[10px] font-bold text-slate-500">Identificação</Label>
+                        <Input
+                          value={newCompLabel}
+                          onChange={(e) => setNewCompLabel(e.target.value)}
+                          className="bg-slate-50 rounded-lg h-8 font-bold text-xs"
+                          placeholder="Ex: C02 CHUVEIRO"
+                        />
+                      </div>
+                    </div>
+
+                    {newCompType === "breaker" && (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-slate-500">Fase</Label>
+                          <Select
+                            value={newCompSupplyType}
+                            onValueChange={(val) => {
+                              const config = phaseTypeConfig[val] || phaseTypeConfig.Monofásico;
+                              setNewCompSupplyType(val);
+                              setNewCompPhase(config.phase);
+                              setNewCompPoles(config.poles);
+                            }}
+                          >
+                            <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(phaseTypeConfig).map(([value, config]) => (
+                                <SelectItem key={value} value={value}>{config.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-slate-500">Corrente</Label>
+                          <Select value={newCompCurrent} onValueChange={setNewCompCurrent}>
+                            <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {[6, 10, 16, 20, 25, 32, 40, 50, 63].map(val => (
+                                <SelectItem key={val} value={String(val)}>{val} A</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-slate-500">Curva</Label>
+                          <Select value={newCompCurve} onValueChange={setNewCompCurve}>
+                            <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="B">Curva B</SelectItem>
+                              <SelectItem value="C">Curva C</SelectItem>
+                              <SelectItem value="D">Curva D</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-slate-500">Módulos DIN</Label>
                         <Select value={String(newCompPoles)} onValueChange={(val) => {
                           const poles = parseInt(val, 10);
                           setNewCompPoles(poles);
@@ -8807,9 +10123,9 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             setNewCompPhase(config.phase);
                           }
                         }}>
-                          <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {(newCompType === "breaker" ? [1, 2, 3] : [1, 2, 3, 4]).map(val => (
+                            {[1, 2, 3, 4].map(val => (
                               <SelectItem key={val} value={String(val)}>{val} DIN</SelectItem>
                             ))}
                           </SelectContent>
@@ -8817,9 +10133,9 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       </div>
 
                       <div className="space-y-1">
-                        <Label className="text-[10px] font-bold text-slate-500">Trilho Destino</Label>
+                        <Label className="text-[10px] font-bold text-slate-500">Trilho</Label>
                         <Select value={newCompRail} onValueChange={setNewCompRail}>
-                          <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {rails.map((r, idx) => (
                               <SelectItem key={r.id} value={r.id}>Trilho {idx + 1}</SelectItem>
@@ -8829,8 +10145,21 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       </div>
                     </div>
 
-                    <Button type="submit" className="w-full rounded-xl h-10 font-bold bg-primary text-white">
-                      <Plus className="w-4 h-4 mr-1.5" />
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="checkbox"
+                        id="autoRepeatInsertCheck"
+                        checked={autoRepeatInsert}
+                        onChange={(e) => setAutoRepeatInsert(e.target.checked)}
+                        className="rounded border-slate-300 text-primary focus:ring-primary h-3.5 w-3.5"
+                      />
+                      <label htmlFor="autoRepeatInsertCheck" className="text-[10px] font-semibold text-slate-600 cursor-pointer">
+                        Inserção contínua (manter formulário pronto)
+                      </label>
+                    </div>
+
+                    <Button type="submit" className="w-full rounded-xl h-9 font-extrabold bg-primary text-white text-xs">
+                      <Plus className="w-3.5 h-3.5 mr-1.5" />
                       Adicionar ao Trilho DIN
                     </Button>
                   </form>
@@ -8838,9 +10167,9 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
               </div>
             )}
 
-            {/* CONTEÚDO TAB: CABOS / FIAÇÃO */}
+            {/* CONTEÚDO TAB: CABOS / FIAÇÃO INTELIGENTE */}
             {activeTab === "wiring" && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 
                 {/* SELEÇÃO DO CABO ATUAL */}
                 {selectedWireId ? (
@@ -8865,201 +10194,195 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     const wireLabelMeta = wire.labelMeta || {};
                     const wireLabelEditKey = `wire-label:${wire.id}`;
                     const wireLabelText = wireLabelMeta.text ?? destinationCircuitLabel(wire) ?? "";
+                    const wireCircuitRef = destinationCircuitLabel(wire) || wire.name;
+
                     return (
-                      <div className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-5 shadow-sm space-y-4 animate-in fade-in duration-200 text-xs">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="text-[10px] font-extrabold text-primary uppercase tracking-wider">Cabo Selecionado</span>
-                            <h3 className="text-sm font-extrabold text-slate-800 mt-0.5">Conexão: {selectedWireTitle}</h3>
-                            <p className="mt-1 text-[10px] font-semibold leading-normal text-slate-500">
-                              Arraste Origem/Destino para trocar os bornes e arraste Dobrar/Ponto para moldar o caminho do cabo.
-                            </p>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3.5 animate-in fade-in duration-200 text-xs">
+                        {/* Header do Cabo */}
+                        <div className="flex justify-between items-start pb-2 border-b border-slate-100">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="h-2.5 w-2.5 rounded-full shrink-0 border border-slate-300"
+                                style={{ background: wireDisplayColor(normalizedWireColor(wire)) }}
+                              />
+                              <span className="text-[9px] font-black uppercase text-primary">Cabo Selecionado</span>
+                              <Badge variant="outline" className="text-[9px] font-bold">{wire.gauge || "2.5mm²"}</Badge>
+                            </div>
+                            <h3 className="text-sm font-black text-slate-800 mt-0.5 truncate">{selectedWireTitle}</h3>
                           </div>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600" onClick={() => clearWireSelection()}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600 shrink-0" onClick={() => clearWireSelection()}>
                             <X className="w-4 h-4" />
                           </Button>
                         </div>
 
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold text-slate-500">Nome do Cabo</Label>
-                          <Input
-                            value={wire.name || ""}
-                            onFocus={() => captureEditHistoryStart(wireEditKey)}
-                            onBlur={() => commitEditHistory(wireEditKey)}
-                            onChange={(event) => handleUpdateWire(wire.id, "name", event.target.value, { history: false })}
-                            className="h-9 rounded-lg bg-white text-xs font-bold"
-                            placeholder="Ex: Alimentacao C1, Retorno sala, Neutro circuito 2"
-                          />
-                        </div>
-
-                        <div className="space-y-3 rounded-xl border border-emerald-100 bg-white p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <Label className="text-[10px] font-bold text-slate-500">Texto exibido no circuito</Label>
-                              <p className="mt-0.5 text-[9.5px] font-semibold leading-normal text-slate-500">
-                                Este texto aparece no desenho e fica salvo junto com a conexão.
-                              </p>
-                            </div>
+                        {/* Barra de Ações Rápidas de Roteamento Inteligente */}
+                        <div className="space-y-1.5">
+                          <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Ações de Roteamento:</span>
+                          <div className="grid grid-cols-2 gap-1.5">
                             <Button
                               type="button"
                               size="sm"
-                              variant={wireLabelMeta.hidden ? "outline" : "secondary"}
-                              className="h-8 shrink-0 rounded-lg px-3 text-[10px] font-extrabold"
-                              onClick={() => updateWireLabelMeta(wire.id, { hidden: !wireLabelMeta.hidden })}
+                              variant="secondary"
+                              className="h-7 rounded-lg text-[10px] font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                              onClick={() => handleAutoRouteWire(wire.id)}
                             >
-                              {wireLabelMeta.hidden ? "Mostrar" : "Ocultar"}
+                              <Zap className="w-3 h-3 mr-1 text-emerald-600" />
+                              Auto Route
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 rounded-lg text-[10px] font-bold text-slate-700 hover:bg-slate-50"
+                              onClick={() => handleSimplifyWireRoute(wire.id)}
+                            >
+                              <Scissors className="w-3 h-3 mr-1 text-slate-500" />
+                              Simplificar Rota
                             </Button>
                           </div>
-                          <Input
-                            value={wireLabelText}
-                            onFocus={() => captureEditHistoryStart(wireLabelEditKey)}
-                            onBlur={() => commitEditHistory(wireLabelEditKey)}
-                            onChange={(event) => updateWireLabelMeta(wire.id, { text: event.target.value }, { history: false })}
-                            className="h-9 rounded-lg bg-slate-50 text-xs font-bold"
-                            placeholder="Ex: PE - C1 ILUMINACAO, Neutro cozinha, Circuito 4"
-                          />
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold text-slate-500">Tamanho</Label>
-                              <Input
-                                type="number"
-                                step="0.5"
-                                value={wireLabelMeta.fontSize || 7}
-                                onChange={(event) => updateWireLabelMeta(wire.id, { fontSize: Number(event.target.value) })}
-                                className="h-9 rounded-lg bg-slate-50 text-xs font-bold"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold text-slate-500">Rotação</Label>
-                              <Input
-                                type="number"
-                                step="5"
-                                value={wireLabelMeta.rotation ?? (wire.color?.includes("green") ? 0 : -90)}
-                                onChange={(event) => updateWireLabelMeta(wire.id, { rotation: Number(event.target.value) })}
-                                className="h-9 rounded-lg bg-slate-50 text-xs font-bold"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold text-slate-500">Cor</Label>
-                              <input
-                                type="color"
-                                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 p-1"
-                                value={wireLabelMeta.color || "#0f172a"}
-                                onChange={(event) => updateWireLabelMeta(wire.id, { color: event.target.value })}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 rounded-lg bg-white/70 p-2 text-[10px] font-semibold text-slate-500">
-                          <div className="min-w-0">
-                            <span className="block font-black uppercase text-emerald-600">Origem</span>
-                            <span className="block truncate text-slate-700">{wireInfo.origin}</span>
-                          </div>
-                          <div className="min-w-0">
-                            <span className="block font-black uppercase text-orange-600">Destino</span>
-                            <span className="block truncate text-slate-700">{wireInfo.destination}</span>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Cor do Cabo</Label>
-                            <Select value={wire.color || normalizedWireColor(wire)} onValueChange={(val) => handleUpdateWire(wire.id, "color", val)}>
-                              <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {WIRE_COLOR_OPTIONS.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Bitola (Gauge)</Label>
-                            <Select value={wire.gauge || "2.5mm²"} onValueChange={(val) => handleUpdateWire(wire.id, "gauge", val)}>
-                              <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {["1.5mm²", "2.5mm²", "4mm²", "6mm²", "10mm²", "16mm²"].map(g => (
-                                  <SelectItem key={g} value={g}>{g}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Grossura Visual do Fio</Label>
-                            <Select
-                              value={selectedWireThicknessValue}
-                              onValueChange={(val) => handleUpdateWire(wire.id, "visual_thickness", val === "auto" ? "" : Number(val))}
+                          <div className="grid grid-cols-3 gap-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 rounded-lg text-[9.5px] font-bold"
+                              onClick={() => handleAddWireBendPoint(wire.id)}
                             >
-                              <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {WIRE_THICKNESS_OPTIONS.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Pontos de Rota</Label>
-                            <div className="flex h-9 items-center justify-between rounded-lg border border-slate-200 bg-white px-3 font-extrabold text-slate-700">
-                              <span>{selectedWireRouteBends.length}</span>
-                              <span className="text-[9px] uppercase text-slate-400">arrastáveis</span>
-                            </div>
+                              <Plus className="w-3 h-3 mr-0.5" />
+                              Dobra
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 rounded-lg text-[9.5px] font-bold"
+                              disabled={selectedWireRouteBends.length === 0}
+                              onClick={() => handleRemoveWireBendPoint(wire.id)}
+                            >
+                              <Minus className="w-3 h-3 mr-0.5" />
+                              Remover
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={tracedCircuitId === wireCircuitRef ? "default" : "outline"}
+                              className="h-7 rounded-lg text-[9.5px] font-bold"
+                              onClick={() => handleTrackCircuit(wireCircuitRef)}
+                            >
+                              <Eye className="w-3 h-3 mr-0.5" />
+                              Rastrear
+                            </Button>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 rounded-xl border border-emerald-100 bg-white p-3">
+                        {/* Terminais e Pontos de Conexão */}
+                        <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-2.5 border border-slate-200 text-[10px]">
                           <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Modo da Rota</Label>
-                            <Select
-                              value={selectedWireRouteMode}
-                              disabled={selectedWireLocked}
-                              onValueChange={(val) => setWireRoutingMode(wire.id, val)}
-                            >
-                              <SelectTrigger className="bg-slate-50 rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {CABLE_ROUTING_MODES.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <div className="flex items-center justify-between">
+                              <span className="font-black uppercase text-emerald-600">Origem</span>
+                              <button
+                                type="button"
+                                className="text-[9px] text-slate-500 hover:text-emerald-700 underline font-bold"
+                                onClick={() => setWireMoveMode(wireMoveMode === "source" ? "" : "source")}
+                              >
+                                {wireMoveMode === "source" ? "Cancelar" : "Mover"}
+                              </button>
+                            </div>
+                            <span className="block truncate font-bold text-slate-700">{wireInfo.origin}</span>
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Estilo da Linha</Label>
-                            <Select
-                              value={selectedWireLineStyle}
-                              onValueChange={(val) => handleUpdateWire(wire.id, "lineStyle", val)}
-                            >
-                              <SelectTrigger className="bg-slate-50 rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {CABLE_LINE_STYLES.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <div className="flex items-center justify-between">
+                              <span className="font-black uppercase text-orange-600">Destino</span>
+                              <button
+                                type="button"
+                                className="text-[9px] text-slate-500 hover:text-orange-700 underline font-bold"
+                                onClick={() => setWireMoveMode(wireMoveMode === "target" ? "" : "target")}
+                              >
+                                {wireMoveMode === "target" ? "Cancelar" : "Mover"}
+                              </button>
+                            </div>
+                            <span className="block truncate font-bold text-slate-700">{wireInfo.destination}</span>
                           </div>
+                        </div>
+
+                        {/* Propriedades Técnicas */}
+                        <div className="space-y-2.5">
                           <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Raio da Curva</Label>
+                            <Label className="text-[10px] font-bold text-slate-500">Nome do Cabo</Label>
                             <Input
-                              type="number"
-                              min="0"
-                              max="24"
-                              step="1"
-                              value={selectedWireCornerRadius}
-                              onChange={(event) => handleUpdateWire(wire.id, "cornerRadius", Number(event.target.value))}
-                              className="h-9 rounded-lg bg-slate-50 text-xs font-bold"
+                              value={wire.name || ""}
+                              onFocus={() => captureEditHistoryStart(wireEditKey)}
+                              onBlur={() => commitEditHistory(wireEditKey)}
+                              onChange={(event) => handleUpdateWire(wire.id, "name", event.target.value, { history: false })}
+                              className="h-8 rounded-lg bg-slate-50 text-xs font-bold"
+                              placeholder="Ex: C1 Alimentação"
                             />
                           </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold text-slate-500">Cor</Label>
+                              <Select value={wire.color || normalizedWireColor(wire)} onValueChange={(val) => handleUpdateWire(wire.id, "color", val)}>
+                                <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {WIRE_COLOR_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold text-slate-500">Bitola</Label>
+                              <Select value={wire.gauge || "2.5mm²"} onValueChange={(val) => handleUpdateWire(wire.id, "gauge", val)}>
+                                <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {["1.5mm²", "2.5mm²", "4mm²", "6mm²", "10mm²", "16mm²"].map(g => (
+                                    <SelectItem key={g} value={g}>{g}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold text-slate-500">Modo da Rota</Label>
+                              <Select
+                                value={selectedWireRouteMode}
+                                disabled={selectedWireLocked}
+                                onValueChange={(val) => setWireRoutingMode(wire.id, val)}
+                              >
+                                <SelectTrigger className="bg-slate-50 rounded-lg h-8 font-bold text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {CABLE_ROUTING_MODES.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold text-slate-500">Raio de Curva</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                max="24"
+                                step="1"
+                                value={selectedWireCornerRadius}
+                                onChange={(event) => handleUpdateWire(wire.id, "cornerRadius", Number(event.target.value))}
+                                className="h-8 rounded-lg bg-slate-50 text-xs font-bold"
+                              />
+                            </div>
+                          </div>
+
                           <div className="grid grid-cols-2 gap-2">
                             <Button
                               type="button"
                               size="sm"
                               variant={selectedWireLocked ? "default" : "outline"}
-                              className="h-9 rounded-lg text-[10px] font-extrabold"
+                              className="h-8 rounded-lg text-[10px] font-bold"
                               onClick={() => handleUpdateWire(wire.id, "locked", !selectedWireLocked)}
                             >
                               {selectedWireLocked ? "Desbloquear" : "Bloquear"}
@@ -9068,7 +10391,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               type="button"
                               size="sm"
                               variant={selectedWireVisible ? "outline" : "default"}
-                              className="h-9 rounded-lg text-[10px] font-extrabold"
+                              className="h-8 rounded-lg text-[10px] font-bold"
                               onClick={() => handleUpdateWire(wire.id, "visible", !selectedWireVisible)}
                             >
                               {selectedWireVisible ? "Ocultar" : "Mostrar"}
@@ -9076,257 +10399,13 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Conector Origem</Label>
-                            <Select
-                              value={wire.terminal_source || "agulha"}
-                              onValueChange={(val) => handleUpdateWire(wire.id, "terminal_source", val)}
-                            >
-                              <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="agulha">Agulha</SelectItem>
-                                <SelectItem value="ilhais">Olhal / Ilhós</SelectItem>
-                                <SelectItem value="compressao">Compressão</SelectItem>
-                                <SelectItem value="duplo">Duplo</SelectItem>
-                                <SelectItem value="nenhum">Nenhum</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-slate-500">Conector Destino</Label>
-                            <Select
-                              value={wire.terminal_target || "agulha"}
-                              onValueChange={(val) => handleUpdateWire(wire.id, "terminal_target", val)}
-                            >
-                              <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="agulha">Agulha</SelectItem>
-                                <SelectItem value="ilhais">Olhal / Ilhós</SelectItem>
-                                <SelectItem value="compressao">Compressão</SelectItem>
-                                <SelectItem value="duplo">Duplo</SelectItem>
-                                <SelectItem value="nenhum">Nenhum</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold text-slate-500 block">Posicionamento das Pontas</Label>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant={wireMoveMode === "source" ? "destructive" : "outline"}
-                              className={`flex-1 rounded-lg h-9 font-bold text-xs ${wireMoveMode === "source" ? "animate-pulse" : ""}`}
-                              disabled={selectedWireLocked}
-                              onClick={() => {
-                                if (selectedWireLocked) return;
-                                setWiringMode(false);
-                                setWireEndpointDrag(null);
-                                setHoveredPinId("");
-                                setWireMoveMode(wireMoveMode === "source" ? "" : "source");
-                              }}
-                            >
-                              {wireMoveMode === "source" ? "Cancelando..." : "Mover Origem"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={wireMoveMode === "target" ? "destructive" : "outline"}
-                              className={`flex-1 rounded-lg h-9 font-bold text-xs ${wireMoveMode === "target" ? "animate-pulse" : ""}`}
-                              disabled={selectedWireLocked}
-                              onClick={() => {
-                                if (selectedWireLocked) return;
-                                setWiringMode(false);
-                                setWireEndpointDrag(null);
-                                setHoveredPinId("");
-                                setWireMoveMode(wireMoveMode === "target" ? "" : "target");
-                              }}
-                            >
-                              {wireMoveMode === "target" ? "Cancelando..." : "Mover Destino"}
-                            </Button>
-                          </div>
-                          {wireMoveMode && (
-                            <p className="text-[10px] text-emerald-600 font-extrabold text-center bg-emerald-50 py-1 rounded">
-                              Clique em um borne destacado ou arraste a ponta do cabo para redefinir a {wireMoveMode === "source" ? "origem" : "destino"}.
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="space-y-2 rounded-xl border border-emerald-100 bg-white p-3">
-                          <Label className="text-[10px] font-bold text-slate-500 block">Caminho do Cabo</Label>
-                          <p className="text-[10px] font-semibold leading-normal text-slate-500">
-                            Clique no fio e arraste o marcador Dobrar. Use mais pontos quando precisar passar o cabo por cantos diferentes do quadro.
-                          </p>
-                          <div className="grid grid-cols-3 gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={selectedWireRouteMode === "automatic" ? "default" : "outline"}
-                              className="h-8 rounded-lg text-[10px] font-bold"
-                              disabled={selectedWireLocked}
-                              onClick={() => setWireRoutingMode(wire.id, "automatic")}
-                            >
-                              Automática
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={selectedWireRouteMode === "orthogonal" ? "default" : "outline"}
-                              className="h-8 rounded-lg text-[10px] font-bold"
-                              disabled={selectedWireLocked}
-                              onClick={() => setWireRoutingMode(wire.id, "orthogonal")}
-                            >
-                              Ortogonal
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={selectedWireRouteMode === "manual" ? "default" : "outline"}
-                              className="h-8 rounded-lg text-[10px] font-bold"
-                              disabled={selectedWireLocked}
-                              onClick={() => setWireRoutingMode(wire.id, "manual")}
-                            >
-                              Manual
-                            </Button>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-9 rounded-lg text-xs font-bold"
-                              disabled={selectedWireLocked}
-                              onClick={() => addWireRoutePoint(wire.id)}
-                            >
-                              <Plus className="mr-1.5 h-3.5 w-3.5" />
-                              Adicionar ponto
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-9 rounded-lg text-xs font-bold"
-                              disabled={selectedWireLocked || selectedWireRouteBends.length === 0}
-                              onClick={() => clearWireRoutePoints(wire.id)}
-                            >
-                              Limpar rota
-                            </Button>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-9 rounded-lg text-xs font-bold"
-                              disabled={selectedWireLocked || selectedWireRouteBends.length === 0}
-                              onClick={() => removeLastWireRoutePoint(wire.id)}
-                            >
-                              Remover ponto
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-9 rounded-lg text-xs font-bold"
-                              disabled={selectedWireLocked}
-                              onClick={() => duplicateWireRoutePoint(wire.id)}
-                            >
-                              Duplicar ponto
-                            </Button>
-                          </div>
-                          {selectedWireRoutePoint && (
-                            <div className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                              <div className="space-y-1">
-                                <Label className="text-[10px] font-bold text-slate-500">Ponto X</Label>
-                                <Input
-                                  type="number"
-                                  value={Math.round(selectedWireRoutePoint.x)}
-                                  disabled={selectedWireLocked}
-                                  onChange={(event) => updateWireRoutePoint(wire.id, selectedRoutePoint.index, {
-                                    x: Number(event.target.value),
-                                    y: selectedWireRoutePoint.y,
-                                  })}
-                                  className="h-8 rounded-lg bg-white text-xs font-bold"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-[10px] font-bold text-slate-500">Ponto Y</Label>
-                                <Input
-                                  type="number"
-                                  value={Math.round(selectedWireRoutePoint.y)}
-                                  disabled={selectedWireLocked}
-                                  onChange={(event) => updateWireRoutePoint(wire.id, selectedRoutePoint.index, {
-                                    x: selectedWireRoutePoint.x,
-                                    y: Number(event.target.value),
-                                  })}
-                                  className="h-8 rounded-lg bg-white text-xs font-bold"
-                                />
-                              </div>
-                            </div>
-                          )}
-                          <div className="grid grid-cols-3 gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-9 rounded-lg text-[10px] font-bold"
-                              disabled={selectedWireLocked}
-                              onClick={() => reverseWireDirection(wire.id)}
-                            >
-                              Inverter
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-9 rounded-lg text-[10px] font-bold"
-                              disabled={selectedWireLocked}
-                              onClick={() => disconnectWireEndpoint(wire.id, "source")}
-                            >
-                              Soltar origem
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-9 rounded-lg text-[10px] font-bold"
-                              disabled={selectedWireLocked}
-                              onClick={() => disconnectWireEndpoint(wire.id, "target")}
-                            >
-                              Soltar destino
-                            </Button>
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-2 text-[10px] font-medium text-slate-500 bg-slate-100 p-2 rounded-lg">
-                          <button
-                            type="button"
-                            className="min-w-0 rounded-md bg-white px-2 py-1.5 text-left shadow-sm transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={selectedWireLocked}
-                            onClick={() => !selectedWireLocked && setWireMoveMode("source")}
-                          >
-                            <span className="block font-black uppercase text-emerald-600">Origem</span>
-                            <span className="block truncate font-bold text-slate-700">{wireInfo.origin}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="min-w-0 rounded-md bg-white px-2 py-1.5 text-left shadow-sm transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={selectedWireLocked}
-                            onClick={() => !selectedWireLocked && setWireMoveMode("target")}
-                          >
-                            <span className="block font-black uppercase text-orange-600">Destino</span>
-                            <span className="block truncate font-bold text-slate-700">{wireInfo.destination}</span>
-                          </button>
-                        </div>
-
+                        {/* Botão Excluir */}
                         <Button
                           variant="destructive"
                           size="sm"
-                          className="w-full rounded-lg h-9 font-bold text-xs"
+                          className="w-full rounded-xl h-8 font-bold text-xs mt-2"
                           disabled={selectedWireLocked}
-                          onClick={() => {
-                            deleteSelectedElement();
-                          }}
+                          onClick={() => deleteSelectedElement()}
                         >
                           <Trash2 className="w-3.5 h-3.5 mr-1.5" />
                           Excluir Cabo Elétrico
@@ -9334,135 +10413,229 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       </div>
                     );
                   })()
-                ) : (
-                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-center text-xs font-semibold text-slate-500">
-                    Selecione um cabo no quadro para arrastar Origem/Destino. Para criar um cabo novo, ative <strong className="text-primary">Fiação Rápida</strong> e clique em dois bornes.
-                  </div>
-                )}
-
-                {/* FORMULARIO DE CABO MANUAL */}
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-                  <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Criar Conexão Manual</h3>
-                  <div className="space-y-4 text-xs">
-	                    <div className="space-y-1">
-	                      <Label className="text-[10px] font-bold text-slate-500">Nome da conexão</Label>
-	                      <Input
-	                        value={wireName}
-	                        onChange={(event) => setWireName(event.target.value)}
-	                        className="bg-white rounded-lg h-9 font-bold"
-	                        placeholder="Ex: Neutro circuito 4"
-	                      />
-	                    </div>
-
-	                    <div className="space-y-1">
-	                      <Label className="text-[10px] font-bold text-slate-500">Texto no desenho</Label>
-	                      <Input
-	                        value={wireDisplayText}
-	                        onChange={(event) => setWireDisplayText(event.target.value)}
-	                        className="bg-white rounded-lg h-9 font-bold"
-	                        placeholder="Ex: Vai para circuito 1"
-	                      />
-	                    </div>
-	                    
-	                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold text-slate-500">Cor do Isolamento</Label>
-                        <Select value={wireColor} onValueChange={setWireColor}>
-                          <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {WIRE_COLOR_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold text-slate-500">Seção Transversal</Label>
-                        <Select value={wireGauge} onValueChange={setWireGauge}>
-                          <SelectTrigger className="bg-white rounded-lg h-9 font-bold"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {["1.5mm²", "2.5mm²", "4mm²", "6mm²", "10mm²", "16mm²"].map(g => (
-                              <SelectItem key={g} value={g}>{g}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                ) : visibleWires.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4 text-center">
+                    <div className="mx-auto w-12 h-12 rounded-2xl bg-slate-50 text-slate-600 flex items-center justify-center border border-slate-200/80 shadow-inner">
+                      <Cable className="w-6 h-6 text-slate-500" />
                     </div>
-
-                    <div className="p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                      <p className="text-[10px] text-slate-500 leading-normal font-medium">
-                        Selecione o <strong>"Fiação Rápida"</strong> acima, clique em uma conexão inicial (ex: parafuso de barramento) e depois em uma final (ex: disjuntor) para rotear o cabo com precisão.
+                    <div>
+                      <div className="flex items-center justify-center gap-2">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">CONEXÕES</h3>
+                        <Badge variant="outline" className="text-[9px] font-extrabold text-slate-500 bg-slate-50 border-slate-200">
+                          0 ligações
+                        </Badge>
+                      </div>
+                      <p className="mt-1.5 text-xs text-slate-500 leading-relaxed font-medium">
+                        Nenhuma ligação criada. A estrutura e os circuitos estão prontos para montagem.
                       </p>
                     </div>
 
-                  </div>
-                </div>
+                    <div className="space-y-2 pt-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="w-full h-9 rounded-xl text-xs font-extrabold bg-primary hover:bg-primary/90 text-white shadow-sm"
+                        onClick={() => {
+                          setWiringMode(true);
+                          setWiringStart("");
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />
+                        + Nova ligação
+                      </Button>
 
-                {/* LISTA COMPLETA DE CABOS NO QUADRO */}
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-                  <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Conexões no Quadro ({visibleWires.length})</h3>
-                  <div className="max-h-[300px] overflow-y-auto space-y-2 divide-y divide-slate-100 pr-1">
-                    {visibleWires.map((w) => {
-                      const info = getWireDisplayInfo(w);
-                      const isSelectedConnection = selectedWireId === w.id;
-                      const rowLabelMeta = w.labelMeta || {};
-                      const rowLabelText = rowLabelMeta.text ?? destinationCircuitLabel(w) ?? "";
-                      const rowLabelEditKey = `wire-label:${w.id}:inline`;
-                      return (
-                        <div
-                          key={w.id}
-                          onClick={() => selectEditableWire(w.id)}
-                          className={`pt-2 text-xs font-bold cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors ${
-                            isSelectedConnection ? "bg-emerald-50 ring-1 ring-emerald-200" : ""
-                          }`}
-                        >
-                          <div className="flex gap-2">
-                            <span
-                              className="mt-1 h-3 w-3 shrink-0 rounded-full border border-slate-300"
-                              style={{
-                                background: wireDisplayColor(normalizedWireColor(w))
-                              }}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-[10px] font-black uppercase text-slate-800">{info.main}</div>
-                              <div className="truncate text-[9px] font-extrabold text-slate-500">{info.subtitle}</div>
-                              <div className="mt-1 grid grid-cols-2 gap-1 text-[8.5px] font-bold text-slate-400">
-                                <span className="truncate">Origem: {info.origin}</span>
-                                <span className="truncate">Destino: {info.destination}</span>
-                              </div>
-                            </div>
-                          </div>
-                          {isSelectedConnection && (
-                            <div
-                              className="mt-3 space-y-2 rounded-lg border border-emerald-100 bg-white p-3"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <Label className="text-[10px] font-bold text-slate-500">Texto no circuito</Label>
-                                <button
-                                  type="button"
-                                  className="rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-[9px] font-black uppercase text-emerald-700"
-                                  onClick={() => updateWireLabelMeta(w.id, { hidden: !rowLabelMeta.hidden })}
-                                >
-                                  {rowLabelMeta.hidden ? "Mostrar texto" : "Ocultar texto"}
-                                </button>
-                              </div>
-                              <Input
-                                value={rowLabelText}
-                                onFocus={() => captureEditHistoryStart(rowLabelEditKey)}
-                                onBlur={() => commitEditHistory(rowLabelEditKey)}
-                                onChange={(event) => updateWireLabelMeta(w.id, { text: event.target.value }, { history: false })}
-                                className="h-9 rounded-lg bg-slate-50 text-xs font-bold"
-                                placeholder="Digite o texto que aparece no circuito"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="w-full h-9 rounded-xl text-xs font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/70"
+                        onClick={() => setShowAutoConnectModal(true)}
+                      >
+                        <Zap className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+                        Auto conectar
+                      </Button>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-left text-[10px] text-slate-500 space-y-1">
+                      <span className="font-bold text-slate-700 block">💡 Como desenhar ligações:</span>
+                      <p>1. Clique em <strong>+ Nova ligação</strong> para visualizar os bornes interativos.</p>
+                      <p>2. Selecione o borne de origem e em seguida o borne de destino.</p>
+                      <p>3. Ou use <strong>Auto conectar</strong> para rotear tudo automaticamente.</p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <>
+                    {/* BARRA SUPERIOR DE AÇÕES DE CONEXÕES */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-800">CONEXÕES</span>
+                          <Badge variant="outline" className="text-[9.5px] font-extrabold text-primary bg-primary/5 border-primary/20">
+                            {visibleWires.length} ligações
+                          </Badge>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[10px] font-bold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                          onClick={() => setShowClearWiresModal(true)}
+                        >
+                          <Trash2 className="w-3 h-3 mr-1 text-red-500" />
+                          Limpar fiação
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <Button
+                          size="sm"
+                          variant={wiringMode ? "destructive" : "default"}
+                          className="h-8 rounded-xl text-[10px] font-extrabold"
+                          onClick={() => {
+                            setWiringMode(!wiringMode);
+                            setWiringStart("");
+                          }}
+                        >
+                          <Cable className="w-3.5 h-3.5 mr-1" />
+                          {wiringMode ? "Cancelar Modo" : "+ Nova ligação"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 rounded-xl text-[10px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60"
+                          onClick={() => setShowAutoConnectModal(true)}
+                        >
+                          <Zap className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                          Auto conectar
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* AUDITORIA DE CONEXÕES & DIAGNÓSTICO */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Diagnóstico de Bornes</span>
+                        <Badge variant="outline" className="text-[9px] font-black text-emerald-700 bg-emerald-50 border-emerald-200">
+                          {panelDiagnostics.validCount} OK
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1 text-center text-[10px]">
+                        <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-100">
+                          <span className="block text-xs font-black">{panelDiagnostics.validCount}</span>
+                          <span className="text-[8.5px]">Corretas</span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-amber-50 text-amber-800 font-bold border border-amber-100">
+                          <span className="block text-xs font-black">{panelDiagnostics.warningCount}</span>
+                          <span className="text-[8.5px]">Atenção</span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-slate-50 text-slate-700 font-bold border border-slate-200">
+                          <span className="block text-xs font-black">{panelDiagnostics.freePinsCount}</span>
+                          <span className="text-[8.5px]">Livres</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-lg text-[9.5px] font-extrabold border-slate-200 hover:bg-slate-50"
+                          onClick={() => setShowDiagnosticsModal(true)}
+                        >
+                          <Activity className="w-3 h-3 mr-1 text-primary" />
+                          Auditar Quadro
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-lg text-[9.5px] font-extrabold text-slate-700 hover:bg-slate-50 border-slate-200"
+                          onClick={handleAutoOrganizeAllWires}
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1 text-slate-500" />
+                          Reorganizar
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* FILTROS DE CABOS */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Lista de Condutores ({visibleWires.length})
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1">
+                        {[
+                          { id: "all", label: "Todos" },
+                          { id: "phase", label: "Fases" },
+                          { id: "neutral", label: "Neutro" },
+                          { id: "ground", label: "PE (Terra)" },
+                          { id: "warning", label: "Alertas" },
+                        ].map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setWireFilterType(f.id)}
+                            className={`px-2 py-1 rounded-md text-[9.5px] font-extrabold transition-colors ${
+                              wireFilterType === f.id
+                                ? "bg-primary text-white"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* LISTA COMPACTA DE CABOS */}
+                      <div className="max-h-[280px] overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-100">
+                        {visibleWires
+                          .filter((w) => {
+                            if (wireFilterType === "phase") return !w.color?.includes("green") && !w.color?.includes("blue");
+                            if (wireFilterType === "neutral") return w.color?.includes("blue");
+                            if (wireFilterType === "ground") return w.color?.includes("green");
+                            if (wireFilterType === "warning") {
+                              const p1 = getPinCoords(w.source, rails, panelHeight, infrastructure);
+                              const p2 = getPinCoords(w.target, rails, panelHeight, infrastructure);
+                              return !isValidWirePoint(p1) || !isValidWirePoint(p2);
+                            }
+                            return true;
+                          })
+                          .map((w) => {
+                            const info = getWireDisplayInfo(w);
+                            const isSelectedConnection = selectedWireId === w.id;
+                            return (
+                              <div
+                                key={w.id}
+                                onClick={() => selectEditableWire(w.id)}
+                                className={`pt-1.5 text-xs font-bold cursor-pointer hover:bg-slate-50 p-2 rounded-xl border transition-all ${
+                                  isSelectedConnection
+                                    ? "bg-emerald-50/80 border-emerald-200 ring-1 ring-emerald-200 shadow-sm"
+                                    : "bg-white border-slate-200/80"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-300"
+                                    style={{ background: wireDisplayColor(normalizedWireColor(w)) }}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="truncate text-[10px] font-black uppercase text-slate-800">{info.main}</span>
+                                      <span className="text-[8.5px] font-extrabold text-slate-400">{w.gauge || "2.5mm²"}</span>
+                                    </div>
+                                    <div className="mt-0.5 flex items-center justify-between text-[8.5px] font-bold text-slate-400">
+                                      <span className="truncate">{info.origin} → {info.destination}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  </>
+                )}
 
               </div>
             )}
@@ -10192,14 +11365,13 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       Gerar / Atualizar QGBT
                     </Button>
                   </div>
-                  <Button variant="outline" className="w-full rounded-xl text-xs font-bold text-slate-700 h-9" onClick={() => {
-                    const rawLayout = generateDefaultPanelLayout(project, { forceDistribution: activeBoard?.type !== "qgbt" });
-                    const def = isPrincipalBoard
-                      ? mergeSolarLayoutIntoPrincipal(project, { ...rawLayout, infrastructure }, { forceRegenerate: true })
-                      : { ...rawLayout, infrastructure };
-                    updateWires(def.wires);
-                  }}>
-                    Auto-gerar Cabeamento Recomendado
+                  <Button
+                    variant="outline"
+                    className="w-full rounded-xl text-xs font-bold text-slate-700 h-9"
+                    onClick={() => setShowAutoConnectModal(true)}
+                  >
+                    <Zap className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+                    Auto Conectar Fiação Recomendada
                   </Button>
                   <Button
                     variant="outline"
@@ -10213,6 +11385,212 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO: LIMPAR FIAÇÃO DO QUADRO */}
+      {showClearWiresModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 text-center space-y-4">
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center border border-red-100 shadow-inner">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Limpar fiação do quadro?</h3>
+                <p className="mt-2 text-xs text-slate-600 leading-relaxed font-medium">
+                  As ligações visuais serão removidas. Os componentes, circuitos e configurações elétricas serão preservados.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 bg-slate-50 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl text-xs font-bold"
+                onClick={() => setShowClearWiresModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="rounded-xl text-xs font-extrabold bg-red-600 hover:bg-red-700 text-white shadow-sm"
+                onClick={handleClearWiresConfirm}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                Limpar fiação
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO: AUTO CONECTAR LIGAÇÕES */}
+      {showAutoConnectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-inner shrink-0">
+                  <Zap className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Auto Conectar Ligações</h3>
+                  <p className="text-xs text-slate-500 font-semibold">Geração automática de rotas conforme projeto elétrico</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 space-y-3 text-xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Resumo das ligações calculadas:
+                </span>
+                <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-bold">
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                    <span className="block text-sm font-black text-slate-800">{autoConnectPreview.phaseCount}</span>
+                    <span className="text-slate-500">Fases</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-blue-50/80 border border-blue-100 text-blue-900 shadow-2xs">
+                    <span className="block text-sm font-black text-blue-700">{autoConnectPreview.neutralCount}</span>
+                    <span className="text-blue-600">Neutros</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-100 text-emerald-900 shadow-2xs">
+                    <span className="block text-sm font-black text-emerald-700">{autoConnectPreview.groundCount}</span>
+                    <span className="text-emerald-600">PE (Terra)</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 font-medium space-y-1 pt-1 border-t border-slate-200/60 leading-normal">
+                  <p>• Alimentação geral e proteção (DPS / IDR).</p>
+                  <p>• Distribuição para disjuntores e bornes de carga dos circuitos.</p>
+                  <p>• Barramentos de Neutro e Aterramento PE integrados.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 bg-slate-50 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl text-xs font-bold"
+                onClick={() => setShowAutoConnectModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                onClick={handleAutoConnectConfirm}
+              >
+                <Zap className="w-3.5 h-3.5 mr-1.5" />
+                Criar ligações
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE AUDITORIA E DIAGNÓSTICO DE LIGAÇÕES DO QUADRO */}
+      {showDiagnosticsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800">Auditoria de Ligações do Quadro</h3>
+                  <p className="text-xs text-slate-500 font-semibold">Verificação técnica automática de bornes, circuitos e condutores</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-600" onClick={() => setShowDiagnosticsModal(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Badges de Resumo */}
+            <div className="grid grid-cols-3 gap-3 p-5 bg-white border-b border-slate-100">
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs font-bold text-emerald-800">Conectadas</span>
+                </div>
+                <div className="text-lg font-black text-emerald-900 mt-1">{panelDiagnostics.validCount} cabos</div>
+              </div>
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-100">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="text-xs font-bold text-amber-800">Incompletas / Alertas</span>
+                </div>
+                <div className="text-lg font-black text-amber-900 mt-1">{panelDiagnostics.warningCount} itens</div>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="flex items-center gap-2">
+                  <Cable className="w-4 h-4 text-slate-600 shrink-0" />
+                  <span className="text-xs font-bold text-slate-700">Bornes Livres</span>
+                </div>
+                <div className="text-lg font-black text-slate-900 mt-1">{panelDiagnostics.freePinsCount} bornes</div>
+              </div>
+            </div>
+
+            {/* Lista Detalhada */}
+            <div className="p-5 overflow-y-auto space-y-2 flex-1 divide-y divide-slate-100">
+              {panelDiagnostics.warnings?.length > 0 ? (
+                panelDiagnostics.warnings.map((diag, idx) => (
+                  <div key={idx} className="pt-2 flex items-center justify-between text-xs gap-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-black text-slate-800">{diag.title}</span>
+                        <p className="text-[11px] text-slate-500 font-semibold">{diag.description}</p>
+                      </div>
+                    </div>
+                    {diag.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[10px] font-bold rounded-lg shrink-0"
+                        onClick={() => {
+                          handleFocusElement(diag.type, diag.id);
+                          setShowDiagnosticsModal(false);
+                        }}
+                      >
+                        <Maximize2 className="w-3 h-3 mr-1" />
+                        Focar no Quadro
+                      </Button>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center space-y-2">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+                  <h4 className="text-sm font-black text-slate-800">Todas as ligações estão em conformidade</h4>
+                  <p className="text-xs text-slate-500">Nenhum circuito quebrado, cabo solto ou borne desconectado detectado.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-xl text-xs font-bold"
+                onClick={() => {
+                  handleAutoOrganizeAllWires();
+                  setShowDiagnosticsModal(false);
+                }}
+              >
+                <Zap className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+                Auto Organizar Todas as Rotas
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 rounded-xl text-xs font-extrabold px-4 bg-primary text-white"
+                onClick={() => setShowDiagnosticsModal(false)}
+              >
+                Fechar
+              </Button>
+            </div>
           </div>
         </div>
       )}

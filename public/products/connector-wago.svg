@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="wagoBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#f1f5f9" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#cbd5e1" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="orangeLever" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff7a00"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+    <filter id="wagoShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <!-- Main Transparent Housing -->
+  <rect x="30" y="45" width="140" height="110" rx="10" fill="url(#wagoBody)" stroke="#94a3b8" stroke-width="2" filter="url(#wagoShadow)"/>
+  <!-- Internal copper bus / clamps visible through transparent body -->
+  <rect x="45" y="110" width="30" height="24" rx="3" fill="#d97706" opacity="0.7"/>
+  <rect x="85" y="110" width="30" height="24" rx="3" fill="#d97706" opacity="0.7"/>
+  <rect x="125" y="110" width="30" height="24" rx="3" fill="#d97706" opacity="0.7"/>
+  <!-- Wire entry ports at bottom -->
+  <circle cx="60" cy="144" r="7" fill="#334155"/>
+  <circle cx="100" cy="144" r="7" fill="#334155"/>
+  <circle cx="140" cy="144" r="7" fill="#334155"/>
+  <!-- Orange Levers -->
+  <!-- Lever 1 -->
+  <rect x="46" y="52" width="28" height="48" rx="4" fill="url(#orangeLever)" stroke="#c2410c" stroke-width="1.5"/>
+  <line x1="52" y1="62" x2="68" y2="62" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+  <line x1="52" y1="70" x2="68" y2="70" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+  <!-- Lever 2 -->
+  <rect x="86" y="52" width="28" height="48" rx="4" fill="url(#orangeLever)" stroke="#c2410c" stroke-width="1.5"/>
+  <line x1="92" y1="62" x2="108" y2="62" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+  <line x1="92" y1="70" x2="108" y2="70" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+  <!-- Lever 3 (Raised slightly) -->
+  <rect x="126" y="44" width="28" height="48" rx="4" fill="url(#orangeLever)" stroke="#c2410c" stroke-width="1.5" transform="rotate(-5 140 44)"/>
+  <line x1="132" y1="54" x2="148" y2="54" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+  <!-- Wago 221 text -->
+  <text x="100" y="104" font-family="system-ui, sans-serif" font-size="9" font-weight="900" fill="#475569" text-anchor="middle">221 · 32A 450V</text>
+</svg>

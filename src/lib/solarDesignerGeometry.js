@@ -841,3 +841,58 @@ export function getMultiAreaAggregateMetrics(areas = [], globalConfig = {}) {
     allPanelPolygons,
   };
 }
+
+/**
+ * Move a single vertex in a polygon and returns normalized result
+ */
+export function moveVertex(points, vertexIndex, newLatLng) {
+  const polygon = normalizeRoofPolygon(points);
+  if (vertexIndex < 0 || vertexIndex >= polygon.length) return polygon;
+  const updated = [...polygon];
+  updated[vertexIndex] = {
+    lat: roundCoordinate(newLatLng.lat),
+    lng: roundCoordinate(newLatLng.lng),
+  };
+  return updated;
+}
+
+/**
+ * Inserts a new vertex along an edge
+ */
+export function insertVertexAtEdge(points, edgeIndex, latlng = null) {
+  const polygon = normalizeRoofPolygon(points);
+  if (edgeIndex < 0 || edgeIndex >= polygon.length) return polygon;
+  const updated = [...polygon];
+  const newPt = latlng
+    ? { lat: roundCoordinate(latlng.lat), lng: roundCoordinate(latlng.lng) }
+    : {
+        lat: roundCoordinate((polygon[edgeIndex].lat + polygon[(edgeIndex + 1) % polygon.length].lat) / 2),
+        lng: roundCoordinate((polygon[edgeIndex].lng + polygon[(edgeIndex + 1) % polygon.length].lng) / 2),
+      };
+  updated.splice(edgeIndex + 1, 0, newPt);
+  return updated;
+}
+
+/**
+ * Removes a vertex if there are at least 4 vertices (maintaining a valid minimum polygon of 3)
+ */
+export function deleteVertex(points, vertexIndex) {
+  const polygon = normalizeRoofPolygon(points);
+  if (polygon.length <= 3) return polygon;
+  if (vertexIndex < 0 || vertexIndex >= polygon.length) return polygon;
+  const updated = [...polygon];
+  updated.splice(vertexIndex, 1);
+  return updated;
+}
+
+/**
+ * Calcula azimute e cardinal a partir de um polígono
+ */
+export function calculateAzimuth(points) {
+  const polygon = normalizeRoofPolygon(points);
+  if (polygon.length < 2) {
+    return { degrees: 0, cardinal: "N", formatted: "0° (N)" };
+  }
+  const rotation = getDominantRoofRotation(polygon, 0);
+  return getAzimuthWithCardinal(rotation);
+}

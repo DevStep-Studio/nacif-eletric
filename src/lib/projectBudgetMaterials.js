@@ -12,6 +12,7 @@ import {
   phaseCountForBudgetCircuit,
   resolveBudgetSupplyType,
 } from "./budgetElectricalMaterials.js";
+import { getMaterialProductInfo } from "@/lib/materialProductCatalog";
 
 export const calculateCircuitBreakerPrice = ({
   current = 16,
@@ -228,34 +229,9 @@ export const getProjectLogo = (project, fallback) => (
   || DEFAULT_LOGO_URL
 );
 
-const MATERIAL_IMAGE_URLS = {
-  breaker: "https://zennyt.com.br/wp-content/uploads/2025/04/mini_disjuntor_weg_unipolar_16a_curva_c_mdw_c16_5291_1_b83d06e37dabf8827df140ca9ebcab4f.jpg",
-  dr: "https://el12.com/zdjecia/residual-current-device-iid-2p-25a-30ma,p94293,w400_m.webp",
-  dps: "https://i.shopar.openk.com.br/protetor_de_surto_dps_classe_ii_1p_20ka_275v_clamper_16235_plug_in_front_v_vermelho_21532_38290.jpg",
-  cable: "https://images.tcdn.com.br/img/img_prod/1223709/1690997268_design_sem_nome_5.png",
-  panel: "https://images.tcdn.com.br/img/img_prod/1061963/quadro_de_distribuicao_de_sobrepor_para_12_disjuntores_din_pvc_porta_opaca_steck_911_1_7f1f8dbea4c6c71931a80104efd459d1.jpg",
-  outlet: "https://cdn.awsli.com.br/600x450/454/454948/produto/194023350/tomada-2p-t-10a-branca-weg-pial-tramontina-xzghfwny9t.jpg",
-  switch: "https://cdn.leroymerlin.com.br/products/interruptor_simples_10a_branco_liz_tramontina_89471200_0001_600x600.jpg",
-  box: "https://cdn.awsli.com.br/600x450/1984/1984878/produto/155519996/caixa-de-luz-4x2-amarela-tigre-r5eg71rp3x.jpg",
-  conduit: "https://images.tcdn.com.br/img/img_prod/1061963/eletroduto_corrugado_flexivel_20mm_amarelo_rolo_50_metros_1103_1_458b5884218ddf9dcdd10ae0f676731d.jpg",
-};
-
-export const getBudgetMaterialImageUrl = (name = "") => {
-  const term = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-  if (term.includes("dps")) return MATERIAL_IMAGE_URLS.dps;
-  if ((term.includes("dr") || term.includes("diferencial")) && (term.includes("trifas") || term.includes("tetrapolar") || term.includes("4p"))) return "";
-  if (term.includes("dr 30ma") || term.includes("idr") || term.includes("diferencial")) return MATERIAL_IMAGE_URLS.dr;
-  if (term.includes("disjuntor")) return MATERIAL_IMAGE_URLS.breaker;
-  if (term.includes("cabo")) return MATERIAL_IMAGE_URLS.cable;
-  if (term.includes("quadro") || term.includes("rack")) return MATERIAL_IMAGE_URLS.panel;
-  if (term.includes("tomada")) return MATERIAL_IMAGE_URLS.outlet;
-  if (term.includes("interruptor")) return MATERIAL_IMAGE_URLS.switch;
-  if (term.includes("caixa")) return MATERIAL_IMAGE_URLS.box;
-  if (term.includes("eletroduto") || term.includes("condulete") || term.includes("curva") || term.includes("luva") || term.includes("abracadeira")) return MATERIAL_IMAGE_URLS.conduit;
-
-  return "";
-};
+export const getBudgetMaterialImageUrl = (name = "") => (
+  getMaterialProductInfo(name).imageUrl
+);
 
 const getProjectPanelLayouts = (project = {}) => {
   const boards = Array.isArray(project?.panel_boards) ? project.panel_boards : [];
@@ -526,12 +502,18 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
   });
 
   const aggregatedBaseMaterials = aggregateBudgetMaterials(baseMaterials);
-  const materials = aggregatedBaseMaterials.map((material) => ({
-    ...material,
-    imageUrl: getBudgetMaterialImageUrl(material.name),
-    basePrice: material.price,
-    price: Math.round(material.price * productMultiplier * 100) / 100,
-  }));
+  const materials = aggregatedBaseMaterials.map((material) => {
+    const productInfo = getMaterialProductInfo(material);
+    return {
+      ...material,
+      imageUrl: material.image || material.imageUrl || productInfo.imageUrl,
+      brand: material.brand || productInfo.brand,
+      specShort: material.specShort || productInfo.specShort,
+      category: material.category || productInfo.categoryKey,
+      basePrice: material.price,
+      price: Math.round(material.price * productMultiplier * 100) / 100,
+    };
+  });
   const baseMaterialTotal = aggregatedBaseMaterials.reduce((sum, material) => sum + material.qty * material.price, 0);
   const materialTotal = materials.reduce((sum, material) => sum + material.qty * material.price, 0);
 
