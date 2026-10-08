@@ -376,10 +376,10 @@ export default function Layout() {
           )}
         </button>
 
-        {/* Topo da Sidebar: Logo & Botão Interno */}
+        {/* Topo da Sidebar: Logo */}
         <div
           className={`flex h-16 items-center border-b border-[#F1F5F9] transition-all duration-200 ${
-            sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"
+            sidebarCollapsed ? "justify-center px-2" : "justify-start px-4"
           }`}
         >
           <Link
@@ -393,18 +393,6 @@ export default function Layout() {
           >
             <BrandLogo branding={branding} compact={sidebarCollapsed} />
           </Link>
-
-          {!sidebarCollapsed && (
-            <button
-              type="button"
-              aria-label="Recolher menu"
-              onClick={() => setSidebarCollapsed(true)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-[#F1F5F9] hover:text-[#0F172A]"
-              title="Recolher menu lateral"
-            >
-              <ChevronsLeft className="h-4 w-4" />
-            </button>
-          )}
         </div>
 
         {/* Workspace / Store Selector Pill Card */}
