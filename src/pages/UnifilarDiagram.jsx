@@ -362,7 +362,7 @@ function UnifilarSVG({ project, metrics }) {
         <text x={right - 120} y="216" fill="#000" fontSize="11.5">{sideLabelRight}</text>
         <text x={right - 78} y="216" fill="#000" fontSize="9">{feeder}mm²</text>
 
-        {Array.from({ length: feederPhaseCount }).map((_, phaseIndex) => {
+        {project?.has_dps !== false && project?.dps_omitted !== true ? Array.from({ length: feederPhaseCount }).map((_, phaseIndex) => {
           const yy = top + 34 + phaseIndex * 13;
           return (
             <g key={phaseIndex}>
@@ -374,12 +374,12 @@ function UnifilarSVG({ project, metrics }) {
               <text x="146" y={yy + 2.1} fill="#ff0000" fontSize="5.2" textAnchor="middle" fontWeight="800">II</text>
             </g>
           );
-        })}
+        }) : null}
 
-        {Array.from({ length: feederPhaseCount }).map((_, i) => (
+        {project?.has_general_breaker !== false ? Array.from({ length: feederPhaseCount }).map((_, i) => (
           <ellipse key={i} cx={busXs[i]} cy={top - 20} rx="8" ry="3.2" fill="none" stroke="#ff5cff" strokeWidth="0.7" />
-        ))}
-        {generalBreaker ? (
+        )) : null}
+        {generalBreaker && project?.has_general_breaker !== false ? (
           <text x={busXs[Math.max(0, feederPhaseCount - 1)] + 26} y={top - 18} fill="#ff5cff" fontSize="5.8">{generalBreaker}A</text>
         ) : null}
 
@@ -775,6 +775,28 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
   const supply = proj.supply_type || "Monofásico";
   const voltage = proj.voltage || 220;
 
+  const boards = Array.isArray(proj?.panel_boards) ? proj.panel_boards : [];
+  const activeBoard = getPrimaryPanelBoard(boards) || boards[0] || null;
+  const layout = activeBoard?.layout || proj?.panel_layout || null;
+  const layoutComps = (layout?.rails || []).flatMap((r) => r.components || []).filter((c) => c && c.type !== "spacer");
+  const hasLayout = layoutComps.length > 0;
+  const hasDpsInLayout = layoutComps.some((c) => c.type === "dps");
+  const hasDrInLayout = layoutComps.some((c) => (
+    c.type === "dr"
+    || c.type === "idr"
+    || c.id === "gen_dr"
+    || /^(idr|dr)(\s|$)/i.test(String(c.label || c.name || ""))
+  ));
+  const hasMainBreakerInLayout = layoutComps.some((c) => (
+    c.type === "breaker" && (c.isGeneral || c.id === "gen_brk")
+  ));
+
+  const showDps = proj?.has_dps !== false && proj?.dps_omitted !== true && (!hasLayout || hasDpsInLayout);
+  const showGeneralBreaker = proj?.has_general_breaker !== false && (!hasLayout || hasMainBreakerInLayout);
+  const circuitsList = projMetrics?.circuits || proj?.circuits || [];
+  const hasDrInCircuits = circuitsList.some((c) => c.needs_dr || c.wet_area);
+  const showGeneralDr = proj?.has_dr !== false && proj?.no_general_dr !== true && (hasLayout ? hasDrInLayout : hasDrInCircuits);
+
   // 1. Nó de Alimentação Geral
   initialNodes.push({
     id: "node-feed",
@@ -791,89 +813,81 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
 
   // 2. Disjuntor Geral
   const mainBreakerAmps = projMetrics?.generalBreaker;
-  initialNodes.push({
-    id: "node-general-breaker",
-    type: "breaker",
-    x: 80,
-    y: 200,
-    title: "DISJUNTOR GERAL (DJ)",
-    subtitle: mainBreakerAmps ? `${projMetrics?.generalBreakerPoles || 2}P · ${mainBreakerAmps}A / Curva C` : "Pendente (sem circuitos)",
-    value: mainBreakerAmps ? `${mainBreakerAmps}A` : "—",
-    phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
-    accentColor: "#00d8b8",
-    active: Boolean(mainBreakerAmps),
-  });
-  initialConnections.push({
-    id: "c-feed-to-breaker",
-    from: "node-feed",
-    to: "node-general-breaker",
-    type: "fase"
-  });
+  if (showGeneralBreaker) {
+    initialNodes.push({
+      id: "node-general-breaker",
+      type: "breaker",
+      x: 80,
+      y: 200,
+      title: "DISJUNTOR GERAL (DJ)",
+      subtitle: mainBreakerAmps ? `${projMetrics?.generalBreakerPoles || 2}P · ${mainBreakerAmps}A / Curva C` : "Pendente (sem circuitos)",
+      value: mainBreakerAmps ? `${mainBreakerAmps}A` : "—",
+      phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
+      accentColor: "#00d8b8",
+      active: Boolean(mainBreakerAmps),
+    });
+    initialConnections.push({
+      id: "c-feed-to-breaker",
+      from: "node-feed",
+      to: "node-general-breaker",
+      type: "fase"
+    });
+  }
 
   // 3. DPS Geral
-  initialNodes.push({
-    id: "node-dps",
-    type: "dps",
-    x: 360,
-    y: 80,
-    title: "DPS GERAL",
-    subtitle: "Classe II · 15kA",
-    value: "275V",
-    phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
-    accentColor: "#dc2626",
-    active: true
-  });
-  initialConnections.push({
-    id: "c-breaker-to-dps",
-    from: "node-general-breaker",
-    to: "node-dps",
-    type: "fase"
-  });
+  if (showDps) {
+    initialNodes.push({
+      id: "node-dps",
+      type: "dps",
+      x: 360,
+      y: 80,
+      title: "DPS GERAL",
+      subtitle: "Classe II · 15kA",
+      value: "275V",
+      phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
+      accentColor: "#dc2626",
+      active: true
+    });
+    const dpsSource = showGeneralBreaker ? "node-general-breaker" : "node-feed";
+    initialConnections.push({
+      id: "c-source-to-dps",
+      from: dpsSource,
+      to: "node-dps",
+      type: "fase"
+    });
+  }
 
-  // 4. DR Geral — In do IDR ≥ In do disjuntor geral (mesmo dimensionamento das demais telas)
-  const boards = Array.isArray(proj?.panel_boards) ? proj.panel_boards : [];
-  const activeBoard = getPrimaryPanelBoard(boards) || boards[0] || null;
-  const layout = activeBoard?.layout || proj?.panel_layout || null;
-  const layoutComps = (layout?.rails || []).flatMap((r) => r.components || []).filter((c) => c && c.type !== "spacer");
-  const hasLayout = layoutComps.length > 0;
-  const hasDrInLayout = layoutComps.some((c) => (
-    c.type === "dr"
-    || c.type === "idr"
-    || c.id === "gen_dr"
-    || /^(idr|dr)(\s|$)/i.test(String(c.label || c.name || ""))
-  ));
-  const circuitsList = projMetrics?.circuits || proj?.circuits || [];
-  const hasDrInCircuits = circuitsList.some((c) => c.needs_dr || c.wet_area);
-  const showGeneralDr = hasLayout ? hasDrInLayout : (proj?.has_dr !== false && hasDrInCircuits);
-
+  // 4. DR Geral
   if (showGeneralDr) {
     const drAmps = projMetrics?.generalDr || selectDrRating(mainBreakerAmps);
     initialNodes.push({
       id: "node-dr",
       type: "dr",
       x: 80,
-      y: 320,
-      title: "DR GERAL",
+      y: showGeneralBreaker ? 320 : 200,
+      title: "IDR GERAL",
       subtitle: "Diferencial 30mA",
       value: `${drAmps}A`,
       phase: supply === "Trifásico" ? "ABC" : supply === "Bifásico" ? "AB" : "A",
       accentColor: "#005188",
       active: true
     });
+    const drSource = showGeneralBreaker ? "node-general-breaker" : "node-feed";
     initialConnections.push({
-      id: "c-breaker-to-dr",
-      from: "node-general-breaker",
+      id: "c-source-to-dr",
+      from: drSource,
       to: "node-dr",
       type: "fase"
     });
   }
 
   // 5. Barramento Principal
+  const busbarY = (showGeneralBreaker && showGeneralDr) ? 440 : (showGeneralBreaker || showGeneralDr) ? 320 : 200;
   initialNodes.push({
     id: "node-busbar",
     type: "busbar",
     x: 80,
-    y: showGeneralDr ? 440 : 320,
+    y: busbarY,
     title: "BARRAMENTO PRINCIPAL",
     subtitle: `Distribuição ${supply === "Trifásico" ? "A/B/C" : supply === "Bifásico" ? "A/B" : "A"}`,
     value: "Cobre 80A",
@@ -881,9 +895,10 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
     accentColor: "#eab308",
     active: true
   });
+  const busbarSource = showGeneralDr ? "node-dr" : showGeneralBreaker ? "node-general-breaker" : "node-feed";
   initialConnections.push({
-    id: showGeneralDr ? "c-dr-to-busbar" : "c-breaker-to-busbar",
-    from: showGeneralDr ? "node-dr" : "node-general-breaker",
+    id: `c-${busbarSource}-to-busbar`,
+    from: busbarSource,
     to: "node-busbar",
     type: "fase"
   });
@@ -900,6 +915,7 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
 
     initialNodes.push({
       id: cId,
+      circuit_id: c.id || c.circuit_id || `circuit_${idx}`,
       type: "circuit",
       x: cX,
       y: cY,
@@ -920,6 +936,91 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
   });
 
   return { nodes: initialNodes, connections: initialConnections };
+}
+
+function sanitizeDiagramLayout(rawLayout, proj, projMetrics) {
+  if (!rawLayout || !Array.isArray(rawLayout.nodes) || rawLayout.nodes.length === 0) return null;
+
+  const boards = Array.isArray(proj?.panel_boards) ? proj.panel_boards : [];
+  const activeBoard = getPrimaryPanelBoard(boards) || boards[0] || null;
+  const layout = activeBoard?.layout || proj?.panel_layout || null;
+  const layoutComps = (layout?.rails || []).flatMap((r) => r.components || []).filter((c) => c && c.type !== "spacer");
+  const hasLayout = layoutComps.length > 0;
+  const hasDpsInLayout = layoutComps.some((c) => c.type === "dps");
+  const hasDrInLayout = layoutComps.some((c) => (
+    c.type === "dr" || c.type === "idr" || c.id === "gen_dr" || /^(idr|dr)(\s|$)/i.test(String(c.label || c.name || ""))
+  ));
+  const hasMainBreakerInLayout = layoutComps.some((c) => (
+    c.type === "breaker" && (c.isGeneral || c.id === "gen_brk")
+  ));
+
+  const showDps = proj?.has_dps !== false && proj?.dps_omitted !== true && (!hasLayout || hasDpsInLayout);
+  const showDr = proj?.has_dr !== false && proj?.no_general_dr !== true && (!hasLayout || hasDrInLayout);
+  const showGeneralBreaker = proj?.has_general_breaker !== false && (!hasLayout || hasMainBreakerInLayout);
+
+  const circuitsList = proj?.circuits || projMetrics?.circuits || [];
+  const circuitCount = circuitsList.length;
+
+  let nodes = [...rawLayout.nodes];
+  let nodesToRemove = new Set();
+
+  if (!showDps) {
+    nodesToRemove.add("node-dps");
+  }
+  if (!showDr) {
+    nodesToRemove.add("node-dr");
+  }
+  if (!showGeneralBreaker) {
+    nodesToRemove.add("node-general-breaker");
+  }
+
+  // Prune circuit nodes that no longer exist
+  nodes.forEach((n) => {
+    if (n.type === "circuit" || n.id.startsWith("node-circuit-")) {
+      const idxMatch = n.id.match(/^node-circuit-(\d+)$/);
+      if (idxMatch) {
+        const idx = Number(idxMatch[1]);
+        if (idx >= circuitCount) {
+          nodesToRemove.add(n.id);
+        }
+      } else if (n.circuit_id) {
+        const exists = circuitsList.some((c) => (
+          String(c.id || c.circuit_id || "") === String(n.circuit_id)
+        ));
+        if (!exists) nodesToRemove.add(n.id);
+      }
+    }
+  });
+
+  const filteredNodes = nodes.filter((n) => !nodesToRemove.has(n.id));
+  let filteredConns = (rawLayout.connections || []).filter((c) => (
+    !nodesToRemove.has(c.from) && !nodesToRemove.has(c.to) &&
+    filteredNodes.some((n) => n.id === c.from) &&
+    filteredNodes.some((n) => n.id === c.to)
+  ));
+
+  // Ensure busbar has incoming connection
+  const hasBusbarIn = filteredConns.some((c) => c.to === "node-busbar");
+  if (!hasBusbarIn && filteredNodes.some((n) => n.id === "node-busbar")) {
+    const upstream = (showDr && filteredNodes.some((n) => n.id === "node-dr"))
+      ? "node-dr"
+      : (showGeneralBreaker && filteredNodes.some((n) => n.id === "node-general-breaker"))
+        ? "node-general-breaker"
+        : filteredNodes.some((n) => n.id === "node-feed")
+          ? "node-feed"
+          : null;
+    if (upstream) {
+      filteredConns.push({
+        id: `c-${upstream}-to-busbar`,
+        from: upstream,
+        to: "node-busbar",
+        type: "fase",
+      });
+    }
+  }
+
+  const didChange = nodes.length !== filteredNodes.length || (rawLayout.connections || []).length !== filteredConns.length;
+  return { layout: { nodes: filteredNodes, connections: filteredConns }, didChange };
 }
 
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────────
@@ -1022,10 +1123,16 @@ export default function UnifilarDiagram() {
         try {
           const layout = typeof p.diagram_layout === "string" ? JSON.parse(p.diagram_layout) : p.diagram_layout;
           if (layout && Array.isArray(layout.nodes) && layout.nodes.length > 0) {
-            setNodes(layout.nodes);
-            setConnections(layout.connections || []);
-            clearHistory();
-            return;
+            const sanitized = sanitizeDiagramLayout(layout, p, projMetrics);
+            if (sanitized) {
+              setNodes(sanitized.layout.nodes);
+              setConnections(sanitized.layout.connections || []);
+              clearHistory();
+              if (sanitized.didChange) {
+                backend.entities.Project.update(selectedId, { diagram_layout: sanitized.layout }).catch(() => {});
+              }
+              return;
+            }
           }
         } catch (e) {
           console.error("Erro ao ler diagram_layout:", e);
@@ -1408,14 +1515,148 @@ export default function UnifilarDiagram() {
     if (save) handleSaveDiagram(updated, connectionsRef.current, true);
   };
 
-  // Excluir nó com auto-salvar
-  const handleDeleteNode = (nodeId) => {
+  // Excluir nó com auto-salvar e sincronização com quadro e circuitos
+  const handleDeleteNode = async (nodeId) => {
     const currentNodes = nodesRef.current || [];
     const currentConnections = connectionsRef.current || [];
+    const targetNode = currentNodes.find((n) => n.id === nodeId);
+    if (!targetNode && !nodeId) return;
+
     const updatedNodes = currentNodes.filter(n => n.id !== nodeId);
-    const updatedConns = currentConnections.filter(c => c.from !== nodeId && c.to !== nodeId);
+    let updatedConns = currentConnections.filter(c => c.from !== nodeId && c.to !== nodeId);
+
+    // Se remover node-dr, reconecta upstream diretamente ao barramento
+    if (nodeId === "node-dr" || targetNode?.type === "dr") {
+      const hasBusbarConn = updatedConns.some((c) => c.to === "node-busbar");
+      if (!hasBusbarConn && updatedNodes.some((n) => n.id === "node-general-breaker") && updatedNodes.some((n) => n.id === "node-busbar")) {
+        updatedConns.push({
+          id: "c-breaker-to-busbar",
+          from: "node-general-breaker",
+          to: "node-busbar",
+          type: "fase"
+        });
+      }
+    }
+
     commitDiagram(updatedNodes, updatedConns, { selectId: selectedNodeId === nodeId ? null : selectedNodeId });
     if (selectedNodeId === nodeId) setSelectedNodeId(null);
+
+    // Sincronizar exclusão com project.circuits, panel_layout e panel_boards
+    if (!project || !selectedId) return;
+
+    let projectUpdates = {
+      diagram_layout: { nodes: updatedNodes, connections: updatedConns },
+    };
+
+    const currentCircuits = Array.isArray(project?.circuits) ? project.circuits : [];
+    const boards = Array.isArray(project?.panel_boards) ? project.panel_boards : [];
+    const primaryBoard = getPrimaryPanelBoard(boards) || boards[0] || null;
+    let currentRails = primaryBoard?.layout?.rails || project?.panel_layout?.rails || [];
+    let currentWires = primaryBoard?.layout?.wires || project?.panel_layout?.wires || [];
+    let currentInfra = primaryBoard?.layout?.infrastructure || project?.panel_layout?.infrastructure || [];
+
+    const pinMatchesTarget = (pinId = "", compId = "") => {
+      const p = String(pinId || "");
+      const c = String(compId || "");
+      return p.startsWith(`comp:${c}:`) || p.startsWith(`load_out:${c}:`) || p.includes(`:${c}:`);
+    };
+
+    if (targetNode?.type === "circuit" || nodeId.startsWith("node-circuit-")) {
+      const cIndexMatch = nodeId.match(/node-circuit-(\d+)/);
+      const targetIndex = cIndexMatch ? Number(cIndexMatch[1]) : -1;
+      const matchedIndex = currentCircuits.findIndex((c, idx) => (
+        (targetIndex >= 0 && idx === targetIndex) ||
+        (targetNode.circuit_id && (String(c.id) === String(targetNode.circuit_id) || String(c.circuit_id) === String(targetNode.circuit_id))) ||
+        (c.name && c.name === targetNode.title)
+      ));
+
+      if (matchedIndex >= 0) {
+        const deletedCircuit = currentCircuits[matchedIndex];
+        const nextCircuits = currentCircuits.filter((_, idx) => idx !== matchedIndex);
+        projectUpdates.circuits = nextCircuits;
+
+        const circuitRefs = [
+          deletedCircuit.id,
+          deletedCircuit.circuit_id,
+          deletedCircuit.source_point_id,
+          `circuit_${matchedIndex}`,
+          `circuit-${matchedIndex}`,
+          `C${matchedIndex + 1}`,
+          deletedCircuit.name,
+        ].filter(Boolean).map(String);
+
+        currentRails = currentRails.map((rail) => ({
+          ...rail,
+          components: (rail.components || []).filter((comp) => (
+            !circuitRefs.includes(String(comp.id)) &&
+            !circuitRefs.includes(String(comp.circuit_id)) &&
+            !circuitRefs.includes(String(comp.circuitId)) &&
+            !circuitRefs.includes(String(comp.label)) &&
+            !(comp.circuitNumber != null && Number(comp.circuitNumber) === matchedIndex + 1)
+          )),
+        }));
+
+        currentWires = currentWires.filter((wire) => (
+          !circuitRefs.some((ref) => (
+            String(wire.circuit_id || "") === ref ||
+            String(wire.circuitName || "") === ref ||
+            pinMatchesTarget(wire.source, ref) ||
+            pinMatchesTarget(wire.target, ref)
+          ))
+        ));
+      }
+    } else if (nodeId === "node-dr" || targetNode?.type === "dr") {
+      projectUpdates.has_dr = false;
+      projectUpdates.no_general_dr = true;
+      currentRails = currentRails.map((rail) => ({
+        ...rail,
+        components: (rail.components || []).filter((comp) => (
+          comp.type !== "dr" && comp.type !== "idr" && comp.id !== "gen_dr"
+        )),
+      }));
+      currentWires = currentWires.filter((w) => (
+        !pinMatchesTarget(w.source, "gen_dr") && !pinMatchesTarget(w.target, "gen_dr")
+      ));
+    } else if (nodeId === "node-dps" || targetNode?.type === "dps") {
+      projectUpdates.has_dps = false;
+      projectUpdates.dps_omitted = true;
+      currentRails = currentRails.map((rail) => ({
+        ...rail,
+        components: (rail.components || []).filter((comp) => comp.type !== "dps"),
+      }));
+      currentWires = currentWires.filter((w) => (
+        !String(w.source || "").includes("dps") && !String(w.target || "").includes("dps")
+      ));
+    } else if (nodeId === "node-general-breaker" || (targetNode?.type === "breaker" && nodeId.includes("general"))) {
+      projectUpdates.has_general_breaker = false;
+      projectUpdates.manual_general_breaker = null;
+      currentRails = currentRails.map((rail) => ({
+        ...rail,
+        components: (rail.components || []).filter((comp) => !comp.isGeneral && comp.id !== "gen_brk"),
+      }));
+      currentWires = currentWires.filter((w) => (
+        !pinMatchesTarget(w.source, "gen_brk") && !pinMatchesTarget(w.target, "gen_brk")
+      ));
+    }
+
+    const nextLayoutObj = { rails: currentRails, wires: currentWires, infrastructure: currentInfra };
+    const nextBoards = boards.length > 0
+      ? boards.map((b) => (b.id === primaryBoard?.id ? { ...b, layout: nextLayoutObj } : b))
+      : [{ id: "board_principal", name: "Quadro Principal", type: "distribuicao", layout: nextLayoutObj }];
+
+    projectUpdates.panel_boards = nextBoards;
+    projectUpdates.panel_layout = nextLayoutObj;
+
+    const nextProject = { ...project, ...projectUpdates };
+    const nextMetrics = calcProjectMetrics(nextProject);
+    setProject(nextProject);
+    setMetrics(nextMetrics);
+
+    try {
+      await backend.entities.Project.update(selectedId, projectUpdates);
+    } catch (err) {
+      console.error("Erro ao sincronizar exclusão do unifilar:", err);
+    }
   };
 
   // Adicionar nó filho inline com auto-salvar

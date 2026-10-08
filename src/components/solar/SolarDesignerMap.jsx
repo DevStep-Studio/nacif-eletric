@@ -155,17 +155,21 @@ function ViewportController({ center, zoom, viewportRequest = 0 }) {
   return null;
 }
 
-function MeasurementLabels({ roofPolygon }) {
+function MeasurementLabels({ roofPolygon, isSelected = true }) {
   const edges = useMemo(() => getPolygonEdges(roofPolygon), [roofPolygon]);
 
   return edges.map((item) => (
     <Marker
-      key={item.id}
+      key={`${item.id}-${isSelected ? 'sel' : 'unsel'}`}
       position={[item.midpoint.lat, item.midpoint.lng]}
       interactive={false}
       icon={L.divIcon({
         className: "solar-measure-label",
-        html: `<span class="bg-white/95 text-slate-900 border border-slate-300 px-1.5 py-0.5 rounded text-[10px] font-bold shadow-md whitespace-nowrap backdrop-blur-sm" style="transform: rotate(${item.rotation}deg); display: inline-block;">${item.label}</span>`,
+        html: `<span class="${
+          isSelected
+            ? "bg-white/95 text-slate-900 border-2 border-[#00d8b8]"
+            : "bg-white/80 text-slate-600 border border-slate-300"
+        } px-1.5 py-0.5 rounded text-[10px] font-bold shadow-md whitespace-nowrap backdrop-blur-sm" style="transform: rotate(${item.rotation}deg); display: inline-block;">${item.label}</span>`,
         iconSize: [70, 18],
         iconAnchor: [35, 9],
       })}
@@ -209,32 +213,41 @@ function EdgeAlignmentLayer({ roofPolygon, onAlignToEdge }) {
   ));
 }
 
-function ArrayCountBadge({ panelPolygons }) {
-  const topAnchor = useMemo(() => {
-    if (!panelPolygons.length) return null;
-    const allPoints = panelPolygons.flat();
-    let maxLat = -Infinity;
-    let avgLng = 0;
-    allPoints.forEach((p) => {
-      if (p.lat > maxLat) maxLat = p.lat;
-      avgLng += p.lng;
-    });
-    avgLng /= allPoints.length;
-    return { lat: maxLat, lng: avgLng };
-  }, [panelPolygons]);
+/**
+ * Badge flutuante de identificação e quantidade de módulos por área
+ */
+function AreaBadge({ area, isSelected, onClick }) {
+  const centroid = useMemo(() => {
+    if (area.panelPolygons && area.panelPolygons.length > 0) {
+      return getPolygonCentroid(area.panelPolygons.flat());
+    }
+    return getPolygonCentroid(area.polygon);
+  }, [area.polygon, area.panelPolygons]);
 
-  if (!topAnchor || !panelPolygons.length) return null;
+  if (!centroid) return null;
 
   return (
     <Marker
-      position={[topAnchor.lat, topAnchor.lng]}
-      interactive={false}
+      position={[centroid.lat, centroid.lng]}
+      eventHandlers={{
+        click: (e) => {
+          L.DomEvent.stopPropagation(e);
+          onClick?.();
+        },
+      }}
       icon={L.divIcon({
-        className: "solar-array-count-badge",
+        className: "solar-area-badge",
         html: `
-          <div class="bg-white/95 border border-slate-200/90 text-slate-800 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold shadow-md backdrop-blur-md whitespace-nowrap flex items-center gap-1.5 -translate-x-1/2 -translate-y-[130%] pointer-events-none">
-            <span class="h-1.5 w-1.5 rounded-full bg-[#00d8b8]"></span>
-            <span>Arranjo: <strong class="text-[#009b84]">${panelPolygons.length}</strong> módulos</span>
+          <div class="cursor-pointer ${
+            isSelected
+              ? "bg-slate-900 text-white border-2 border-[#00d8b8] shadow-lg scale-105"
+              : "bg-white/95 text-slate-800 border border-slate-300 hover:border-[#00d8b8] hover:scale-105"
+          } px-2.5 py-1 rounded-md text-[11px] font-bold shadow-md backdrop-blur-md whitespace-nowrap flex items-center gap-1.5 -translate-x-1/2 -translate-y-1/2 transition-all">
+            <span class="h-2 w-2 rounded-full ${isSelected ? "bg-[#00d8b8] animate-pulse" : "bg-emerald-500"}"></span>
+            <span class="${isSelected ? "font-black text-[#00d8b8]" : "font-bold"}">${area.name || "Área"}</span>
+            <span class="opacity-40">·</span>
+            <span class="text-[10px] opacity-90">${area.panelCount || (area.panelPolygons?.length || 0)} mods</span>
+            <span class="text-[10px] opacity-60">(${Math.round(area.roof_area_m2 || 0)}m²)</span>
           </div>
         `,
         iconSize: [0, 0],
@@ -275,19 +288,32 @@ function MapViewportEvents({ onViewportChange, onMapClick, isDrawing, onMeasureC
   return null;
 }
 
-function MapFitController({ roofPolygon, request }) {
+function MapFitController({ areas = [], selectedArea, roofPolygon = [], request }) {
   const map = useMap();
   const lastRequestRef = useRef(0);
 
   useEffect(() => {
-    if (!request || request === lastRequestRef.current || roofPolygon.length < 3) return;
+    if (!request || request === lastRequestRef.current) return;
     lastRequestRef.current = request;
-    map.fitBounds(L.latLngBounds(toLeafletPositions(roofPolygon)), {
-      animate: true,
-      maxZoom: 21,
-      padding: [70, 70],
-    });
-  }, [map, request, roofPolygon]);
+
+    // Enquadra a área selecionada ou todas as áreas juntas
+    let pointsToFit = [];
+    if (selectedArea?.polygon?.length >= 3) {
+      pointsToFit = toLeafletPositions(selectedArea.polygon);
+    } else if (areas?.length > 0 && areas.some((a) => a.polygon?.length >= 3)) {
+      pointsToFit = areas.flatMap((a) => toLeafletPositions(a.polygon || []));
+    } else if (roofPolygon?.length >= 3) {
+      pointsToFit = toLeafletPositions(roofPolygon);
+    }
+
+    if (pointsToFit.length >= 3) {
+      map.fitBounds(L.latLngBounds(pointsToFit), {
+        animate: true,
+        maxZoom: 21,
+        padding: [70, 70],
+      });
+    }
+  }, [map, request, selectedArea, areas, roofPolygon]);
 
   return null;
 }
@@ -354,6 +380,7 @@ function InteractiveRoofDrawingLayer({
   const map = useMap();
   const [mousePos, setMousePos] = useState(null);
 
+  // Manipulador de atalhos de teclado (Esc p/ cancelar, Backspace p/ desfazer, Enter p/ concluir)
   useEffect(() => {
     if (!isDrawing) {
       setMousePos(null);
@@ -661,8 +688,10 @@ function EditableRoofPolygonLayer({
 }
 
 export default function SolarDesignerMap({
-  config,
-  sizing,
+  config = {},
+  areas = [],
+  selectedAreaId = null,
+  sizing = {},
   viewMode = "map", // "map" | "shadows" | "irradiation"
   className = "h-[520px]",
   designerMode = false,
@@ -676,6 +705,8 @@ export default function SolarDesignerMap({
   strings = [],
   panelPolygons: controlledPanelPolygons,
   onEditorModeChange,
+  onSelectArea,
+  onCreateArea,
   onRoofChange,
   onAlignToEdge,
   onViewportChange,
@@ -692,10 +723,38 @@ export default function SolarDesignerMap({
   showMiniMap = false,
   onViewModeChange,
 }) {
-  const roofPolygon = useMemo(() => getRoofPolygonFromConfig(config), [config]);
-  const generatedPanelPolygons = useMemo(() => buildPanelPolygons(config, sizing), [config, sizing]);
-  const panelPolygons = controlledPanelPolygons || generatedPanelPolygons;
-  
+  // Encontra a área atualmente selecionada
+  const selectedArea = useMemo(
+    () => areas.find((a) => a.id === selectedAreaId) || areas[0] || null,
+    [areas, selectedAreaId]
+  );
+
+  const selectedRoofPolygon = useMemo(
+    () => selectedArea?.polygon || getRoofPolygonFromConfig(config),
+    [selectedArea, config]
+  );
+
+  // Reúne todos os painéis de todas as áreas
+  const allAreasPanels = useMemo(() => {
+    if (controlledPanelPolygons && controlledPanelPolygons.length > 0) {
+      return [{ areaId: selectedArea?.id || "default", isSelected: true, panels: controlledPanelPolygons }];
+    }
+    if (areas.length > 0) {
+      return areas.map((a) => ({
+        areaId: a.id,
+        isSelected: a.id === (selectedArea?.id || selectedAreaId),
+        panels: a.panelPolygons || [],
+      }));
+    }
+    const generated = buildPanelPolygons(config, sizing);
+    return [{ areaId: "default", isSelected: true, panels: generated }];
+  }, [areas, controlledPanelPolygons, selectedArea, selectedAreaId, config, sizing]);
+
+  const allPanelsFlat = useMemo(
+    () => allAreasPanels.flatMap((group) => group.panels),
+    [allAreasPanels]
+  );
+
   const mapCenter = useMemo(() => getMapCenterFromConfig(config), [config]);
   const mapZoom = Math.max(3, Math.min(22, Math.round(Number(config.map_zoom) || DEFAULT_SOLAR_MAP_ZOOM)));
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
@@ -706,28 +765,29 @@ export default function SolarDesignerMap({
   // - Zoom >= 20: Detalhamento completo com matriz de células + busbars secundárias
   const panelCellLines = useMemo(() => {
     if (currentZoom < 17) return [];
-    const isLargeArray = panelPolygons.length > 250;
+    const isLargeArray = allPanelsFlat.length > 250;
     const highDetail = currentZoom >= 20 && !isLargeArray;
 
     const allLines = [];
-    for (let i = 0; i < panelPolygons.length; i++) {
-      const res = buildRealisticPanelCellLines(panelPolygons[i], currentZoom, highDetail);
+    for (let i = 0; i < allPanelsFlat.length; i++) {
+      const res = buildRealisticPanelCellLines(allPanelsFlat[i], currentZoom, highDetail);
       if (res.primary && res.primary.length > 0) {
         allLines.push(...res.primary);
       }
     }
 
     return allLines.map(toLeafletPositions);
-  }, [panelPolygons, currentZoom]);
+  }, [allPanelsFlat, currentZoom]);
 
   const initialCenter = useMemo(
     () => [mapCenter?.lat || DEFAULT_SOLAR_MAP_CENTER.lat, mapCenter?.lng || DEFAULT_SOLAR_MAP_CENTER.lng],
     []
   );
 
-  const azimuthInfo = useMemo(() => getAzimuthWithCardinal(config.roof_rotation_deg || 24), [config.roof_rotation_deg]);
+  const activeAzimuth = selectedArea?.roof_rotation_deg ?? config.roof_rotation_deg ?? 24;
+  const azimuthInfo = useMemo(() => getAzimuthWithCardinal(activeAzimuth), [activeAzimuth]);
   const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
-  const hasRoof = roofPolygon.length >= 3;
+  const hasRoof = (areas.length > 0 && areas.some((a) => a.polygon?.length >= 3)) || selectedRoofPolygon.length >= 3;
   const isDrawing = editorMode === "draw-polygon" || editorMode === "draw-rectangle";
   const isMeasuring = editorMode === "measure";
 
@@ -751,11 +811,15 @@ export default function SolarDesignerMap({
 
   const handleFinishDrawing = useCallback(() => {
     if (drawingPoints.length < 3) return;
-    onRoofChange?.(drawingPoints);
+    if (onCreateArea) {
+      onCreateArea(drawingPoints);
+    } else {
+      onRoofChange?.(drawingPoints);
+    }
     onEditorModeChange?.("select");
     onSelectRoof?.();
     setDrawingPoints([]);
-  }, [drawingPoints, onRoofChange, onEditorModeChange, onSelectRoof]);
+  }, [drawingPoints, onCreateArea, onRoofChange, onEditorModeChange, onSelectRoof]);
 
   const handleCancelDrawing = useCallback(() => {
     setDrawingPoints([]);
@@ -783,11 +847,17 @@ export default function SolarDesignerMap({
     });
   }, []);
 
-  const roofMetrics = useMemo(() => getRoofMetricsFromPolygon(roofPolygon, config), [roofPolygon, config]);
-  const roofArea = roofMetrics.areaM2 || config.roof_area_m2 || 96;
-  const panelCount = panelPolygons.length;
-  const moduleWp = config.module_wp || 540;
-  const dcPowerKw = (panelCount * moduleWp) / 1000;
+  const totalPanelCount = allPanelsFlat.length;
+  const selectedPanelCount = selectedArea?.panelCount || (selectedArea?.panelPolygons?.length || 0);
+  const moduleWp = Number(config.module_wp) || 540;
+  const totalDcPowerKw = (totalPanelCount * moduleWp) / 1000;
+  const selectedDcPowerKw = (selectedPanelCount * moduleWp) / 1000;
+  const totalAnnualMwh = totalDcPowerKw * 1.36;
+
+  const totalRoofArea = useMemo(
+    () => areas.reduce((sum, a) => sum + (a.roof_area_m2 || 0), 0) || (selectedArea?.roof_area_m2 || 0) || (getRoofMetricsFromPolygon(selectedRoofPolygon, config).areaM2 || 0),
+    [areas, selectedArea, selectedRoofPolygon, config]
+  );
 
   // Mapa de índices de string para cada módulo
   const moduleStringMap = useMemo(() => {
@@ -805,7 +875,7 @@ export default function SolarDesignerMap({
 
   return (
     <div className={`relative overflow-hidden bg-slate-100 select-none ${className} ${isDrawing ? "solar-designer-map--drawing" : ""}`}>
-      {/* Banner Superior Flutuante de Instruções & Ações de Desenho (Light Theme) */}
+      {/* Banner Superior Flutuante de Instruções & Ações (Light Theme) */}
       {isDrawing ? (
         <div className="absolute top-3 inset-x-4 z-[500] flex items-center justify-between pointer-events-none animate-in slide-in-from-top-2">
           <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-[#00d8b8]/60 bg-white/95 px-3.5 py-1.5 text-xs text-slate-900 shadow-2xl backdrop-blur-md">
@@ -858,30 +928,66 @@ export default function SolarDesignerMap({
           </div>
         </div>
       ) : (
-        /* Banner Superior Padrão de Status (Light Theme) */
+        /* Banner Superior Padrão de Status com Seletores de Área (Light Theme) */
         <div className="absolute top-3 inset-x-4 z-[500] pointer-events-none flex items-center justify-between">
           <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white/95 px-3.5 py-1.5 text-xs text-slate-800 shadow-xl backdrop-blur-md">
             <Sun className="h-4 w-4 text-[#00d8b8]" />
             <span className="font-medium hidden md:inline">
               {editorMode === "measure"
                 ? "Clique em dois pontos para medir a distância real no telhado."
-                : "Clique em uma água do telhado ou módulo para inspecionar propriedades."}
+                : "Clique em qualquer área solar para selecioná-la, configurar painéis ou alinhar à borda."}
             </span>
             <span className="font-medium md:hidden">Editor Fotovoltaico</span>
           </div>
 
           <div className="pointer-events-auto flex items-center gap-2">
+            {/* Seletor Rápido de Áreas */}
+            {areas.length > 1 && (
+              <div className="flex items-center gap-1 bg-white/95 p-1 rounded-xl border border-slate-200/90 shadow-xl backdrop-blur-md">
+                {areas.map((a, idx) => {
+                  const isSelected = a.id === selectedArea?.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => onSelectArea?.(a.id)}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                        isSelected
+                          ? "bg-[#00d8b8] text-slate-950 font-black shadow-sm"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                      }`}
+                    >
+                      {a.name || `Área ${idx + 1}`}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {hasRoof && (
               <div
                 onClick={() => onSelectRoof?.()}
                 className="cursor-pointer flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-800 shadow-xl backdrop-blur-md hover:bg-slate-50 transition"
                 title="Clique para inspecionar esta área"
               >
-                <span className="text-slate-500">◬ {config.roof_pitch_deg || 0}°</span>
+                <span className="text-slate-500">◬ {selectedArea?.roof_pitch_deg ?? config.roof_pitch_deg ?? 0}°</span>
                 <span className="h-3 w-px bg-slate-300" />
-                <span className="text-[#009b84]">{Math.round(roofArea)} m²</span>
+                <span className="text-[#009b84]">{Math.round(totalRoofArea)} m² ({areas.length || 1} {areas.length === 1 ? "área" : "áreas"})</span>
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => onEditorModeChange?.(editorMode === "draw-polygon" ? "select" : "draw-polygon")}
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-black shadow-xl backdrop-blur-md transition ${
+                isDrawing
+                  ? "border-amber-400 bg-amber-50 text-amber-800"
+                  : "border-[#00d8b8]/60 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              }`}
+            >
+              <Plus className="h-3.5 w-3.5 text-[#009b84]" />
+              <span>+ Adicionar Área</span>
+            </button>
 
             {isMeasuring && measureDistance !== null && (
               <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800 shadow-xl backdrop-blur-md">
@@ -915,7 +1021,7 @@ export default function SolarDesignerMap({
         <TileLayer url={SATELLITE_TILE_URL} attribution={SATELLITE_ATTRIBUTION} maxNativeZoom={19} maxZoom={23} />
         
         <ViewportController center={mapCenter} zoom={mapZoom} viewportRequest={viewportRequest} />
-        <MapFitController roofPolygon={roofPolygon} request={fitRoofRequest} />
+        <MapFitController areas={areas} selectedArea={selectedArea} roofPolygon={selectedRoofPolygon} request={fitRoofRequest} />
         <MapViewportEvents
           onViewportChange={onViewportChange}
           onMapClick={onMapClick}
@@ -925,8 +1031,31 @@ export default function SolarDesignerMap({
           onZoomChange={setCurrentZoom}
         />
         <FloatingMapControls onFitRoof={onFitRoof} hasRoof={hasRoof} onToggle3D={onToggle3D} />
-        
-        {/* Camada de Desenho Interativo Ativo */}
+
+        {/* 1. Camada das Áreas Concluídas Não Selecionadas */}
+        {!isDrawing && areas
+          .filter((a) => a.id !== selectedArea?.id && a.polygon?.length >= 3)
+          .map((area) => (
+            <Polygon
+              key={`inactive-area-${area.id}`}
+              positions={toLeafletPositions(area.polygon)}
+              eventHandlers={{
+                click: (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  onSelectArea?.(area.id);
+                },
+              }}
+              pathOptions={{
+                color: "#38bdf8",
+                fillColor: "#0284c7",
+                fillOpacity: 0.12,
+                opacity: 0.75,
+                weight: 2,
+              }}
+            />
+          ))}
+
+        {/* 2. Camada de Desenho Interativo Ativo */}
         <InteractiveRoofDrawingLayer
           isDrawing={isDrawing}
           drawingPoints={drawingPoints}
@@ -936,91 +1065,113 @@ export default function SolarDesignerMap({
           onUndoPoint={handleUndoDrawingPoint}
         />
 
-        {/* Camada de Telhado Existente e Edição de Vértices */}
-        {!isDrawing && (
+        {/* 3. Camada do Telhado Selecionado e Edição de Vértices */}
+        {!isDrawing && selectedRoofPolygon?.length >= 3 && (
           <EditableRoofPolygonLayer
-            positions={roofPolygon}
+            positions={selectedRoofPolygon}
             isEditing={editorMode === "edit" || editorMode === "select"}
             onSelectRoof={onSelectRoof}
             onChange={onRoofChange}
           />
         )}
 
-        {showMeasurements && !isDrawing && <MeasurementLabels roofPolygon={roofPolygon} />}
-        {hasRoof && !isDrawing && onAlignToEdge && <EdgeAlignmentLayer roofPolygon={roofPolygon} onAlignToEdge={onAlignToEdge} />}
-        {panelPolygons.length > 0 && !isDrawing && <ArrayCountBadge panelPolygons={panelPolygons} />}
+        {/* 4. Badges de Identificação de todas as Áreas */}
+        {showBadges && !isDrawing && areas.map((area) => (
+          <AreaBadge
+            key={`badge-${area.id}`}
+            area={area}
+            isSelected={area.id === selectedArea?.id}
+            onClick={() => onSelectArea?.(area.id)}
+          />
+        ))}
 
-        {/* Camada de Módulos Fotovoltaicos */}
+        {/* 5. Medições de arestas na área ativa */}
+        {showMeasurements && !isDrawing && selectedRoofPolygon?.length >= 3 && (
+          <MeasurementLabels roofPolygon={selectedRoofPolygon} isSelected={true} />
+        )}
+
+        {/* 6. Alinhamento de bordas na área ativa */}
+        {hasRoof && !isDrawing && selectedRoofPolygon?.length >= 3 && onAlignToEdge && (
+          <EdgeAlignmentLayer roofPolygon={selectedRoofPolygon} onAlignToEdge={onAlignToEdge} />
+        )}
+
+        {/* 7. Camada de Módulos Fotovoltaicos Realistas */}
         <Pane name="solar-panels-pane" style={{ zIndex: 440, pointerEvents: isDrawing ? "none" : "auto" }}>
-          {panelPolygons.map((panel, index) => {
-            const isSelected = selectedModuleIndex === index;
-            const stringInfo = moduleStringMap.get(index);
-            const strIdx = stringInfo?.stringIndex ?? 0;
-            const strColor = STRING_COLORS[strIdx % STRING_COLORS.length];
-            const isStringActive = selectedStringIndex === null || selectedStringIndex === strIdx;
+          {allAreasPanels.map((group) =>
+            group.panels.map((panel, idx) => {
+              const globalIndex = idx;
+              const isSelected = group.isSelected && selectedModuleIndex === globalIndex;
+              const stringInfo = moduleStringMap.get(globalIndex);
+              const strIdx = stringInfo?.stringIndex ?? 0;
+              const strColor = STRING_COLORS[strIdx % STRING_COLORS.length];
+              const isStringActive = selectedStringIndex === null || selectedStringIndex === strIdx;
 
-            // Paleta realista de silício mono-PERC com micro-variação óptica sutil
-            const realisticSiliconColor = PHOTOVOLTAIC_BASE_COLORS[(index * 7 + 3) % PHOTOVOLTAIC_BASE_COLORS.length];
+              // Paleta realista de silício mono-PERC com micro-variação óptica sutil
+              const realisticSiliconColor = PHOTOVOLTAIC_BASE_COLORS[(globalIndex * 7 + 3) % PHOTOVOLTAIC_BASE_COLORS.length];
 
-            // Moldura externa de alumínio anodizado escuro / grafite
-            let strokeColor = "#1e293b";
-            let fillColor = viewMode === "irradiation" ? "#00c853" : realisticSiliconColor;
-            let opacity = 0.98;
-            let fillOpacity = 0.96;
-            let strokeWidth = 1.2;
+              // Moldura externa de alumínio anodizado escuro / grafite
+              let strokeColor = group.isSelected ? "#1e293b" : "#334155";
+              let fillColor = viewMode === "irradiation" ? "#00c853" : realisticSiliconColor;
+              let opacity = group.isSelected ? 0.98 : 0.88;
+              let fillOpacity = group.isSelected ? 0.96 : 0.85;
+              let strokeWidth = group.isSelected ? 1.2 : 0.9;
 
-            if (electricalMode || selectedStringIndex !== null) {
-              fillColor = strColor.fill;
-              strokeColor = strColor.stroke;
-              strokeWidth = 1.4;
-              if (!isStringActive) {
-                opacity = 0.35;
-                fillOpacity = 0.3;
+              if (electricalMode || selectedStringIndex !== null) {
+                fillColor = strColor.fill;
+                strokeColor = strColor.stroke;
+                strokeWidth = 1.4;
+                if (!isStringActive) {
+                  opacity = 0.35;
+                  fillOpacity = 0.3;
+                }
               }
-            }
 
-            if (isSelected) {
-              strokeColor = "#00d8b8";
-              fillColor = "#1a3b5c";
-              strokeWidth = 2.2;
-              opacity = 1;
-              fillOpacity = 1;
-            }
+              if (isSelected) {
+                strokeColor = "#00d8b8";
+                fillColor = "#1a3b5c";
+                strokeWidth = 2.2;
+                opacity = 1;
+                fillOpacity = 1;
+              }
 
-            return (
-              <Polygon
-                key={`panel-${index}`}
-                positions={toLeafletPositions(panel)}
-                interactive={editorMode === "select" && !isDrawing}
-                eventHandlers={{
-                  click: (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    onSelectModule?.(index);
-                  },
-                }}
-                pathOptions={{
-                  color: strokeColor,
-                  className: `solar-panel-shape cursor-pointer transition-all duration-150 ${isSelected ? "solar-panel--selected" : ""}`,
-                  fillColor,
-                  fillOpacity,
-                  opacity,
-                  weight: strokeWidth,
-                }}
-              >
-                <Tooltip sticky direction="top" className="solar-panel-tooltip">
-                  <div className="text-[11px] font-bold">
-                    <span className="text-[#00d8b8]">Módulo #{index + 1}</span>
-                    <span className="text-slate-300 ml-1.5">{moduleWp} Wp</span>
-                    {stringInfo && (
-                      <div className="text-[10px] text-emerald-400 mt-0.5 font-medium">
-                        {stringInfo.stringName}
-                      </div>
-                    )}
-                  </div>
-                </Tooltip>
-              </Polygon>
-            );
-          })}
+              return (
+                <Polygon
+                  key={`panel-${group.areaId}-${idx}`}
+                  positions={toLeafletPositions(panel)}
+                  interactive={editorMode === "select" && !isDrawing}
+                  eventHandlers={{
+                    click: (e) => {
+                      L.DomEvent.stopPropagation(e);
+                      if (group.areaId !== selectedArea?.id) {
+                        onSelectArea?.(group.areaId);
+                      }
+                      onSelectModule?.(globalIndex);
+                    },
+                  }}
+                  pathOptions={{
+                    color: strokeColor,
+                    className: `solar-panel-shape cursor-pointer transition-all duration-150 ${isSelected ? "solar-panel--selected" : ""}`,
+                    fillColor,
+                    fillOpacity,
+                    opacity,
+                    weight: strokeWidth,
+                  }}
+                >
+                  <Tooltip sticky direction="top" className="solar-panel-tooltip">
+                    <div className="text-[11px] font-bold">
+                      <span className="text-[#00d8b8]">Módulo #{idx + 1}</span>
+                      <span className="text-slate-300 ml-1.5">{moduleWp} Wp</span>
+                      {stringInfo && (
+                        <div className="text-[10px] text-emerald-400 mt-0.5 font-medium">
+                          {stringInfo.stringName}
+                        </div>
+                      )}
+                    </div>
+                  </Tooltip>
+                </Polygon>
+              );
+            })
+          )}
           
           {panelCellLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
@@ -1036,7 +1187,7 @@ export default function SolarDesignerMap({
           )}
         </Pane>
 
-        {/* Camada da Régua / Medição */}
+        {/* 8. Camada da Régua / Medição */}
         {isMeasuring && measurePoints.length > 0 && (
           <Pane name="solar-ruler-pane" style={{ zIndex: 460 }}>
             {measurePoints.map((pt, idx) => (
@@ -1065,7 +1216,7 @@ export default function SolarDesignerMap({
           </Pane>
         )}
 
-        {/* Camada de Obstáculos Interativos */}
+        {/* 9. Camada de Obstáculos Interativos */}
         <Pane name="solar-obstacles-pane" style={{ zIndex: 450, pointerEvents: isDrawing ? "none" : "auto" }}>
           {obstacles.map((obs) => {
             const isSelected = selectedObstacleId === obs.id;
@@ -1114,19 +1265,22 @@ export default function SolarDesignerMap({
           })}
         </Pane>
 
-        {/* Camada de Mapa de Calor de Irradiação */}
-        {viewMode === "irradiation" && roofPolygon.length >= 3 && (
+        {/* 10. Camada de Mapa de Calor de Irradiação */}
+        {viewMode === "irradiation" && (
           <Pane name="solar-irradiation-pane" style={{ zIndex: 430, pointerEvents: "none" }}>
-            <Polygon
-              positions={toLeafletPositions(roofPolygon)}
-              interactive={false}
-              pathOptions={{
-                color: "#f59e0b",
-                fillColor: "#f59e0b",
-                fillOpacity: 0.35,
-                weight: 2,
-              }}
-            />
+            {areas.map((a) => (
+              <Polygon
+                key={`irrad-${a.id}`}
+                positions={toLeafletPositions(a.polygon)}
+                interactive={false}
+                pathOptions={{
+                  color: "#f59e0b",
+                  fillColor: "#f59e0b",
+                  fillOpacity: 0.35,
+                  weight: 2,
+                }}
+              />
+            ))}
           </Pane>
         )}
       </MapContainer>
@@ -1174,6 +1328,43 @@ export default function SolarDesignerMap({
           <Flame className="h-3.5 w-3.5 text-amber-500" />
           <span>Irradiação</span>
         </button>
+      </div>
+
+      {/* HUD Flutuante Inferior (Light Theme) */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-6 rounded-xl border border-slate-200/90 bg-white/95 px-6 py-2.5 text-slate-800 shadow-2xl backdrop-blur-md">
+        {/* Coluna 1: Módulos FV Total/Área */}
+        <div className="flex flex-col items-center min-w-[130px]">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">MÓDULOS FV TOTAL/ÁREA</span>
+          <span className="text-sm font-black text-slate-900">
+            {totalPanelCount} <span className="text-slate-400">/ {selectedPanelCount} na ativa</span>
+          </span>
+          <div className="mt-1 h-1 w-full rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-full bg-emerald-500 rounded-full" style={{ width: totalPanelCount > 0 ? "100%" : "0%" }} />
+          </div>
+        </div>
+
+        <div className="h-8 w-px bg-slate-200" />
+
+        {/* Coluna 2: Potência CC Total/Área */}
+        <div className="flex flex-col items-center min-w-[130px]">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">POTÊNCIA CC TOTAL</span>
+          <span className="text-sm font-black text-slate-900">
+            {totalDcPowerKw.toFixed(1)} <span className="text-slate-400">kWp ({selectedDcPowerKw.toFixed(1)} kWp ativa)</span>
+          </span>
+          <div className="mt-1 h-1 w-full rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-full bg-emerald-500 rounded-full" style={{ width: totalPanelCount > 0 ? "100%" : "0%" }} />
+          </div>
+        </div>
+
+        <div className="h-8 w-px bg-slate-200" />
+
+        {/* Coluna 3: Produção Anual Est. */}
+        <div className="flex flex-col items-center min-w-[140px]">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">PRODUÇÃO ANUAL TOTAL</span>
+          <span className="text-sm font-black text-[#009b84]">
+            {totalAnnualMwh.toFixed(2)} MWh/ano
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -66,35 +66,31 @@ export default function BudgetPage() {
   };
 
   const handlePrint = (size) => {
-    const rows = materials.map(m => `
-      <tr>
-        <td style="width:44px;text-align:center"><img src="${getMaterialDataUriForPrint(m.name)}" alt="" style="width:30px;height:30px;object-fit:contain" /></td>
-        <td><strong>${m.name}</strong><br><span style="font-size:7.5pt;color:#64748b">${m.brand || ""} · ${m.specShort || ""}</span></td>
-        <td style="text-align:center">${formatQty(m.qty)}</td>
-        <td style="text-align:center">${formatUnit(m.unit)}</td>
-        <td style="text-align:right">${formatCurrencyBR(m.price)}</td>
-        <td style="text-align:right">${formatCurrencyBR(m.qty * m.price)}</td>
-      </tr>`).join("");
-    const html = `
-      <h2>Orçamento — ${project?.name || ""}</h2>
-      <p class="sub">Proposta gerada automaticamente com fotos dos produtos · NACIF Solutions Eletric · NBR 5410:2004</p>
-      <table>
-        <thead><tr><th style="width:44px;text-align:center">Item</th><th>Material</th><th style="text-align:center">Qtd.</th><th style="text-align:center">Unidade</th><th style="text-align:right">Valor unitário</th><th style="text-align:right">Total</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="totals">
-        <div class="total-row"><span>Materiais base:</span><span>${formatCurrencyBR(baseMaterialTotal)}</span></div>
-        <div class="total-row"><span>Variação produtos (${productAdjustment}%):</span><span>${formatCurrencyBR(productAdjustmentValue)}</span></div>
-        <div class="total-row"><span>Materiais ajustados:</span><span>${formatCurrencyBR(materialTotal)}</span></div>
-        <div class="total-row"><span>Mão de Obra:</span><span>${formatCurrencyBR(laborCost)}</span></div>
-        <div class="total-row"><span>Margem (${margin}%):</span><span>${formatCurrencyBR(subtotal * margin / 100)}</span></div>
-        <div class="grand-total">Total: ${formatCurrencyBR(total)}</div>
-      </div>`;
+
     openHTMLPrint({
-      htmlContent: html,
       paperSize: size,
       projectName: project?.name,
+      documentTitle: `Orçamento — ${project?.name || "Projeto"}`,
+      subtitle: "Proposta gerada automaticamente · NACIF Solutions Eletric · NBR 5410:2004",
       logoUrl,
+      items: materials.map((m) => ({
+        name: m.name,
+        qty: m.qty,
+        unit: m.unit,
+        price: m.price,
+        category: m.category,
+        manual: m.manual,
+        imageUrl: getMaterialSymbolDataUri(m.name),
+      })),
+      totals: {
+        baseMaterialTotal,
+        productAdjustment,
+        productAdjustmentValue,
+        materialTotal,
+        laborCost,
+        margin,
+        total,
+      },
       projectInfo: {
         clientName: project?.client_name,
         address: project?.address,

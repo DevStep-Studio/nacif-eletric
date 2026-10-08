@@ -1,5 +1,5 @@
-import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
-import { calcMainProtection, calcProjectMetrics } from "@/lib/electricalEngine";
+import { DEFAULT_LOGO_URL } from "./brandingDefaults.js";
+import { calcMainProtection, calcProjectMetrics } from "./electricalEngine.js";
 import {
   BUDGET_MATERIAL_PRICES,
   buildConduitBudgetItems,
@@ -11,29 +11,112 @@ import {
   isPanelAssemblyBudgetItem,
   phaseCountForBudgetCircuit,
   resolveBudgetSupplyType,
-} from "@/lib/budgetElectricalMaterials";
+} from "./budgetElectricalMaterials.js";
 import { getMaterialProductInfo } from "@/lib/materialProductCatalog";
 
+export const calculateCircuitBreakerPrice = ({
+  current = 16,
+  poles = 1,
+  isGeneral = false,
+  curve = "C",
+  name = "",
+} = {}) => {
+  const i = Math.max(6, Number(current) || 16);
+  const p = Math.max(1, Number(poles) || 1);
+  const text = String(name || "").toLowerCase();
+  const isMoldedCase = text.includes("caixa moldada") || text.includes("mccb") || (isGeneral && i >= 100) || i >= 150;
+
+  if (isMoldedCase) {
+    if (i >= 1600) return p >= 4 ? 19500 : p === 3 ? 14500 : 11000;
+    if (i >= 1000) return p >= 4 ? 11800 : p === 3 ? 8900 : 6800;
+    if (i >= 800) return p >= 4 ? 7200 : p === 3 ? 5400 : p === 2 ? 4200 : 3100;
+    if (i >= 600) return p >= 4 ? 4300 : p === 3 ? 3200 : p === 2 ? 2450 : 1800; // 630A 3P -> R$ 3.200,00!
+    if (i >= 500) return p >= 4 ? 3500 : p === 3 ? 2600 : p === 2 ? 2050 : 1500;
+    if (i >= 400) return p >= 4 ? 2650 : p === 3 ? 1950 : p === 2 ? 1550 : 1150;
+    if (i >= 300) return p >= 4 ? 2250 : p === 3 ? 1650 : p === 2 ? 1300 : 980;
+    if (i >= 225) return p >= 4 ? 1580 : p === 3 ? 1150 : p === 2 ? 920 : 690;
+    if (i >= 175) return p >= 4 ? 1220 : p === 3 ? 890 : p === 2 ? 710 : 530;
+    if (i >= 150) return p >= 4 ? 1020 : p === 3 ? 740 : p === 2 ? 590 : 440;
+    if (i >= 125) return p >= 4 ? 780 : p === 3 ? 560 : p === 2 ? 450 : 340;
+    return p >= 4 ? 660 : p === 3 ? 480 : p === 2 ? 380 : 290;
+  }
+
+  // Mini-disjuntores padrão DIN (residencial / comercial):
+  if (i <= 25) {
+    return p >= 4 ? 115 : p === 3 ? 78 : p === 2 ? 48 : 19.90;
+  }
+  if (i <= 32) {
+    return p >= 4 ? 128 : p === 3 ? 88 : p === 2 ? 54 : 24.90;
+  }
+  if (i <= 40) {
+    return p >= 4 ? 145 : p === 3 ? 98 : p === 2 ? 66.50 : 29.90;
+  }
+  if (i <= 50) {
+    return p >= 4 ? 170 : p === 3 ? 118 : p === 2 ? 78 : 36.00;
+  }
+  if (i <= 63) {
+    return p >= 4 ? 198 : p === 3 ? 138 : p === 2 ? 89 : 42.00;
+  }
+  if (i <= 80) {
+    return p >= 4 ? 360 : p === 3 ? 260 : p === 2 ? 180 : 85.00;
+  }
+  if (i <= 100) {
+    return p >= 4 ? 480 : p === 3 ? 340 : p === 2 ? 240 : 115.00;
+  }
+  return p >= 4 ? 590 : p === 3 ? 420 : p === 2 ? 295 : 145.00;
+};
+
 export const BUDGET_BASE_MATERIAL_PRICES = {
-  "Disjuntor 10A": 18,
-  "Disjuntor 16A": 19,
-  "Disjuntor 20A": 20,
-  "Disjuntor 25A": 22,
-  "Disjuntor 32A": 25,
-  "Disjuntor 40A": 35,
-  "Disjuntor 50A": 45,
-  "DR 30mA 25A": 120,
-  "DR 30mA 40A": 140,
+  "Disjuntor 10A": 19.9,
+  "Disjuntor 16A": 19.9,
+  "Disjuntor 20A": 19.9,
+  "Disjuntor 25A": 22.9,
+  "Disjuntor 32A": 24.9,
+  "Disjuntor 40A": 29.9,
+  "Disjuntor 50A": 36.0,
+  "Disjuntor 63A": 42.0,
+  "Disjuntor 70A": 85.0,
+  "Disjuntor 80A": 85.0,
+  "Disjuntor 100A": 115.0,
+  "Disjuntor 125A": 145.0,
+  "Disjuntor geral 630A 3P/C": 3200.0,
+  "Disjuntor geral 400A 3P/C": 1950.0,
+  "Disjuntor geral 250A 3P/C": 1150.0,
+  "Disjuntor geral 160A 3P/C": 740.0,
+  "Disjuntor geral 125A 3P/C": 560.0,
+  "Disjuntor geral 100A 3P/C": 480.0,
+  "DR 30mA 25A": 125,
+  "DR 30mA 40A": 145,
+  "DR 30mA 63A": 175,
   "DPS Classe II": 85,
+  "DPS Classe II 275V 20kA": 85,
+  "DPS Classe II 275V 45kA": 110,
+  "DPS Classe I+II 255V 50kA": 320,
   "Cabo 1.5mm² (m)": 2.5,
   "Cabo 2.5mm² (m)": 3.8,
-  "Cabo 4mm² (m)": 5.5,
-  "Cabo 6mm² (m)": 8.2,
-  "Cabo 10mm² (m)": 13.5,
-  "Cabo 16mm² (m)": 22,
-  "Quadro 12 DIN": 65,
-  "Quadro 24 DIN": 110,
-  "Quadro 36 DIN": 160,
+  "Cabo 4mm² (m)": 5.8,
+  "Cabo 6mm² (m)": 8.6,
+  "Cabo 10mm² (m)": 14.5,
+  "Cabo 16mm² (m)": 22.5,
+  "Cabo 25mm² (m)": 36.0,
+  "Cabo 35mm² (m)": 49.0,
+  "Cabo 50mm² (m)": 72.0,
+  "Cabo 70mm² (m)": 98.0,
+  "Cabo 95mm² (m)": 138.0,
+  "Cabo 120mm² (m)": 178.0,
+  "Cabo 150mm² (m)": 225.0,
+  "Cabo 185mm² (m)": 285.0,
+  "Cabo 240mm² (m)": 375.0,
+  "Quadro 12 DIN": 75,
+  "Quadro 18 DIN": 95,
+  "Quadro 24 DIN": 130,
+  "Quadro 36 DIN": 180,
+  "Quadro 48 DIN": 260,
+  "Quadro 72 DIN": 380,
+  "QGBT Autoportante 250A": 1650,
+  "QGBT Autoportante 400A": 2900,
+  "QGBT Autoportante 630A": 4800,
+  "QGBT Autoportante 800A": 6500,
   ...BUDGET_MATERIAL_PRICES,
 };
 
@@ -57,34 +140,79 @@ export const estimateLocalMaterialPrice = (name = "") => {
   const exact = Object.entries(BUDGET_BASE_MATERIAL_PRICES).find(([key]) => key.toLowerCase() === name.toLowerCase());
   if (exact) return exact[1];
 
+  // Identificação inteligente de disjuntores com corrente e polos
+  if (term.includes("disjuntor") || term.includes("breaker") || term.includes("dj")) {
+    const currentMatch = term.match(/(\d+)\s*a\b/i);
+    const current = currentMatch ? Number(currentMatch[1]) : 20;
+    const isGeneral = term.includes("geral") || term.includes("main") || term.includes("entrada");
+    let poles = 1;
+    if (term.includes("4p") || term.includes("tetra") || term.includes("quadripolar")) poles = 4;
+    else if (term.includes("3p") || term.includes("tri") || term.includes("trifas")) poles = 3;
+    else if (term.includes("2p") || term.includes("bi") || term.includes("bifas")) poles = 2;
+    return calculateCircuitBreakerPrice({ current, poles, isGeneral, name: term });
+  }
+
+  // Identificação de DR / IDR
+  if (term.includes("dr") || term.includes("idr") || term.includes("diferencial")) {
+    const currentMatch = term.match(/(\d+)\s*a\b/i);
+    const current = currentMatch ? Number(currentMatch[1]) : 40;
+    let poles = 2;
+    if (term.includes("4p") || term.includes("tetra") || term.includes("trifas")) poles = 4;
+    else if (term.includes("3p") || term.includes("tri")) poles = 3;
+    return getBudgetDrPrice({ current, poles });
+  }
+
   const rules = [
-    { pattern: /disjuntor.*(6|10)a/, price: 20 },
-    { pattern: /disjuntor.*16a/, price: 19 },
-    { pattern: /disjuntor.*20a/, price: 20 },
-    { pattern: /disjuntor.*(25|32)a/, price: 25 },
-    { pattern: /disjuntor.*(40|50)a/, price: 45 },
-    { pattern: /\bdr\b|idr|diferencial/, price: 140 },
     { pattern: /dps|surto/, price: 85 },
-    { pattern: /cabo.*1[,.]?5/, price: 2.5 },
+    { pattern: /cabo.*240/, price: 375 },
+    { pattern: /cabo.*185/, price: 285 },
+    { pattern: /cabo.*150/, price: 225 },
+    { pattern: /cabo.*120/, price: 178 },
+    { pattern: /cabo.*95/, price: 138 },
+    { pattern: /cabo.*70/, price: 98 },
+    { pattern: /cabo.*50/, price: 72 },
+    { pattern: /cabo.*35/, price: 49 },
+    { pattern: /cabo.*25/, price: 36 },
+    { pattern: /cabo.*16/, price: 22.5 },
+    { pattern: /cabo.*10/, price: 14.5 },
+    { pattern: /cabo.*6/, price: 8.6 },
+    { pattern: /cabo.*4/, price: 5.8 },
     { pattern: /cabo.*2[,.]?5/, price: 3.8 },
-    { pattern: /cabo.*4/, price: 5.5 },
-    { pattern: /cabo.*6/, price: 8.2 },
-    { pattern: /cabo.*10/, price: 13.5 },
-    { pattern: /quadro.*(12|18)/, price: 85 },
-    { pattern: /quadro.*24/, price: 110 },
-    { pattern: /quadro.*36/, price: 160 },
-    { pattern: /tomada/, price: 16 },
-    { pattern: /interruptor/, price: 14 },
-    { pattern: /caixa/, price: 6 },
-    { pattern: /eletroduto/, price: 3 },
-    { pattern: /curva|luva|bucha|arruela|abracadeira|abraçadeira/, price: 2.5 },
-    { pattern: /condulete/, price: 22 },
+    { pattern: /cabo.*1[,.]?5/, price: 2.5 },
+    { pattern: /qgbt.*800/, price: 6500 },
+    { pattern: /qgbt.*630/, price: 4800 },
+    { pattern: /qgbt.*400/, price: 2900 },
+    { pattern: /qgbt.*250|qgbt/, price: 1650 },
+    { pattern: /quadro.*(48|54)/, price: 260 },
+    { pattern: /quadro.*36/, price: 180 },
+    { pattern: /quadro.*24/, price: 130 },
+    { pattern: /quadro.*(12|18)/, price: 95 },
+    { pattern: /tomada.*20a/, price: 22 },
+    { pattern: /tomada/, price: 18 },
+    { pattern: /interruptor.*(paralelo|three|intermediario)/, price: 24 },
+    { pattern: /interruptor/, price: 16 },
+    { pattern: /caixa.*4x4/, price: 9.5 },
+    { pattern: /caixa.*4x2|caixa/, price: 5.8 },
+    { pattern: /condulete/, price: 26 },
+    { pattern: /eletroduto.*galvan/, price: 18.5 },
+    { pattern: /eletroduto/, price: 2.8 },
+    { pattern: /curva/, price: 3.5 },
+    { pattern: /luva/, price: 1.4 },
+    { pattern: /bucha.*arruela/, price: 1.2 },
+    { pattern: /abracadeira|abraçadeira/, price: 1.6 },
+    { pattern: /conector.*5\s*vias/, price: 4.5 },
     { pattern: /conector|borne|emenda/, price: 2.9 },
-    { pattern: /terminal|ilh[oó]s|olhal|garfo/, price: 0.9 },
-    { pattern: /barramento|trilho|canaleta|prensa/, price: 22 },
-    { pattern: /fita|anilha|etiqueta|fixador|parafuso|bucha/, price: 5 },
-    { pattern: /rack|cftv|nvr|dvr/, price: 420 },
-    { pattern: /ar condicionado|split/, price: 45 },
+    { pattern: /terminal.*(compressao|tubular|ilhos|olhal|garfo)/, price: 1.2 },
+    { pattern: /barramento.*trifas/, price: 68 },
+    { pattern: /barramento/, price: 38 },
+    { pattern: /canaleta/, price: 28 },
+    { pattern: /trilho/, price: 18 },
+    { pattern: /prensa/, price: 4.8 },
+    { pattern: /fita.*auto\s*fus/, price: 24 },
+    { pattern: /fita/, price: 9.5 },
+    { pattern: /anilha|etiqueta|fixador|parafuso|bucha/, price: 0.45 },
+    { pattern: /rack|cftv|nvr|dvr/, price: 450 },
+    { pattern: /ar condicionado|split/, price: 55 },
   ];
 
   const match = rules.find((rule) => rule.pattern.test(term));
@@ -157,24 +285,32 @@ const isGeneralPanelComponent = (component = {}) => (
 const withMainProtectionOverride = (component = {}, mainProtection = null) => {
   if (!mainProtection || !isGeneralPanelComponent(component)) return component;
   const spec = component.type === "dr" ? mainProtection.dr : mainProtection.breaker;
-  return { ...component, current: spec.current, poles: spec.poles, curve: spec.curve || component.curve };
+  if (!spec || !spec.current) return component;
+  return { ...component, current: spec.current, poles: spec.poles || component.poles, curve: spec.curve || component.curve };
 };
 
 const breakerMaterialFromComponent = (component = {}) => {
   const current = Math.max(6, Number(component.current || component.breaker_a || component.rating || component.breaker) || 16);
   const poles = Math.max(1, Number(component.poles || component.breaker_poles || 1) || 1);
   const curve = String(component.curve || component.breaker_curve || "").trim();
-  const baseName = `Disjuntor ${current}A`;
+  const isGeneral = component.isGeneral === true || /geral/i.test(String(component.label || component.name || ""));
   const poleSuffix = `${poles}P${curve ? `/${curve}` : ""}`;
-  const name = component.isGeneral || /geral/i.test(String(component.label || component.name || ""))
-    ? `Disjuntor geral ${current}A ${poleSuffix}`
-    : `Disjuntor ${current}A ${poleSuffix}`;
-  const poleFactor = poles >= 3 ? 2.8 : poles === 2 ? 1.9 : 1;
-  const basePrice = BUDGET_BASE_MATERIAL_PRICES[baseName] || estimateLocalMaterialPrice(baseName);
+  const isMoldedCase = (isGeneral && current >= 100) || current >= 150 || /caixa moldada|mccb/i.test(String(component.label || component.name || ""));
+
+  const prefix = isGeneral ? "Disjuntor geral" : "Disjuntor";
+  const name = `${prefix} ${current}A ${poleSuffix}`;
+  const price = calculateCircuitBreakerPrice({
+    current,
+    poles,
+    isGeneral,
+    curve,
+    name,
+  });
+
   return {
     name,
     qty: 1,
-    price: Math.round(basePrice * poleFactor * 100) / 100,
+    price: Math.round(price * 100) / 100,
   };
 };
 

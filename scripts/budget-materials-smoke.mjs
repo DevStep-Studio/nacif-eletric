@@ -81,4 +81,65 @@ assert.ok(
   "todo item mantido pertence a uma categoria de quadro",
 );
 
-console.log("budget materials smoke: ok");
+// ── Verificação de Preços Realistas de Materiais e Proteção ─────────────────
+import {
+  calculateCircuitBreakerPrice,
+  estimateLocalMaterialPrice,
+  buildProjectBudgetMaterials,
+} from "../src/lib/projectBudgetMaterials.js";
+import { getBudgetDrPrice } from "../src/lib/budgetElectricalMaterials.js";
+
+// Testes de Disjuntores de Alta Capacidade / Caixa Moldada
+assert.equal(calculateCircuitBreakerPrice({ current: 630, poles: 3, isGeneral: true }), 3200, "Disjuntor geral 630A 3P deve custar R$ 3.200");
+assert.equal(calculateCircuitBreakerPrice({ current: 800, poles: 3, isGeneral: true }), 5400, "Disjuntor geral 800A 3P deve custar R$ 5.400");
+assert.equal(calculateCircuitBreakerPrice({ current: 400, poles: 3, isGeneral: true }), 1950, "Disjuntor geral 400A 3P deve custar R$ 1.950");
+assert.equal(calculateCircuitBreakerPrice({ current: 250, poles: 3, isGeneral: true }), 1150, "Disjuntor geral 250A 3P deve custar R$ 1.150");
+assert.equal(calculateCircuitBreakerPrice({ current: 160, poles: 3, isGeneral: true }), 740, "Disjuntor geral 160A 3P deve custar R$ 740");
+assert.equal(calculateCircuitBreakerPrice({ current: 100, poles: 3, isGeneral: true }), 480, "Disjuntor geral 100A 3P deve custar R$ 480 (caixa moldada)");
+
+// Testes de Mini-Disjuntores DIN
+assert.equal(calculateCircuitBreakerPrice({ current: 40, poles: 3 }), 98, "Disjuntor 40A 3P DIN deve custar R$ 98");
+assert.equal(calculateCircuitBreakerPrice({ current: 40, poles: 2 }), 66.5, "Disjuntor 40A 2P DIN deve custar R$ 66,50");
+assert.equal(calculateCircuitBreakerPrice({ current: 63, poles: 3 }), 138, "Disjuntor 63A 3P DIN deve custar R$ 138");
+assert.equal(calculateCircuitBreakerPrice({ current: 20, poles: 1 }), 19.9, "Disjuntor 20A 1P DIN deve custar R$ 19,90");
+
+// Testes de DRs por Amperagem
+assert.equal(getBudgetDrPrice({ current: 250, poles: 4 }), 1750, "DR Tetrapolar 250A deve custar R$ 1.750");
+assert.equal(getBudgetDrPrice({ current: 40, poles: 4 }), 275, "DR Tetrapolar 40A deve custar R$ 275");
+assert.equal(getBudgetDrPrice({ current: 40, poles: 2 }), 155, "DR Bipolar 40A deve custar R$ 155");
+
+// Testes de Estimativa Inteligente de Texto
+assert.equal(estimateLocalMaterialPrice("Disjuntor geral 630A 3P/C"), 3200, "Estimativa de disjuntor geral 630A 3P deve ser R$ 3.200");
+assert.equal(estimateLocalMaterialPrice("Disjuntor 40A 3P/C"), 98, "Estimativa de disjuntor 40A 3P/C deve ser R$ 98");
+assert.equal(estimateLocalMaterialPrice("Disjuntor 40A 2P/C"), 66.5, "Estimativa de disjuntor 40A 2P/C deve ser R$ 66,50");
+
+// Teste de montagem completa do orçamento com disjuntor geral 630A
+const mockProject = {
+  name: "Obra Industrial",
+  supply_type: "Trifásico",
+  panel_boards: [
+    {
+      layout: {
+        rails: [
+          {
+            components: [
+              { id: "gen_brk", type: "breaker", isGeneral: true, current: 630, poles: 3, curve: "C", label: "DJ Geral 630A" },
+              { id: "gen_dr", type: "dr", isGeneral: true, current: 250, poles: 4, label: "DR Geral 250A" },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+const budget = buildProjectBudgetMaterials(mockProject);
+const brkItem = budget.materials.find((m) => m.name.includes("630A"));
+const drItem = budget.materials.find((m) => m.name.includes("250A"));
+assert.ok(brkItem, "Disjuntor 630A está no orçamento");
+assert.equal(brkItem.price, 3200, "Preço do disjuntor geral 630A é R$ 3.200 e não R$ 70");
+assert.ok(drItem, "DR 250A está no orçamento");
+assert.equal(drItem.price, 1750, "Preço do DR 250A é R$ 1.750");
+
+console.log("budget materials smoke: ok (todos os preços e testes aprovados)");
+

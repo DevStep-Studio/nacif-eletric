@@ -6,36 +6,73 @@ const normalizeText = (value = "") => (
 );
 
 export const BUDGET_MATERIAL_PRICES = {
-  "DR Monofasico 40A 30mA": 150,
-  "DR Bifasico 40A 30mA": 170,
-  "DR Tripolar 40A 30mA": 240,
+  // Dispositivos Diferenciais Residuais (DR / IDR)
+  "DR Monofasico 25A 30mA": 125,
+  "DR Monofasico 40A 30mA": 145,
+  "DR Monofasico 63A 30mA": 175,
+  "DR Bifasico 25A 30mA": 135,
+  "DR Bifasico 40A 30mA": 155,
+  "DR Bifasico 63A 30mA": 185,
+  "DR Tripolar 40A 30mA": 245,
+  "DR Tripolar 63A 30mA": 290,
+  "DR Tetrapolar 25A 30mA (Trifasico)": 245,
   "DR Tetrapolar 40A 30mA (Trifasico)": 275,
+  "DR Tetrapolar 63A 30mA (Trifasico)": 320,
+  "DR Tetrapolar 80A 30mA (Trifasico)": 460,
+  "DR Tetrapolar 100A 30mA (Trifasico)": 580,
+  "DR Tetrapolar 125A 30mA (Trifasico)": 780,
+  "DR Tetrapolar 160A 30mA (Trifasico)": 1250,
+  "DR Tetrapolar 200A 30mA (Trifasico)": 1450,
+  "DR Tetrapolar 250A 30mA (Trifasico)": 1750,
+  "DR Tetrapolar 400A 30mA (Trifasico)": 2400,
+  "DR Tetrapolar 630A 30mA (Trifasico)": 3200,
+
+  // Dispositivos de Proteção contra Surtos (DPS)
+  "DPS Classe II": 85,
+  "DPS Classe II 275V 20kA": 85,
+  "DPS Classe II 275V 45kA": 110,
+  "DPS Classe I+II 255V 50kA": 320,
+
+  // Conectores e Terminais
   "Conector de emenda compacto 3 vias": 2.9,
+  "Conector de emenda compacto 5 vias": 4.5,
   "Terminal tubular isolado sortido": 0.75,
   "Terminal olhal/garfo isolado para quadro": 1.2,
+  "Terminal de compressão tubular 25-50mm²": 6.5,
+  "Terminal de compressão tubular 70-120mm²": 14,
+  "Terminal de compressão tubular 150-240mm²": 24,
+
+  // Infraestrutura e Caixas
   "Caixa 4x2 PVC embutir": 5.8,
   "Caixa 4x4 PVC embutir/passagem": 9.5,
-  "Condulete aluminio tipo C/L/T": 24,
+  "Condulete aluminio tipo C/L/T": 26,
   "Curva 90 para eletroduto": 3.5,
-  "Luva para eletroduto": 1.2,
-  "Bucha e arruela para eletroduto": 1.1,
-  "Abraçadeira tipo D com parafuso": 1.4,
-  "Fita isolante antichama": 8.5,
-  "Fita auto fusão": 18,
+  "Luva para eletroduto": 1.4,
+  "Bucha e arruela para eletroduto": 1.2,
+  "Abraçadeira tipo D com parafuso": 1.6,
+  "Fita isolante antichama": 9.5,
+  "Fita auto fusão": 24,
   "Anilha/etiqueta de identificação": 0.35,
+
+  // Quadros e Barramentos
   "Barramento fase pente/garfo": 38,
+  "Barramento fase pente/garfo 80A": 38,
+  "Barramento fase pente/garfo 100A Trifasico": 68,
   "Barramento neutro isolado": 28,
-  "Barramento terra PE": 24,
-  "Canaleta recortada para quadro": 22,
+  "Barramento terra PE": 28,
+  "Bloco distribuidor tetrapolar 125A": 88,
+  "Canaleta recortada para quadro": 28,
   "Trilho DIN 35mm": 18,
-  "Prensa-cabo/entrada de quadro": 4.5,
+  "Prensa-cabo/entrada de quadro": 4.8,
   "Parafuso, bucha e fixadores": 0.45,
+
+  // Acabamentos Elétricos
   "Tomada 2P+T 10A com placa": 18,
   "Tomada 2P+T 20A com placa": 22,
   "Interruptor simples com placa": 16,
   "Interruptor paralelo/intermediario com placa": 24,
   "Ponto de luz/soquete plafon": 18,
-  "Rack CFTV/Telecom 6U": 420,
+  "Rack CFTV/Telecom 6U": 450,
 };
 
 export const GENERATED_BUDGET_SOURCES = new Set([
@@ -82,10 +119,36 @@ const CONDUIT_PRICE_FACTOR = {
   '4"': 12.5,
 };
 
-const standardProtectionRating = (value = 40) => {
-  const current = Math.max(40, Number(value) || 40);
-  const standards = [40, 63, 80, 100, 125, 160, 200, 250];
+export const standardProtectionRating = (value = 40) => {
+  const current = Math.max(25, Number(value) || 40);
+  const standards = [25, 40, 63, 80, 100, 125, 160, 200, 250, 400, 630];
   return standards.find((rating) => current <= rating) || standards[standards.length - 1];
+};
+
+export const getBudgetDrPrice = ({ current = 40, poles = 2 } = {}) => {
+  const i = Math.max(25, Number(current) || 40);
+  const p = Math.max(1, Number(poles) || 2);
+
+  if (p >= 4 || p === 3) {
+    if (i >= 630) return 3200;
+    if (i >= 400) return 2400;
+    if (i >= 250) return 1750;
+    if (i >= 200) return 1450;
+    if (i >= 160) return 1250;
+    if (i >= 125) return 780;
+    if (i >= 100) return 580;
+    if (i >= 80) return 460;
+    if (i >= 63) return 320;
+    if (i >= 40) return 275;
+    return 245;
+  }
+
+  // Monofásico ou Bifásico (2P / 1P)
+  if (i >= 100) return 340;
+  if (i >= 80) return 260;
+  if (i >= 63) return 185;
+  if (i >= 40) return 155;
+  return 135;
 };
 
 export const phaseCountForBudgetCircuit = (circuit = {}) => {
@@ -288,7 +351,7 @@ export const getBudgetDrMaterial = ({
     return {
       name: `DR Tetrapolar ${rating}A 30mA (Trifásico)`,
       qty: Math.max(1, Number(quantity) || 1),
-      price: rating === 40 ? BUDGET_MATERIAL_PRICES["DR Tetrapolar 40A 30mA (Trifasico)"] : Math.round(rating * 7),
+      price: getBudgetDrPrice({ current: rating, poles: 4 }),
       poles: 4,
       supplyType,
     };
@@ -298,7 +361,7 @@ export const getBudgetDrMaterial = ({
     return {
       name: `DR Bifásico ${rating}A 30mA`,
       qty: Math.max(1, Number(quantity) || 1),
-      price: rating === 40 ? BUDGET_MATERIAL_PRICES["DR Bifasico 40A 30mA"] : Math.round(rating * 4.8),
+      price: getBudgetDrPrice({ current: rating, poles: 2 }),
       poles: 2,
       supplyType,
     };
@@ -307,8 +370,8 @@ export const getBudgetDrMaterial = ({
   return {
     name: `DR Monofásico ${rating}A 30mA`,
     qty: Math.max(1, Number(quantity) || 1),
-    price: rating === 40 ? BUDGET_MATERIAL_PRICES["DR Monofasico 40A 30mA"] : Math.round(rating * 4.2),
-    poles: 2,
+    price: getBudgetDrPrice({ current: rating, poles: 1 }),
+    poles: 1,
     supplyType,
   };
 };
@@ -335,7 +398,7 @@ export const getBudgetDrMaterialFromDevice = (device = {}, context = {}) => {
     return {
       name: `DR Tetrapolar ${current}A 30mA (Trifásico)`,
       qty: quantity,
-      price: current === 40 ? BUDGET_MATERIAL_PRICES["DR Tetrapolar 40A 30mA (Trifasico)"] : Math.round(current * 7),
+      price: getBudgetDrPrice({ current, poles: 4 }),
       poles: 4,
       supplyType: "Trifásico",
     };
@@ -345,7 +408,7 @@ export const getBudgetDrMaterialFromDevice = (device = {}, context = {}) => {
     return {
       name: `DR Tripolar ${current}A 30mA`,
       qty: quantity,
-      price: current === 40 ? BUDGET_MATERIAL_PRICES["DR Tripolar 40A 30mA"] : Math.round(current * 6),
+      price: getBudgetDrPrice({ current, poles: 3 }),
       poles: 3,
       supplyType: "Trifásico",
     };
@@ -355,7 +418,7 @@ export const getBudgetDrMaterialFromDevice = (device = {}, context = {}) => {
     return {
       name: `DR Bifásico ${current}A 30mA`,
       qty: quantity,
-      price: current === 40 ? BUDGET_MATERIAL_PRICES["DR Bifasico 40A 30mA"] : Math.round(current * 4.8),
+      price: getBudgetDrPrice({ current, poles: 2 }),
       poles: 2,
       supplyType: "Bifásico",
     };
@@ -364,7 +427,7 @@ export const getBudgetDrMaterialFromDevice = (device = {}, context = {}) => {
   return {
     name: `DR Monofásico ${current}A 30mA`,
     qty: quantity,
-    price: current === 40 ? BUDGET_MATERIAL_PRICES["DR Monofasico 40A 30mA"] : Math.round(current * 4.2),
+    price: getBudgetDrPrice({ current, poles: 1 }),
     poles: 1,
     supplyType: "Monofásico",
   };

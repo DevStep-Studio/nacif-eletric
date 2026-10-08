@@ -1,20 +1,46 @@
-import { useMemo, useState } from "react";
-import { Compass, Layers, Rotate3d, Sun, Zap } from "lucide-react";
-import { getAzimuthWithCardinal } from "@/lib/solarDesignerGeometry";
+import React, { useState } from "react";
+import { Compass, Rotate3d, Sun, Zap, Layers } from "lucide-react";
+import { calculateAzimuth } from "../../lib/solarDesignerGeometry";
 
-export default function Solar3DView({ config, panelPolygons = [], sizing }) {
+export default function Solar3DView({ config, areas = [], sizing, panelPolygons = [] }) {
   const [pitchAngle, setPitchAngle] = useState(config.roof_pitch_deg || 15);
-  const [sunTime, setSunTime] = useState(12); // hora do dia (6 a 18)
-  const azimuth = useMemo(() => getAzimuthWithCardinal(config.roof_rotation_deg || 24), [config.roof_rotation_deg]);
+  const [sunTime, setSunTime] = useState(12);
+  const [selectedAreaId, setSelectedAreaId] = useState(areas[0]?.id || null);
 
-  // Posição calculada do sol no domo 3D
-  const sunElevationPct = Math.max(10, Math.sin(((sunTime - 6) / 12) * Math.PI) * 90);
-  const sunPositionX = ((sunTime - 6) / 12) * 80 + 10;
+  const activeAreas = areas.length > 0 ? areas : (config.areas?.length > 0 ? config.areas : []);
+  const currentArea = activeAreas.find((a) => a.id === selectedAreaId) || activeAreas[0] || {};
+  const currentPolygon = currentArea?.polygon || config.roof_polygon || [];
+
+  const azimuth = calculateAzimuth(currentPolygon);
+
+  // Posição visual do sol (6h a 18h)
+  const sunPositionX = ((sunTime - 6) / 12) * 100;
+  const sunElevationPct = Math.sin(((sunTime - 6) / 12) * Math.PI) * 100;
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-gradient-to-b from-sky-100/60 via-slate-100 to-slate-200 flex flex-col items-center justify-center p-6 text-slate-900 select-none">
-      {/* Controles de visualização 3D no topo (Light) */}
-      <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 bg-white/95 backdrop-blur-md border border-slate-200/90 p-2 rounded-xl text-xs text-slate-800 shadow-xl">
+    <div className="relative h-full w-full bg-gradient-to-b from-sky-100 via-sky-50 to-slate-200 overflow-hidden flex flex-col items-center justify-center select-none">
+      {/* Barra de Controles 3D Superior (Light Theme) */}
+      <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-white/95 backdrop-blur-md border border-slate-200/90 p-1.5 rounded-xl text-xs shadow-xl text-slate-800">
+        {/* Seletor de Áreas quando houver múltiplas */}
+        {activeAreas.length > 1 && (
+          <div className="flex items-center gap-1 pr-2 border-r border-slate-200">
+            <Layers className="h-3.5 w-3.5 text-[#00d8b8]" />
+            {activeAreas.map((area, idx) => (
+              <button
+                key={area.id}
+                type="button"
+                onClick={() => setSelectedAreaId(area.id)}
+                className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+                  (currentArea.id === area.id)
+                    ? "bg-[#00d8b8] text-slate-950 font-black shadow-sm"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                }`}
+              >
+                {area.name || `Área ${idx + 1}`}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2 px-2">
           <Rotate3d className="h-4 w-4 text-[#00d8b8]" />
           <span className="font-bold">Inclinação: {pitchAngle}°</span>
@@ -52,7 +78,6 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
       {/* Sol e Trajetória 3D */}
       <div className="absolute inset-x-12 top-10 h-36 pointer-events-none">
         <div className="relative w-full h-full">
-          {/* Arco da trajetória solar */}
           <svg className="w-full h-full overflow-visible">
             <path
               d="M 50 120 Q 50% 10 950 120"
@@ -62,7 +87,6 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
               strokeDasharray="6 6"
             />
           </svg>
-          {/* Marcador do Sol */}
           <div
             style={{ left: `${sunPositionX}%`, top: `${100 - sunElevationPct}%` }}
             className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 transition-all duration-300"
@@ -84,7 +108,6 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
           transform: `perspective(900px) rotateX(${pitchAngle + 35}deg) rotateZ(${-azimuth.degrees / 2}deg) scale(1.05)`,
         }}
       >
-        {/* Estrutura do Telhado */}
         <div
           style={{
             width: "380px",
@@ -93,11 +116,9 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
           }}
           className="relative rounded-2xl bg-gradient-to-tr from-[#a0522d] via-[#b86236] to-[#cd7f32] border-4 border-[#8c4b26]/70 flex flex-wrap content-start p-3.5 gap-1.5 overflow-hidden"
         >
-          {/* Textura de telhas cerâmicas */}
           <div className="absolute inset-0 opacity-15 pointer-events-none bg-[repeating-linear-gradient(0deg,#000_0px,#000_4px,transparent_4px,transparent_16px)]" />
 
-          {/* Renderização dos Módulos Solares Fotovoltaicos 3D */}
-          {Array.from({ length: Math.min(36, sizing?.panelCount || 21) }).map((_, i) => (
+          {Array.from({ length: Math.min(36, currentArea?.panelCount || sizing?.panelCount || 21) }).map((_, i) => (
             <div
               key={i}
               className="relative h-12 w-8 rounded-sm bg-gradient-to-b from-[#194b8e] to-[#0c2a54] border border-[#7ca6dc]/70 shadow-md flex flex-col justify-between p-0.5 overflow-hidden group hover:border-[#00d8b8] transition"
@@ -105,7 +126,6 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
                 boxShadow: "0 2px 5px rgba(0,0,0,0.3)",
               }}
             >
-              {/* Células fotovoltaicas com brilho reflexivo */}
               <div className="grid grid-cols-2 grid-rows-3 gap-[1px] h-full w-full opacity-75">
                 {Array.from({ length: 6 }).map((_, c) => (
                   <div key={c} className="bg-[#1e58a4]/60 rounded-[0.5px]" />
@@ -115,7 +135,6 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
             </div>
           ))}
 
-          {/* Obstáculo simulado em 3D (ex: Caixa d'água) */}
           <div
             className="absolute right-5 bottom-5 h-14 w-14 rounded-lg bg-gradient-to-b from-slate-200 to-slate-400 border-2 border-slate-500 shadow-[0_12px_24px_rgba(0,0,0,0.3)] flex flex-col items-center justify-center text-[8px] font-black text-slate-800"
             style={{
@@ -132,8 +151,13 @@ export default function Solar3DView({ config, panelPolygons = [], sizing }) {
       <div className="absolute bottom-4 inset-x-6 z-20 flex items-center justify-between bg-white/95 backdrop-blur-md border border-slate-200/90 px-4 py-2.5 rounded-xl text-xs shadow-xl text-slate-800">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5 font-bold text-emerald-600">
-            <Zap className="h-4 w-4" /> {sizing?.panelCount || 21} Módulos Posicionados
+            <Zap className="h-4 w-4" /> {sizing?.panelCount || 21} Módulos Totais ({activeAreas.length} {activeAreas.length === 1 ? "Área" : "Áreas"})
           </span>
+          {activeAreas.length > 1 && (
+            <span className="text-slate-500">
+              {currentArea.name || "Área"}: <strong className="text-slate-900">{currentArea.panelCount || 0} módulos</strong>
+            </span>
+          )}
           <span className="text-slate-500">
             Inclinação: <strong className="text-slate-900">{pitchAngle}°</strong>
           </span>
