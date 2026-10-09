@@ -311,6 +311,7 @@ export default function SolarProject() {
   const [pendingObstaclePreset, setPendingObstaclePreset] = useState(null);
   const [editingAreaNameId, setEditingAreaNameId] = useState(null);
   const [tempAreaName, setTempAreaName] = useState("");
+  const [drawingTargetAreaId, setDrawingTargetAreaId] = useState(null);
 
   // Seleções do Inspector Contextual
   const [selectedEntity, setSelectedEntity] = useState({ type: "none", id: null }); // type: "none" | "roof" | "module" | "string" | "obstacle"
@@ -639,12 +640,39 @@ export default function SolarProject() {
     setConfig(normalizeSolarConfig(next));
   };
 
+  // Helper para obter com segurança todas as áreas existentes
+  const getSafeExistingAreas = useCallback(() => {
+    if (Array.isArray(config.areas) && config.areas.length > 0) {
+      return config.areas;
+    }
+    if (Array.isArray(config.roof_polygon) && config.roof_polygon.length >= 3) {
+      return [
+        createDefaultSolarArea(
+          {
+            id: "area_1",
+            name: "Água 1",
+            polygon: config.roof_polygon,
+            roof_rotation_deg: config.roof_rotation_deg || 0,
+            roof_pitch_deg: config.roof_pitch_deg || 12,
+            structure_type: config.structure_type || "triangle",
+            module_orientation: config.module_orientation || "horizontal",
+            auto_fill_surface: config.auto_fill_surface !== false,
+          },
+          1,
+          config
+        ),
+      ];
+    }
+    return [];
+  }, [config]);
+
   // Atualiza parâmetros da área selecionada (ex: inclinação, azimute, orientação, espaçamento)
   const updateSelectedArea = (field, value) => {
     if (!selectedArea) return;
     const targetId = selectedArea.id;
+    const existing = getSafeExistingAreas();
 
-    const nextAreas = config.areas.map((a) => {
+    const nextAreas = existing.map((a) => {
       if (a.id !== targetId) return a;
       const updated = { ...a, [field]: value };
       if (field === "roof_width_m" || field === "roof_height_m") {
@@ -668,16 +696,46 @@ export default function SolarProject() {
     });
   }, [selectedArea, toast]);
 
-  // Criação de uma nova área solar demarcada pelo usuário no mapa
+  // Criação ou redesenho de área solar demarcada pelo usuário no mapa
   const handleCreateArea = useCallback((createdPositions) => {
     const normalizedPositions = serializeRoofPolygon(normalizeRoofPolygon(createdPositions));
     if (normalizedPositions.length < 3) return;
 
-    const newIndex = config.areas.length + 1;
+    const existingAreas = getSafeExistingAreas();
+
+    // Se estava em modo de redesenho da área atual
+    if (drawingTargetAreaId) {
+      const nextAreas = existingAreas.map((a) => {
+        if (a.id !== drawingTargetAreaId) return a;
+        return createDefaultSolarArea(
+          {
+            ...a,
+            polygon: normalizedPositions,
+          },
+          1,
+          config
+        );
+      });
+      const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
+      setConfig(nextConfig);
+      setSelectedAreaId(drawingTargetAreaId);
+      setSelectedEntity({ type: "roof", id: drawingTargetAreaId });
+      setEditorMode("select");
+      setDrawingTargetAreaId(null);
+      pushAreasHistory(nextAreas);
+      toast({
+        title: "Água do telhado atualizada!",
+        description: "Geometria redesenhada com sucesso.",
+      });
+      return;
+    }
+
+    // Criação de NOVA ÁGUA adicional (quantas o usuário quiser)
+    const newIndex = existingAreas.length + 1;
     const newArea = createDefaultSolarArea(
       {
         id: `area_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        name: `Área ${newIndex}`,
+        name: `Água ${newIndex}`,
         polygon: normalizedPositions,
         roof_rotation_deg: config.roof_rotation_deg || 0,
         roof_pitch_deg: config.roof_pitch_deg || 12,
@@ -689,25 +747,29 @@ export default function SolarProject() {
       config
     );
 
-    const nextAreas = [...config.areas, newArea];
+    const nextAreas = [...existingAreas, newArea];
     const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
     setConfig(nextConfig);
     setSelectedAreaId(newArea.id);
+    setSelectedEntity({ type: "roof", id: newArea.id });
     setEditorMode("select");
+    setDrawingTargetAreaId(null);
+    setSidebarOpen(true);
     pushAreasHistory(nextAreas);
 
     toast({
-      title: "Área solar adicionada!",
+      title: "Água do telhado adicionada!",
       description: `${newArea.name} demarcada com sucesso (${newArea.roof_area_m2} m²).`,
     });
-  }, [config, pushAreasHistory, toast]);
+  }, [config, drawingTargetAreaId, getSafeExistingAreas, pushAreasHistory, toast]);
 
   // Alteração de vértices na área ativa
   const handleRoofGeometryChange = useCallback((positions) => {
     if (!selectedArea) return;
     const normalizedPositions = serializeRoofPolygon(normalizeRoofPolygon(positions));
+    const existingAreas = getSafeExistingAreas();
 
-    const nextAreas = config.areas.map((a) => {
+    const nextAreas = existingAreas.map((a) => {
       if (a.id !== selectedArea.id) return a;
       return createDefaultSolarArea(
         {
@@ -722,7 +784,7 @@ export default function SolarProject() {
     const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
     setConfig(nextConfig);
     pushAreasHistory(nextAreas);
-  }, [config, selectedArea, pushAreasHistory]);
+  }, [config, selectedArea, getSafeExistingAreas, pushAreasHistory]);
 
   // Duplicação de área solar
   const handleDuplicateArea = (areaId) => {
@@ -779,15 +841,35 @@ export default function SolarProject() {
     setSelectedEntity({ type: "none", id: null });
   }, [handleRoofGeometryChange]);
 
-  // Iniciar demarcação de nova área
-  const handleStartDrawNewArea = () => {
+  // Selecionar área específica
+  const handleSelectArea = useCallback((areaId) => {
+    setSelectedAreaId(areaId);
+    setSelectedEntity({ type: "roof", id: areaId });
+    setSidebarOpen(true);
+    setEditorMode("select");
+  }, []);
+
+  // Iniciar demarcação de nova água do telhado
+  const handleStartDrawNewArea = useCallback(() => {
+    setDrawingTargetAreaId(null);
     setEditorMode("draw-polygon");
     setSidebarOpen(true);
     toast({
-      title: "Demarcar Nova Área",
-      description: "Clique no mapa de satélite para definir os vértices da nova área solar.",
+      title: "Adicionar Nova Água de Telhado",
+      description: "Clique no mapa de satélite para definir os vértices da nova água do telhado.",
     });
-  };
+  }, [toast]);
+
+  // Redesenhar a água do telhado atualmente selecionada
+  const handleRedrawSelectedArea = useCallback(() => {
+    if (!selectedArea) return;
+    setDrawingTargetAreaId(selectedArea.id);
+    setEditorMode("draw-polygon");
+    toast({
+      title: `Redesenhar ${selectedArea.name || "Água"}`,
+      description: "Clique no mapa para redefinir os vértices desta água do telhado.",
+    });
+  }, [selectedArea, toast]);
 
   // Renomeação de área
   const handleSaveAreaName = (areaId) => {
@@ -1458,6 +1540,48 @@ export default function SolarProject() {
 
             {/* Conteúdo Rolável do Inspector Contextual */}
             <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5 text-xs">
+              {/* Seletor Rápido de Águas do Telhado em Abas */}
+              {multiAreaLayouts.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-2 space-y-1.5 shadow-sm">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1">
+                      <Layers className="h-3.5 w-3.5 text-[#009b84]" /> Águas do Telhado ({multiAreaLayouts.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleStartDrawNewArea}
+                      className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-[#009b84] hover:bg-[#E6FAF7] rounded-md transition"
+                      title="Demarcar outra água de telhado"
+                    >
+                      <Plus className="h-3 w-3 stroke-[3]" /> Nova Água
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {multiAreaLayouts.map((area, idx) => {
+                      const isSelected = area.id === selectedArea?.id;
+                      return (
+                        <button
+                          key={area.id}
+                          type="button"
+                          onClick={() => handleSelectArea(area.id)}
+                          className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                            isSelected
+                              ? "bg-[#00d8b8] text-slate-950 font-black shadow-sm ring-1 ring-[#00d8b8]"
+                              : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200"
+                          }`}
+                          title={`${area.name || `Água ${idx + 1}`} · ${area.panelCount || 0} módulos (${Math.round(area.roof_area_m2 || 0)} m²)`}
+                        >
+                          <span className="truncate">{area.name || `Água ${idx + 1}`}</span>
+                          <span className="text-[10px] opacity-80 font-bold ml-1">
+                            {area.panelCount || 0} un
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Seção 1: GERENCIAMENTO DE MÚLTIPLAS ÁREAS SOLARES */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 overflow-hidden shadow-sm">
                 <div className="flex items-center justify-between p-2.5 bg-slate-100/70 border-b border-slate-200">
@@ -1622,10 +1746,7 @@ export default function SolarProject() {
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => {
-                          setEditorMode("draw-polygon");
-                          toast({ title: "Modo de Demarcação", description: "Clique no mapa para redesenhar a área." });
-                        }}
+                        onClick={handleRedrawSelectedArea}
                         className="h-8 rounded-lg border-slate-200 bg-[#E6FAF7] text-[#009b84] font-bold text-xs hover:bg-[#d5f7f2]"
                       >
                         <RotateCw className="h-3 w-3 mr-1" /> Redesenhar
@@ -2153,7 +2274,13 @@ export default function SolarProject() {
 
             <button
               type="button"
-              onClick={() => setEditorMode("draw-polygon")}
+              onClick={() => {
+                if (editorMode === "draw-polygon") {
+                  setEditorMode("select");
+                } else {
+                  handleStartDrawNewArea();
+                }
+              }}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
                 editorMode === "draw-polygon"
                   ? "bg-[#00d8b8] text-slate-950 font-black shadow-sm"
@@ -2161,7 +2288,7 @@ export default function SolarProject() {
                   ? "bg-[#E6FAF7] text-[#009b84] border border-[#00d8b8]/40 hover:bg-[#d5f7f2]"
                   : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
               }`}
-              title="Demarcar Área do Telhado (A)"
+              title={!hasRoof ? "Demarcar Área do Telhado (A)" : "Adicionar Nova Água de Telhado (A)"}
             >
               <Pencil className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{!hasRoof ? "Demarcar Telhado" : "Área"}</span>
@@ -2317,14 +2444,11 @@ export default function SolarProject() {
               selectedModuleIndex={selectedModuleIdx}
               electricalMode={appMode === "electrical"}
               strings={strings}
-              panelPolygons={allVisiblePanelPolygons}
-              showBadges={false}
+              showBadges={true}
               showMeasurements
               onEditorModeChange={setEditorMode}
-              onSelectArea={(id) => {
-                setSelectedAreaId(id);
-                setEditorMode("select");
-              }}
+              onSelectArea={handleSelectArea}
+              onSelectRoof={() => setSelectedEntity({ type: "roof", id: selectedArea?.id })}
               onCreateArea={handleCreateArea}
               onRoofChange={handleRoofGeometryChange}
               onAlignToEdge={handleAlignToEdge}

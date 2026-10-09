@@ -15,6 +15,7 @@ import {
 import SolarStepper from "./SolarStepper";
 import StepDadosProjeto from "./StepDadosProjeto";
 import StepLocalizacao from "./StepLocalizacao";
+import StepConsumo from "./StepConsumo";
 import ResultsBar from "./ResultsBar";
 
 function loadDraft() {
@@ -50,11 +51,23 @@ export default function SolarProjectWizard() {
     return () => window.clearTimeout(id);
   }, [state]);
 
-  const stepKey = CREATION_WIZARD_STEPS[stepIndex]?.key || "dados";
+  const stepKey = CREATION_WIZARD_STEPS[stepIndex]?.key || "localizacao";
   const stepErrors = useMemo(() => getStepErrors(stepKey, state), [stepKey, state]);
   const results = useMemo(() => getInstantResults(state), [state]);
 
-  const updateState = (patch) => setState((current) => ({ ...current, ...patch }));
+  const updateState = (patch) => {
+    setState((current) => {
+      const next = { ...current, ...patch };
+      // Sugestão automática e dinâmica de nome para projetos iniciados por endereço
+      if (!next.name || next.name.startsWith("Projeto Solar - ")) {
+        const addressLabel = [next.address, next.number, next.city].filter(Boolean).join(", ");
+        if (addressLabel) {
+          next.name = `Projeto Solar - ${addressLabel}`;
+        }
+      }
+      return next;
+    });
+  };
 
   const isLastStep = stepIndex === CREATION_WIZARD_STEPS.length - 1;
 
@@ -198,7 +211,7 @@ export default function SolarProjectWizard() {
 
   return (
     <div className="space-y-5">
-      {/* 1. Indicador de Progresso (Passo 1: Dados do projeto -> Passo 2: Localização) */}
+      {/* 1. Indicador de Progresso (Passo 1: Localização -> Passo 2: Dados do projeto -> Passo 3: Consumo) */}
       <SolarStepper
         steps={CREATION_WIZARD_STEPS}
         currentIndex={stepIndex}
@@ -209,8 +222,9 @@ export default function SolarProjectWizard() {
 
       {/* Conteúdo da Etapa Atual */}
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} />}
         {stepKey === "localizacao" && <StepLocalizacao state={state} onChange={updateState} />}
+        {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} />}
+        {stepKey === "consumo" && <StepConsumo state={state} onChange={updateState} />}
       </div>
 
       {/* Barra de Resultados Integrados */}
@@ -253,11 +267,13 @@ export default function SolarProjectWizard() {
               Criando projeto...
             </>
           ) : stepIndex === 0 ? (
-            "Avançar para localização →"
+            "Avançar para dados do projeto →"
+          ) : stepIndex === 1 ? (
+            "Avançar para dimensionamento (consumo) →"
           ) : (
             <>
               <Rocket className="h-4 w-4" />
-              Criar Projeto →
+              Criar Projeto e Abrir Editor 3D →
             </>
           )}
         </Button>

@@ -740,15 +740,15 @@ export default function SolarDesignerMap({
 
   // Reúne todos os painéis de todas as áreas
   const allAreasPanels = useMemo(() => {
-    if (controlledPanelPolygons && controlledPanelPolygons.length > 0) {
-      return [{ areaId: selectedArea?.id || "default", isSelected: true, panels: controlledPanelPolygons }];
-    }
     if (areas.length > 0) {
       return areas.map((a) => ({
         areaId: a.id,
         isSelected: a.id === (selectedArea?.id || selectedAreaId),
         panels: a.panelPolygons || [],
       }));
+    }
+    if (controlledPanelPolygons && controlledPanelPolygons.length > 0) {
+      return [{ areaId: selectedArea?.id || "default", isSelected: true, panels: controlledPanelPolygons }];
     }
     const generated = buildPanelPolygons(config, sizing);
     return [{ areaId: "default", isSelected: true, panels: generated }];
@@ -1037,7 +1037,7 @@ export default function SolarDesignerMap({
         <FloatingMapControls onFitRoof={onFitRoof} hasRoof={hasRoof} onToggle3D={onToggle3D} />
 
         {/* 1. Camada das Áreas Concluídas Não Selecionadas */}
-        {!isDrawing && areas
+        {areas
           .filter((a) => a.id !== selectedArea?.id && a.polygon?.length >= 3)
           .map((area) => (
             <Polygon
@@ -1045,16 +1045,18 @@ export default function SolarDesignerMap({
               positions={toLeafletPositions(area.polygon)}
               eventHandlers={{
                 click: (e) => {
+                  if (isDrawing) return;
                   L.DomEvent.stopPropagation(e);
                   onSelectArea?.(area.id);
                 },
               }}
               pathOptions={{
-                color: "#38bdf8",
+                color: "#0284c7",
                 fillColor: "#0284c7",
-                fillOpacity: 0.12,
-                opacity: 0.75,
+                fillOpacity: isDrawing ? 0.08 : 0.16,
+                opacity: isDrawing ? 0.5 : 0.85,
                 weight: 2,
+                dashArray: isDrawing ? "4, 4" : undefined,
               }}
             />
           ))}
@@ -1078,9 +1080,22 @@ export default function SolarDesignerMap({
             onChange={onRoofChange}
           />
         )}
+        {isDrawing && selectedRoofPolygon?.length >= 3 && (
+          <Polygon
+            positions={toLeafletPositions(selectedRoofPolygon)}
+            pathOptions={{
+              color: "#00d8b8",
+              fillColor: "#00d8b8",
+              fillOpacity: 0.1,
+              opacity: 0.6,
+              weight: 2,
+              dashArray: "4, 4",
+            }}
+          />
+        )}
 
         {/* 4. Badges de Identificação de todas as Áreas */}
-        {showBadges && !isDrawing && areas.map((area) => (
+        {showBadges && areas.map((area) => (
           <AreaBadge
             key={`badge-${area.id}`}
             area={area}

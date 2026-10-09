@@ -19,18 +19,19 @@ import {
 
 console.log("⚡ Executando testes automatizados: Stepper, Reordenação de Etapas, Auto-detecção de Distribuidora e Relatórios PDF...");
 
-// 1. Validar Etapas da Criação (2 Etapas: Dados e Localização) e Etapas Completas (5 Etapas dentro da visualização)
-console.log("1. Validando as etapas de criação (2 etapas) e dentro do projeto (5 etapas)...");
-assert.equal(CREATION_WIZARD_STEPS.length, 2, "A criação do projeto solar deve ter exatamente 2 etapas (até o passo 2).");
-assert.equal(CREATION_WIZARD_STEPS[0].key, "dados", "Etapa 1 de criação DEVE ser Dados do projeto.");
-assert.equal(CREATION_WIZARD_STEPS[1].key, "localizacao", "Etapa 2 de criação DEVE ser Localização.");
+// 1. Validar Etapas da Criação (3 Etapas: Localização, Dados e Consumo) e Etapas Completas (5 Etapas dentro da visualização)
+console.log("1. Validando as etapas de criação (3 etapas) e dentro do projeto (5 etapas)...");
+assert.equal(CREATION_WIZARD_STEPS.length, 3, "A criação do projeto solar deve ter 3 etapas (Localização -> Dados -> Consumo).");
+assert.equal(CREATION_WIZARD_STEPS[0].key, "localizacao", "Etapa 1 de criação DEVE ser Localização.");
+assert.equal(CREATION_WIZARD_STEPS[1].key, "dados", "Etapa 2 de criação DEVE ser Dados do projeto.");
+assert.equal(CREATION_WIZARD_STEPS[2].key, "consumo", "Etapa 3 de criação DEVE ser Consumo.");
 
-const expectedFullKeys = ["dados", "localizacao", "consumo", "equipamentos", "projeto"];
+const expectedFullKeys = ["localizacao", "dados", "consumo", "equipamentos", "projeto"];
 assert.equal(FULL_PROJECT_STEPS.length, 5, "Dentro da visualização do projeto deve ter as 5 etapas completas.");
 expectedFullKeys.forEach((key, idx) => {
   assert.equal(FULL_PROJECT_STEPS[idx].key, key, `Etapa ${idx + 1} deve ser '${key}' mas é '${FULL_PROJECT_STEPS[idx].key}'`);
 });
-console.log("   ✓ Validação das etapas concluída com sucesso: Criação (2 etapas) e Visualização (5 etapas).");
+console.log("   ✓ Validação das etapas concluída com sucesso: Criação (3 etapas) e Visualização (5 etapas).");
 
 // 1.1 Validar que só gera relatório depois de preencher os dados do projeto
 console.log("1.1 Validando regra de negócio: Só gera relatório após preencher os dados do projeto...");

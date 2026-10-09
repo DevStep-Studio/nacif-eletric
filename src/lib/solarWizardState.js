@@ -14,13 +14,14 @@ import {
 } from "./solarSizing.js";
 
 export const CREATION_WIZARD_STEPS = [
-  { key: "dados", label: "Dados do projeto" },
   { key: "localizacao", label: "Localização" },
+  { key: "dados", label: "Dados do projeto" },
+  { key: "consumo", label: "Consumo" },
 ];
 
 export const FULL_PROJECT_STEPS = [
-  { key: "dados", label: "Dados do projeto" },
   { key: "localizacao", label: "Localização" },
+  { key: "dados", label: "Dados do projeto" },
   { key: "consumo", label: "Consumo" },
   { key: "equipamentos", label: "Equipamentos" },
   { key: "projeto", label: "Projeto" },
