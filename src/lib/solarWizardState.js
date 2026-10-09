@@ -13,13 +13,20 @@ import {
   sizeFromDesiredPower,
 } from "./solarSizing.js";
 
-export const WIZARD_STEPS = [
+export const CREATION_WIZARD_STEPS = [
+  { key: "dados", label: "Dados do projeto" },
+  { key: "localizacao", label: "Localização" },
+];
+
+export const FULL_PROJECT_STEPS = [
   { key: "dados", label: "Dados do projeto" },
   { key: "localizacao", label: "Localização" },
   { key: "consumo", label: "Consumo" },
   { key: "equipamentos", label: "Equipamentos" },
   { key: "projeto", label: "Projeto" },
 ];
+
+export const WIZARD_STEPS = CREATION_WIZARD_STEPS;
 
 export const DRAFT_STORAGE_KEY = "voltai_solar_wizard_draft_v1";
 
@@ -232,4 +239,81 @@ export function getStepErrors(stepKey, state) {
   }
 
   return errors;
+}
+
+/**
+ * Validação rigorosa dos dados do projeto antes de gerar relatórios ou memoriais descritivos.
+ * Só gera relatório depois de preencher os dados do projeto (Consumo, Módulos, Inversor, etc.).
+ */
+export function validateProjectDataForReports(project = {}, config = {}, sizing = {}) {
+  const missing = [];
+  let firstMissingStep = null;
+
+  // 1. Dados básicos
+  const name = project?.name?.trim();
+  if (!name) {
+    missing.push("Nome do projeto");
+    if (!firstMissingStep) firstMissingStep = "dados";
+  }
+
+  // 2. Localização
+  const hasAddress = project?.address?.trim() || project?.city?.trim() || project?.state?.trim();
+  if (!hasAddress) {
+    missing.push("Endereço / Localização");
+    if (!firstMissingStep) firstMissingStep = "localizacao";
+  }
+
+  // 3. Consumo ou Potência alvo
+  const monthlyConsumption = Number(
+    project?.consumption?.monthly_consumption_kwh ||
+    project?.monthly_consumption_kwh ||
+    config?.monthly_consumption_kwh ||
+    0
+  );
+  const desiredPower = Number(
+    project?.desired_power_kwp ||
+    project?.solar_config?.desired_power_kwp ||
+    config?.desired_power_kwp ||
+    0
+  );
+  if (monthlyConsumption <= 0 && desiredPower <= 0) {
+    missing.push("Consumo de energia (kWh/mês)");
+    if (!firstMissingStep) firstMissingStep = "consumo";
+  }
+
+  // 4. Módulos Fotovoltaicos
+  const moduleWp = Number(config?.module_wp || project?.solar_config?.module_wp || 0);
+  const panelCount = Number(
+    sizing?.panelCount ||
+    sizing?.totalPanels ||
+    config?.requested_panel_count ||
+    project?.solar_config?.requested_panel_count ||
+    0
+  );
+  if (moduleWp <= 0) {
+    missing.push("Potência dos módulos (Wp)");
+    if (!firstMissingStep) firstMissingStep = "equipamentos";
+  }
+  if (panelCount <= 0) {
+    missing.push("Quantidade de módulos fotovoltaicos");
+    if (!firstMissingStep) firstMissingStep = "equipamentos";
+  }
+
+  // 5. Inversor de frequência
+  const inverterKw = Number(config?.inverter_kw || project?.solar_config?.inverter_kw || 0);
+  if (inverterKw <= 0) {
+    missing.push("Potência do inversor (kW)");
+    if (!firstMissingStep) firstMissingStep = "equipamentos";
+  }
+
+  const valid = missing.length === 0;
+
+  return {
+    valid,
+    missing,
+    firstMissingStep: firstMissingStep || "consumo",
+    message: valid
+      ? "Dados completos."
+      : `Preencha os seguintes dados do projeto para habilitar a emissão de relatórios: ${missing.join(", ")}.`,
+  };
 }

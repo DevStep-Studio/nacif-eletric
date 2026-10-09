@@ -18,6 +18,8 @@ import { useAuth } from "@/lib/AuthContext";
 import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
 import Solar3DView from "@/components/solar/Solar3DView";
 import SolarReportsDialog from "@/components/solar/SolarReportsDialog";
+import SolarProjectParametersModal from "@/components/solar/SolarProjectParametersModal";
+import { validateProjectDataForReports } from "@/lib/solarWizardState";
 import {
   DEFAULT_SOLAR_MAP_CENTER,
   DEFAULT_SOLAR_MAP_ZOOM,
@@ -302,6 +304,8 @@ export default function SolarProject() {
   const [areasListOpen, setAreasListOpen] = useState(true);
   const [groupParamsOpen, setGroupParamsOpen] = useState(false);
   const [reportsOpen, setReportsOpen] = useState(false);
+  const [projectParamsOpen, setProjectParamsOpen] = useState(false);
+  const [projectParamsInitialStep, setProjectParamsInitialStep] = useState("consumo");
   const [searchAddress, setSearchAddress] = useState("");
   const [searchingAddress, setSearchingAddress] = useState(false);
   const [pendingObstaclePreset, setPendingObstaclePreset] = useState(null);
@@ -569,8 +573,13 @@ export default function SolarProject() {
     strings,
     technicalAnalysis,
     areas: multiAreaLayouts,
-    selectedArea,
   }), [totalPanelCount, totalDcPowerKw, aggregateMetrics, acCurrent, breaker, annualGenerationKwh, annualSavingsBrl, paybackYears, strings, technicalAnalysis, multiAreaLayouts, selectedArea]);
+
+  const reportValidation = useMemo(
+    () => validateProjectDataForReports(reportProject, config, visualSizing),
+    [reportProject, config, visualSizing]
+  );
+  const isProjectDataComplete = reportValidation.valid;
 
   // Funções de Gerenciamento do Histórico (Undo / Redo)
   const syncRoofHistoryState = useCallback(() => {
@@ -900,6 +909,17 @@ export default function SolarProject() {
   };
 
   const handleDownloadDirect = (reportType = "executive") => {
+    if (!reportValidation.valid) {
+      toast({
+        title: "Preencha os dados do projeto primeiro",
+        description: reportValidation.message,
+        variant: "destructive",
+      });
+      setProjectParamsInitialStep(reportValidation.firstMissingStep || "consumo");
+      setProjectParamsOpen(true);
+      return;
+    }
+
     try {
       if (reportType === "executive") {
         const doc = generateExecutiveSolarPdf(reportProject, config, visualSizing);
@@ -1270,6 +1290,31 @@ export default function SolarProject() {
             </button>
           </div>
 
+          {/* Botão Parâmetros & Dados do Projeto */}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setProjectParamsInitialStep(isProjectDataComplete ? "consumo" : (reportValidation.firstMissingStep || "consumo"));
+              setProjectParamsOpen(true);
+            }}
+            className={`h-7 rounded-lg border text-xs font-bold shadow-sm transition flex items-center gap-1.5 ${
+              isProjectDataComplete
+                ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                : "border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 ring-1 ring-amber-400/40"
+            }`}
+            title={isProjectDataComplete ? "Parâmetros e Dados do Projeto" : "Preencher dados pendentes para relatórios"}
+          >
+            <Sliders className="h-3 w-3 text-[#00d8b8]" />
+            <span>Dados do Projeto</span>
+            {!isProjectDataComplete ? (
+              <span className="flex h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+            ) : (
+              <Check className="h-3 w-3 text-emerald-600" />
+            )}
+          </Button>
+
           {/* Dropdown de Relatórios */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1277,7 +1322,11 @@ export default function SolarProject() {
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-7 rounded-lg border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-sm"
+                className={`h-7 rounded-lg border text-xs font-bold shadow-sm transition ${
+                  isProjectDataComplete
+                    ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                    : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                }`}
               >
                 <Download className="mr-1 h-3 w-3 text-[#00d8b8]" /> Relatórios <ChevronDown className="ml-1 h-3 w-3 text-slate-400" />
               </Button>
@@ -1286,6 +1335,20 @@ export default function SolarProject() {
               <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 px-2 py-1">
                 Documentos Técnicos PDF
               </DropdownMenuLabel>
+              {!isProjectDataComplete && (
+                <div
+                  onClick={() => {
+                    setProjectParamsInitialStep(reportValidation.firstMissingStep || "consumo");
+                    setProjectParamsOpen(true);
+                  }}
+                  className="mx-1 my-1 p-2 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 text-[11px] font-semibold cursor-pointer hover:bg-amber-100 transition"
+                >
+                  <p className="font-bold flex items-center gap-1 text-amber-950">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> Dados incompletos
+                  </p>
+                  <p className="text-[10px] text-amber-800 mt-0.5">Preencha os dados do projeto para gerar relatórios.</p>
+                </div>
+              )}
               <DropdownMenuItem
                 onClick={() => handleDownloadDirect("executive")}
                 className="text-xs font-bold text-[#009b84] hover:bg-[#E6FAF7] cursor-pointer rounded-lg px-2.5 py-2"
@@ -2016,6 +2079,30 @@ export default function SolarProject() {
               )}
             </div>
 
+            {/* Atalho para os Parâmetros e Passo a Passo do Projeto */}
+            <div className="px-3 py-2 border-t border-slate-200 bg-white">
+              <button
+                type="button"
+                onClick={() => {
+                  setProjectParamsInitialStep("equipamentos");
+                  setProjectParamsOpen(true);
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 hover:bg-[#E6FAF7] hover:border-[#00d8b8] p-2.5 transition text-left group cursor-pointer"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-slate-800 flex items-center gap-1.5 group-hover:text-[#007f6c]">
+                    <Sliders className="h-3.5 w-3.5 text-[#00d8b8]" /> Parâmetros do Projeto
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 group-hover:text-[#007f6c]">
+                    5 Etapas →
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Inversor, módulos, consumo e memorial descritivo.
+                </p>
+              </button>
+            </div>
+
             {/* Ações Inferiores da Sidebar */}
             <div className="p-3 border-t border-slate-200 bg-slate-50/90 grid grid-cols-2 gap-2">
               <Button
@@ -2316,6 +2403,33 @@ export default function SolarProject() {
         project={reportProject}
         config={config}
         sizing={visualSizing}
+        onOpenParameters={(step) => {
+          setProjectParamsInitialStep(step || "consumo");
+          setProjectParamsOpen(true);
+        }}
+      />
+
+      {/* Modal / Passo a Passo Completo dos Parâmetros do Projeto (Consumo, Equipamentos, Memorial, etc.) */}
+      <SolarProjectParametersModal
+        open={projectParamsOpen}
+        onOpenChange={setProjectParamsOpen}
+        project={project}
+        config={config}
+        sizing={visualSizing}
+        initialStep={projectParamsInitialStep}
+        onSave={async (updatedProjectPayload, updatedConfigPatch) => {
+          const nextConfig = normalizeSolarConfig({ ...config, ...updatedConfigPatch });
+          setConfig(nextConfig);
+          const activeId = projectId || project?.id;
+          if (activeId) {
+            try {
+              const updated = await backend.entities.Project.update(activeId, updatedProjectPayload);
+              setProject(updated);
+            } catch (err) {
+              console.error("Erro ao salvar projeto:", err);
+            }
+          }
+        }}
       />
     </div>
   );

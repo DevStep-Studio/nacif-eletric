@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
+  AlertTriangle,
   Download,
   FileSpreadsheet,
   FileText,
@@ -9,10 +10,12 @@ import {
   Loader2,
   Printer,
   Receipt,
+  Sliders,
   Sun,
   Zap,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { validateProjectDataForReports } from "@/lib/solarWizardState";
 import {
   downloadPdfBlob,
   generateBillOfMaterialsReport,
@@ -85,11 +88,32 @@ const REPORT_CARDS = [
   },
 ];
 
-export default function SolarReportsDialog({ open, onOpenChange, project, config, sizing }) {
+export default function SolarReportsDialog({
+  open,
+  onOpenChange,
+  project,
+  config,
+  sizing,
+  onOpenParameters,
+}) {
   const { toast } = useToast();
   const [downloadingId, setDownloadingId] = useState(null);
 
+  const validation = useMemo(
+    () => validateProjectDataForReports(project, config, sizing),
+    [project, config, sizing]
+  );
+
   const handlePrint = () => {
+    if (!validation.valid) {
+      toast({
+        title: "Dados do projeto incompletos",
+        description: validation.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       printExecutiveSolarReport(project, config, sizing);
       toast({
@@ -106,6 +130,15 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
   };
 
   const handleDownload = async (report) => {
+    if (!validation.valid) {
+      toast({
+        title: "Dados do projeto incompletos",
+        description: validation.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setDownloadingId(report.id);
     try {
       const doc = report.fn(project, config, sizing);
@@ -126,6 +159,15 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
   };
 
   const handleDownloadAll = async () => {
+    if (!validation.valid) {
+      toast({
+        title: "Dados do projeto incompletos",
+        description: validation.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setDownloadingId("all");
     try {
       for (const report of REPORT_CARDS) {
@@ -165,12 +207,41 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
             <Button
               type="button"
               onClick={handlePrint}
-              className="h-9 px-4 bg-[#E6FAF7] hover:bg-[#d5f7f2] text-[#009b84] text-xs font-bold rounded-xl border border-[#00d8b8]/40 shrink-0"
+              disabled={!validation.valid}
+              className="h-9 px-4 bg-[#E6FAF7] hover:bg-[#d5f7f2] text-[#009b84] text-xs font-bold rounded-xl border border-[#00d8b8]/40 shrink-0 disabled:opacity-50"
             >
               <Printer className="mr-1.5 h-4 w-4 text-[#00d8b8]" /> Imprimir Relatório
             </Button>
           </div>
         </DialogHeader>
+
+        {/* ALERTA DE VALIDAÇÃO: Só gera relatório depois de preencher os dados do projeto */}
+        {!validation.valid && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs shadow-sm space-y-2 mt-2">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-black text-amber-950 text-sm">Preencha os dados do projeto antes de emitir relatórios</h4>
+                <p className="mt-1 text-xs text-amber-800 leading-relaxed font-semibold">
+                  {validation.message}
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      onOpenChange(false);
+                      onOpenParameters?.(validation.firstMissingStep);
+                    }}
+                    className="h-8 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-sm flex items-center gap-1.5"
+                  >
+                    <Sliders className="h-3.5 w-3.5" /> Preencher Dados do Projeto
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2 pt-2">
           {REPORT_CARDS.map((report) => {
@@ -207,9 +278,9 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={isDownloading}
+                    disabled={isDownloading || !validation.valid}
                     onClick={() => handleDownload(report)}
-                    className="h-8 border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800 rounded-lg shadow-sm"
+                    className="h-8 border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800 rounded-lg shadow-sm disabled:opacity-50"
                   >
                     {isDownloading ? (
                       <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -237,16 +308,17 @@ export default function SolarReportsDialog({ open, onOpenChange, project, config
             <Button
               type="button"
               onClick={handlePrint}
+              disabled={!validation.valid}
               variant="outline"
-              className="border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm"
+              className="border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm disabled:opacity-50"
             >
               <Printer className="mr-1.5 h-4 w-4 text-[#00d8b8]" /> Imprimir
             </Button>
             <Button
               type="button"
-              disabled={downloadingId === "all"}
+              disabled={downloadingId === "all" || !validation.valid}
               onClick={handleDownloadAll}
-              className="bg-[#00d8b8] text-slate-950 text-xs font-black rounded-xl hover:bg-[#00c4a7] shadow-sm"
+              className="bg-[#00d8b8] text-slate-950 text-xs font-black rounded-xl hover:bg-[#00c4a7] shadow-sm disabled:opacity-50"
             >
               {downloadingId === "all" ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

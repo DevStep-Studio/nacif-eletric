@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { WIZARD_STEPS, defaultWizardState, getStepErrors } from "../src/lib/solarWizardState.js";
+import {
+  CREATION_WIZARD_STEPS,
+  FULL_PROJECT_STEPS,
+  defaultWizardState,
+  getStepErrors,
+  validateProjectDataForReports,
+} from "../src/lib/solarWizardState.js";
 import { identifyDistributorByLocation, BRAZILIAN_REGULATORY_DISTRIBUTORS } from "../src/lib/solarDistributorRates.js";
 import {
   generateExecutiveSolarPdf,
@@ -13,18 +19,37 @@ import {
 
 console.log("⚡ Executando testes automatizados: Stepper, Reordenação de Etapas, Auto-detecção de Distribuidora e Relatórios PDF...");
 
-// 1. Validar Nova Ordem das Etapas (5 Etapas: Dados, Localização, Consumo, Equipamentos, Projeto)
-console.log("1. Validando a ordem exata das etapas do Wizard...");
-const expectedKeys = ["dados", "localizacao", "consumo", "equipamentos", "projeto"];
-assert.equal(WIZARD_STEPS.length, 5, "O wizard deve ter exatamente 5 etapas.");
-expectedKeys.forEach((key, idx) => {
-  assert.equal(WIZARD_STEPS[idx].key, key, `Etapa ${idx + 1} deve ser '${key}' mas é '${WIZARD_STEPS[idx].key}'`);
+// 1. Validar Etapas da Criação (2 Etapas: Dados e Localização) e Etapas Completas (5 Etapas dentro da visualização)
+console.log("1. Validando as etapas de criação (2 etapas) e dentro do projeto (5 etapas)...");
+assert.equal(CREATION_WIZARD_STEPS.length, 2, "A criação do projeto solar deve ter exatamente 2 etapas (até o passo 2).");
+assert.equal(CREATION_WIZARD_STEPS[0].key, "dados", "Etapa 1 de criação DEVE ser Dados do projeto.");
+assert.equal(CREATION_WIZARD_STEPS[1].key, "localizacao", "Etapa 2 de criação DEVE ser Localização.");
+
+const expectedFullKeys = ["dados", "localizacao", "consumo", "equipamentos", "projeto"];
+assert.equal(FULL_PROJECT_STEPS.length, 5, "Dentro da visualização do projeto deve ter as 5 etapas completas.");
+expectedFullKeys.forEach((key, idx) => {
+  assert.equal(FULL_PROJECT_STEPS[idx].key, key, `Etapa ${idx + 1} deve ser '${key}' mas é '${FULL_PROJECT_STEPS[idx].key}'`);
 });
-assert.equal(WIZARD_STEPS[1].key, "localizacao", "Etapa 2 DEVE ser Localização.");
-assert.equal(WIZARD_STEPS[2].key, "consumo", "Etapa 3 DEVE ser Consumo.");
-assert.equal(WIZARD_STEPS[3].key, "equipamentos", "Etapa 4 DEVE ser Equipamentos.");
-assert.equal(WIZARD_STEPS[4].key, "projeto", "Etapa 5 DEVE ser Projeto.");
-console.log("   ✓ Ordem das etapas validada com sucesso: Dados -> Localização -> Consumo -> Equipamentos -> Projeto.");
+console.log("   ✓ Validação das etapas concluída com sucesso: Criação (2 etapas) e Visualização (5 etapas).");
+
+// 1.1 Validar que só gera relatório depois de preencher os dados do projeto
+console.log("1.1 Validando regra de negócio: Só gera relatório após preencher os dados do projeto...");
+const incompleteProject = { name: "Teste Incompleto" };
+const incompleteCheck = validateProjectDataForReports(incompleteProject, {}, {});
+assert.equal(incompleteCheck.valid, false, "Projeto sem consumo e sem equipamentos NÃO deve gerar relatório.");
+assert.ok(incompleteCheck.missing.length > 0, "Deve listar os campos faltantes.");
+
+const completeProject = {
+  name: "Teste Completo",
+  address: "Rua das Flores, 100",
+  city: "São Paulo",
+  state: "SP",
+  consumption: { monthly_consumption_kwh: 500, tariff_brl_kwh: 0.95 },
+  solar_config: { inverter_kw: 5, module_wp: 550, requested_panel_count: 10 },
+};
+const completeCheck = validateProjectDataForReports(completeProject, completeProject.solar_config, { panelCount: 10 });
+assert.equal(completeCheck.valid, true, "Projeto com dados preenchidos DEVE estar habilitado para relatórios.");
+console.log("   ✓ Regra de bloqueio e liberação de relatórios validada com sucesso.");
 
 // 2. Validar Auto-detecção de Concessionária e Tarifa por Localidade
 console.log("2. Validando auto-detecção de distribuidoras e tarifas...");
