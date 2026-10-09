@@ -454,8 +454,12 @@ export function calcCircuit(circuit = {}) {
   const minWireArea     = minimumWireAreaForCircuit(type);
   let wireData          = selectWireGauge(corrected_a, install_method, minWireArea);
 
-  // Dimensionamento do disjuntor do circuito: In >= Ib
-  const breaker_a       = selectBreaker(project_current_a) || (project_current_a > 0 ? 10 : null);
+  // Dimensionamento do disjuntor do circuito: In >= Ib (mínimo comercial de 10A para circuitos terminais conforme NBR 5410)
+  const rawBreaker      = selectBreaker(project_current_a);
+  const normalizedType  = String(type || "").toLowerCase();
+  const isBranchCircuit = !normalizedType.includes("alimentador") && !normalizedType.includes("subquadro") && !normalizedType.includes("entrada");
+  const minTerminalBreaker = isBranchCircuit ? 10 : 6;
+  const breaker_a       = rawBreaker ? Math.max(rawBreaker, minTerminalBreaker) : (project_current_a > 0 ? minTerminalBreaker : null);
   let vd                = calcVoltageDrop(effectivePowerW, voltage, supply_type, length_m, wireData.gauge, fp);
 
   if (!vd.ok) {

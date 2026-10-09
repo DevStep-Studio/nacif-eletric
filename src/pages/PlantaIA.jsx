@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
 import {
   ArrowLeft,
   Upload,
@@ -992,6 +993,7 @@ const POINT_CIRCUIT_DEFAULTS = {
     voltage: 127,
     supply_type: "Monofásico",
     power_factor: 0.92,
+    demand_factor: 1.0,
   },
   spot: {
     type: "Iluminação",
@@ -1088,21 +1090,48 @@ const CIRCUIT_INSTALL_METHODS = [
 
 const circuitIdentifier = (circuit, index = 0) => String(circuit?.id || circuit?.circuit_id || circuit?.name || `circuit-${index}`);
 
-const isCircuitConfigurablePoint = (point) => CIRCUIT_CONFIG_POINT_TYPES.has(String(point?.type || ""));
+const isCircuitConfigurablePoint = (point) => {
+  if (!point) return false;
+  const type = String(point.type || "").toLowerCase();
+  const label = String(point.label || "").toLowerCase();
+  if (CIRCUIT_CONFIG_POINT_TYPES.has(type)) return true;
+  if (LIGHT_POINT_TYPES.has(type)) return true;
+  if (label.includes("luz") || label.includes("ilumin") || label.includes("spot") || label.includes("arandela") || label.includes("tomada") || label.includes("chuveiro") || label.includes("ar condicionado") || label.includes("motor")) return true;
+  return false;
+};
 
-const getPointCircuitDefaults = (point = {}, project = {}) => {
-  const defaults = POINT_CIRCUIT_DEFAULTS[point.type] || POINT_CIRCUIT_DEFAULTS.tug;
-  const pointLabel = String(point.label || "").trim();
-  const baseName = pointLabel && pointLabel !== point.type ? pointLabel : defaults.name;
+const resolvePointDefaults = (point = {}, project = {}) => {
+  const pType = String(point.type || "").toLowerCase();
+  const pLabel = String(point.label || point.name || "").toLowerCase();
+  let baseDefaults = POINT_CIRCUIT_DEFAULTS[pType];
+  if (!baseDefaults) {
+    if (LIGHT_POINT_TYPES.has(pType) || pLabel.includes("luz") || pLabel.includes("ilumin") || pLabel.includes("fluorescente") || pLabel.includes("spot") || pLabel.includes("arandela") || pLabel.includes("luminaria")) {
+      baseDefaults = POINT_CIRCUIT_DEFAULTS.spot || POINT_CIRCUIT_DEFAULTS.luminaria;
+    } else if (pType.includes("chuveiro") || pLabel.includes("chuveiro")) {
+      baseDefaults = POINT_CIRCUIT_DEFAULTS.chuveiro;
+    } else if (pType.includes("arcond") || pLabel.includes("ar condicionado")) {
+      baseDefaults = POINT_CIRCUIT_DEFAULTS.arcond;
+    } else if (pType.includes("motor") || pLabel.includes("motor")) {
+      baseDefaults = POINT_CIRCUIT_DEFAULTS.motor;
+    } else if (pType.includes("tue") || pLabel.includes("espec") || pLabel.includes("130")) {
+      baseDefaults = POINT_CIRCUIT_DEFAULTS.tue;
+    } else {
+      baseDefaults = POINT_CIRCUIT_DEFAULTS.tug;
+    }
+  }
+  const pointLabel = String(point.label || point.name || "").trim();
+  const baseName = pointLabel && pointLabel !== point.type ? pointLabel : baseDefaults.name;
   return {
-    ...defaults,
+    ...baseDefaults,
     name: point.circuit || `${baseName} - planta`,
-    power_w: Number(point.load_w) || defaults.power_w,
-    voltage: Number(point.voltage) || defaults.voltage || project?.voltage || 127,
-    supply_type: point.supply_type || defaults.supply_type || project?.supply_type || "Monofásico",
+    power_w: Number(point.load_w) || baseDefaults.power_w,
+    voltage: Number(point.voltage) || baseDefaults.voltage || project?.voltage || 127,
+    supply_type: point.supply_type || baseDefaults.supply_type || project?.supply_type || "Monofásico",
     length_m: Number(point.length_m) || 15,
   };
 };
+
+const getPointCircuitDefaults = resolvePointDefaults;
 
 const conductorCountForCircuit = (circuit = {}) => {
   if (circuit.supply_type === "Trifásico" || circuit.phase === "ABC") return 5;
@@ -1948,6 +1977,7 @@ function drawPlantLegend(doc, points, routes, stats = {}) {
 
 export default function PlantaIA() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const projectFromUrl = searchParams.get("project") || "";
   const fileInputRef = useRef(null);
@@ -4074,49 +4104,121 @@ export default function PlantaIA() {
     ? points.find((point) => sameId(point.id, circuitModalPointId)) || null
     : null;
 
+  const circuitModalTitle = useMemo(() => {
+    if (!circuitModalPoint) return "Configurar circuito";
+    const type = String(circuitModalPoint.type || "").toLowerCase();
+    const label = String(circuitModalPoint.label || "").toLowerCase();
+    if (LIGHT_POINT_TYPES.has(type) || label.includes("luz") || label.includes("ilumin") || label.includes("fluorescente") || label.includes("spot") || label.includes("arandela") || label.includes("luminaria")) {
+      return "Configurar circuito de iluminação";
+    }
+    if (type.includes("chuveiro") || label.includes("chuveiro")) return "Configurar circuito do chuveiro";
+    if (type.includes("arcond") || label.includes("ar condicionado")) return "Configurar circuito do ar-condicionado";
+    if (type.includes("motor") || label.includes("motor")) return "Configurar circuito do motor";
+    if (type === "tue" || label.includes("tue")) return "Configurar circuito de tomadas (TUE)";
+    if (type === "tug" || label.includes("tomada")) return "Configurar circuito de tomadas (TUG)";
+    return `Configurar circuito - ${routePointLabel(circuitModalPoint)}`;
+  }, [circuitModalPoint]);
+
   const pointCircuitPreview = useMemo(() => {
-    if (!pointCircuitForm.power_w || !pointCircuitForm.voltage || !pointCircuitForm.supply_type) return null;
+    const power = Number(pointCircuitForm.power_w);
+    const voltage = Number(pointCircuitForm.voltage) || 127;
+    const supply = pointCircuitForm.supply_type || "Monofásico";
+    if (!Number.isFinite(power) || power < 0 || voltage <= 0 || !supply) return null;
     return enrichCircuitInstallation(calcCircuit({
       ...pointCircuitForm,
-      power_w: Number(pointCircuitForm.power_w) || 0,
-      voltage: Number(pointCircuitForm.voltage) || 127,
-      power_factor: Number(pointCircuitForm.power_factor) || undefined,
+      power_w: power,
+      voltage,
+      power_factor: Number(pointCircuitForm.power_factor) || (pointCircuitForm.type === "Iluminação" ? 0.92 : 1),
       length_m: Number(pointCircuitForm.length_m) || 15,
       temp_ambient: Number(pointCircuitForm.temp_ambient) || 30,
       group_count: Number(pointCircuitForm.group_count) || 1,
       point_count: Number(pointCircuitForm.point_count) || 1,
-      demand_factor: Number(pointCircuitForm.demand_factor) || 1,
+      demand_factor: Number(pointCircuitForm.demand_factor) || getDefaultDemandFactor(pointCircuitForm.type, pointCircuitForm.name),
     }));
   }, [pointCircuitForm]);
 
   const updatePointCircuitForm = (key, value) => {
-    setPointCircuitForm((current) => ({ ...current, [key]: value }));
+    setPointCircuitForm((current) => {
+      const next = { ...current, [key]: value };
+      if (key === "type") {
+        const suggestedDf = getDefaultDemandFactor(value, next.name);
+        next.demand_factor = String(suggestedDf);
+        if (value === "Iluminação") {
+          next.power_factor = "0.92";
+          if (!next.power_w || next.power_w === "200") next.power_w = "100";
+        } else if (value === "Motor") {
+          next.power_factor = "0.85";
+          next.supply_type = "Trifásico";
+          if (!next.power_w || Number(next.power_w) < 500) next.power_w = "1500";
+        } else if (value === "Ar Condicionado") {
+          next.power_factor = "0.92";
+          next.supply_type = "Bifásico";
+          next.voltage = "220";
+          if (!next.power_w || Number(next.power_w) < 500) next.power_w = "1500";
+        } else if (value === "Chuveiro") {
+          next.power_factor = "1";
+          next.voltage = "220";
+          if (!next.power_w || Number(next.power_w) < 1000) next.power_w = "5500";
+        } else if (value === "Tomadas de Uso Geral") {
+          next.power_factor = "1";
+          if (!next.power_w) next.power_w = "100";
+        } else if (value === "Tomadas de Uso Específico") {
+          next.power_factor = "1";
+          next.voltage = "220";
+          if (!next.power_w || Number(next.power_w) < 500) next.power_w = "2000";
+        }
+      }
+      return next;
+    });
   };
 
   const openCircuitConfigForPoint = useCallback((point, preferredMode = "") => {
     if (!point || !isCircuitConfigurablePoint(point)) return;
-    const defaults = getPointCircuitDefaults(point, selectedProjectData || {});
+    const defaults = resolvePointDefaults(point, selectedProjectData || {});
     const linkedCircuit = circuitOptions.find((circuit) => (
       sameId(circuit.id, point.circuit_id) ||
       String(circuit.name || "").toLowerCase() === String(point.circuit || "").toLowerCase()
     ));
     const initialMode = preferredMode || (linkedCircuit || circuitOptions.length > 0 ? "existing" : "custom");
     setPointCircuitMode(initialMode === "existing" && circuitOptions.length > 0 ? "existing" : "custom");
+
+    const isLightPoint = LIGHT_POINT_TYPES.has(String(point.type || "")) ||
+      String(point.label || "").toLowerCase().includes("luz") ||
+      String(point.label || "").toLowerCase().includes("fluorescente");
+
+    const isTypeMismatch = isLightPoint && linkedCircuit && !String(linkedCircuit.type || "").toLowerCase().includes("ilumin");
+
+    let resolvedType = defaults.type;
+    if (point.circuit_type && (!isLightPoint || String(point.circuit_type).toLowerCase().includes("ilumin"))) {
+      resolvedType = normalizeCircuitType(point.circuit_type);
+    } else if (linkedCircuit?.type && (!isLightPoint || String(linkedCircuit.type).toLowerCase().includes("ilumin"))) {
+      resolvedType = normalizeCircuitType(linkedCircuit.type);
+    }
+
+    const resolvedName = (!isTypeMismatch && (point.circuit || linkedCircuit?.name)) || defaults.name;
+    const resolvedPower = String(
+      (!isTypeMismatch && (point.load_w || linkedCircuit?.power_w)) || defaults.power_w || 100
+    );
+    const resolvedVoltage = String(point.voltage || (!isTypeMismatch && linkedCircuit?.voltage) || defaults.voltage || selectedProjectData?.voltage || 127);
+    const resolvedSupply = point.supply_type || (!isTypeMismatch && linkedCircuit?.supply_type) || defaults.supply_type || selectedProjectData?.supply_type || "Monofásico";
+    const resolvedFp = String(point.power_factor || (!isTypeMismatch && linkedCircuit?.power_factor) || defaults.power_factor || (resolvedType === "Iluminação" ? 0.92 : 1));
+    const resolvedDf = String(point.demand_factor || (!isTypeMismatch && linkedCircuit?.demand_factor) || defaults.demand_factor || getDefaultDemandFactor(resolvedType, resolvedName));
+
     setPointCircuitForm({
       ...CIRCUIT_FORM_EMPTY,
       circuit_id: linkedCircuit?.id || circuitOptions[0]?.id || "",
-      name: point.circuit || defaults.name,
-      type: normalizeCircuitType(point.circuit_type || defaults.type),
-      power_w: String(point.load_w || defaults.power_w || ""),
-      voltage: String(point.voltage || defaults.voltage || selectedProjectData?.voltage || 127),
-      supply_type: point.supply_type || defaults.supply_type || selectedProjectData?.supply_type || "Monofásico",
-      power_factor: String(point.power_factor || defaults.power_factor || 1),
-      length_m: String(point.length_m || defaults.length_m || 15),
-      install_method: point.install_method || defaults.install_method || "Eletroduto Embutido em Parede",
-      temp_ambient: String(point.temp_ambient || 30),
-      group_count: String(point.group_count || 1),
-      point_count: String(point.point_count || 1),
-      demand_factor: String(point.demand_factor || defaults.demand_factor || getDefaultDemandFactor(point.circuit_type || defaults.type, point.circuit || defaults.name)),
+      name: resolvedName,
+      type: resolvedType,
+      power_w: resolvedPower,
+      voltage: resolvedVoltage,
+      supply_type: resolvedSupply,
+      power_factor: resolvedFp,
+      length_m: String(point.length_m || linkedCircuit?.length_m || defaults.length_m || 15),
+      install_method: point.install_method || linkedCircuit?.install_method || defaults.install_method || "Eletroduto Embutido em Parede",
+      temp_ambient: String(point.temp_ambient || linkedCircuit?.temp_ambient || 30),
+      group_count: String(point.group_count || linkedCircuit?.group_count || 1),
+      point_count: String(point.point_count || linkedCircuit?.point_count || 1),
+      demand_factor: resolvedDf,
     });
     setCircuitModalPointId(String(point.id));
   }, [circuitOptions, selectedProjectData]);
@@ -4127,6 +4229,7 @@ export default function PlantaIA() {
     const pointPatch = {
       circuit_id: circuitId,
       circuit: preparedCircuit.name || "Circuito",
+      circuitLabel: preparedCircuit.name || "Circuito",
       circuit_type: preparedCircuit.type || "Circuito",
       load_w: Number(preparedCircuit.power_w) || 0,
       voltage: Number(preparedCircuit.voltage) || 127,
@@ -4166,7 +4269,10 @@ export default function PlantaIA() {
 
   const handleApplyExistingCircuitToPoint = async () => {
     if (!circuitModalPoint || !pointCircuitForm.circuit_id) return;
-    const selectedCircuit = generatedCircuits.find((circuit, index) => sameId(circuitIdentifier(circuit, index), pointCircuitForm.circuit_id));
+    const selectedCircuit = generatedCircuits.find((circuit, index) => (
+      sameId(circuitIdentifier(circuit, index), pointCircuitForm.circuit_id) ||
+      sameId(circuit.id, pointCircuitForm.circuit_id)
+    ));
     if (!selectedCircuit) return;
     setSaving(true);
     try {
@@ -4185,8 +4291,17 @@ export default function PlantaIA() {
       setCircuitModalPointId("");
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
+      toast({
+        title: "Circuito vinculado ao ponto",
+        description: `Ponto vinculado a ${normalizedCircuit.name}`,
+      });
     } catch (error) {
       console.error(error);
+      toast({
+        title: "Erro ao vincular circuito",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -4200,49 +4315,80 @@ export default function PlantaIA() {
       const existingCircuits = normalizeProjectCircuits(
         generatedCircuits.length > 0 ? generatedCircuits : (project?.circuits || [])
       );
-      const circuitId = circuitModalPoint.circuit_id && String(circuitModalPoint.circuit_id).startsWith("plant-circuit-")
-        ? circuitModalPoint.circuit_id
-        : `plant-circuit-${circuitModalPoint.id}`;
+      
+      const formCircuitName = pointCircuitForm.name.trim() || pointCircuitPreview.name || "Circuito da planta";
+      const existingByName = existingCircuits.find(
+        (c) => String(c.name || "").trim().toLowerCase() === formCircuitName.toLowerCase()
+      );
+      
+      const circuitId = pointCircuitForm.circuit_id || circuitModalPoint.circuit_id || existingByName?.id || `plant-circuit-${circuitModalPoint.id}`;
+      
       const draftCircuit = enrichCircuitInstallation({
         ...pointCircuitPreview,
         id: circuitId,
         circuit_id: circuitId,
         source: "planta",
         source_point_id: String(circuitModalPoint.id),
-        name: pointCircuitForm.name.trim() || pointCircuitPreview.name || "Circuito da planta",
+        name: formCircuitName,
         description: pointCircuitForm.description || `Criado na planta a partir de ${routePointLabel(circuitModalPoint)}`,
         type: normalizeCircuitType(pointCircuitForm.type),
         load_w_total: Number(pointCircuitPreview.power_w) || 0,
       });
-      const withoutCurrentPoint = existingCircuits.filter((circuit) => (
-        !sameId(circuit.id, circuitId) && !sameId(circuit.source_point_id, circuitModalPoint.id)
+
+      const withoutCurrentCircuit = existingCircuits.filter((circuit) => (
+        !sameId(circuit.id, circuitId) &&
+        String(circuit.name || "").trim().toLowerCase() !== formCircuitName.toLowerCase() &&
+        !sameId(circuit.source_point_id, circuitModalPoint.id)
       ));
-      const balancedCircuits = autoBalancePhases([...withoutCurrentPoint, draftCircuit]).map(enrichCircuitInstallation);
+
+      const balancedCircuits = autoBalancePhases(
+        [...withoutCurrentCircuit, draftCircuit],
+        project?.supply_type || selectedProjectData?.supply_type || "Trifásico"
+      ).map(enrichCircuitInstallation);
+
       const savedCircuit = balancedCircuits.find((circuit) => sameId(circuit.id, circuitId)) || draftCircuit;
       const { snapshot } = applyCircuitMetadataToPoint(circuitModalPoint, savedCircuit, "plant");
 
       setGeneratedCircuits(normalizeProjectCircuits(balancedCircuits));
 
-      if (selectedProject && project) {
-        await backend.entities.Project.update(selectedProject, {
-          ...buildProjectElectricalSyncPayload(project, balancedCircuits),
-          plant_design: snapshot,
-          plant_points_count: snapshot.points.length,
-          plant_routes_count: snapshot.routes.length,
-        });
+      if (selectedProject) {
+        try {
+          await backend.entities.Project.update(selectedProject, {
+            ...buildProjectElectricalSyncPayload(project || {}, balancedCircuits),
+            plant_design: snapshot,
+            plant_points_count: snapshot.points.length,
+            plant_routes_count: snapshot.routes.length,
+          });
 
-        const refreshedProject = await backend.entities.Project.get(selectedProject);
-        setSelectedProjectData(refreshedProject);
-        setGeneratedCircuits(normalizeProjectCircuits(refreshedProject.circuits || []));
+          const refreshedProject = await backend.entities.Project.get(selectedProject);
+          setSelectedProjectData(refreshedProject);
+          setProjects((current) => current.map((item) => (
+            item.id === selectedProject ? { ...item, ...refreshedProject } : item
+          )));
+        } catch (apiError) {
+          console.warn("Aviso ao sincronizar projeto no backend:", apiError);
+        }
       }
+
+      await persistPlantDesignSnapshot(snapshot, { silent: true });
 
       setCircuitModalPointId("");
       setActiveRightTab("circuits");
       setRightPanelOpen(true);
       setSaved(true);
       setTimeout(() => setSaved(false), 2200);
+
+      toast({
+        title: "Circuito dimensionado com sucesso!",
+        description: `${savedCircuit.name} · ${savedCircuit.wire_gauge} · Disjuntor ${savedCircuit.breaker_a}A ${savedCircuit.breaker_poles}P/${savedCircuit.breaker_curve}`,
+      });
     } catch (error) {
-      console.error(error);
+      console.error("Erro ao salvar circuito:", error);
+      toast({
+        title: "Erro ao dimensionar circuito",
+        description: error?.message || "Ocorreu um erro ao salvar o circuito. Verifique os dados.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -6147,11 +6293,13 @@ export default function PlantaIA() {
                         <Button
                           type="button"
                           size="sm"
-                          className="h-9 w-full rounded-md bg-[#00d8b8] text-xs font-black hover:bg-[#00a98e]"
+                          className="h-9 w-full rounded-md bg-[#00d8b8] text-xs font-black text-white shadow-sm hover:bg-[#00a98e] active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
                           onClick={() => openCircuitConfigForPoint(selectedPoint)}
                         >
                           <Zap className="h-3.5 w-3.5" />
-                          Configurar circuito do ponto
+                          {selectedPoint.circuit
+                            ? `Dimensionar / Editar (${selectedPoint.circuit})`
+                            : "Dimensionar / Configurar circuito"}
                         </Button>
                       ) : (
                         <p className="text-[10px] font-bold leading-snug text-[#64748B]">
@@ -7924,7 +8072,7 @@ export default function PlantaIA() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-[#0F172A]">
                 <Zap className="h-5 w-5 text-[#00d8b8]" />
-                Configurar circuito da tomada
+                {circuitModalTitle}
               </DialogTitle>
             </DialogHeader>
 
@@ -8004,14 +8152,26 @@ export default function PlantaIA() {
                     })()}
 
                     <div className="flex justify-end gap-2 border-t border-[#E2EEF6] pt-3">
-                      <Button type="button" variant="outline" className="font-bold" onClick={() => setCircuitModalPointId("")}>Cancelar</Button>
+                      <Button type="button" variant="outline" className="font-bold" onClick={() => setCircuitModalPointId("")}>
+                        Cancelar
+                      </Button>
                       <Button
                         type="button"
                         className="bg-[#00d8b8] font-black hover:bg-[#00a98e]"
                         disabled={saving || !pointCircuitForm.circuit_id}
                         onClick={handleApplyExistingCircuitToPoint}
                       >
-                        Aplicar ao ponto
+                        {saving ? (
+                          <>
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                            Aplicando...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="mr-1.5 h-4 w-4" />
+                            Aplicar ao ponto
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -8078,7 +8238,7 @@ export default function PlantaIA() {
                       <div className="grid gap-2 rounded-md border border-[#CDEFE8] bg-[#F8FBFD] p-3 text-xs font-bold text-[#526173] sm:grid-cols-4">
                         <span>Corrente <strong className="block text-[#0F172A]">{pointCircuitPreview.project_current_a} A</strong></span>
                         <span>Condutor <strong className="block text-[#0F172A]">{pointCircuitPreview.wire_gauge}</strong></span>
-                        <span>Proteção <strong className="block text-[#0F172A]">{pointCircuitPreview.breaker_a}A {pointCircuitPreview.breaker_poles}P/{pointCircuitPreview.breaker_curve}</strong></span>
+                        <span>Proteção <strong className="block text-[#0F172A]">{pointCircuitPreview.breaker_a ? `${pointCircuitPreview.breaker_a}A ${pointCircuitPreview.breaker_poles}P/${pointCircuitPreview.breaker_curve}` : "-"}</strong></span>
                         <span>Eletroduto <strong className="block text-[#0F172A]">{pointCircuitPreview.conduit_diameter}</strong></span>
                         <span>Cabos <strong className="block text-[#0F172A]">{pointCircuitPreview.cable_description}</strong></span>
                         <span>Queda <strong className={pointCircuitPreview.voltage_drop_ok ? "block text-[#0F172A]" : "block text-red-600"}>{pointCircuitPreview.voltage_drop_pct}%</strong></span>
@@ -8092,14 +8252,26 @@ export default function PlantaIA() {
                     )}
 
                     <div className="flex justify-end gap-2 border-t border-[#E2EEF6] pt-3">
-                      <Button type="button" variant="outline" className="font-bold" onClick={() => setCircuitModalPointId("")}>Cancelar</Button>
+                      <Button type="button" variant="outline" className="font-bold" onClick={() => setCircuitModalPointId("")}>
+                        Cancelar
+                      </Button>
                       <Button
                         type="button"
                         className="bg-[#00d8b8] font-black hover:bg-[#00a98e]"
                         disabled={saving || !pointCircuitForm.name.trim() || !pointCircuitPreview}
                         onClick={handleSavePointCircuit}
                       >
-                        {saving ? "Salvando..." : "Dimensionar e salvar"}
+                        {saving ? (
+                          <>
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                            Dimensionando e salvando...
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="mr-1.5 h-4 w-4" />
+                            Dimensionar e salvar
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
