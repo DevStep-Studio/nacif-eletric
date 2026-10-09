@@ -7,6 +7,7 @@ import {
   conductorCountForBudgetCircuit,
   getBudgetDrMaterial,
   getBudgetDrMaterialFromDevice,
+  getBudgetDrPrice,
   isGeneratedBudgetSource,
   isPanelAssemblyBudgetItem,
   phaseCountForBudgetCircuit,

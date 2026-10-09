@@ -480,6 +480,13 @@ export default function SolarProject() {
     [config]
   );
 
+  const hasRoof = useMemo(() => {
+    return (
+      (multiAreaLayouts.length > 0 && multiAreaLayouts.some((a) => a.polygon?.length >= 3)) ||
+      (Array.isArray(config.roof_polygon) && config.roof_polygon.length >= 3)
+    );
+  }, [multiAreaLayouts, config.roof_polygon]);
+
   // Define a área atualmente selecionada
   const selectedArea = useMemo(() => {
     if (!multiAreaLayouts.length) return null;
@@ -1086,7 +1093,7 @@ export default function SolarProject() {
     );
   }
 
-  const hasAnyRoof = multiAreaLayouts.length > 0 && multiAreaLayouts.some((a) => a.polygon?.length >= 3);
+  const hasAnyRoof = hasRoof;
   const currentPreset = getModulePreset(config.module_preset_id || config.module_model);
 
   // Elemento selecionado para o Inspector
