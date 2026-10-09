@@ -684,7 +684,12 @@ export function openHTMLPrint({
   };
 
   const win = window.open("", "_blank");
-  if (!win) return;
+  if (!win) {
+    if (typeof window !== "undefined") {
+      window.alert("O navegador bloqueou a abertura da janela de impressão/PDF. Por favor, permita pop-ups para este site ou utilize a opção 'Baixar PDF'.");
+    }
+    return;
+  }
 
   win.document.write(`<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1059,14 +1064,27 @@ export function openHTMLPrint({
       </div>
     </div>
   `).join("")}
+  <script>
+    function runAutoPrint() {
+      try {
+        window.focus();
+        window.print();
+      } catch (err) {
+        console.error("Falha ao disparar diálogo de impressão:", err);
+      }
+    }
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+      setTimeout(runAutoPrint, 400);
+    } else {
+      window.addEventListener("DOMContentLoaded", () => setTimeout(runAutoPrint, 400));
+      window.addEventListener("load", () => setTimeout(runAutoPrint, 400));
+    }
+  </script>
 </body>
 </html>`);
 
   win.document.close();
-  win.onload = () => {
+  try {
     win.focus();
-    setTimeout(() => {
-      win.print();
-    }, 400);
-  };
+  } catch {}
 }

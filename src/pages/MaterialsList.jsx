@@ -530,7 +530,7 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
         price: m.price,
         category: m.category,
         brand: m.brand,
-        imageUrl: getMaterialSymbolDataUri(m.name),
+        imageUrl: getMaterialDataUriForPrint(m.name),
       })),
       totals: {
         referenceTotal: recommendation.referenceTotal,

@@ -1,9 +1,29 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
-import { FileText, Printer, Upload, ChevronDown, FolderOpen, Zap, Plus, Sparkles, Trash2, Sun } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  FileText,
+  Printer,
+  Upload,
+  ChevronDown,
+  FolderOpen,
+  Zap,
+  Plus,
+  Sparkles,
+  Trash2,
+  Sun,
+  Download,
+  FileSpreadsheet,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { openHTMLPrint, PAPER_SIZES } from "@/lib/printUtils";
+import { downloadBudgetPDF, downloadBudgetCSV } from "@/lib/budgetExportUtils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import PageHeader from "@/components/PageHeader";
@@ -20,6 +40,61 @@ import {
   getProjectLogo,
   normalizeManualBudgetItems,
 } from "@/lib/projectBudgetMaterials";
+
+function BrandLogoUploaderDisplay({ logoUrl }) {
+  const [hasError, setHasError] = useState(false);
+  const isCustom = logoUrl && typeof logoUrl === "string" && logoUrl.startsWith("data:");
+
+  if (isCustom && !hasError) {
+    return (
+      <img
+        src={logoUrl}
+        className="h-5 max-w-[120px] object-contain"
+        alt="Logo personalizada"
+        onError={() => setHasError(true)}
+      />
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-black tracking-wide text-[#0f4f49]">
+      <Zap className="w-3.5 h-3.5 text-[#00d8b8] fill-[#00d8b8]" />
+      <span>NACIF Solutions</span>
+    </span>
+  );
+}
+
+function ProjectThumbBadge({ project, size = "md", customLogo = null }) {
+  const [hasError, setHasError] = useState(false);
+  const rawLogo = customLogo || project?.logo_url || project?.logoUrl || project?.project_logo || project?.logo;
+  const isSolar = String(project?.project_type || "").toLowerCase().includes("solar");
+
+  const sizeClasses = size === "lg" ? "h-14 w-14" : "h-12 w-12";
+  const iconSize = size === "lg" ? "h-7 w-7" : "h-5 w-5";
+
+  if (rawLogo && typeof rawLogo === "string" && !hasError) {
+    return (
+      <span className={`flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#CDEFE8] bg-white p-1.5 ${sizeClasses}`}>
+        <img
+          src={rawLogo}
+          alt={project?.name || "Logo"}
+          className="h-full w-full object-contain"
+          onError={() => setHasError(true)}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span className={`flex shrink-0 items-center justify-center rounded-xl border border-[#CDEFE8] bg-[#F2FFFC] ${sizeClasses}`}>
+      {isSolar ? (
+        <Sun className={`${iconSize} text-amber-500`} />
+      ) : (
+        <Zap className={`${iconSize} text-primary`} />
+      )}
+    </span>
+  );
+}
 
 function MaterialThumb({ material, size = "normal" }) {
   return <MaterialProductThumb material={material} size={size === "small" ? "compact" : "normal"} />;
@@ -66,36 +141,81 @@ export default function BudgetPage() {
   };
 
   const handlePrint = (size) => {
+    try {
+      openHTMLPrint({
+        paperSize: size,
+        projectName: project?.name,
+        documentTitle: `Orçamento — ${project?.name || "Projeto"}`,
+        subtitle: "Proposta gerada automaticamente · NACIF Solutions Eletric · NBR 5410:2004",
+        logoUrl: logoUrl && logoUrl.startsWith("data:") ? logoUrl : DEFAULT_LOGO_URL,
+        items: materials.map((m) => ({
+          name: m.name,
+          qty: m.qty,
+          unit: m.unit,
+          price: m.price,
+          category: m.category,
+          manual: m.manual,
+          imageUrl: getMaterialDataUriForPrint(m.name),
+        })),
+        totals: {
+          baseMaterialTotal,
+          productAdjustment,
+          productAdjustmentValue,
+          materialTotal,
+          laborCost,
+          margin,
+          total,
+        },
+        projectInfo: {
+          clientName: project?.client_name,
+          address: project?.address,
+        },
+      });
+    } catch (err) {
+      console.error("Erro ao imprimir orçamento:", err);
+      alert("Não foi possível abrir o diálogo de impressão. Tente a opção 'Baixar PDF'.");
+    }
+  };
 
-    openHTMLPrint({
-      paperSize: size,
-      projectName: project?.name,
-      documentTitle: `Orçamento — ${project?.name || "Projeto"}`,
-      subtitle: "Proposta gerada automaticamente · NACIF Solutions Eletric · NBR 5410:2004",
-      logoUrl,
-      items: materials.map((m) => ({
-        name: m.name,
-        qty: m.qty,
-        unit: m.unit,
-        price: m.price,
-        category: m.category,
-        manual: m.manual,
-        imageUrl: getMaterialSymbolDataUri(m.name),
-      })),
-      totals: {
-        baseMaterialTotal,
-        productAdjustment,
-        productAdjustmentValue,
-        materialTotal,
-        laborCost,
-        margin,
-        total,
-      },
-      projectInfo: {
-        clientName: project?.client_name,
-        address: project?.address,
-      },
-    });
+  const handleDownloadPDF = () => {
+    if (!project) return;
+    try {
+      downloadBudgetPDF({
+        project,
+        materials,
+        totals: {
+          baseMaterialTotal,
+          productAdjustment,
+          productAdjustmentValue,
+          materialTotal,
+          laborCost,
+          margin,
+          total,
+        },
+      });
+    } catch (err) {
+      console.error("Erro ao gerar PDF do orçamento:", err);
+      alert("Erro ao gerar PDF do orçamento. Por favor, tente novamente.");
+    }
+  };
+
+  const handleDownloadCSV = () => {
+    if (!project) return;
+    try {
+      downloadBudgetCSV({
+        project,
+        materials,
+        totals: {
+          materialTotal,
+          laborCost,
+          margin,
+          total,
+        },
+      });
+    } catch (err) {
+      console.error("Erro ao exportar CSV do orçamento:", err);
+      alert("Erro ao exportar CSV do orçamento.");
+    }
   };
 
   const selectProject = (id) => {
@@ -215,39 +335,61 @@ export default function BudgetPage() {
         subtitle={project?.name ? `Proposta técnica e comercial para ${project.name}` : "Abra a partir de um projeto para gerar materiais, mão de obra e margem."}
         actions={
           <>
-          <label
-            className="flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-[11px] border border-dashed border-[#BCEEE5] bg-white hover:bg-[#F2FFFC] text-xs font-bold text-[#5f6877] transition"
-            title="Carregar logotipo personalizado para a proposta/orçamento"
-          >
-            <Upload className="w-3.5 h-3.5 text-primary shrink-0" />
-            <img
-              src={logoUrl || DEFAULT_LOGO_URL}
-              className="h-5 max-w-[120px] object-contain"
-              alt="Logo NACIF Solutions"
-              onError={(e) => {
-                if (e.currentTarget.src !== DEFAULT_LOGO_URL) {
-                  e.currentTarget.src = DEFAULT_LOGO_URL;
-                }
-              }}
-            />
-            <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-          </label>
-          {project && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs hover:bg-secondary/50">
-                  <Printer className="w-3.5 h-3.5" />Imprimir<ChevronDown className="w-3 h-3" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {Object.keys(PAPER_SIZES).map(size => (
-                  <DropdownMenuItem key={size} onClick={() => handlePrint(size)}>
-                    <Printer className="w-4 h-4 mr-2" />Formato {size}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+            <label
+              className="flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-[11px] border border-dashed border-[#BCEEE5] bg-white hover:bg-[#F2FFFC] text-xs font-bold text-[#5f6877] transition"
+              title="Carregar logotipo personalizado para a proposta/orçamento"
+            >
+              <Upload className="w-3.5 h-3.5 text-primary shrink-0" />
+              <BrandLogoUploaderDisplay logoUrl={logoUrl} />
+              <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+            </label>
+
+            {project && (
+              <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 shadow-sm transition">
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Baixar Orçamento</span>
+                      <ChevronDown className="w-3 h-3 ml-0.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={handleDownloadPDF} className="cursor-pointer font-medium">
+                      <Download className="w-4 h-4 mr-2 text-primary" />
+                      <span>Baixar Proposta em PDF</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDownloadCSV} className="cursor-pointer font-medium">
+                      <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600" />
+                      <span>Baixar Planilha (Excel/CSV)</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handlePrint("A4")} className="cursor-pointer font-medium">
+                      <Printer className="w-4 h-4 mr-2 text-slate-600" />
+                      <span>Imprimir Prancha Técnica (A4)</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold hover:bg-secondary/50 transition">
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Imprimir</span>
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {Object.keys(PAPER_SIZES).map((size) => (
+                      <DropdownMenuItem key={size} onClick={() => handlePrint(size)} className="cursor-pointer">
+                        <Printer className="w-4 h-4 mr-2" />
+                        Formato {size}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
           </>
         }
       />
@@ -284,31 +426,7 @@ export default function BudgetPage() {
                         : "border-border/60 bg-white hover:border-primary/40 hover:bg-secondary/50"
                     }`}
                   >
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#CDEFE8] bg-[#F2FFFC] p-2">
-                      {(() => {
-                        const itemLogo = item?.logo_url || item?.logoUrl || item?.project_logo || item?.logo;
-                        const isSolar = String(item?.project_type || "").toLowerCase().includes("solar");
-                        if (itemLogo) {
-                          return (
-                            <img
-                              src={itemLogo}
-                              alt={item.name || "Projeto"}
-                              className="h-full w-full object-contain"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                                const fallback = e.currentTarget.nextElementSibling;
-                                if (fallback) fallback.style.display = "flex";
-                              }}
-                            />
-                          );
-                        }
-                        return isSolar ? (
-                          <Sun className="h-5 w-5 text-amber-500" />
-                        ) : (
-                          <Zap className="h-5 w-5 text-primary" />
-                        );
-                      })()}
-                    </span>
+                    <ProjectThumbBadge project={item} size="md" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-black text-[#0f172a]">{item.name || "Projeto sem nome"}</span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-muted-foreground">
@@ -330,31 +448,11 @@ export default function BudgetPage() {
       ) : (
         <>
           <div className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card p-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#CDEFE8] bg-white p-2">
-              {(() => {
-                const projectCustomLogo = project?.logo_url || project?.logoUrl || project?.project_logo || project?.logo;
-                const hasCustomBudgetLogo = logoUrl && logoUrl !== DEFAULT_LOGO_URL;
-                const displayLogo = projectCustomLogo || (hasCustomBudgetLogo ? logoUrl : DEFAULT_COMPACT_LOGO_URL);
-                const isSolar = String(project?.project_type || "").toLowerCase().includes("solar");
-                return (
-                  <>
-                    <img
-                      src={displayLogo}
-                      className="h-full w-full object-contain"
-                      alt={project.name || "Logo"}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        const fallback = e.currentTarget.nextElementSibling;
-                        if (fallback) fallback.style.display = "flex";
-                      }}
-                    />
-                    <span className="hidden h-full w-full items-center justify-center">
-                      {isSolar ? <Sun className="h-7 w-7 text-amber-500" /> : <Zap className="h-7 w-7 text-primary" />}
-                    </span>
-                  </>
-                );
-              })()}
-            </div>
+            <ProjectThumbBadge
+              project={project}
+              size="lg"
+              customLogo={logoUrl && logoUrl.startsWith("data:") ? logoUrl : null}
+            />
             <div className="min-w-0">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground">Orçamento selecionado</p>
               <h2 className="truncate text-xl font-black text-[#0f172a]">{project.name}</h2>
@@ -519,14 +617,43 @@ export default function BudgetPage() {
             </div>
           </div>
 
-          <div className="p-6 rounded-2xl bg-primary/10 border border-primary/20">
-            <div className="flex justify-between text-sm"><span>Materiais base</span><span>{formatCurrencyBR(baseMaterialTotal)}</span></div>
-            <div className="flex justify-between text-sm mt-1"><span>Variação produtos ({productAdjustment}%)</span><span>{formatCurrencyBR(productAdjustmentValue)}</span></div>
-            <div className="flex justify-between text-sm mt-1"><span>Materiais ajustados</span><span>{formatCurrencyBR(materialTotal)}</span></div>
-            <div className="flex justify-between text-sm mt-1"><span>Mão de Obra</span><span>{formatCurrencyBR(laborCost)}</span></div>
-            <div className="flex justify-between text-sm mt-1"><span>Margem ({margin}%)</span><span>{formatCurrencyBR(subtotal * margin / 100)}</span></div>
-            <div className="flex justify-between font-bold text-lg mt-3 pt-3 border-t border-primary/20">
-              <span>Total</span><span className="text-primary">{formatCurrencyBR(total)}</span>
+          <div className="p-6 rounded-2xl bg-primary/10 border border-primary/20 space-y-4">
+            <div className="space-y-1">
+              <div className="flex justify-between text-sm"><span>Materiais base</span><span>{formatCurrencyBR(baseMaterialTotal)}</span></div>
+              <div className="flex justify-between text-sm"><span>Variação produtos ({productAdjustment}%)</span><span>{formatCurrencyBR(productAdjustmentValue)}</span></div>
+              <div className="flex justify-between text-sm"><span>Materiais ajustados</span><span>{formatCurrencyBR(materialTotal)}</span></div>
+              <div className="flex justify-between text-sm"><span>Mão de Obra</span><span>{formatCurrencyBR(laborCost)}</span></div>
+              <div className="flex justify-between text-sm"><span>Margem ({margin}%)</span><span>{formatCurrencyBR(subtotal * margin / 100)}</span></div>
+              <div className="flex justify-between font-bold text-lg pt-3 border-t border-primary/20">
+                <span>Total da Proposta</span><span className="text-primary font-black">{formatCurrencyBR(total)}</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-wrap items-center gap-3 border-t border-primary/20">
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-extrabold hover:bg-primary/90 shadow-sm transition"
+              >
+                <Download className="w-4 h-4" />
+                Baixar Orçamento em PDF
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadCSV}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-primary/30 bg-white hover:bg-primary/10 text-sm font-bold text-[#0f4f49] shadow-sm transition"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                Baixar Planilha CSV / Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePrint("A4")}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-white hover:bg-secondary/60 text-sm font-semibold text-muted-foreground transition"
+              >
+                <Printer className="w-4 h-4" />
+                Imprimir Prancha A4
+              </button>
             </div>
           </div>
         </>
