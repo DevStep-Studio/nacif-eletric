@@ -2966,7 +2966,7 @@ export default function PanelGenerator() {
   const handleDuplicateComponent = (componentId = selectedComponentId) => {
     const targetId = componentId || selectedComponentId;
     if (!targetId) return;
-    const placement = findComponentPlacement(targetId);
+    const placement = findComponentPlacement(targetId, rails);
     if (!placement?.component) return;
 
     const { component, railIndex } = placement;
@@ -3059,7 +3059,7 @@ export default function PanelGenerator() {
       setSelectedComponentId(id);
       setSelectedWireId("");
       setActiveTab("components");
-      const placement = findComponentPlacement(id);
+      const placement = findComponentPlacement(id, rails);
       if (placement && panelViewportRef.current) {
         const railY = 190 + placement.railIndex * 240;
         panelViewportRef.current.scrollTo({
@@ -3492,6 +3492,40 @@ export default function PanelGenerator() {
     selectInfrastructure(busbarId);
   };
 
+  const handleDeleteInfrastructure = (infraId = selectedInfrastructureId) => {
+    const targetId = String(infraId || selectedInfrastructureId || "");
+    if (!targetId) return false;
+
+    if (["neutral-bus", "ground-bus"].includes(targetId)) {
+      setSelectedInfrastructureId("");
+      return true;
+    }
+
+    let nextInfrastructure = infrastructure.filter((item) => String(item.id) !== targetId);
+
+    // Se for um barramento pente automático (comb-bus:...), marca explicitamente como deleted
+    // para que a função renderCombBusbars saiba que ele foi removido pelo usuário
+    if (targetId.startsWith(`${COMB_BUSBAR_PREFIX}:`)) {
+      nextInfrastructure.push({
+        id: targetId,
+        type: "comb-busbar",
+        deleted: true,
+      });
+    }
+
+    setInfrastructure(nextInfrastructure);
+    saveLayoutToDb(rails, wires, nextInfrastructure);
+    setSelectedInfrastructureId("");
+    if (activeTab === "infra") {
+      setActiveTab("settings");
+    }
+    toast({
+      title: "Item removido",
+      description: "O barramento foi removido com sucesso.",
+    });
+    return true;
+  };
+
   const deleteSelectedElement = () => {
     if (selectedTextWireId) {
       updateWireLabelMeta(selectedTextWireId, { hidden: true, text: "" });
@@ -3532,15 +3566,7 @@ export default function PanelGenerator() {
     }
 
     if (selectedInfrastructureId) {
-      if (["neutral-bus", "ground-bus"].includes(selectedInfrastructureId)) {
-        setSelectedInfrastructureId("");
-        return true;
-      }
-      const nextInfrastructure = infrastructure.filter((item) => item.id !== selectedInfrastructureId);
-      setInfrastructure(nextInfrastructure);
-      saveLayoutToDb(rails, wires, nextInfrastructure);
-      setSelectedInfrastructureId("");
-      return true;
+      return handleDeleteInfrastructure(selectedInfrastructureId);
     }
 
     return false;
@@ -4664,7 +4690,7 @@ export default function PanelGenerator() {
   };
 
   // AÇÕES DO COMPONENTE SELECIONADO
-  const getSelectedComponent = () => findComponentPlacement(selectedComponentId);
+  const getSelectedComponent = () => findComponentPlacement(selectedComponentId, rails);
 
   const handleUpdateComponent = (field, value, options = {}) => {
     const updated = rails.map(r => ({
@@ -4717,9 +4743,9 @@ export default function PanelGenerator() {
   };
 
   const handleDeleteComponent = async (componentId = selectedComponentId) => {
-    const targetId = String(componentId || "");
+    const targetId = String(componentId || selectedComponentId || "");
     if (!targetId) return false;
-    const placement = findComponentPlacement(targetId);
+    const placement = findComponentPlacement(targetId, rails);
     if (!placement?.component) {
       setSelectedComponentId("");
       return false;
@@ -4944,6 +4970,11 @@ export default function PanelGenerator() {
       circuits: nextCircuits,
       diagram_layout: nextDiagramLayout,
       projectUpdates,
+    });
+
+    toast({
+      title: "Dispositivo removido",
+      description: `${component.label || "Dispositivo"} foi removido com sucesso.`,
     });
 
     return true;
@@ -5536,20 +5567,22 @@ export default function PanelGenerator() {
     return (
       <g id="comb-busbars">
         {rails.map((r, rIdx) => {
-      const railY = 190 + rIdx * 240;
-      const y = railY - 45;
-      const groups = getCombBusbarGroups(r);
+          const railY = 190 + rIdx * 240;
+          const y = railY - 45;
+          const groups = getCombBusbarGroups(r);
 
-      return (
-        <g key={`comb-rail-${r.id}`}>
-          {groups.map((group, gIdx) => {
-            const first = group[0];
-            const last = group[group.length - 1];
-            const defaultX = first.x + 4;
-            const defaultWidth = (last.x + last.width) - first.x - 8;
-            const defaultY = y - 4; // Logo acima do parafuso
-            const combId = makeCombBusbarId(r.id, gIdx);
-            const combSettings = infrastructure.find((item) => item.id === combId) || {};
+          return (
+            <g key={`comb-rail-${r.id}`}>
+              {groups.map((group, gIdx) => {
+                const first = group[0];
+                const last = group[group.length - 1];
+                const defaultX = first.x + 4;
+                const defaultWidth = (last.x + last.width) - first.x - 8;
+                const defaultY = y - 4; // Logo acima do parafuso
+                const combId = makeCombBusbarId(r.id, gIdx);
+                const combSettings = infrastructure.find((item) => item.id === combId) || {};
+
+                if (combSettings.deleted || combSettings.hidden) return null;
 
             const rawX = Number(combSettings.x);
             const rawY = Number(combSettings.y);
@@ -5603,19 +5636,19 @@ export default function PanelGenerator() {
                 <rect x={bx + 2} y={by + 2} width={Math.max(0, bw - 4)} height="2" fill="#ffffff" fillOpacity="0.4" pointerEvents="none" />
                 
                 {/* Dentes de cobre exatamente em cada polo de cada componente do grupo */}
-	                {group.map((item) => {
-	                  return Array.from({ length: item.c.poles }).map((_, pi) => {
-	                    const px = item.x + xOffset + pi * MOD + MOD / 2 - 2;
-	                    if (!isCombToothVisible(px, bx, bw)) return null;
-	                    return (
-	                      <rect
-	                        key={`${item.c.id}-${pi}`}
-	                        x={px}
-	                        y={by + barHeight}
-	                        width={COMB_TOOTH_WIDTH}
-	                        height={toothHeight}
-	                        fill={conductorColor}
-	                        stroke="#854d0e"
+                {group.map((item) => {
+                  return Array.from({ length: item.c.poles }).map((_, pi) => {
+                    const px = item.x + xOffset + pi * MOD + MOD / 2 - 2;
+                    if (!isCombToothVisible(px, bx, bw)) return null;
+                    return (
+                      <rect
+                        key={`${item.c.id}-${pi}`}
+                        x={px}
+                        y={by + barHeight}
+                        width={COMB_TOOTH_WIDTH}
+                        height={toothHeight}
+                        fill={conductorColor}
+                        stroke="#854d0e"
                         strokeWidth="0.5"
                         pointerEvents="none"
                       />
@@ -5624,10 +5657,22 @@ export default function PanelGenerator() {
                 })}
                 {isSelected && (
                   <g>
-                    <rect x={bx + Math.max(0, bw - 76)} y={by - 21} width="76" height="16" rx="4" fill="#0f172a" opacity="0.92" />
-                    <text x={bx + Math.max(0, bw - 38)} y={by - 10} fill="#ffffff" fontSize="6.4" fontWeight="950" textAnchor="middle">
-                      Editar barramento
+                    <rect x={bx + Math.max(0, bw - 98)} y={by - 22} width="98" height="18" rx="4" fill="#0f172a" opacity="0.95" />
+                    <text x={bx + Math.max(0, bw - 58)} y={by - 10} fill="#ffffff" fontSize="7" fontWeight="900" textAnchor="middle">
+                      Barramento pente
                     </text>
+                    {/* Botão Excluir */}
+                    <g
+                      className="cursor-pointer hover:opacity-80"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteInfrastructure(combId);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <rect x={bx + Math.max(0, bw - 18)} y={by - 20} width="15" height="14" rx="3" fill="#ef4444" />
+                      <text x={bx + Math.max(0, bw - 10.5)} y={by - 10} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">×</text>
+                    </g>
                     <rect
                       x={bx - 7}
                       y={by + barHeight / 2 - 7}
@@ -5649,9 +5694,9 @@ export default function PanelGenerator() {
                       fill="#ffffff"
                       stroke="#00d8b8"
                       strokeWidth="1.4"
-	                      className="cursor-ew-resize"
-	                      onPointerDown={(event) => startInfrastructureResizeDrag(event, combId, "right", { x: bx, y: by, width: bw })}
-	                    />
+                      className="cursor-ew-resize"
+                      onPointerDown={(event) => startInfrastructureResizeDrag(event, combId, "right", { x: bx, y: by, width: bw })}
+                    />
                     {renderRotationHandle({
                       key: `${combId}-rotate`,
                       centerX: combCenterX,
@@ -5667,8 +5712,8 @@ export default function PanelGenerator() {
                         onSelect: () => selectInfrastructure(combId),
                       }),
                     })}
-	                  </g>
-	                )}
+                  </g>
+                )}
                 {label && (
                   <text
                     x={combSettings.labelX ?? (bx + bw / 2)}
@@ -5709,18 +5754,18 @@ export default function PanelGenerator() {
           const combCenterY = by + (barHeight + toothHeight) / 2;
           const combTransform = combRotation ? `rotate(${combRotation} ${combCenterX} ${combCenterY})` : undefined;
           const toothXs = [];
-		          for (let px = bx + Math.max(6, toothGap / 2 - COMB_TOOTH_WIDTH / 2); px <= bx + bw; px += toothGap) {
-		            if (isCombToothVisible(px, bx, bw)) toothXs.push(px);
-		          }
+          for (let px = bx + Math.max(6, toothGap / 2 - COMB_TOOTH_WIDTH / 2); px <= bx + bw; px += toothGap) {
+            if (isCombToothVisible(px, bx, bw)) toothXs.push(px);
+          }
 
           return (
             <g
-	              key={combId}
-	              id={combId}
+              key={combId}
+              id={combId}
               transform={combTransform}
-	              opacity="0.95"
-	              className="cursor-move"
-	              onPointerDown={(event) => startInfraTextDrag(event, combId, bx, by)}
+              opacity="0.95"
+              className="cursor-move"
+              onPointerDown={(event) => startInfraTextDrag(event, combId, bx, by)}
               onClick={(event) => {
                 event.stopPropagation();
                 if (!wiringMode && !wireMoveMode) selectInfrastructure(combId);
@@ -5746,9 +5791,9 @@ export default function PanelGenerator() {
               {toothXs.map((px, index) => (
                 <rect
                   key={`${combId}-tooth-${index}`}
-	                  x={px}
-	                  y={by + barHeight}
-	                  width={COMB_TOOTH_WIDTH}
+                  x={px}
+                  y={by + barHeight}
+                  width={COMB_TOOTH_WIDTH}
                   height={toothHeight}
                   fill={conductorColor}
                   stroke="#854d0e"
@@ -5758,10 +5803,22 @@ export default function PanelGenerator() {
               ))}
               {isSelected && (
                 <g>
-                  <rect x={bx + Math.max(0, bw - 84)} y={by - 21} width="84" height="16" rx="4" fill="#0f172a" opacity="0.92" />
-                  <text x={bx + Math.max(0, bw - 42)} y={by - 10} fill="#ffffff" fontSize="7" fontWeight="900" textAnchor="middle">
+                  <rect x={bx + Math.max(0, bw - 98)} y={by - 22} width="98" height="18" rx="4" fill="#0f172a" opacity="0.95" />
+                  <text x={bx + Math.max(0, bw - 58)} y={by - 10} fill="#ffffff" fontSize="7" fontWeight="900" textAnchor="middle">
                     Pente livre
                   </text>
+                  {/* Botão Excluir */}
+                  <g
+                    className="cursor-pointer hover:opacity-80"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteInfrastructure(combId);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <rect x={bx + Math.max(0, bw - 18)} y={by - 20} width="15" height="14" rx="3" fill="#ef4444" />
+                    <text x={bx + Math.max(0, bw - 10.5)} y={by - 10} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">×</text>
+                  </g>
                   <rect
                     x={bx - 7}
                     y={by + barHeight / 2 - 7}
@@ -5783,9 +5840,9 @@ export default function PanelGenerator() {
                     fill="#ffffff"
                     stroke="#00d8b8"
                     strokeWidth="1.4"
-	                    className="cursor-ew-resize"
-	                    onPointerDown={(event) => startInfrastructureResizeDrag(event, combId, "right", { x: bx, y: by, width: bw })}
-	                  />
+                    className="cursor-ew-resize"
+                    onPointerDown={(event) => startInfrastructureResizeDrag(event, combId, "right", { x: bx, y: by, width: bw })}
+                  />
                   {renderRotationHandle({
                     key: `${combId}-rotate`,
                     centerX: combCenterX,
@@ -5801,8 +5858,8 @@ export default function PanelGenerator() {
                       onSelect: () => selectInfrastructure(combId),
                     }),
                   })}
-	                </g>
-	              )}
+                </g>
+              )}
               {label && (
                 <text
                   x={combSettings.labelX ?? (bx + bw / 2)}
@@ -5891,11 +5948,22 @@ export default function PanelGenerator() {
               
               {isSelected && (
                 <g>
+                  <g
+                    className="cursor-pointer hover:opacity-80"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteInfrastructure(id);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <rect x={cx + 12} y={by - 26} width="16" height="14" rx="3" fill="#ef4444" />
+                    <text x={cx + 20} y={by - 16} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">×</text>
+                  </g>
                   {renderRotationHandle({
                     key: `${id}-rotate`,
                     centerX: cx,
                     centerY: cy,
-                    handleX: cx,
+                    handleX: cx - 12,
                     handleY: by - 20,
                     label: "Girar",
                     onPointerDown: (event) => startRotationDrag(event, { infraId: id, centerX: cx, centerY: cy, historyKey: `infra:${id}`, onSelect: () => selectInfrastructure(id) })
@@ -5969,13 +6037,24 @@ export default function PanelGenerator() {
               
               {isSelected && (
                 <g>
+                  <g
+                    className="cursor-pointer hover:opacity-80"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteInfrastructure(id);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <rect x={cx + 12} y={by - 26} width="16" height="14" rx="3" fill="#ef4444" />
+                    <text x={cx + 20} y={by - 16} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">×</text>
+                  </g>
                   <rect x={bx - 6} y={cy - 6} width="8" height="12" rx="2" fill="#fff" stroke="#00d8b8" className="cursor-ew-resize" onPointerDown={(e) => startInfrastructureResizeDrag(e, id, "left", { x: bx, y: by, width: bw })} />
                   <rect x={bx + bw - 2} y={cy - 6} width="8" height="12" rx="2" fill="#fff" stroke="#00d8b8" className="cursor-ew-resize" onPointerDown={(e) => startInfrastructureResizeDrag(e, id, "right", { x: bx, y: by, width: bw })} />
                   {renderRotationHandle({
                     key: `${id}-rotate`,
                     centerX: cx,
                     centerY: cy,
-                    handleX: cx,
+                    handleX: cx - 12,
                     handleY: by - 20,
                     label: "Girar",
                     onPointerDown: (event) => startRotationDrag(event, { infraId: id, centerX: cx, centerY: cy, historyKey: `infra:${id}`, onSelect: () => selectInfrastructure(id) })
@@ -9694,7 +9773,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => handleDeleteComponent()}
+                              onClick={() => handleDeleteComponent(component.id)}
                               title="Excluir dispositivo"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -11042,15 +11121,37 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
               
               return (
                 <div className="flex h-full flex-col p-4 bg-slate-50/50">
-                  <div className="mb-4">
-	                    <h2 className="text-sm font-black text-slate-800 uppercase tracking-tight">
+                  <div className="flex items-start justify-between pb-3 border-b border-slate-200 mb-4">
+                    <div><h2 className="text-sm font-black text-slate-800 uppercase tracking-tight">
 	                      {isScalableProperty ? (isThreePhase ? "Editar Barramento Trifásico" : isFreeDin ? "Editar Trilho DIN Livre" : isFreeCombBusbarId(infraId) ? "Editar Barramento Pente Livre" : "Editar Barramento Pente") : isNeutralBus ? "Editar Barramento Superior" : isGroundBus ? "Editar Barramento Terra" : "Editar Infraestrutura"}
 	                    </h2>
 	                    <p className="text-xs font-semibold text-slate-500">
 	                      {isScalableProperty ? "Ajustes finos e dimensões ficam salvos automaticamente." : isNeutralBus || isGroundBus ? "Ajuste posição, largura e identificação do barramento." : "Ajuste o texto e a posição"}
-	                    </p>
-	                  </div>
-	                  <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+	                    </p></div>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                      {isScalableProperty && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDeleteInfrastructure(infraId)}
+                          title="Excluir barramento"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600"
+                        onClick={() => { setSelectedInfrastructureId(""); setActiveTab("settings"); }}
+                        title="Fechar"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto pr-2 space-y-4">
 	                    {isScalableProperty && (
 	                      <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm">
 	                        {combBusbarInfo ? (
@@ -11064,7 +11165,8 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 	                                  {combBusbarInfo.free ? "Arraste o pente diretamente no desenho ou ajuste os valores finos abaixo." : "O ajuste não muda a ordem dos disjuntores; ele só posiciona e dimensiona o barramento pente."}
 	                                </p>
 	                              </div>
-	                              <Button
+	                              <div className="flex items-center gap-1.5 shrink-0">
+                                  <Button
 	                                type="button"
 	                                variant="outline"
 	                                size="sm"
@@ -11073,6 +11175,18 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 	                              >
 	                                Resetar
 	                              </Button>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    className="h-8 rounded-lg text-[10px] font-extrabold"
+                                    onClick={() => handleDeleteInfrastructure(infraId)}
+                                    title="Excluir este barramento"
+                                  >
+                                    <Trash2 className="w-3 h-3 mr-1" />
+                                    Excluir
+                                  </Button>
+                                </div>
 	                            </div>
 
 	                            <div>
