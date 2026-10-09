@@ -21,6 +21,7 @@
     "test:solar-bill": "node scripts/solar-bill-extraction-smoke.mjs",
     "test:solar-stepper": "node scripts/solar-stepper-and-location-smoke.mjs",
     "test:unified-sync": "node scripts/unified-electrical-sync-smoke.mjs",
+    "test:din-positioning": "node scripts/din-rail-positioning-smoke.mjs",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
   },

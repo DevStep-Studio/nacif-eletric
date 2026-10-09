@@ -1068,7 +1068,9 @@ const findLoadComponentPlacement = (compId = "", rails = []) => {
     let currentX = 160;
 
     for (const component of rail.components || []) {
-      const componentWidth = Number(component.poles || 1) * MOD;
+      const componentWidth = component.type === "spacer"
+        ? (Number(component.poles) || 1) * (MOD + 2) - 2
+        : Number(component.poles || 1) * MOD;
       if (componentMatchesLoadTarget(compId, component)) {
         return {
           component,
@@ -2264,11 +2266,128 @@ export default function PanelGenerator() {
     return true;
   };
 
+  const placeComponentOnRailAtSlot = (existingActive, movedComponent, targetSlot, compPoles, railId) => {
+    const poles = Math.max(1, Number(compPoles || movedComponent?.poles) || 1);
+    const maxStart = ROW_MAX - poles + 1;
+    const clampedTarget = clampNumber(Math.round(targetSlot), 1, maxStart, 1);
+
+    // Obter lista dos outros componentes ativos ordenados por posição atual
+    const items = (existingActive || [])
+      .filter((c) => c && c.id !== movedComponent?.id && c.type !== "spacer")
+      .map((c) => {
+        const rawPos = Number(c.dinPosition ?? c.startDin ?? c.slot);
+        const cPoles = Math.max(1, Number(c.poles) || 1);
+        return {
+          ...c,
+          start: Number.isFinite(rawPos) ? Math.round(rawPos) : 1,
+          size: cPoles,
+        };
+      })
+      .sort((a, b) => a.start - b.start);
+
+    const moved = {
+      ...movedComponent,
+      railId,
+      dinPosition: clampedTarget,
+      startDin: clampedTarget,
+      slot: clampedTarget,
+      poles,
+      moduleWidth: poles,
+      dinSize: poles,
+      start: clampedTarget,
+      size: poles,
+    };
+
+    // Verificar se o slot alvo tem colisão direta com algum componente existente
+    const targetEnd = clampedTarget + poles - 1;
+    const hasCollision = items.some((item) => {
+      const itemEnd = item.start + item.size - 1;
+      return Math.max(clampedTarget, item.start) <= Math.min(targetEnd, itemEnd);
+    });
+
+    if (!hasCollision) {
+      // Sem colisão: movedComponent fica no targetSlot e todos os outros mantêm suas posições exatas!
+      return [...items, moved].map((c) => {
+        const pos = c.start;
+        return {
+          ...c,
+          railId,
+          dinPosition: pos,
+          startDin: pos,
+          slot: pos,
+        };
+      });
+    }
+
+    // Com colisão: o usuário soltou sobre componentes existentes.
+    // Inserimos movedComponent na posição desejada e empurramos os itens colidentes para a direita.
+    const beforeItems = [];
+    const afterItems = [];
+
+    for (const item of items) {
+      if (item.start + item.size - 1 < clampedTarget) {
+        beforeItems.push(item);
+      } else {
+        afterItems.push(item);
+      }
+    }
+
+    let currentPos = clampedTarget + poles;
+    const adjustedAfter = afterItems.map((item) => {
+      const newStart = Math.max(item.start, currentPos);
+      currentPos = newStart + item.size;
+      return { ...item, start: newStart };
+    });
+
+    let allPlaced = [...beforeItems, moved, ...adjustedAfter];
+
+    // Se o último componente ultrapassou ROW_MAX, empurramos de volta para a esquerda para caber
+    const lastItem = allPlaced[allPlaced.length - 1];
+    if (lastItem) {
+      const overflow = (lastItem.start + lastItem.size - 1) - ROW_MAX;
+      if (overflow > 0) {
+        for (let i = allPlaced.length - 1; i >= 0; i--) {
+          const item = allPlaced[i];
+          const nextLimit = i === allPlaced.length - 1 ? ROW_MAX - item.size + 1 : allPlaced[i + 1].start - item.size;
+          item.start = Math.max(1, Math.min(item.start, nextLimit));
+        }
+        for (let i = 1; i < allPlaced.length; i++) {
+          const prev = allPlaced[i - 1];
+          const curr = allPlaced[i];
+          if (curr.start < prev.start + prev.size) {
+            curr.start = prev.start + prev.size;
+          }
+        }
+      }
+    }
+
+    return allPlaced.map((c) => {
+      const pos = c.start;
+      return {
+        ...c,
+        railId,
+        dinPosition: pos,
+        startDin: pos,
+        slot: pos,
+      };
+    });
+  };
+
   const normalizeRailsLayout = (currentRails) => {
     let normalized = currentRails.map(r => ({
       ...r,
       // Remove spacers so we can redistribute active components cleanly
-      components: (r.components || []).filter(c => c.type !== "spacer")
+      components: (r.components || [])
+        .filter(c => c.type !== "spacer")
+        .sort((a, b) => {
+          const aPos = Number(a.dinPosition ?? a.startDin ?? a.slot);
+          const bPos = Number(b.dinPosition ?? b.startDin ?? b.slot);
+          const aHasPosition = Number.isFinite(aPos);
+          const bHasPosition = Number.isFinite(bPos);
+          if (aHasPosition && bHasPosition && aPos !== bPos) return aPos - bPos;
+          if (aHasPosition !== bHasPosition) return aHasPosition ? -1 : 1;
+          return 0;
+        })
     }));
 
     for (let i = 0; i < normalized.length; i++) {
@@ -3610,6 +3729,30 @@ export default function PanelGenerator() {
           handleMoveComponent("right");
           return;
         }
+        if (key === "ArrowUp") {
+          event.preventDefault();
+          event.stopPropagation();
+          const sel = getSelectedComponent();
+          if (sel) {
+            const currentIdx = rails.findIndex((r) => r.id === sel.railId);
+            if (currentIdx > 0) {
+              handleMoveToRail(rails[currentIdx - 1].id, sel.component.id);
+            }
+          }
+          return;
+        }
+        if (key === "ArrowDown") {
+          event.preventDefault();
+          event.stopPropagation();
+          const sel = getSelectedComponent();
+          if (sel) {
+            const currentIdx = rails.findIndex((r) => r.id === sel.railId);
+            if (currentIdx >= 0 && currentIdx < rails.length - 1) {
+              handleMoveToRail(rails[currentIdx + 1].id, sel.component.id);
+            }
+          }
+          return;
+        }
       }
 
       if (key !== "Escape") return;
@@ -4128,68 +4271,37 @@ export default function PanelGenerator() {
   const moveComponentToPoint = (componentId, point) => {
     if (!componentId || !point) return;
     let movedComponent = null;
-    const withoutComponent = rails.map((rail) => {
-      const components = (rail.components || []).filter((component) => {
-        if (component.id === componentId) {
-          movedComponent = component;
-          return false;
-        }
-        return component.type !== "spacer";
-      });
-      return { ...rail, components };
-    });
+    for (const rail of rails) {
+      const found = (rail.components || []).find((c) => c.id === componentId && c.type !== "spacer");
+      if (found) {
+        movedComponent = found;
+        break;
+      }
+    }
 
     if (!movedComponent || movedComponent.type === "spacer") return;
 
     const targetRailIndex = Math.max(0, Math.min(rails.length - 1, Math.round((point.y - 190) / 240)));
-    const targetRail = withoutComponent[targetRailIndex];
-    const activeComponents = (targetRail.components || []).filter((component) => component.type !== "spacer");
+    const targetRail = rails[targetRailIndex];
+    if (!targetRail) return;
+
     const movedWidth = Math.max(1, Number(movedComponent.poles) || 1);
+    const rawSlot = Math.round((point.x - 160) / (MOD + 2)) + 1;
+    const targetSlot = Math.max(1, Math.min(ROW_MAX - movedWidth + 1, rawSlot));
 
-    let currentX = 160;
-    let insertIndex = activeComponents.length;
-    for (let index = 0; index < activeComponents.length; index += 1) {
-      const comp = activeComponents[index];
-      const compW = (Number(comp.poles) || 1) * MOD + 2;
-      const compMidX = currentX + compW / 2;
-      if (point.x < compMidX) {
-        insertIndex = index;
-        break;
-      }
-      currentX += compW;
-    }
-
-    const nextComponents = [...activeComponents];
-    nextComponents.splice(insertIndex, 0, {
-      ...movedComponent,
-      railId: targetRail.id,
-      moduleWidth: movedWidth,
-      dinSize: movedWidth,
-      poles: movedWidth,
-    });
-
-    const cleanComponents = nextComponents.map((c) => {
-      const copy = { ...c, railId: targetRail.id };
-      delete copy.dinPosition;
-      delete copy.startDin;
-      delete copy.slot;
-      return copy;
-    });
-
-    const nextRails = withoutComponent.map((rail, index) => {
+    const nextRails = rails.map((rail, index) => {
+      const activeComponents = (rail.components || []).filter((c) => c.id !== componentId && c.type !== "spacer");
       if (index === targetRailIndex) {
-        return { ...rail, components: cleanComponents };
+        const updatedTargetComponents = placeComponentOnRailAtSlot(
+          activeComponents,
+          movedComponent,
+          targetSlot,
+          movedWidth,
+          targetRail.id
+        );
+        return { ...rail, components: updatedTargetComponents };
       }
-      return {
-        ...rail,
-        components: (rail.components || []).map((c) => {
-          const copy = { ...c };
-          delete copy.dinPosition;
-          delete copy.startDin;
-          delete copy.slot;
-          return copy;
-        }),
-      };
+      return { ...rail, components: activeComponents };
     });
 
     const normalizedRails = normalizeRailsLayout(nextRails);
@@ -5001,41 +5113,84 @@ export default function PanelGenerator() {
     const sel = getSelectedComponent();
     if (!sel) return;
     const { component, railId } = sel;
+    const targetRail = rails.find((r) => r.id === railId);
+    if (!targetRail) return;
+
+    const compPoles = Math.max(1, Number(component.poles) || 1);
+    const currentSlot = Number(component.dinPosition ?? component.startDin ?? component.slot ?? 1);
     
-    let hasMoved = false;
-    const updated = rails.map(r => {
+    let targetSlot = currentSlot;
+    if (direction === "left") {
+      targetSlot = Math.max(1, currentSlot - 1);
+    } else if (direction === "right") {
+      targetSlot = Math.min(ROW_MAX - compPoles + 1, currentSlot + 1);
+    }
+
+    if (targetSlot === currentSlot) return;
+
+    const activeComponents = (targetRail.components || []).filter((c) => c.id !== component.id && c.type !== "spacer");
+    const updatedTargetComponents = placeComponentOnRailAtSlot(activeComponents, component, targetSlot, compPoles, railId);
+
+    const nextRails = rails.map((r) => {
       if (r.id !== railId) return r;
-      const activeComponents = (r.components || []).filter(c => c.type !== "spacer");
-      const index = activeComponents.findIndex(c => c.id === component.id);
-      if (index === -1) return r;
-      
-      const nextActive = [...activeComponents];
-      if (direction === "left" && index > 0) {
-        const temp = nextActive[index - 1];
-        nextActive[index - 1] = nextActive[index];
-        nextActive[index] = temp;
-        hasMoved = true;
-      } else if (direction === "right" && index < nextActive.length - 1) {
-        const temp = nextActive[index + 1];
-        nextActive[index + 1] = nextActive[index];
-        nextActive[index] = temp;
-        hasMoved = true;
-      }
-
-      const cleanActive = nextActive.map((c) => {
-        const copy = { ...c };
-        delete copy.dinPosition;
-        delete copy.startDin;
-        delete copy.slot;
-        return copy;
-      });
-
-      return { ...r, components: cleanActive };
+      return { ...r, components: updatedTargetComponents };
     });
 
-    if (!hasMoved) return;
+    const normalizedRails = normalizeRailsLayout(nextRails);
+    const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
+    const pHeight = 180 + normalizedRails.length * 240 + 100;
 
-    const normalizedRails = normalizeRailsLayout(updated);
+    const nextWires = wires.map((wire) => {
+      const isSourceAffected = String(wire.source || "").includes(component.id) || String(wire.sourceComponentId || "") === component.id;
+      const isTargetAffected = String(wire.target || "").includes(component.id) || String(wire.targetComponentId || "") === component.id;
+      if (!isSourceAffected && !isTargetAffected) return wire;
+
+      const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
+      const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
+      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
+      const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
+      const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
+      const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset,
+        sourcePin: wire.source,
+        targetPin: wire.target,
+      });
+      return {
+        ...wire,
+        route: { mode: "orthogonal", points: newRoute },
+        route_points: newRoute.length > 2 ? newRoute.slice(1, -1) : [],
+      };
+    });
+
+    setRails(normalizedRails);
+    setWires(nextWires);
+    saveLayoutToDb(normalizedRails, nextWires, infrastructure);
+    setSelectedComponentId(component.id);
+  };
+
+  const handleSetComponentSlot = (newSlot) => {
+    const sel = getSelectedComponent();
+    if (!sel) return;
+    const { component, railId } = sel;
+    const targetRail = rails.find((r) => r.id === railId);
+    if (!targetRail) return;
+
+    const compPoles = Math.max(1, Number(component.poles) || 1);
+    const targetSlot = clampNumber(Math.round(Number(newSlot)), 1, ROW_MAX - compPoles + 1, 1);
+
+    const activeComponents = (targetRail.components || []).filter((c) => c.id !== component.id && c.type !== "spacer");
+    const updatedTargetComponents = placeComponentOnRailAtSlot(activeComponents, component, targetSlot, compPoles, railId);
+
+    const nextRails = rails.map((r) => {
+      if (r.id !== railId) return r;
+      return { ...r, components: updatedTargetComponents };
+    });
+
+    const normalizedRails = normalizeRailsLayout(nextRails);
     const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
     const pHeight = 180 + normalizedRails.length * 240 + 100;
 
@@ -5085,22 +5240,25 @@ export default function PanelGenerator() {
     });
     if (!foundComp || sourceRailId === targetRailId) return;
 
-    const withoutComponent = rails.map((r) => {
-      const active = (r.components || []).filter((c) => c.type !== "spacer");
+    const compPoles = Math.max(1, Number(foundComp.poles) || 1);
+    const currentSlot = Number(foundComp.dinPosition ?? foundComp.startDin ?? foundComp.slot ?? 1);
+    const targetRail = rails.find((r) => r.id === targetRailId);
+    if (!targetRail) return;
+
+    const targetActive = (targetRail.components || []).filter((c) => c.type !== "spacer");
+    const updatedTargetComponents = placeComponentOnRailAtSlot(targetActive, foundComp, currentSlot, compPoles, targetRailId);
+
+    const nextRails = rails.map((r) => {
       if (r.id === sourceRailId) {
-        return { ...r, components: active.filter((c) => c.id !== foundComp.id) };
+        return { ...r, components: (r.components || []).filter((c) => c.id !== foundComp.id && c.type !== "spacer") };
       }
       if (r.id === targetRailId) {
-        const cleanMoved = { ...foundComp, railId: targetRailId };
-        delete cleanMoved.dinPosition;
-        delete cleanMoved.startDin;
-        delete cleanMoved.slot;
-        return { ...r, components: [...active, cleanMoved] };
+        return { ...r, components: updatedTargetComponents };
       }
-      return { ...r, components: active };
+      return { ...r, components: (r.components || []).filter((c) => c.type !== "spacer") };
     });
 
-    const normalizedRails = normalizeRailsLayout(withoutComponent);
+    const normalizedRails = normalizeRailsLayout(nextRails);
     const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
     const pHeight = 180 + normalizedRails.length * 240 + 100;
 
@@ -5509,7 +5667,9 @@ export default function PanelGenerator() {
       const railY = 190 + rIdx * 240;
       let currentX = 160;
       (r.components || []).forEach((c) => {
-        const compW = (Number(c.poles) || 1) * MOD;
+        const compW = c.type === "spacer"
+          ? (Number(c.poles) || 1) * (MOD + 2) - 2
+          : (Number(c.poles) || 1) * MOD;
         const x = currentX;
         currentX += compW + 2;
         const y = railY - 45;
@@ -5528,10 +5688,10 @@ export default function PanelGenerator() {
     const bx = Math.max(16, Math.min(PANEL_W - toolbarW - 16, cx - toolbarW / 2));
     const by = y >= 64 ? y - toolbarH - 12 : y + H + 12;
 
-    const activeComponents = (rail.components || []).filter((item) => item.type !== "spacer");
-    const compIdx = activeComponents.findIndex((item) => item.id === c.id);
-    const canMoveLeft = compIdx > 0;
-    const canMoveRight = compIdx >= 0 && compIdx < activeComponents.length - 1;
+    const currentSlot = Number(c.dinPosition ?? c.startDin ?? c.slot ?? 1);
+    const poles = Math.max(1, Number(c.poles) || 1);
+    const canMoveLeft = currentSlot > 1;
+    const canMoveRight = currentSlot < (ROW_MAX - poles + 1);
 
     return (
       <g
@@ -5661,7 +5821,9 @@ export default function PanelGenerator() {
     let currentX = 160;
 
     for (const c of rail.components || []) {
-      const compW = c.poles * MOD;
+      const compW = c.type === "spacer"
+        ? (Number(c.poles) || 1) * (MOD + 2) - 2
+        : c.poles * MOD;
       const x = currentX;
       currentX += compW + 2;
 
@@ -6766,7 +6928,7 @@ export default function PanelGenerator() {
   };
 
   const renderSpacer = (c, x, y) => {
-    const W = c.poles * MOD;
+    const W = (Number(c.poles) || 1) * (MOD + 2) - 2;
     const badgeW = Math.min(W - 8, Math.max(96, (c.label || "").length * 8.8 + 20));
     const isTraced = tracedCircuitId && isComponentMatchingCircuit(c, tracedCircuitId);
     const isDimmed = tracedCircuitId && !isTraced;
@@ -8842,17 +9004,115 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
   const renderComponentDragPreview = () => {
     if (!componentDrag?.active) return null;
+
+    let draggedComp = null;
+    for (const r of rails) {
+      const found = (r.components || []).find((c) => c.id === componentDrag.componentId && c.type !== "spacer");
+      if (found) {
+        draggedComp = found;
+        break;
+      }
+    }
+
+    const compPoles = Math.max(1, Number(draggedComp?.poles) || 1);
     const targetRailIndex = Math.max(0, Math.min(rails.length - 1, Math.round((componentDrag.y - 190) / 240)));
+    const targetRail = rails[targetRailIndex] || rails[0];
     const railY = 190 + targetRailIndex * 240;
-    const dropX = Math.max(148, Math.min(PANEL_W - 148, componentDrag.x));
+
+    const rawSlot = Math.round((componentDrag.x - 160) / (MOD + 2)) + 1;
+    const targetSlot = Math.max(1, Math.min(ROW_MAX - compPoles + 1, rawSlot));
+    const snappedX = 160 + (targetSlot - 1) * (MOD + 2);
+    const compW = compPoles * MOD;
+    const compH = BRK_H;
+    const compY = railY - 45;
+
+    const badgeLabel = `Módulo DIN ${targetSlot}${compPoles > 1 ? `–${targetSlot + compPoles - 1}` : ""} · ${targetRail?.name || `Trilho T${targetRailIndex + 1}`}`;
+    const badgeW = Math.max(140, badgeLabel.length * 7.5 + 24);
 
     return (
       <g id="component-drag-preview" pointerEvents="none">
-        <rect x="132" y={railY - 66} width={PANEL_W - 264} height="132" rx="10" fill="#00d8b8" fillOpacity="0.08" stroke="#00d8b8" strokeWidth="1.4" strokeDasharray="7,5" />
-        <line x1={dropX} y1={railY - 62} x2={dropX} y2={railY + 62} stroke="#00d8b8" strokeWidth="2.2" strokeDasharray="5,4" />
-        <rect x={dropX - 58} y={railY - 84} width="116" height="19" rx="6" fill="#00d8b8" />
-        <text x={dropX} y={railY - 71} fill="#ffffff" fontSize="7.2" fontWeight="950" textAnchor="middle">
-          Solte para mover aqui
+        {/* Destaque do trilho selecionado */}
+        <rect
+          x="132"
+          y={railY - 56}
+          width={PANEL_W - 264}
+          height="112"
+          rx="8"
+          fill="#00d8b8"
+          fillOpacity="0.06"
+          stroke="#00d8b8"
+          strokeWidth="1.2"
+          strokeDasharray="6,4"
+        />
+
+        {/* Fantasma do disjuntor na posição exata de encaixe (snap) */}
+        <rect
+          x={snappedX}
+          y={compY}
+          width={compW}
+          height={compH}
+          rx="6"
+          fill="#00d8b8"
+          fillOpacity="0.3"
+          stroke="#00d8b8"
+          strokeWidth="2.2"
+          strokeDasharray="4,2"
+          filter="url(#shadow)"
+        />
+
+        {/* Guias verticais de alinhamento com o trilho */}
+        <line
+          x1={snappedX}
+          y1={railY - 50}
+          x2={snappedX}
+          y2={railY + 50}
+          stroke="#00d8b8"
+          strokeWidth="1"
+          strokeDasharray="3,3"
+        />
+        <line
+          x1={snappedX + compW}
+          y1={railY - 50}
+          x2={snappedX + compW}
+          y2={railY + 50}
+          stroke="#00d8b8"
+          strokeWidth="1"
+          strokeDasharray="3,3"
+        />
+
+        {/* Badge superior informando trilho e módulo DIN */}
+        <rect
+          x={snappedX + compW / 2 - badgeW / 2}
+          y={compY - 26}
+          width={badgeW}
+          height="22"
+          rx="6"
+          fill="#0f172a"
+          stroke="#00d8b8"
+          strokeWidth="1.2"
+          filter="url(#deviceShadow)"
+        />
+        <text
+          x={snappedX + compW / 2}
+          y={compY - 11}
+          fill="#00d8b8"
+          fontSize="9.5"
+          fontWeight="900"
+          textAnchor="middle"
+        >
+          {badgeLabel}
+        </text>
+
+        {/* Label dentro do fantasma */}
+        <text
+          x={snappedX + compW / 2}
+          y={compY + compH / 2 + 4}
+          fill="#ffffff"
+          fontSize="10"
+          fontWeight="bold"
+          textAnchor="middle"
+        >
+          {draggedComp?.label || draggedComp?.id || "Dispositivo"}
         </text>
       </g>
     );
@@ -9722,7 +9982,9 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       return (
                         <g key={`comp-list-${r.id}`}>
                           {r.components.map(c => {
-                            const compW = c.poles * MOD;
+                            const compW = c.type === "spacer"
+                              ? (Number(c.poles) || 1) * (MOD + 2) - 2
+                              : c.poles * MOD;
                             const isSelected = selectedComponentId === c.id;
                             const x = currentX;
                             currentX += compW + 2;
@@ -10160,16 +10422,44 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                               </div>
                             )}
 
-                            <div className="space-y-1.5">
-                              <Label className="text-[10px] font-bold text-slate-500">Posição no Trilho DIN</Label>
-                              <div className="flex gap-2">
-                                <Button size="sm" variant="outline" className="flex-1 rounded-lg h-8 font-bold text-xs" onClick={() => handleMoveComponent("left")}>
-                                  <ChevronLeft className="w-3.5 h-3.5 mr-1" />
-                                  Esquerda
+                            <div className="space-y-2 rounded-xl bg-slate-50 p-2.5 border border-slate-200">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Posicionamento DIN</Label>
+                                <span className="text-[10px] font-extrabold text-[#0f4f49] bg-[#E8FCF8] px-2 py-0.5 rounded border border-[#BCEEE5]">
+                                  Módulo {component.dinPosition || component.startDin || component.slot || 1} de {ROW_MAX}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 flex-1 rounded-lg font-bold text-xs"
+                                  onClick={() => handleMoveComponent("left")}
+                                  title="Recuar 1 Módulo DIN (←)"
+                                >
+                                  <ChevronLeft className="w-3.5 h-3.5 mr-0.5" />
+                                  Recuar
                                 </Button>
-                                <Button size="sm" variant="outline" className="flex-1 rounded-lg h-8 font-bold text-xs" onClick={() => handleMoveComponent("right")}>
-                                  Direita
-                                  <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                                <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                                  <span className="text-[10px] font-bold text-slate-400">DIN</span>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={ROW_MAX - (Number(component.poles) || 1) + 1}
+                                    value={Number(component.dinPosition ?? component.startDin ?? component.slot ?? 1)}
+                                    onChange={(e) => handleSetComponentSlot(e.target.value)}
+                                    className="w-12 h-6 text-center font-black text-xs p-0 border-0 focus-visible:ring-0 bg-transparent"
+                                  />
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 flex-1 rounded-lg font-bold text-xs"
+                                  onClick={() => handleMoveComponent("right")}
+                                  title="Avançar 1 Módulo DIN (→)"
+                                >
+                                  Avançar
+                                  <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
                                 </Button>
                               </div>
                             </div>
