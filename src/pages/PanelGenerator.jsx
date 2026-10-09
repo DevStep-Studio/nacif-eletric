@@ -3596,6 +3596,21 @@ export default function PanelGenerator() {
         return;
       }
 
+      if (selectedComponentId && !isTypingTarget(event.target)) {
+        if (key === "ArrowLeft") {
+          event.preventDefault();
+          event.stopPropagation();
+          handleMoveComponent("left");
+          return;
+        }
+        if (key === "ArrowRight") {
+          event.preventDefault();
+          event.stopPropagation();
+          handleMoveComponent("right");
+          return;
+        }
+      }
+
       if (key !== "Escape") return;
 
       const hasActiveEdit = wiringMode
@@ -3646,6 +3661,7 @@ export default function PanelGenerator() {
       setInfraResizeDrag(null);
       setRotationDrag(null);
       clearWireSelection();
+      setSelectedComponentId("");
     };
 
     window.addEventListener("keydown", handleEditorKeyDown, true);
@@ -4128,37 +4144,53 @@ export default function PanelGenerator() {
     const targetRail = withoutComponent[targetRailIndex];
     const activeComponents = (targetRail.components || []).filter((component) => component.type !== "spacer");
     const movedWidth = Math.max(1, Number(movedComponent.poles) || 1);
-    const targetSlot = clampNumber(
-      Math.round((point.x - RAIL_COMPONENT_START_X) / (MOD + RAIL_COMPONENT_GAP)) + 1,
-      1,
-      ROW_MAX - movedWidth + 1,
-      1
-    );
-    let insertIndex = activeComponents.length;
 
+    let currentX = 160;
+    let insertIndex = activeComponents.length;
     for (let index = 0; index < activeComponents.length; index += 1) {
-      const component = activeComponents[index];
-      const componentStart = Number(component.dinPosition ?? component.startDin ?? component.slot) || (index + 1);
-      if (targetSlot < componentStart) {
+      const comp = activeComponents[index];
+      const compW = (Number(comp.poles) || 1) * MOD + 2;
+      const compMidX = currentX + compW / 2;
+      if (point.x < compMidX) {
         insertIndex = index;
         break;
       }
+      currentX += compW;
     }
 
     const nextComponents = [...activeComponents];
     nextComponents.splice(insertIndex, 0, {
       ...movedComponent,
       railId: targetRail.id,
-      dinPosition: targetSlot,
-      startDin: targetSlot,
-      slot: targetSlot,
       moduleWidth: movedWidth,
       dinSize: movedWidth,
       poles: movedWidth,
     });
-    const nextRails = withoutComponent.map((rail, index) => (
-      index === targetRailIndex ? { ...rail, components: nextComponents } : rail
-    ));
+
+    const cleanComponents = nextComponents.map((c) => {
+      const copy = { ...c, railId: targetRail.id };
+      delete copy.dinPosition;
+      delete copy.startDin;
+      delete copy.slot;
+      return copy;
+    });
+
+    const nextRails = withoutComponent.map((rail, index) => {
+      if (index === targetRailIndex) {
+        return { ...rail, components: cleanComponents };
+      }
+      return {
+        ...rail,
+        components: (rail.components || []).map((c) => {
+          const copy = { ...c };
+          delete copy.dinPosition;
+          delete copy.startDin;
+          delete copy.slot;
+          return copy;
+        }),
+      };
+    });
+
     const normalizedRails = normalizeRailsLayout(nextRails);
     const obstacles = extractPanelObstacles(normalizedRails, infrastructure);
     const pHeight = 180 + normalizedRails.length * 240 + 100;
@@ -4395,6 +4427,8 @@ export default function PanelGenerator() {
       const dragKey = `component:${componentDrag.componentId}:move`;
       if (componentDrag.active && point) {
         moveComponentToPoint(componentDrag.componentId, point);
+      } else {
+        selectComponent(componentDrag.componentId);
       }
       commitEditHistory(dragKey);
       setComponentDrag(null);
@@ -5005,7 +5039,15 @@ export default function PanelGenerator() {
         hasMoved = true;
       }
 
-      return { ...r, components: nextActive };
+      const cleanActive = nextActive.map((c) => {
+        const copy = { ...c };
+        delete copy.dinPosition;
+        delete copy.startDin;
+        delete copy.slot;
+        return copy;
+      });
+
+      return { ...r, components: cleanActive };
     });
 
     if (!hasMoved) return;
@@ -5043,6 +5085,7 @@ export default function PanelGenerator() {
     setRails(normalizedRails);
     setWires(nextWires);
     saveLayoutToDb(normalizedRails, nextWires, infrastructure);
+    setSelectedComponentId(component.id);
   };
 
   const handleMoveToRail = (targetRailId, targetComponentId = selectedComponentId) => {
@@ -5065,7 +5108,11 @@ export default function PanelGenerator() {
         return { ...r, components: active.filter((c) => c.id !== foundComp.id) };
       }
       if (r.id === targetRailId) {
-        return { ...r, components: [...active, { ...foundComp, railId: targetRailId }] };
+        const cleanMoved = { ...foundComp, railId: targetRailId };
+        delete cleanMoved.dinPosition;
+        delete cleanMoved.startDin;
+        delete cleanMoved.slot;
+        return { ...r, components: [...active, cleanMoved] };
       }
       return { ...r, components: active };
     });
@@ -5471,42 +5518,155 @@ export default function PanelGenerator() {
     setActiveTab("components");
   };
 
-  // Helper para renderizar controles flutuantes acima dos componentes selecionados
-  const renderFloatingControls = (c, x, y, W) => {
+  // Overlay de alta prioridade para o componente selecionado (sempre acima de barramentos e fios)
+  const renderSelectedComponentOverlay = () => {
+    if (!selectedComponentId || componentDrag?.active) return null;
+    let found = null;
+    rails.forEach((r, rIdx) => {
+      const railY = 190 + rIdx * 240;
+      let currentX = 160;
+      (r.components || []).forEach((c) => {
+        const compW = (Number(c.poles) || 1) * MOD;
+        const x = currentX;
+        currentX += compW + 2;
+        const y = railY - 45;
+        if (c.id === selectedComponentId) {
+          found = { component: c, rail: r, railIndex: rIdx, x, y, width: compW, height: BRK_H };
+        }
+      });
+    });
+
+    if (!found) return null;
+    const { component: c, rail, railIndex, x, y, width: W, height: H } = found;
+
+    const toolbarW = 176;
+    const toolbarH = 28;
     const cx = x + W / 2;
-    const bx = cx - 48;
-    const by = y - 24;
-    
+    const bx = Math.max(16, Math.min(PANEL_W - toolbarW - 16, cx - toolbarW / 2));
+    const by = y >= 64 ? y - toolbarH - 12 : y + H + 12;
+
+    const activeComponents = (rail.components || []).filter((item) => item.type !== "spacer");
+    const compIdx = activeComponents.findIndex((item) => item.id === c.id);
+    const canMoveLeft = compIdx > 0;
+    const canMoveRight = compIdx >= 0 && compIdx < activeComponents.length - 1;
+
     return (
-      <g key={`controls-${c.id}`} className="no-select select-none" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-        {/* Outline pontilhado ao redor do componente para indicar seleção */}
-        <rect x={x - 2} y={y - 2} width={W + 4} height={BRK_H + 4} rx="6" fill="none" stroke="#00d8b8" strokeWidth="2" strokeDasharray="4,3" />
-        
-        {/* Fundo da barra de ferramentas flutuante */}
-        <rect x={bx} y={by} width="96" height="18" rx="5" fill="#1e293b" stroke="#334155" strokeWidth="1" filter="url(#shadow)" />
-        
+      <g
+        id="selected-component-overlay"
+        className="no-select select-none"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Glow externo de seleção */}
+        <rect
+          x={x - 4}
+          y={y - 4}
+          width={W + 8}
+          height={H + 8}
+          rx="8"
+          fill="#00d8b8"
+          fillOpacity="0.12"
+          stroke="#00d8b8"
+          strokeWidth="1.2"
+          pointerEvents="none"
+        />
+
+        {/* Borda técnica pontilhada */}
+        <rect
+          x={x - 2}
+          y={y - 2}
+          width={W + 4}
+          height={H + 4}
+          rx="6"
+          fill="none"
+          stroke="#00d8b8"
+          strokeWidth="2.4"
+          strokeDasharray="5,3"
+          pointerEvents="none"
+        />
+
+        {/* 4 Grips nos cantos */}
+        <rect x={x - 4} y={y - 4} width="5" height="5" fill="#00d8b8" rx="1" pointerEvents="none" />
+        <rect x={x + W - 1} y={y - 4} width="5" height="5" fill="#00d8b8" rx="1" pointerEvents="none" />
+        <rect x={x - 4} y={y + H - 1} width="5" height="5" fill="#00d8b8" rx="1" pointerEvents="none" />
+        <rect x={x + W - 1} y={y + H - 1} width="5" height="5" fill="#00d8b8" rx="1" pointerEvents="none" />
+
+        {/* Barra flutuante de ações rápidas */}
+        <rect
+          x={bx}
+          y={by}
+          width={toolbarW}
+          height={toolbarH}
+          rx="7"
+          fill="#0f172a"
+          stroke="#334155"
+          strokeWidth="1.2"
+          filter="url(#deviceShadow)"
+        />
+
         {/* Botão Mover Esquerda */}
-        <g className="cursor-pointer hover:opacity-80" onClick={(e) => { e.stopPropagation(); handleMoveComponent("left"); }}>
-          <rect x={bx + 2} y={by + 2} width="20" height="14" rx="3" fill="#334155" />
-          <text x={bx + 12} y={by + 11} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">←</text>
+        <g
+          className={canMoveLeft ? "cursor-pointer hover:opacity-85" : "opacity-30 cursor-not-allowed"}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (canMoveLeft) handleMoveComponent("left");
+          }}
+        >
+          <title>Mover para esquerda (←)</title>
+          <rect x={bx + 4} y={by + 4} width="24" height="20" rx="4" fill="#1e293b" />
+          <text x={bx + 16} y={by + 17.5} fill="#ffffff" fontSize="12" fontWeight="bold" textAnchor="middle">←</text>
         </g>
-        
+
         {/* Botão Mover Direita */}
-        <g className="cursor-pointer hover:opacity-80" onClick={(e) => { e.stopPropagation(); handleMoveComponent("right"); }}>
-          <rect x={bx + 24} y={by + 2} width="20" height="14" rx="3" fill="#334155" />
-          <text x={bx + 34} y={by + 11} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">→</text>
+        <g
+          className={canMoveRight ? "cursor-pointer hover:opacity-85" : "opacity-30 cursor-not-allowed"}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (canMoveRight) handleMoveComponent("right");
+          }}
+        >
+          <title>Mover para direita (→)</title>
+          <rect x={bx + 32} y={by + 4} width="24" height="20" rx="4" fill="#1e293b" />
+          <text x={bx + 44} y={by + 17.5} fill="#ffffff" fontSize="12" fontWeight="bold" textAnchor="middle">→</text>
         </g>
-        
-        {/* Botão Alternar Trilho */}
-        <g className="cursor-pointer hover:opacity-80" onClick={(e) => { e.stopPropagation(); handleToggleRail(c.id); }}>
-          <rect x={bx + 46} y={by + 2} width="24" height="14" rx="3" fill="#00d8b8" />
-          <text x={bx + 58} y={by + 11} fill="#ffffff" fontSize="7" fontWeight="bold" textAnchor="middle">Trilho</text>
+
+        {/* Botão Mudar Trilho */}
+        <g
+          className="cursor-pointer hover:opacity-85"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleToggleRail(c.id);
+          }}
+        >
+          <title>Mover para outro trilho DIN</title>
+          <rect x={bx + 60} y={by + 4} width="44" height="20" rx="4" fill="#0f4f49" stroke="#00d8b8" strokeWidth="0.8" />
+          <text x={bx + 82} y={by + 17} fill="#00d8b8" fontSize="8" fontWeight="900" textAnchor="middle">TRILHO</text>
         </g>
-        
-        {/* Botão Excluir */}
-        <g className="cursor-pointer hover:opacity-80" onClick={(e) => { e.stopPropagation(); handleDeleteComponent(c.id); }}>
-          <rect x={bx + 72} y={by + 2} width="22" height="14" rx="3" fill="#ef4444" />
-          <text x={bx + 83} y={by + 11} fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle">×</text>
+
+        {/* Botão Duplicar */}
+        <g
+          className="cursor-pointer hover:opacity-85"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDuplicateComponent(c.id);
+          }}
+        >
+          <title>Duplicar componente</title>
+          <rect x={bx + 108} y={by + 4} width="32" height="20" rx="4" fill="#1e293b" />
+          <text x={bx + 124} y={by + 17} fill="#94a3b8" fontSize="7.5" fontWeight="bold" textAnchor="middle">COPIAR</text>
+        </g>
+
+        {/* Botão Apagar / Excluir */}
+        <g
+          className="cursor-pointer hover:opacity-85"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteComponent(c.id);
+          }}
+        >
+          <title>Apagar disjuntor / componente (Del)</title>
+          <rect x={bx + 144} y={by + 4} width="28" height="20" rx="4" fill="#dc2626" />
+          <text x={bx + 158} y={by + 18} fill="#ffffff" fontSize="13" fontWeight="bold" textAnchor="middle">×</text>
         </g>
       </g>
     );
@@ -6096,7 +6256,15 @@ export default function PanelGenerator() {
         opacity={compOpacity}
         className="cursor-pointer"
         onPointerDown={(event) => startComponentDrag(event, c.id)}
-        onClick={() => selectComponent(c.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          selectComponent(c.id);
+        }}
+        onPointerUp={(e) => {
+          if (!componentDrag?.active) {
+            selectComponent(c.id);
+          }
+        }}
         onMouseEnter={() => setHoveredItem({
           type: "component",
           label: displayLabel,
@@ -6329,8 +6497,6 @@ export default function PanelGenerator() {
           </g>
         )}
 
-        {/* Controles Flutuantes se Selecionado */}
-        {isSelected && renderFloatingControls(c, x, y, W)}
       </g>
     );
   };
@@ -6354,7 +6520,15 @@ export default function PanelGenerator() {
         opacity={compOpacity}
         className="cursor-pointer"
         onPointerDown={(event) => startComponentDrag(event, c.id)}
-        onClick={() => selectComponent(c.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          selectComponent(c.id);
+        }}
+        onPointerUp={(e) => {
+          if (!componentDrag?.active) {
+            selectComponent(c.id);
+          }
+        }}
       >
         {/* Sombra */}
         <rect x={x + 1} y={y + 2} width={W - 2} height={BRK_H} rx="5" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
@@ -6446,8 +6620,6 @@ export default function PanelGenerator() {
           />
         )}
 
-        {/* Controles Flutuantes se Selecionado */}
-        {isSelected && renderFloatingControls(c, x, y, W)}
       </g>
     );
   };
@@ -6469,7 +6641,15 @@ export default function PanelGenerator() {
         opacity={compOpacity}
         className="cursor-pointer"
         onPointerDown={(event) => startComponentDrag(event, c.id)}
-        onClick={() => selectComponent(c.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          selectComponent(c.id);
+        }}
+        onPointerUp={(e) => {
+          if (!componentDrag?.active) {
+            selectComponent(c.id);
+          }
+        }}
       >
         {/* Sombra */}
         <rect x={x + 1} y={y + 2} width={W - 2} height={BRK_H} rx="5" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
@@ -6598,8 +6778,6 @@ export default function PanelGenerator() {
           />
         )}
 
-        {/* Controles Flutuantes se Selecionado */}
-        {isSelected && renderFloatingControls(c, x, y, W)}
       </g>
     );
   };
@@ -6686,7 +6864,15 @@ export default function PanelGenerator() {
         opacity={compOpacity}
         className="cursor-pointer"
         onPointerDown={(event) => startComponentDrag(event, c.id)}
-        onClick={() => selectComponent(c.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          selectComponent(c.id);
+        }}
+        onPointerUp={(e) => {
+          if (!componentDrag?.active) {
+            selectComponent(c.id);
+          }
+        }}
       >
         {/* Sombra */}
         <rect x={x + 0.5} y={y + 2} width={W - 1} height={BRK_H} rx="2" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
@@ -6752,8 +6938,6 @@ export default function PanelGenerator() {
           />
         )}
 
-        {/* Controles Flutuantes se Selecionado */}
-        {isSelected && renderFloatingControls(c, x, y, W)}
       </g>
     );
   };
@@ -8993,6 +9177,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     onPointerDown={(e) => {
                       if (!wiringMode && (e.target.tagName === "svg" || e.target.id === "panel-background")) {
                         clearWireSelection({ exitWiringMode: false });
+                        setSelectedComponentId("");
                       }
                     }}
                     onPointerMove={handleSvgPointerMove}
@@ -9578,6 +9763,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     {renderFreeDinRails()}
                     {renderTextAnnotations()}
                     {renderComponentDragPreview()}
+                    {renderSelectedComponentOverlay()}
                     {renderConnectionHotspots()}
                     {renderDebugTerminals()}
                     {renderSelectedWireRouteHandles()}
