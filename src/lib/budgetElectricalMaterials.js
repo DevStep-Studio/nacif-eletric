@@ -7,72 +7,72 @@ const normalizeText = (value = "") => (
 
 export const BUDGET_MATERIAL_PRICES = {
   // Dispositivos Diferenciais Residuais (DR / IDR)
-  "DR Monofasico 25A 30mA": 125,
-  "DR Monofasico 40A 30mA": 145,
-  "DR Monofasico 63A 30mA": 175,
-  "DR Bifasico 25A 30mA": 135,
-  "DR Bifasico 40A 30mA": 155,
-  "DR Bifasico 63A 30mA": 185,
-  "DR Tripolar 40A 30mA": 245,
-  "DR Tripolar 63A 30mA": 290,
-  "DR Tetrapolar 25A 30mA (Trifasico)": 245,
-  "DR Tetrapolar 40A 30mA (Trifasico)": 275,
-  "DR Tetrapolar 63A 30mA (Trifasico)": 320,
-  "DR Tetrapolar 80A 30mA (Trifasico)": 460,
-  "DR Tetrapolar 100A 30mA (Trifasico)": 580,
-  "DR Tetrapolar 125A 30mA (Trifasico)": 780,
-  "DR Tetrapolar 160A 30mA (Trifasico)": 1250,
-  "DR Tetrapolar 200A 30mA (Trifasico)": 1450,
-  "DR Tetrapolar 250A 30mA (Trifasico)": 1750,
-  "DR Tetrapolar 400A 30mA (Trifasico)": 2400,
-  "DR Tetrapolar 630A 30mA (Trifasico)": 3200,
+  "DR Monofasico 25A 30mA": 89,
+  "DR Monofasico 40A 30mA": 98,
+  "DR Monofasico 63A 30mA": 125,
+  "DR Bifasico 25A 30mA": 89,
+  "DR Bifasico 40A 30mA": 98,
+  "DR Bifasico 63A 30mA": 125,
+  "DR Tripolar 40A 30mA": 145,
+  "DR Tripolar 63A 30mA": 175,
+  "DR Tetrapolar 25A 30mA (Trifasico)": 145,
+  "DR Tetrapolar 40A 30mA (Trifasico)": 165,
+  "DR Tetrapolar 63A 30mA (Trifasico)": 198,
+  "DR Tetrapolar 80A 30mA (Trifasico)": 320,
+  "DR Tetrapolar 100A 30mA (Trifasico)": 420,
+  "DR Tetrapolar 125A 30mA (Trifasico)": 580,
+  "DR Tetrapolar 160A 30mA (Trifasico)": 890,
+  "DR Tetrapolar 200A 30mA (Trifasico)": 1150,
+  "DR Tetrapolar 250A 30mA (Trifasico)": 1390,
+  "DR Tetrapolar 400A 30mA (Trifasico)": 1980,
+  "DR Tetrapolar 630A 30mA (Trifasico)": 2650,
 
   // Dispositivos de Proteção contra Surtos (DPS)
-  "DPS Classe II": 85,
-  "DPS Classe II 275V 20kA": 85,
-  "DPS Classe II 275V 45kA": 110,
-  "DPS Classe I+II 255V 50kA": 320,
+  "DPS Classe II": 48,
+  "DPS Classe II 275V 20kA": 45,
+  "DPS Classe II 275V 45kA": 52,
+  "DPS Classe I+II 255V 50kA": 235,
 
   // Conectores e Terminais
-  "Conector de emenda compacto 3 vias": 2.9,
-  "Conector de emenda compacto 5 vias": 4.5,
-  "Terminal tubular isolado sortido": 0.75,
-  "Terminal olhal/garfo isolado para quadro": 1.2,
-  "Terminal de compressão tubular 25-50mm²": 6.5,
-  "Terminal de compressão tubular 70-120mm²": 14,
-  "Terminal de compressão tubular 150-240mm²": 24,
+  "Conector de emenda compacto 3 vias": 2.7,
+  "Conector de emenda compacto 5 vias": 4.1,
+  "Terminal tubular isolado sortido": 0.25,
+  "Terminal olhal/garfo isolado para quadro": 0.48,
+  "Terminal de compressão tubular 25-50mm²": 4.8,
+  "Terminal de compressão tubular 70-120mm²": 9.8,
+  "Terminal de compressão tubular 150-240mm²": 16.5,
 
   // Infraestrutura e Caixas
-  "Caixa 4x2 PVC embutir": 5.8,
-  "Caixa 4x4 PVC embutir/passagem": 9.5,
-  "Condulete aluminio tipo C/L/T": 26,
-  "Curva 90 para eletroduto": 3.5,
-  "Luva para eletroduto": 1.4,
-  "Bucha e arruela para eletroduto": 1.2,
-  "Abraçadeira tipo D com parafuso": 1.6,
-  "Fita isolante antichama": 9.5,
-  "Fita auto fusão": 24,
-  "Anilha/etiqueta de identificação": 0.35,
+  "Caixa 4x2 PVC embutir": 4.2,
+  "Caixa 4x4 PVC embutir/passagem": 7.5,
+  "Condulete aluminio tipo C/L/T": 19.5,
+  "Curva 90 para eletroduto": 2.6,
+  "Luva para eletroduto": 1.1,
+  "Bucha e arruela para eletroduto": 0.9,
+  "Abraçadeira tipo D com parafuso": 1.2,
+  "Fita isolante antichama": 9.9,
+  "Fita auto fusão": 22.5,
+  "Anilha/etiqueta de identificação": 0.2,
 
   // Quadros e Barramentos
-  "Barramento fase pente/garfo": 38,
-  "Barramento fase pente/garfo 80A": 38,
-  "Barramento fase pente/garfo 100A Trifasico": 68,
-  "Barramento neutro isolado": 28,
-  "Barramento terra PE": 28,
-  "Bloco distribuidor tetrapolar 125A": 88,
-  "Canaleta recortada para quadro": 28,
-  "Trilho DIN 35mm": 18,
-  "Prensa-cabo/entrada de quadro": 4.8,
-  "Parafuso, bucha e fixadores": 0.45,
+  "Barramento fase pente/garfo": 28,
+  "Barramento fase pente/garfo 80A": 28,
+  "Barramento fase pente/garfo 100A Trifasico": 52,
+  "Barramento neutro isolado": 21,
+  "Barramento terra PE": 21,
+  "Bloco distribuidor tetrapolar 125A": 68,
+  "Canaleta recortada para quadro": 32,
+  "Trilho DIN 35mm": 16.9,
+  "Prensa-cabo/entrada de quadro": 3.6,
+  "Parafuso, bucha e fixadores": 0.3,
 
   // Acabamentos Elétricos
-  "Tomada 2P+T 10A com placa": 18,
-  "Tomada 2P+T 20A com placa": 22,
-  "Interruptor simples com placa": 16,
-  "Interruptor paralelo/intermediario com placa": 24,
-  "Ponto de luz/soquete plafon": 18,
-  "Rack CFTV/Telecom 6U": 450,
+  "Tomada 2P+T 10A com placa": 15.9,
+  "Tomada 2P+T 20A com placa": 17.9,
+  "Interruptor simples com placa": 14.9,
+  "Interruptor paralelo/intermediario com placa": 19.9,
+  "Ponto de luz/soquete plafon": 12.9,
+  "Rack CFTV/Telecom 6U": 360,
 };
 
 export const GENERATED_BUDGET_SOURCES = new Set([
@@ -130,25 +130,25 @@ export const getBudgetDrPrice = ({ current = 40, poles = 2 } = {}) => {
   const p = Math.max(1, Number(poles) || 2);
 
   if (p >= 4 || p === 3) {
-    if (i >= 630) return 3200;
-    if (i >= 400) return 2400;
-    if (i >= 250) return 1750;
-    if (i >= 200) return 1450;
-    if (i >= 160) return 1250;
-    if (i >= 125) return 780;
-    if (i >= 100) return 580;
-    if (i >= 80) return 460;
-    if (i >= 63) return 320;
-    if (i >= 40) return 275;
-    return 245;
+    if (i >= 630) return 2650;
+    if (i >= 400) return 1980;
+    if (i >= 250) return 1390;
+    if (i >= 200) return 1150;
+    if (i >= 160) return 890;
+    if (i >= 125) return 580;
+    if (i >= 100) return 420;
+    if (i >= 80) return 320;
+    if (i >= 63) return 198;
+    if (i >= 40) return 165;
+    return 145;
   }
 
   // Monofásico ou Bifásico (2P / 1P)
-  if (i >= 100) return 340;
-  if (i >= 80) return 260;
-  if (i >= 63) return 185;
-  if (i >= 40) return 155;
-  return 135;
+  if (i >= 100) return 260;
+  if (i >= 80) return 195;
+  if (i >= 63) return 125;
+  if (i >= 40) return 98;
+  return 89;
 };
 
 export const phaseCountForBudgetCircuit = (circuit = {}) => {
@@ -238,7 +238,7 @@ export const normalizeBudgetConduitDiameter = (value = "", fallback = DEFAULT_CO
 };
 
 export const conduitPriceForBudget = (diameter = DEFAULT_CONDUIT_DIAMETER, infraType = "embutido") => {
-  const basePrice = infraType === "galvanizado" ? 18.5 : 2.8;
+  const basePrice = infraType === "galvanizado" ? 16.8 : 2.1;
   const normalizedDiameter = normalizeBudgetConduitDiameter(diameter);
   return Math.round(basePrice * (CONDUIT_PRICE_FACTOR[normalizedDiameter] || 1) * 100) / 100;
 };
@@ -593,13 +593,13 @@ export const buildProfessionalBudgetComplements = ({
   addGroupedBudgetItem(items, {
     name: "Curva 90 para eletroduto",
     qty: Math.max(routeCount * 2, conduitAccessoryBase),
-    price: isExternal ? 7.5 : BUDGET_MATERIAL_PRICES["Curva 90 para eletroduto"],
+    price: isExternal ? 6.5 : BUDGET_MATERIAL_PRICES["Curva 90 para eletroduto"],
     category: "infraestrutura",
   });
   addGroupedBudgetItem(items, {
     name: "Luva para eletroduto",
     qty: Math.max(routeCount, Math.ceil(effectiveConduitMeters / 9)),
-    price: isExternal ? 4.8 : BUDGET_MATERIAL_PRICES["Luva para eletroduto"],
+    price: isExternal ? 3.9 : BUDGET_MATERIAL_PRICES["Luva para eletroduto"],
     category: "infraestrutura",
   });
   addGroupedBudgetItem(items, {
