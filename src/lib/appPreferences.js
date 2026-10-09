@@ -123,6 +123,15 @@ const safeJson = (value, fallback) => {
   }
 };
 
+const sanitizeLogoUrl = (url, fallback) => {
+  if (!url || typeof url !== "string") return fallback;
+  if (url.startsWith("/src/assets/")) {
+    const filename = url.split("/").pop();
+    return `/${filename}`;
+  }
+  return url;
+};
+
 const normalizeBranding = (value) => {
   if (!value || typeof value !== "object") return DEFAULT_BRANDING;
   const normalized = {
@@ -134,6 +143,10 @@ const normalizeBranding = (value) => {
   if (value.brandingVersion !== WEG_BRANDING_VERSION) {
     return applyDefaultBranding(normalized);
   }
+
+  normalized.logoDataUrl = sanitizeLogoUrl(normalized.logoDataUrl, DEFAULT_BRANDING.logoDataUrl);
+  normalized.compactLogoDataUrl = sanitizeLogoUrl(normalized.compactLogoDataUrl, DEFAULT_BRANDING.compactLogoDataUrl);
+  normalized.authLogoDataUrl = sanitizeLogoUrl(normalized.authLogoDataUrl, DEFAULT_BRANDING.authLogoDataUrl);
 
   return normalized;
 };

@@ -219,15 +219,22 @@ export const estimateLocalMaterialPrice = (name = "") => {
   return match ? match.price : 25;
 };
 
-export const getProjectLogo = (project, fallback) => (
-  project?.logo_url
-  || project?.logoUrl
-  || project?.project_logo
-  || project?.projectLogo
-  || project?.logo
-  || fallback
-  || DEFAULT_LOGO_URL
-);
+export const getProjectLogo = (project, fallback) => {
+  const candidate = (
+    project?.logo_url
+    || project?.logoUrl
+    || project?.project_logo
+    || project?.projectLogo
+    || project?.logo
+    || fallback
+    || DEFAULT_LOGO_URL
+  );
+  if (typeof candidate === "string" && candidate.startsWith("/src/assets/")) {
+    const filename = candidate.split("/").pop();
+    return `/${filename}`;
+  }
+  return candidate;
+};
 
 export const getBudgetMaterialImageUrl = (name = "") => (
   getMaterialProductInfo(name).imageUrl

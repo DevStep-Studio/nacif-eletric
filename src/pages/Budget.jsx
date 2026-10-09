@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
-import { FileText, Printer, Upload, ChevronDown, FolderOpen, Zap, Plus, Sparkles, Trash2 } from "lucide-react";
+import { FileText, Printer, Upload, ChevronDown, FolderOpen, Zap, Plus, Sparkles, Trash2, Sun } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { openHTMLPrint, PAPER_SIZES } from "@/lib/printUtils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import PageHeader from "@/components/PageHeader";
-import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
+import { DEFAULT_LOGO_URL, DEFAULT_COMPACT_LOGO_URL } from "@/lib/brandingDefaults";
 import MaterialProductThumb from "@/components/MaterialProductThumb";
 import {
   CATEGORY_STYLES,
@@ -215,9 +215,21 @@ export default function BudgetPage() {
         subtitle={project?.name ? `Proposta técnica e comercial para ${project.name}` : "Abra a partir de um projeto para gerar materiais, mão de obra e margem."}
         actions={
           <>
-          <label className="flex items-center gap-1.5 cursor-pointer px-2 py-1.5 rounded border border-dashed border-border hover:bg-secondary/50 text-xs text-muted-foreground">
-            <Upload className="w-3.5 h-3.5" />
-            <img src={logoUrl || DEFAULT_LOGO_URL} className="h-5 object-contain" alt="Logo NACIF Solutions" />
+          <label
+            className="flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-[11px] border border-dashed border-[#BCEEE5] bg-white hover:bg-[#F2FFFC] text-xs font-bold text-[#5f6877] transition"
+            title="Carregar logotipo personalizado para a proposta/orçamento"
+          >
+            <Upload className="w-3.5 h-3.5 text-primary shrink-0" />
+            <img
+              src={logoUrl || DEFAULT_LOGO_URL}
+              className="h-5 max-w-[120px] object-contain"
+              alt="Logo NACIF Solutions"
+              onError={(e) => {
+                if (e.currentTarget.src !== DEFAULT_LOGO_URL) {
+                  e.currentTarget.src = DEFAULT_LOGO_URL;
+                }
+              }}
+            />
             <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
           </label>
           {project && (
@@ -272,12 +284,30 @@ export default function BudgetPage() {
                         : "border-border/60 bg-white hover:border-primary/40 hover:bg-secondary/50"
                     }`}
                   >
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#CDEFE8] bg-white p-2">
-                      {getProjectLogo(item, logoUrl) ? (
-                        <img src={getProjectLogo(item, logoUrl)} alt="" className="h-full w-full object-contain" />
-                      ) : (
-                        <Zap className="h-5 w-5 text-primary" />
-                      )}
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#CDEFE8] bg-[#F2FFFC] p-2">
+                      {(() => {
+                        const itemLogo = item?.logo_url || item?.logoUrl || item?.project_logo || item?.logo;
+                        const isSolar = String(item?.project_type || "").toLowerCase().includes("solar");
+                        if (itemLogo) {
+                          return (
+                            <img
+                              src={itemLogo}
+                              alt={item.name || "Projeto"}
+                              className="h-full w-full object-contain"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                const fallback = e.currentTarget.nextElementSibling;
+                                if (fallback) fallback.style.display = "flex";
+                              }}
+                            />
+                          );
+                        }
+                        return isSolar ? (
+                          <Sun className="h-5 w-5 text-amber-500" />
+                        ) : (
+                          <Zap className="h-5 w-5 text-primary" />
+                        );
+                      })()}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-black text-[#0f172a]">{item.name || "Projeto sem nome"}</span>
@@ -300,8 +330,30 @@ export default function BudgetPage() {
       ) : (
         <>
           <div className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card p-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#CDEFE8] bg-white p-2">
-              <img src={getProjectLogo(project, logoUrl)} className="h-full w-full object-contain" alt="" />
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#CDEFE8] bg-white p-2">
+              {(() => {
+                const projectCustomLogo = project?.logo_url || project?.logoUrl || project?.project_logo || project?.logo;
+                const hasCustomBudgetLogo = logoUrl && logoUrl !== DEFAULT_LOGO_URL;
+                const displayLogo = projectCustomLogo || (hasCustomBudgetLogo ? logoUrl : DEFAULT_COMPACT_LOGO_URL);
+                const isSolar = String(project?.project_type || "").toLowerCase().includes("solar");
+                return (
+                  <>
+                    <img
+                      src={displayLogo}
+                      className="h-full w-full object-contain"
+                      alt={project.name || "Logo"}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        const fallback = e.currentTarget.nextElementSibling;
+                        if (fallback) fallback.style.display = "flex";
+                      }}
+                    />
+                    <span className="hidden h-full w-full items-center justify-center">
+                      {isSolar ? <Sun className="h-7 w-7 text-amber-500" /> : <Zap className="h-7 w-7 text-primary" />}
+                    </span>
+                  </>
+                );
+              })()}
             </div>
             <div className="min-w-0">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground">Orçamento selecionado</p>
