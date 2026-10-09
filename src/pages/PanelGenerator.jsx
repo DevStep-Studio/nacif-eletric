@@ -20,6 +20,7 @@ import {
   nextBusbarIndex,
   remapBusbarIndices,
 } from "@/lib/electricalEngine";
+import { syncPanelDeviceToCircuit, syncCircuitsToPanelBoard } from "@/lib/projectUnifiedSync";
 import { useToast } from "@/components/ui/use-toast";
 import {
   calculateOrthogonalRoute,
@@ -4727,16 +4728,7 @@ export default function PanelGenerator() {
   const getSelectedComponent = () => findComponentPlacement(selectedComponentId, rails);
 
   const handleUpdateComponent = (field, value, options = {}) => {
-    const updated = rails.map(r => ({
-      ...r,
-      components: r.components.map(c => {
-        if (c.id === selectedComponentId) {
-          return { ...c, [field]: value };
-        }
-        return c;
-      })
-    }));
-    updateRails(updated, options);
+    handleUpdateComponentFields({ [field]: value }, options);
   };
 
   const handleUpdateComponentFields = (updates, options = {}) => {
@@ -4752,27 +4744,18 @@ export default function PanelGenerator() {
     }));
     updateRails(updated, options);
 
-    const circuitRef = selected?.circuit_id || selected?.source_point_id;
-    const circuitUpdates = {};
-    if (Object.prototype.hasOwnProperty.call(updates, "name")) circuitUpdates.name = updates.name;
-    if (Object.prototype.hasOwnProperty.call(updates, "label")) circuitUpdates.label = updates.label;
-    if (Object.prototype.hasOwnProperty.call(updates, "circuitLabel")) circuitUpdates.label = updates.circuitLabel;
-    if (Object.prototype.hasOwnProperty.call(updates, "circuitNumber")) circuitUpdates.circuitNumber = updates.circuitNumber;
-    if (Object.prototype.hasOwnProperty.call(updates, "description")) circuitUpdates.description = updates.description;
-    if (Object.prototype.hasOwnProperty.call(updates, "phase")) circuitUpdates.phase = updates.phase;
-    if (Object.prototype.hasOwnProperty.call(updates, "conductorSection")) circuitUpdates.conductorSection = updates.conductorSection;
-
-    if (selectedId && project && circuitRef && Object.keys(circuitUpdates).length > 0) {
-      const nextCircuits = (project.circuits || []).map((circuit) => {
-        const matches = [circuit.id, circuit.circuit_id, circuit.source_point_id, circuit.source]
-          .filter(Boolean)
-          .some((key) => String(key) === String(circuitRef));
-        return matches ? { ...circuit, ...circuitUpdates } : circuit;
-      });
-      setProject((current) => current ? { ...current, circuits: nextCircuits } : current);
-      backend.entities.Project.update(selectedId, { circuits: nextCircuits }).catch((error) => {
-        console.error("Erro ao salvar identificação do circuito:", error);
-      });
+    if (selectedId && project && selected) {
+      const syncResult = syncPanelDeviceToCircuit(project, selected.id, updates);
+      if (syncResult.modified) {
+        setProject(syncResult.project);
+        setMetrics(calcProjectMetrics(syncResult.project));
+        backend.entities.Project.update(selectedId, {
+          circuits: syncResult.project.circuits,
+          plant_design: syncResult.project.plant_design,
+        }).catch((error) => {
+          console.error("Erro ao sincronizar circuito do disjuntor:", error);
+        });
+      }
     }
   };
 

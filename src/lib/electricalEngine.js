@@ -482,6 +482,14 @@ export function calcCircuit(circuit = {}) {
   const curve           = BREAKER_CURVE(type);
   const breaking_ka     = BREAKING_CAPACITY(voltage);
 
+  const calculated_breaker_a = breaker_a || 0;
+  const isManualBreaker = Boolean(circuit.manual_breaker) && Number(circuit.breaker_a) > 0;
+  const finalBreakerA = isManualBreaker ? Number(circuit.breaker_a) : calculated_breaker_a;
+  const breaker_manual_warning = isManualBreaker && finalBreakerA < project_current_a
+    ? `Disjuntor manual (${finalBreakerA}A) menor que a corrente de projeto calculada (${project_current_a.toFixed(1)}A).`
+    : null;
+  const validation_status = breaker_manual_warning ? "incompatible" : (circuit.validation_status || "valid");
+
   return {
     ...circuit,
     power_w:              installedPowerW,
@@ -496,7 +504,10 @@ export function calcCircuit(circuit = {}) {
     wire_gauge:           wireData.gauge,
     wire_area:            wireData.area,
     minimum_wire_area:    minWireArea,
-    breaker_a:            breaker_a || 0,
+    calculated_breaker_a,
+    breaker_a:            finalBreakerA,
+    breaker_manual_warning,
+    validation_status,
     breaker_curve:        curve,
     breaker_poles:        poles,
     breaking_capacity_ka: breaking_ka,
@@ -1736,14 +1747,72 @@ export function buildProjectElectricalSyncPayload(project, circuits = []) {
   const syncedCircuits = Array.isArray(circuits) ? circuits : [];
   const totalDemand = calculateProjectDemand(syncedCircuits);
   const projectForPanel = { ...(project || {}), circuits: syncedCircuits, total_demand_w: totalDemand };
-  const panelLayout = generateDefaultPanelLayout(projectForPanel, { forceDistribution: true });
-  const panelBoards = buildPanelBoardsWithLayout(projectForPanel, panelLayout);
+
+  const hasExistingLayout = Boolean(
+    (Array.isArray(project?.panel_boards) && project.panel_boards.length > 0) ||
+    (Array.isArray(project?.panel_layout?.rails) && project.panel_layout.rails.length > 0)
+  );
+
+  let panelLayout;
+  let panelBoards;
+
+  if (hasExistingLayout) {
+    // Preservar layout e quadros existentes de forma não-destrutiva
+    const currentBoards = project.panel_boards || [];
+    const currentPrimary = getPrimaryPanelBoard(currentBoards) || currentBoards[0] || {
+      id: "board-principal",
+      name: "Quadro de Distribuição (QD)",
+      type: "distribution",
+      layout: project.panel_layout,
+    };
+    const currentRails = currentPrimary.layout?.rails || project.panel_layout?.rails || [];
+
+    // Atualizar parâmetros dos disjuntores existentes preservando posições e fios
+    const updatedRails = currentRails.map((rail) => ({
+      ...rail,
+      components: (rail.components || []).map((comp) => {
+        if (!comp || comp.type !== "breaker" || comp.isGeneral || comp.id === "gen_brk") return comp;
+        const matched = syncedCircuits.find((c, idx) => (
+          String(c.id) === String(comp.circuit_id) ||
+          String(c.id) === String(comp.id) ||
+          String(c.circuit_number) === String(comp.circuitNumber) ||
+          comp.id === `circuit_${idx}`
+        ));
+        if (!matched) return comp;
+        return {
+          ...comp,
+          circuit_id: matched.id,
+          label: matched.name || comp.label,
+          current: Number(matched.breaker_a) || comp.current || 16,
+          curve: matched.breaker_curve || comp.curve || "C",
+          phase: matched.phase || comp.phase || "A",
+          supply_type: matched.supply_type || comp.supply_type || "Monofásico",
+          circuitNumber: matched.circuit_number || comp.circuitNumber,
+        };
+      }),
+    }));
+
+    panelLayout = {
+      ...(currentPrimary.layout || project.panel_layout || {}),
+      rails: updatedRails,
+      wires: currentPrimary.layout?.wires || project.panel_layout?.wires || [],
+      infrastructure: currentPrimary.layout?.infrastructure || project.panel_layout?.infrastructure || [],
+    };
+
+    panelBoards = currentBoards.length > 0
+      ? currentBoards.map((b) => (b.id === currentPrimary.id ? { ...b, layout: panelLayout } : b))
+      : [{ ...currentPrimary, layout: panelLayout }];
+  } else {
+    // Projeto novo sem layout prévio: gerar layout inicial padrão
+    panelLayout = generateDefaultPanelLayout(projectForPanel, { forceDistribution: true });
+    panelBoards = buildPanelBoardsWithLayout(projectForPanel, panelLayout);
+  }
 
   return {
     circuits: syncedCircuits,
     total_demand_w: totalDemand,
     panel_layout: getPrimaryPanelBoard(panelBoards)?.layout || panelLayout,
     panel_boards: panelBoards,
-    diagram_layout: null,
+    diagram_layout: project?.diagram_layout !== undefined ? project.diagram_layout : null,
   };
 }

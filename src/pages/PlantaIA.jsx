@@ -28,6 +28,7 @@ import { normalizePlantDocument } from "@/editor/schemas/plantDocument";
 import { normalizeSnapSettings } from "@/editor/snapping/snapEngine";
 import { normalizeUnitSettings } from "@/editor/units/unitSystem";
 import { autoBalancePhases, buildProjectElectricalSyncPayload, calcCircuit, getDefaultDemandFactor } from "@/lib/electricalEngine";
+import { syncPlantPointsToCircuits, validateUnifiedProject } from "@/lib/projectUnifiedSync";
 import {
   BUDGET_MATERIAL_PRICES,
   buildConduitBudgetItems,
@@ -2345,16 +2346,36 @@ export default function PlantaIA() {
     if (!silent) setSaving(true);
 
     const report = latestScannerReportRef.current;
+    const currentProj = selectedProjectData || {};
+    
+    // Sincronização inteligente dos pontos da planta para os circuitos e quadro DIN
+    let syncedCircuits = currentProj.circuits || [];
+    let electricalSyncPayload = {};
+    if (Array.isArray(snapshot?.points) && snapshot.points.length > 0) {
+      const plantSync = syncPlantPointsToCircuits(currentProj, snapshot.points);
+      syncedCircuits = plantSync.circuits;
+      electricalSyncPayload = buildProjectElectricalSyncPayload(currentProj, syncedCircuits);
+    }
+
     const payload = {
       plant_design: snapshot,
       plant_points_count: snapshot.points.length,
       plant_routes_count: snapshot.routes.length,
       plant_scanner_report: report,
       plant_scan_counts: report?.counts || {},
+      ...(syncedCircuits.length > 0 ? {
+        circuits: syncedCircuits,
+        total_demand_w: electricalSyncPayload.total_demand_w,
+        panel_boards: electricalSyncPayload.panel_boards,
+        panel_layout: electricalSyncPayload.panel_layout,
+      } : {}),
     };
 
     try {
       const updatedProject = await backend.entities.Project.update(selectedProject, payload);
+      if (syncedCircuits.length > 0) {
+        setGeneratedCircuits(normalizeProjectCircuits(syncedCircuits));
+      }
       setSelectedProjectData((current) => current ? { ...current, ...payload, ...(updatedProject || {}) } : updatedProject);
       setProjects((current) => current.map((item) => (
         item.id === selectedProject ? { ...item, ...payload, ...(updatedProject || {}) } : item

@@ -19,6 +19,7 @@ import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
 import Solar3DView from "@/components/solar/Solar3DView";
 import SolarReportsDialog from "@/components/solar/SolarReportsDialog";
 import SolarProjectParametersModal from "@/components/solar/SolarProjectParametersModal";
+import { syncSolarToProjectCircuits } from "@/lib/projectUnifiedSync";
 import { validateProjectDataForReports } from "@/lib/solarWizardState";
 import {
   DEFAULT_SOLAR_MAP_CENTER,
@@ -1045,11 +1046,21 @@ export default function SolarProject() {
     setSaveStatus("saving");
     try {
       const normalizedConfig = normalizeSolarConfig(config);
+      
+      // Sincronizar automaticamente o inversor com os circuitos do projeto e o quadro elétrico DIN
+      const solarSync = syncSolarToProjectCircuits({
+        ...(project || {}),
+        solar_config: normalizedConfig,
+      }, normalizedConfig);
+
       const payload = {
         project_type: "Solar",
         solar_config: normalizedConfig,
         voltage: normalizedConfig.ac_voltage,
         supply_type: normalizedConfig.ac_supply_type,
+        circuits: solarSync.project.circuits,
+        panel_boards: solarSync.project.panel_boards,
+        panel_layout: solarSync.project.panel_layout,
         consumption: {
           ...(project?.consumption || {}),
           consumer_unit: normalizedConfig.consumer_unit || project?.consumption?.consumer_unit || "",
@@ -2547,7 +2558,19 @@ export default function SolarProject() {
           const activeId = projectId || project?.id;
           if (activeId) {
             try {
-              const updated = await backend.entities.Project.update(activeId, updatedProjectPayload);
+              const solarSync = syncSolarToProjectCircuits({
+                ...(project || {}),
+                ...updatedProjectPayload,
+                solar_config: nextConfig,
+              }, nextConfig);
+              const payloadWithSync = {
+                ...updatedProjectPayload,
+                solar_config: nextConfig,
+                circuits: solarSync.project.circuits,
+                panel_boards: solarSync.project.panel_boards,
+                panel_layout: solarSync.project.panel_layout,
+              };
+              const updated = await backend.entities.Project.update(activeId, payloadWithSync);
               setProject(updated);
             } catch (err) {
               console.error("Erro ao salvar projeto:", err);
