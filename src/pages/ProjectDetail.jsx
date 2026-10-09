@@ -361,7 +361,7 @@ export default function ProjectDetail() {
         <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <nav className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Navegação do projeto">
             <div className="flex min-w-max items-center gap-1.5">
-              {projectNavItems.map((item) => {
+              {getProjectNavItems(project).map((item) => {
                 const ItemIcon = item.icon;
                 return (
                   <Link

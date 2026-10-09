@@ -2008,7 +2008,7 @@ export default function SolarProject() {
               editorMode={editorMode}
               fitRoofRequest={fitRoofRequest}
               viewportRequest={viewportRequest}
-              selectedObstacleId={selectedEntity.type === "obstacle" ? selectedEntity.id : selectedObstacleId}
+              selectedObstacleId={selectedEntity.type === "obstacle" ? selectedEntity.id : null}
               selectedModuleIndex={selectedModuleIdx}
               electricalMode={appMode === "electrical"}
               strings={strings}

@@ -95,8 +95,11 @@ const formatProjectDate = (project) => {
   });
 };
 
+const isSolarProjectType = (project) =>
+  String(project?.project_type || "").toLowerCase().includes("solar") || Boolean(project?.solar_config);
+
 const getProjectActions = (project) => [
-  ...(project.project_type === "Solar" ? [{ label: "Projeto solar", icon: Sun, href: `/solar-project?project=${project.id}` }] : []),
+  ...(isSolarProjectType(project) ? [{ label: "Projeto solar", icon: Sun, href: `/solar-project?project=${project.id}` }] : []),
   { label: "Planta", icon: Map, href: `/planta-ia?project=${project.id}` },
   { label: "Circuitos", icon: PencilLine, href: `/circuit-editor?project=${project.id}` },
   { label: "Quadro", icon: Grid2X2, href: `/panel-generator?project=${project.id}` },
