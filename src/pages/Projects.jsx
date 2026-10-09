@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   BarChart3,
   FileText,
@@ -109,6 +109,7 @@ const getProjectActions = (project) => [
 ];
 
 export default function Projects() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -247,6 +248,16 @@ export default function Projects() {
           </div>
 
           <div className="flex items-center justify-between gap-2 lg:justify-end">
+            {selectedIds.length === 1 && (
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/projects/${selectedIds[0]}`)}
+                className="h-10 rounded-[8px] border-[#00d8b8] bg-[#E8FCF8] text-sm font-extrabold text-[#009b84] hover:bg-[#d0f7ee]"
+              >
+                <FolderOpen className="h-4 w-4" />
+                Abrir projeto
+              </Button>
+            )}
             {selectedIds.length > 0 && (
               <Button variant="outline" onClick={handleBulkDelete} className="h-10 rounded-[8px] border-red-200 text-sm font-extrabold text-red-600 hover:bg-red-50">
                 <Trash2 className="h-4 w-4" />
@@ -356,6 +367,7 @@ function FilteredEmpty({ query }) {
 }
 
 function ProjectTable({ projects, selectedIds, allSelected, onToggleAll, onToggleSelected, onDelete }) {
+  const navigate = useNavigate();
   return (
     <div className="overflow-hidden">
       <Table>
@@ -379,8 +391,12 @@ function ProjectTable({ projects, selectedIds, allSelected, onToggleAll, onToggl
         </TableHeader>
         <TableBody>
           {projects.map((project) => (
-            <TableRow key={project.id} className="hover:bg-[#F9FAFB]">
-              <TableCell className="px-4">
+            <TableRow
+              key={project.id}
+              className="hover:bg-[#F9FAFB] cursor-pointer"
+              onClick={() => navigate(`/projects/${project.id}`)}
+            >
+              <TableCell className="px-4" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(project.id)}
@@ -395,7 +411,7 @@ function ProjectTable({ projects, selectedIds, allSelected, onToggleAll, onToggl
                     {project.project_type === "Solar" ? <Sun className="h-5 w-5" /> : <Zap className="h-5 w-5" />}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-extrabold text-[#101828]">{project.name}</span>
+                    <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00d8b8] transition-colors">{project.name}</span>
                     <span className="mt-1 block truncate text-xs font-medium text-[#667085]">
                       {project.project_type || "Instalações elétricas"} - {project.supply_type || "Sem alimentação"} - {project.voltage ? `${project.voltage}V` : "Sem tensão"}
                     </span>
@@ -407,7 +423,7 @@ function ProjectTable({ projects, selectedIds, allSelected, onToggleAll, onToggl
                 <StatusBadge status={project.status} />
               </TableCell>
               <TableCell className="px-4 text-sm font-medium text-[#667085]">{formatProjectDate(project)}</TableCell>
-              <TableCell className="px-4">
+              <TableCell className="px-4" onClick={(e) => e.stopPropagation()}>
                 <ProjectActions project={project} onDelete={() => onDelete(project.id)} align="end" />
               </TableCell>
             </TableRow>
@@ -419,11 +435,15 @@ function ProjectTable({ projects, selectedIds, allSelected, onToggleAll, onToggl
 }
 
 function ProjectCard({ project, selected, onSelect, onDelete }) {
+  const navigate = useNavigate();
   const circuitCount = project?.circuits?.length || 0;
   const tone = projectToneStyles[getProjectTone(project)] || projectToneStyles.blue;
 
   return (
-    <article className={`relative overflow-hidden rounded-[12px] border p-4 transition ${tone.card}`}>
+    <article
+      onClick={() => navigate(`/projects/${project.id}`)}
+      className={`relative overflow-hidden rounded-[12px] border p-4 transition cursor-pointer hover:shadow-md ${tone.card}`}
+    >
       <span className={`absolute inset-y-3 left-0 w-1 rounded-r-full ${tone.rail}`} />
       <div className="flex items-start justify-between gap-3">
         <Link to={`/projects/${project.id}`} className="flex min-w-0 items-center gap-3">
@@ -431,17 +451,19 @@ function ProjectCard({ project, selected, onSelect, onDelete }) {
             {project.project_type === "Solar" ? <Sun className="h-5 w-5" /> : <Zap className="h-5 w-5" />}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-extrabold text-[#101828]">{project.name}</span>
+            <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00d8b8] transition-colors">{project.name}</span>
             <span className="mt-1 block truncate text-xs font-medium text-[#667085]">{project.client_name || "Sem cliente"}</span>
           </span>
         </Link>
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onSelect}
-          aria-label={`Selecionar ${project.name}`}
-          className="h-4 w-4 shrink-0 rounded border-[#D0D5DD]"
-        />
+        <div onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onSelect}
+            aria-label={`Selecionar ${project.name}`}
+            className="h-4 w-4 shrink-0 rounded border-[#D0D5DD]"
+          />
+        </div>
       </div>
 
       <div className="mt-3">
@@ -455,7 +477,7 @@ function ProjectCard({ project, selected, onSelect, onDelete }) {
         <InfoPill label="Atualizado" value={formatProjectDate(project)} />
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-2">
+      <div className="mt-4 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
         <StatusBadge status={project.status} />
         <ProjectActions project={project} onDelete={onDelete} align="end" />
       </div>

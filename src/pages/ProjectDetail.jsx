@@ -14,6 +14,7 @@ import {
   BarChart3,
   BookOpen,
   ShieldCheck,
+  Sun,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -109,14 +110,20 @@ const scoreTones = {
   },
 };
 
-const projectNavItems = [
-  { label: "Circuitos", icon: Edit3, href: (id) => `/circuit-editor?project=${id}` },
-  { label: "Quadro", icon: Zap, href: (id) => `/panel-generator?project=${id}` },
-  { label: "Diagrama", icon: GitBranch, href: (id) => `/unifilar?project=${id}` },
-  { label: "Orçamento", icon: FileText, href: (id) => `/budget?project=${id}` },
-  { label: "Materiais", icon: BarChart3, href: (id) => `/materials?project=${id}` },
-  { label: "Memorial", icon: BookOpen, href: (id) => `/memorial?project=${id}` },
-];
+const getProjectNavItems = (project) => {
+  const isSolar = String(project?.project_type || "").toLowerCase().includes("solar") || Boolean(project?.solar_config);
+  return [
+    ...(isSolar ? [{ label: "Projeto Solar", icon: Sun, href: (id) => `/solar-project?project=${id}` }] : []),
+    { label: "Circuitos", icon: Edit3, href: (id) => `/circuit-editor?project=${id}` },
+    { label: "Quadro", icon: Zap, href: (id) => `/panel-generator?project=${id}` },
+    { label: "Diagrama", icon: GitBranch, href: (id) => `/unifilar?project=${id}` },
+    { label: "Orçamento", icon: FileText, href: (id) => `/budget?project=${id}` },
+    { label: "Materiais", icon: BarChart3, href: (id) => `/materials?project=${id}` },
+    { label: "Memorial", icon: BookOpen, href: (id) => `/memorial?project=${id}` },
+  ];
+};
+
+const projectNavItems = getProjectNavItems();
 
 function ProjectStat({ icon: Icon, label, value, tone = "default" }) {
   const styles = statTones[tone] || statTones.default;
