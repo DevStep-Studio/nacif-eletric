@@ -60,6 +60,7 @@ import {
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
 import {
   AlertTriangle,
+  ArrowLeft,
   Box,
   Check,
   ChevronDown,
@@ -281,9 +282,12 @@ function calculateSolar(config, panelCapacity = null) {
 export default function SolarProject() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const projectId = searchParams.get("project");
   const [project, setProject] = useState(null);
+  const [allProjects, setAllProjects] = useState([]);
+  const [loadingProject, setLoadingProject] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [config, setConfig] = useState(defaultSolarConfig);
   const [selectedAreaId, setSelectedAreaId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -312,7 +316,7 @@ export default function SolarProject() {
   const [autoFvPreview, setAutoFvPreview] = useState(null);
 
   const reportProject = useMemo(() => {
-    if (!project) return project;
+    if (!project) return null;
     const currentResponsible = project.technical_responsible || {};
     return {
       ...project,
@@ -329,29 +333,146 @@ export default function SolarProject() {
   const roofHistoryRef = useRef([[]]);
   const roofHistoryIndexRef = useRef(0);
 
-  useEffect(() => {
-    if (!projectId) return;
-    backend.entities.Project.get(projectId).then((item) => {
-      const normalizedConfig = normalizeSolarConfig({
-        ...(item?.solar_config || {}),
-        consumer_unit: item?.solar_config?.consumer_unit
-          || item?.consumption?.consumer_unit
-          || item?.energy_bill?.installation_code
-          || "",
-        distributor: item?.solar_config?.distributor || item?.consumption?.distributor || item?.distributor || "",
-      });
-      setProject(item);
-      setConfig(normalizedConfig);
-      if (normalizedConfig.areas?.length > 0) {
-        setSelectedAreaId(normalizedConfig.areas[0].id);
+  const loadSolarProject = useCallback(async () => {
+    setLoadingProject(true);
+    setLoadError(null);
+    try {
+      let list = [];
+      try {
+        const fetched = await backend.entities.Project.list("-updated_date", 50);
+        if (Array.isArray(fetched)) {
+          list = fetched;
+          setAllProjects(fetched);
+        }
+      } catch (listErr) {
+        console.warn("Could not list projects for fallback:", listErr);
       }
-      setSearchAddress(item?.address || "");
-      roofHistoryRef.current = [normalizedConfig.areas];
-      roofHistoryIndexRef.current = 0;
-      setRoofHistoryState({ canUndo: false, canRedo: false });
-      setViewportRequest((n) => n + 1);
-    });
-  }, [projectId]);
+
+      const storedActiveId = typeof window !== "undefined"
+        ? window.localStorage.getItem("voltai_active_project_id")
+        : null;
+
+      let targetProject = null;
+
+      // Caso A: projectId informado na URL
+      if (projectId) {
+        try {
+          targetProject = await backend.entities.Project.get(projectId);
+        } catch (getErr) {
+          console.warn(`Project ${projectId} not found directly, checking list...`, getErr);
+          targetProject = list.find((p) => p.id === projectId) || null;
+        }
+      }
+
+      // Caso B: projectId não informado ou não encontrado -> verificar ativo salvo
+      if (!targetProject && storedActiveId) {
+        targetProject = list.find((p) => p.id === storedActiveId) || null;
+        if (!targetProject) {
+          try {
+            targetProject = await backend.entities.Project.get(storedActiveId);
+          } catch {}
+        }
+      }
+
+      // Caso C: buscar qualquer projeto solar existente
+      if (!targetProject && list.length > 0) {
+        targetProject = list.find((p) => (p.type || p.project_type || "").toLowerCase() === "solar") || list[0];
+      }
+
+      // Caso D: nenhum projeto existente -> criar projeto solar inicial
+      if (!targetProject) {
+        try {
+          targetProject = await backend.entities.Project.create({
+            name: "Projeto Solar Residencial",
+            project_type: "Solar",
+            type: "solar",
+            status: "em_andamento",
+            address: "São Paulo, SP",
+            solar_config: defaultSolarConfig,
+          });
+          setAllProjects([targetProject]);
+        } catch (createErr) {
+          console.error("Failed to create default solar project:", createErr);
+        }
+      }
+
+      if (targetProject) {
+        const normalizedConfig = normalizeSolarConfig({
+          ...(targetProject?.solar_config || {}),
+          consumer_unit: targetProject?.solar_config?.consumer_unit
+            || targetProject?.consumption?.consumer_unit
+            || targetProject?.energy_bill?.installation_code
+            || "",
+          distributor: targetProject?.solar_config?.distributor
+            || targetProject?.consumption?.distributor
+            || targetProject?.distributor
+            || "",
+        });
+
+        setProject(targetProject);
+        setConfig(normalizedConfig);
+        if (normalizedConfig.areas?.length > 0) {
+          setSelectedAreaId(normalizedConfig.areas[0].id);
+        }
+        setSearchAddress(targetProject?.address || "");
+        roofHistoryRef.current = [normalizedConfig.areas];
+        roofHistoryIndexRef.current = 0;
+        setRoofHistoryState({ canUndo: false, canRedo: false });
+        setViewportRequest((n) => n + 1);
+
+        try {
+          window.localStorage.setItem("voltai_active_project_id", targetProject.id);
+        } catch {}
+
+        if (projectId !== targetProject.id) {
+          setSearchParams({ project: targetProject.id }, { replace: true });
+        }
+        setLoadError(null);
+      } else {
+        setLoadError("Não foi possível carregar ou inicializar o projeto solar.");
+      }
+    } catch (err) {
+      console.error("Error in loadSolarProject:", err);
+      setLoadError(err.message || "Erro ao carregar o projeto solar.");
+    } finally {
+      setLoadingProject(false);
+    }
+  }, [projectId, setSearchParams]);
+
+  useEffect(() => {
+    loadSolarProject();
+  }, [loadSolarProject]);
+
+  const handleCreateNewSolarProject = async () => {
+    try {
+      setLoadingProject(true);
+      const newProj = await backend.entities.Project.create({
+        name: `Projeto Solar ${new Date().toLocaleDateString("pt-BR")}`,
+        project_type: "Solar",
+        type: "solar",
+        status: "em_andamento",
+        address: "São Paulo, SP",
+        solar_config: defaultSolarConfig,
+      });
+      if (newProj?.id) {
+        setAllProjects((prev) => [newProj, ...prev]);
+        setSearchParams({ project: newProj.id });
+        try { window.localStorage.setItem("voltai_active_project_id", newProj.id); } catch {}
+        toast({
+          title: "Novo projeto solar criado",
+          description: `${newProj.name} iniciado com sucesso.`,
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Erro ao criar projeto",
+        description: err.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingProject(false);
+    }
+  };
 
   // Layouts e painéis calculados para TODAS as áreas de forma independente
   const multiAreaLayouts = useMemo(
@@ -809,7 +930,8 @@ export default function SolarProject() {
   };
 
   const saveConfig = async () => {
-    if (!projectId) return;
+    const activeId = projectId || project?.id;
+    if (!activeId) return;
     setSaving(true);
     setSaveStatus("saving");
     try {
@@ -825,7 +947,7 @@ export default function SolarProject() {
           distributor: normalizedConfig.distributor || project?.consumption?.distributor || "",
         },
       };
-      await backend.entities.Project.update(projectId, payload);
+      await backend.entities.Project.update(activeId, payload);
       setConfig(normalizedConfig);
       setProject((current) => (current ? { ...current, ...payload } : current));
       setSaveStatus("saved");
@@ -899,7 +1021,7 @@ export default function SolarProject() {
       }
 
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (selectedEntity.type === "obstacle" && selectedEntity.id) {
+        if (selectedEntity?.type === "obstacle" && selectedEntity?.id) {
           handleRemoveObstacle(selectedEntity.id);
         }
       }
@@ -909,10 +1031,57 @@ export default function SolarProject() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undoRoofChange, redoRoofChange, selectedEntity]);
 
+  if (loadingProject && !project) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#070c14] text-white p-4">
+        <div className="flex flex-col items-center gap-4 max-w-sm text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#00d8b8]/10 text-[#00d8b8] ring-1 ring-[#00d8b8]/20 animate-pulse">
+            <Sun className="h-7 w-7 text-[#00d8b8] animate-spin" style={{ animationDuration: "4s" }} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-white">Carregando Designer Solar</h3>
+            <p className="text-xs text-slate-400 mt-1">Sincronizando arranjo fotovoltaico e coordenadas...</p>
+          </div>
+          <Loader2 className="h-5 w-5 animate-spin text-[#00d8b8]" />
+          <Link
+            to="/projects"
+            className="text-xs text-slate-400 hover:text-white transition mt-2 underline"
+          >
+            Voltar aos Projetos
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!project) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8FAFC] text-slate-900 p-6">
+        <div className="max-w-md w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-xl text-center space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 border border-amber-200">
+            <Sun className="h-7 w-7 text-amber-500" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-lg font-extrabold text-slate-900">Projeto Solar Não Encontrado</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {loadError || "O projeto solicitado não foi localizado no seu dispositivo. Você pode iniciar um novo projeto solar ou escolher um projeto existente."}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+            <Button
+              type="button"
+              onClick={handleCreateNewSolarProject}
+              className="h-10 rounded-xl bg-[#00d8b8] hover:bg-[#00c4a7] text-slate-950 font-black text-xs px-4 shadow-sm"
+            >
+              <Plus className="h-4 w-4 mr-1.5" /> Criar Projeto Solar
+            </Button>
+            <Button asChild variant="outline" className="h-10 rounded-xl border-slate-200 text-xs font-bold text-slate-700">
+              <Link to="/projects">
+                <ArrowLeft className="h-3.5 w-3.5 mr-1.5" /> Ver Meus Projetos
+              </Link>
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -921,12 +1090,12 @@ export default function SolarProject() {
   const currentPreset = getModulePreset(config.module_preset_id || config.module_model);
 
   // Elemento selecionado para o Inspector
-  const selectedObstacle = selectedEntity.type === "obstacle"
-    ? config.obstacles.find((o) => o.id === selectedEntity.id)
+  const selectedObstacle = selectedEntity?.type === "obstacle"
+    ? (config?.obstacles || []).find((o) => o.id === selectedEntity.id)
     : null;
 
-  const selectedModuleIdx = selectedEntity.type === "module" ? Number(selectedEntity.id) : null;
-  const selectedString = selectedEntity.type === "string"
+  const selectedModuleIdx = selectedEntity?.type === "module" ? Number(selectedEntity.id) : null;
+  const selectedString = selectedEntity?.type === "string"
     ? strings.find((s) => s.id === selectedEntity.id)
     : null;
 
@@ -956,19 +1125,61 @@ export default function SolarProject() {
             </span>
           </div>
 
-          {/* Badge do Projeto / Design Multi-área */}
-          <div className="flex items-center gap-1.5 bg-slate-100/90 px-2.5 py-1 rounded-lg border border-slate-200">
-            <span className="text-xs font-bold text-slate-900 truncate max-w-[140px] md:max-w-[200px]">
-              {project.name || "Projeto Solar"}
-            </span>
-            <span className="h-3 w-px bg-slate-300" />
-            <span className="text-[11px] font-extrabold text-[#009b84]">
-              {multiAreaLayouts.length} {multiAreaLayouts.length === 1 ? "Área" : "Áreas"} · {visualSizing.panelCount} Módulos
-            </span>
-            <span className="text-[10px] text-slate-500 font-medium">
-              ({visualSizing.dcPowerKw.toFixed(1)} kWp)
-            </span>
-          </div>
+          {/* Seletor & Badge do Projeto com Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 bg-slate-100/90 hover:bg-slate-200/90 transition px-2.5 py-1 rounded-lg border border-slate-200 text-left"
+                title="Clique para alternar projeto solar"
+              >
+                <span className="text-xs font-bold text-slate-900 truncate max-w-[120px] md:max-w-[180px]">
+                  {project?.name || "Projeto Solar"}
+                </span>
+                <ChevronDown className="h-3 w-3 text-slate-500 shrink-0" />
+                <span className="h-3 w-px bg-slate-300 mx-0.5" />
+                <span className="text-[11px] font-extrabold text-[#009b84] whitespace-nowrap">
+                  {multiAreaLayouts.length} {multiAreaLayouts.length === 1 ? "Área" : "Áreas"} · {visualSizing.panelCount} Módulos
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium hidden sm:inline whitespace-nowrap">
+                  ({visualSizing.dcPowerKw.toFixed(1)} kWp)
+                </span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-72 max-h-80 overflow-y-auto bg-white border-slate-200 p-1.5 shadow-2xl rounded-xl">
+              <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2 py-1">
+                Seus Projetos
+              </DropdownMenuLabel>
+              {allProjects.map((p) => {
+                const isCurrent = p.id === project?.id;
+                return (
+                  <DropdownMenuItem
+                    key={p.id}
+                    onClick={() => {
+                      if (p.id !== project?.id) {
+                        setSearchParams({ project: p.id });
+                      }
+                    }}
+                    className={`text-xs cursor-pointer rounded-lg px-2.5 py-1.5 flex items-center justify-between ${
+                      isCurrent
+                        ? "bg-[#E6FAF7] font-bold text-[#009b84]"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="truncate">{p.name || "Sem título"}</span>
+                    {isCurrent && <Check className="h-3.5 w-3.5 text-[#00d8b8] shrink-0 ml-1" />}
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuSeparator className="bg-slate-100" />
+              <DropdownMenuItem
+                onClick={handleCreateNewSolarProject}
+                className="text-xs font-bold text-[#009b84] hover:bg-[#E6FAF7] cursor-pointer rounded-lg px-2.5 py-1.5 flex items-center gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" /> Novo Projeto Solar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Busca de Endereço / CEP */}
           <form onSubmit={handleSearchAddress} className="relative hidden lg:flex items-center">
@@ -1143,19 +1354,19 @@ export default function SolarProject() {
             {/* Header do Inspector Contextual */}
             <div className="flex h-10 items-center justify-between border-b border-[#E2E8F0] px-3 bg-slate-50/80">
               <span className="text-xs font-black uppercase tracking-wider text-[#0f4f49] flex items-center gap-1.5">
-                {selectedEntity.type === "roof" ? (
+                {selectedEntity?.type === "roof" ? (
                   <>
                     <Box className="h-3.5 w-3.5 text-[#00d8b8]" /> {selectedArea?.name || "Área do Telhado"}
                   </>
-                ) : selectedEntity.type === "module" ? (
+                ) : selectedEntity?.type === "module" ? (
                   <>
-                    <Grid className="h-3.5 w-3.5 text-[#00d8b8]" /> Módulo #{selectedModuleIdx + 1}
+                    <Grid className="h-3.5 w-3.5 text-[#00d8b8]" /> Módulo #{selectedModuleIdx !== null ? selectedModuleIdx + 1 : 1}
                   </>
-                ) : selectedEntity.type === "string" ? (
+                ) : selectedEntity?.type === "string" ? (
                   <>
                     <Zap className="h-3.5 w-3.5 text-[#00d8b8]" /> {selectedString?.name || "String"}
                   </>
-                ) : selectedEntity.type === "obstacle" ? (
+                ) : selectedEntity?.type === "obstacle" ? (
                   <>
                     <ShieldAlert className="h-3.5 w-3.5 text-rose-500" /> Obstáculo
                   </>
@@ -1363,12 +1574,12 @@ export default function SolarProject() {
               )}
 
               {/* CASO 2: MÓDULO SELECIONADO */}
-              {selectedEntity.type === "module" && (
+              {selectedEntity?.type === "module" && (
                 <div className="space-y-3 animate-in fade-in">
                   <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2.5 shadow-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Identificador</span>
-                      <span className="font-black text-[#009b84]">Módulo #{selectedModuleIdx + 1}</span>
+                      <span className="font-black text-[#009b84]">Módulo #{selectedModuleIdx !== null ? selectedModuleIdx + 1 : 1}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Modelo</span>
@@ -1410,7 +1621,7 @@ export default function SolarProject() {
               )}
 
               {/* CASO 3: OBSTÁCULO SELECIONADO */}
-              {selectedEntity.type === "obstacle" && selectedObstacle && (
+              {selectedEntity?.type === "obstacle" && selectedObstacle && (
                 <div className="space-y-3 animate-in fade-in">
                   <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2.5 shadow-sm">
                     <div className="flex items-center justify-between">
@@ -2008,7 +2219,7 @@ export default function SolarProject() {
               editorMode={editorMode}
               fitRoofRequest={fitRoofRequest}
               viewportRequest={viewportRequest}
-              selectedObstacleId={selectedEntity.type === "obstacle" ? selectedEntity.id : null}
+              selectedObstacleId={selectedEntity?.type === "obstacle" ? selectedEntity.id : null}
               selectedModuleIndex={selectedModuleIdx}
               electricalMode={appMode === "electrical"}
               strings={strings}

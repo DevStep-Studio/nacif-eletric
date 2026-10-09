@@ -88,7 +88,34 @@ class AppErrorBoundary extends React.Component {
 
   render() {
     if (this.state.error) {
-      return <ServerErrorPage error={this.state.error} />;
+      try {
+        return <ServerErrorPage error={this.state.error} />;
+      } catch (boundaryErr) {
+        console.error("Erro secundário na tela de erro:", boundaryErr);
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-900 p-6 font-sans">
+            <div className="max-w-md w-full bg-white p-6 rounded-2xl shadow-xl border border-slate-200 text-center space-y-4">
+              <h2 className="text-xl font-bold text-slate-900">Algo não saiu como esperado</h2>
+              <p className="text-xs text-slate-600">Ocorreu um erro inesperado ao processar a interface.</p>
+              <div className="flex gap-2 justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-[#00d8b8] text-slate-950 font-bold text-xs rounded-xl hover:bg-[#00bda1]"
+                >
+                  Recarregar página
+                </button>
+                <a
+                  href="/projects"
+                  className="px-4 py-2 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-50"
+                >
+                  Ir para Projetos
+                </a>
+              </div>
+            </div>
+          </div>
+        );
+      }
     }
 
     return this.props.children;
@@ -203,18 +230,18 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
-    <AppErrorBoundary>
-      <AuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <BrandingBoot />
-          <Router>
+    <AuthProvider>
+      <QueryClientProvider client={queryClientInstance}>
+        <BrandingBoot />
+        <Router>
+          <AppErrorBoundary>
             <AuthenticatedApp />
             <CookieConsentBanner />
-          </Router>
-          <Toaster />
-        </QueryClientProvider>
-      </AuthProvider>
-    </AppErrorBoundary>
+          </AppErrorBoundary>
+        </Router>
+        <Toaster />
+      </QueryClientProvider>
+    </AuthProvider>
   );
 }
 

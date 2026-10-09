@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, RefreshCw, AlertCircle } from "lucide-react";
 
 export default function ServerErrorPage({ error = null }) {
-  const navigate = useNavigate();
   const [errorId] = useState(() => Math.random().toString(36).substring(2, 9).toUpperCase());
 
   return (

@@ -1,4 +1,4 @@
-import { getMaterialSymbolDataUri } from "@/components/MaterialSymbol";
+import { getMaterialSymbolDataUri } from "./materialSymbolUtils.js";
 
 const normalize = (value = "") => (
   String(value || "")

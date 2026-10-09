@@ -617,11 +617,14 @@ function EditableRoofPolygonLayer({
       {/* Vértices arrastáveis (em modo select ou edit) */}
       {isEditing && (
         <>
-          {positions.map((pt, idx) => (
-            <Marker
-              key={`roof-vert-${idx}-${pt.lat.toFixed(6)}-${pt.lng.toFixed(6)}`}
-              position={[pt.lat, pt.lng]}
-              draggable={true}
+          {positions.map((pt, idx) => {
+            const latVal = Number.isFinite(Number(pt?.lat)) ? Number(pt.lat) : 0;
+            const lngVal = Number.isFinite(Number(pt?.lng)) ? Number(pt.lng) : 0;
+            return (
+              <Marker
+                key={`roof-vert-${idx}-${latVal.toFixed(6)}-${lngVal.toFixed(6)}`}
+                position={[latVal, lngVal]}
+                draggable={true}
               eventHandlers={{
                 dragend: (e) => handleVertexDragEnd(idx, e),
                 contextmenu: (e) => {
@@ -652,7 +655,8 @@ function EditableRoofPolygonLayer({
                 iconSize: [0, 0],
               })}
             />
-          ))}
+          );
+        })}
 
           {/* Marcadores de inserção (+) no ponto médio de cada aresta */}
           {edges.map((edge) => (
@@ -992,7 +996,7 @@ export default function SolarDesignerMap({
             {isMeasuring && measureDistance !== null && (
               <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800 shadow-xl backdrop-blur-md">
                 <Ruler className="h-3.5 w-3.5 text-emerald-600" />
-                <span>Distância: {measureDistance.toFixed(2)} m</span>
+                <span>Distância: {Number(measureDistance || 0).toFixed(2)} m</span>
                 <button
                   type="button"
                   onClick={() => setMeasurePoints([])}
