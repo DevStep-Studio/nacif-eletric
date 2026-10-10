@@ -44,6 +44,7 @@ import {
   WIRE_SPACING,
   DEFAULT_CORNER_RADIUS,
 } from "@/lib/orthogonalRouter";
+import { optimizePanelWiring } from "@/lib/wireRoutingOptimizer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,7 +84,8 @@ import {
   HelpCircle,
   Crosshair,
   Minus,
-  Scissors
+  Scissors,
+  Wand2,
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 
@@ -5572,6 +5574,62 @@ export default function PanelGenerator() {
     setShowClearWiresModal(true);
   };
 
+  const [optimizingWires, setOptimizingWires] = useState(false);
+
+  // Otimização Inteligente dos Cabos do Quadro (CAD Orthogonal Routing)
+  const handleOptimizeWires = async () => {
+    if (!wires || wires.length === 0 || optimizingWires) {
+      toast({
+        title: "Nenhum cabo para otimizar",
+        description: "Adicione conexões ou gere a fiação do quadro antes de otimizar.",
+      });
+      return;
+    }
+
+    setOptimizingWires(true);
+
+    try {
+      // 1. Salva snapshot no histórico para permitir desfazer (Ctrl+Z)
+      pushLayoutHistory(makeLayoutSnapshot());
+      layoutRedoRef.current = [];
+
+      // 2. Executa otimização multicritério dos percursos
+      const { optimizedWires, stats } = optimizePanelWiring({
+        wires,
+        rails,
+        infrastructure,
+        panelHeight,
+        options: {
+          minWireSpacing: 9,
+          obstaclePadding: 8,
+          portExitOffset: 24,
+        },
+      });
+
+      // 3. Invalida cache de caminhos visuais para forçar redesenho na nova geometria
+      wirePathsRef.current = {};
+
+      // 4. Aplica novo layout preservando conexões elétricas e persiste no banco
+      updateWires(optimizedWires);
+
+      const count = stats?.optimizedCount || optimizedWires.length;
+      const bends = stats?.bendsReduced || 0;
+      toast({
+        title: "Fiação otimizada com sucesso!",
+        description: `${count} condutor${count !== 1 ? "es" : ""} reorganizado${count !== 1 ? "s" : ""} em feixes compactos alinhados${bends > 0 ? ` (${bends} curva${bends !== 1 ? "s" : ""} eliminada${bends !== 1 ? "s" : ""})` : ""}.`,
+      });
+    } catch (err) {
+      console.error("Erro ao otimizar fiação do quadro:", err);
+      toast({
+        variant: "destructive",
+        title: "Erro ao otimizar fiação",
+        description: "Não foi possível otimizar os cabos com segurança. O layout anterior foi mantido.",
+      });
+    } finally {
+      setOptimizingWires(false);
+    }
+  };
+
   // Helper para atualizar propriedades do fio selecionado
   const handleUpdateWire = (wireId, field, value, options = {}) => {
     const shouldRemoveField = value === undefined || value === null || value === "";
@@ -9336,6 +9394,23 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 rounded-lg border-sky-200 bg-sky-50/70 px-3 text-xs font-bold text-sky-700 hover:bg-sky-100 hover:text-sky-800 transition-all gap-1.5 shadow-xs disabled:opacity-60"
+                    onClick={handleOptimizeWires}
+                    disabled={optimizingWires || wires.length === 0}
+                    aria-label="Otimizar Fiação"
+                    title="Reorganizar e alinhar automaticamente todos os cabos"
+                  >
+                    {optimizingWires ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-sky-600" />
+                    ) : (
+                      <Wand2 className="h-4 w-4 text-sky-600" />
+                    )}
+                    <span>{optimizingWires ? "Otimizando..." : "Otimizar Fiação"}</span>
+                  </Button>
+
                   <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={() => setScale(s => clampPanelScale(+((s ?? fitScale) - 0.1).toFixed(2)))} aria-label="Diminuir zoom" title="Diminuir zoom">
                       <ZoomOut className="h-4 w-4" />
