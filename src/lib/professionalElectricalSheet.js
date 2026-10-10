@@ -63,58 +63,168 @@ export function drawSheetFrame(doc, mode = "unifilar") {
   }
 }
 
-export function drawTitleBlock(doc, project, title) {
+export function drawTitleBlock(doc, project = {}, title = "PROJETO EXECUTIVO") {
   const x = 910;
   const y = 535;
-  const w = SHEET.w - x - 6;
-  const h = SHEET.h - y - 17;
-  drawRect(doc, x, y, w, h, C.black, 0.65);
+  const w = SHEET.w - x - 6; // 273 mm
+  const h = SHEET.h - y - 17; // 289 mm
+  drawRect(doc, x, y, w, h, C.black, 0.75);
 
-  const rows = [
-    { h: 24, cells: ["00", new Date().toLocaleDateString("pt-BR"), "EMISSAO INICIAL"] },
-    { h: 36, cells: ["CLIENTE:", project.client_name || "CLIENTE"] },
-    { h: 38, cells: ["ENDERECO:", project.address || "ENDERECO DA OBRA"] },
-    { h: 38, cells: ["PROJETISTA:", "VOLT AI / ENGENHARIA"] },
-    { h: 40, cells: ["NOME DO PROJETO:", project.name || "PROJETO ELETRICO"] },
-    { h: 40, cells: ["DISCIPLINA / SUB-DISCIPLINA:", "SISTEMA DE INSTALACOES ELETRICAS"] },
-    { h: 50, cells: ["TITULO DO DESENHO:", title] },
-    { h: 30, cells: ["RESPONSAVEL DO PROJETO:", "ENGENHEIRO ELETRICISTA"] },
-    { h: 24, cells: ["DATA:", "ESCALA:", "PRANCHA / REVISAO:"] },
-  ];
+  const clientName = project.client_name || project.client || project.clientName || "CLIENTE";
+  const address = project.address || project.project_address || "ENDERECO DA OBRA";
+  const projectName = project.name || project.projectName || "PROJETO ELETRICO";
+  const responsible = project.responsible || project.engineer_name || project.engineer || "ENGENHEIRO ELETRICISTA";
+  const revision = project.revision || "00";
+  const sheetCode = project.sheetCode || project.sheet_number || "EL-01 / R00";
+  const scaleText = project.scale || "INDICADA";
+  const currentDate = new Date().toLocaleDateString("pt-BR");
 
+  // Alturas normatizadas somando exatamente 289 mm:
+  // 18 + 30 + 30 + 32 + 32 + 28 + 40 + 32 + 47 = 289 mm
   let cy = y;
-  doc.setFont("helvetica", "normal");
-  rows.forEach((row, i) => {
-    drawRect(doc, x, cy, w, row.h, C.black, 0.35);
-    doc.setFontSize(i === 5 ? 14.5 : 13);
-    doc.setTextColor(...C.black);
 
-    if (row.cells.length === 3) {
-      const cw = w / 3;
-      row.cells.forEach((cell, idx) => {
-        if (idx > 0) doc.line(x + idx * cw, cy, x + idx * cw, cy + row.h);
-        doc.setFont("helvetica", idx === 0 ? "bold" : "normal");
-        doc.setFontSize(i === rows.length - 1 ? 12.5 : 12);
-        text(doc, cell, x + idx * cw + 5, cy + row.h / 2 + 2);
-      });
-    } else {
-      doc.setFont("helvetica", "bold");
-      text(doc, row.cells[0], x + 5, cy + 9);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(i === 6 ? 18 : 15.5);
-      const lines = doc.splitTextToSize(row.cells[1] || "", w - 14);
-      text(doc, lines.slice(0, 3), x + 5, cy + 23);
-    }
-    cy += row.h;
-  });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(12.5);
-  text(doc, new Date().toLocaleDateString("pt-BR"), x + 5, h + y - 8);
-  text(doc, "SEM ESCALA", x + 94, h + y - 8);
+  // 1. Linha de Revisão / Emissão (18 mm)
+  drawRect(doc, x, cy, w, 18, C.black, 0.35);
+  doc.line(x + 38, cy, x + 38, cy + 18);
+  doc.line(x + 118, cy, x + 118, cy + 18);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(28);
-  text(doc, "201/R00", x + w - 70, h + y - 8);
+  doc.setFontSize(10);
+  doc.setTextColor(...C.black);
+  text(doc, revision, x + 19, cy + 11.5, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  text(doc, currentDate, x + 78, cy + 11.5, { align: "center" });
+  text(doc, "EMISSAO INICIAL PARA EXECUCAO", x + 124, cy + 11.5);
+  cy += 18;
+
+  // 2. Cliente (30 mm)
+  drawRect(doc, x, cy, w, 30, C.black, 0.35);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "CLIENTE:", x + 5, cy + 9);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(...C.black);
+  text(doc, clientName.slice(0, 36), x + 5, cy + 22);
+  cy += 30;
+
+  // 3. Endereço (30 mm)
+  drawRect(doc, x, cy, w, 30, C.black, 0.35);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "ENDERECO DA OBRA:", x + 5, cy + 9);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11.5);
+  doc.setTextColor(...C.black);
+  const addrLines = doc.splitTextToSize(address || "", w - 12);
+  text(doc, addrLines.slice(0, 2), x + 5, cy + 21);
+  cy += 30;
+
+  // 4. Projetista (32 mm)
+  drawRect(doc, x, cy, w, 32, C.black, 0.35);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "PROJETISTA / EMPRESA:", x + 5, cy + 9);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(0, 100, 166);
+  text(doc, "NACIF SOLUTIONS ELETRIC", x + 5, cy + 21);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "Engenharia Eletrica & Calculo Parametrico NBR 5410", x + 5, cy + 28);
+  cy += 32;
+
+  // 5. Nome do Projeto (32 mm)
+  drawRect(doc, x, cy, w, 32, C.black, 0.35);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "NOME DO PROJETO:", x + 5, cy + 9);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(...C.black);
+  const projLines = doc.splitTextToSize(projectName || "", w - 12);
+  text(doc, projLines.slice(0, 2), x + 5, cy + 22);
+  cy += 32;
+
+  // 6. Disciplina (28 mm)
+  drawRect(doc, x, cy, w, 28, C.black, 0.35);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "DISCIPLINA / SUB-DISCIPLINA:", x + 5, cy + 9);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...C.black);
+  text(doc, "SISTEMA DE INSTALACOES ELETRICAS", x + 5, cy + 21);
+  cy += 28;
+
+  // 7. Título do Desenho (40 mm)
+  drawRect(doc, x, cy, w, 40, C.black, 0.35);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "TITULO DO DESENHO:", x + 5, cy + 10);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(0, 100, 166);
+  const titleLines = doc.splitTextToSize(title || "PROJETO EXECUTIVO", w - 12);
+  text(doc, titleLines.slice(0, 2), x + 5, cy + 24);
+  cy += 40;
+
+  // 8. Responsável Técnico (32 mm)
+  drawRect(doc, x, cy, w, 32, C.black, 0.35);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "RESPONSAVEL TECNICO:", x + 5, cy + 9);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  doc.setTextColor(...C.black);
+  text(doc, responsible, x + 5, cy + 20);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "CREA / CFT REGISTRADO · CONSELHO REGIONAL", x + 5, cy + 27.5);
+  cy += 32;
+
+  // 9. Metadados e Prancha (47 mm)
+  drawRect(doc, x, cy, w, 47, C.black, 0.35);
+  doc.line(x + 78, cy, x + 78, cy + 47);
+  doc.line(x + 162, cy, x + 162, cy + 47);
+
+  // Coluna Data
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "DATA:", x + 5, cy + 12);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  doc.setTextColor(...C.black);
+  text(doc, currentDate, x + 5, cy + 30);
+
+  // Coluna Escala
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "ESCALA:", x + 83, cy + 12);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  doc.setTextColor(...C.black);
+  text(doc, scaleText, x + 83, cy + 30);
+
+  // Coluna Prancha / Revisão
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  text(doc, "PRANCHA / REVISAO:", x + 167, cy + 12);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  doc.setTextColor(0, 100, 166);
+  text(doc, sheetCode, x + 167, cy + 35);
 }
 
 function drawBreakerSymbol(doc, x, y, amp, side = "right") {

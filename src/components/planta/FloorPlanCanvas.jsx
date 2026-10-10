@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import Konva from "konva";
 import { Stage, Layer, Rect, Line, Circle, Text, Group, Image as KonvaImage, Arc } from "react-konva";
 
@@ -2632,11 +2632,12 @@ function DeviceDimensionsLayer({
   );
 }
 
-export default function FloorPlanCanvas({
+const FloorPlanCanvas = forwardRef(function FloorPlanCanvas({
   imageUrl,
   imageLayout,
   importedPlanElements: rawImportedPlanElements,
   points: rawPoints = [],
+  exporting = false,
   onAddPoint,
   onMovePoint,
   onAddRoom,
@@ -2705,9 +2706,21 @@ export default function FloorPlanCanvas({
   onToggleHandTool: controlledOnToggleHandTool,
   zoomLocked: controlledZoomLocked,
   onToggleZoomLock: controlledOnToggleZoomLock,
-}) {
+}, ref) {
   const wrapperRef = useRef(null);
   const stageRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    getStage: () => stageRef.current,
+    exportCanvas: (pixelRatio = 3) => {
+      const stage = stageRef.current;
+      if (!stage) return null;
+      return stage.toCanvas({ pixelRatio });
+    },
+    resetViewForExport: () => {
+      setPan({ x: 0, y: 0 });
+    },
+  }));
   const panStartRef = useRef({ startX: 0, startY: 0, initialPanX: 0, initialPanY: 0 });
   const importedPlanElements = useMemo(() => normalizeImportedPlanElements(rawImportedPlanElements), [rawImportedPlanElements]);
   const points = useMemo(() => normalizeCanvasPoints(rawPoints), [rawPoints]);
@@ -3363,46 +3376,48 @@ export default function FloorPlanCanvas({
           : "default",
       }}
     >
-      <EditorToolbar
-        activeTool={activeTool}
-        architectureTool={architectureTool}
-        routeToolActive={routeToolActive}
-        handToolActive={handToolActive}
-        zoomLocked={zoomLocked}
-        selectedElement={selectedElement}
-        zoom={zoom}
-        scalePxPerMeter={measurementScale}
-        showWallDimensions={showWallDimensions}
-        showDeviceDimensions={showDeviceDimensions}
-        showPositionLabels={showPositionLabels}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onSelectTool={handleSelectTool}
-        onSelectArchitectureTool={handleSelectArchitectureTool}
-        onSelectMode={handleSelectMode}
-        onToggleHandTool={handleToggleHandTool}
-        onToggleZoomLock={handleToggleZoomLock}
-        onAddRoom={handleAddRoom}
-        toolsPanelOpen={toolsPanelOpen}
-        onToggleToolsPanel={onToggleToolsPanel}
-        onZoomChange={onZoomChange}
-        onScalePxPerMeterChange={onScalePxPerMeterChange}
-        onToggleWallDimensions={onToggleWallDimensions}
-        onToggleDeviceDimensions={onToggleDeviceDimensions}
-        onTogglePositionLabels={onTogglePositionLabels}
-        onFit={fitViewport}
-        onRotateSelected={onRotateSelected}
-        onDuplicateSelected={onDuplicateSelected}
-        onDeleteSelected={onDeleteSelected}
-        onUndo={onUndo}
-        onRedo={onRedo}
-      />
+      {!exporting && (
+        <EditorToolbar
+          activeTool={activeTool}
+          architectureTool={architectureTool}
+          routeToolActive={routeToolActive}
+          handToolActive={handToolActive}
+          zoomLocked={zoomLocked}
+          selectedElement={selectedElement}
+          zoom={zoom}
+          scalePxPerMeter={measurementScale}
+          showWallDimensions={showWallDimensions}
+          showDeviceDimensions={showDeviceDimensions}
+          showPositionLabels={showPositionLabels}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onSelectTool={handleSelectTool}
+          onSelectArchitectureTool={handleSelectArchitectureTool}
+          onSelectMode={handleSelectMode}
+          onToggleHandTool={handleToggleHandTool}
+          onToggleZoomLock={handleToggleZoomLock}
+          onAddRoom={handleAddRoom}
+          toolsPanelOpen={toolsPanelOpen}
+          onToggleToolsPanel={onToggleToolsPanel}
+          onZoomChange={onZoomChange}
+          onScalePxPerMeterChange={onScalePxPerMeterChange}
+          onToggleWallDimensions={onToggleWallDimensions}
+          onToggleDeviceDimensions={onToggleDeviceDimensions}
+          onTogglePositionLabels={onTogglePositionLabels}
+          onFit={fitViewport}
+          onRotateSelected={onRotateSelected}
+          onDuplicateSelected={onDuplicateSelected}
+          onDeleteSelected={onDeleteSelected}
+          onUndo={onUndo}
+          onRedo={onRedo}
+        />
+      )}
       <Stage
         ref={stageRef}
         width={stageWidth}
         height={stageHeight}
         pixelRatio={renderPixelRatio}
-        className="bg-white shadow-[0_18px_55px_rgba(15,23,42,0.08)]"
+        className={exporting ? "bg-white" : "bg-white shadow-[0_18px_55px_rgba(15,23,42,0.08)]"}
         onMouseDown={handleStagePointerDown}
         onTouchStart={handleStagePointerDown}
         onDblClick={handleStageDoubleClick}
@@ -3426,11 +3441,11 @@ export default function FloorPlanCanvas({
         }}
       >
         <Layer listening={!handToolActive}>
-          <Rect name="viewport-background" width={stageWidth} height={stageHeight} fill="#eceff1" />
+          <Rect name="viewport-background" width={stageWidth} height={stageHeight} fill={exporting ? "#ffffff" : "#eceff1"} />
           <Group x={viewport.x} y={viewport.y} scaleX={scale} scaleY={scale}>
             <Rect name="surface" width={DESIGN.width} height={DESIGN.height} fill="#ffffff" />
             <GridLayer width={DESIGN.width} height={DESIGN.height} />
-            <Rect x={DRAWING_FRAME.x} y={DRAWING_FRAME.y} width={DRAWING_FRAME.width} height={DRAWING_FRAME.height} stroke={TECH_BLACK} strokeWidth={1.3} listening={false} />
+            <Rect x={DRAWING_FRAME.x} y={DRAWING_FRAME.y} width={DRAWING_FRAME.width} height={DRAWING_FRAME.height} stroke={exporting ? "transparent" : TECH_BLACK} strokeWidth={1.3} listening={false} />
             {image && (
               <KonvaImage
                 name="background"
@@ -3716,4 +3731,6 @@ export default function FloorPlanCanvas({
       </Stage>
     </div>
   );
-}
+});
+
+export default FloorPlanCanvas;
