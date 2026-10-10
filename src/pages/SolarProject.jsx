@@ -22,6 +22,10 @@ import SolarProjectParametersModal from "@/components/solar/SolarProjectParamete
 import { syncSolarToProjectCircuits } from "@/lib/projectUnifiedSync";
 import { validateProjectDataForReports } from "@/lib/solarWizardState";
 import {
+  fetchGoogleBuildingInsights,
+  convertGoogleSegmentsToSolarAreas,
+} from "@/lib/googleSolarApi";
+import {
   DEFAULT_SOLAR_MAP_CENTER,
   DEFAULT_SOLAR_MAP_ZOOM,
   MODULE_CATALOG,
@@ -912,6 +916,50 @@ export default function SolarProject() {
     }
   };
 
+  // Consulta à Google Solar API — Building Insights & Detecção Automática de Telhados
+  const handleGoogleSolarLookup = async () => {
+    setSearchingAddress(true);
+    try {
+      const lat = config.map_center_lat;
+      const lng = config.map_center_lng;
+      const res = await fetchGoogleBuildingInsights({ lat, lng });
+
+      if (res.available && res.roofSegments && res.roofSegments.length > 0) {
+        const newAreas = convertGoogleSegmentsToSolarAreas(res.roofSegments, config);
+        const nextAreas = [...(config.areas || []), ...newAreas];
+        const nextConfig = normalizeSolarConfig({
+          ...config,
+          areas: nextAreas,
+          roof_defined: true,
+        });
+        setConfig(nextConfig);
+        pushAreasHistory(nextAreas);
+        if (newAreas.length > 0) {
+          setSelectedAreaId(newAreas[0].id);
+          setSelectedEntity({ type: "roof", id: newAreas[0].id });
+        }
+        toast({
+          title: "Google Solar API: Edifício Mapeado!",
+          description: `${res.roofSegments.length} águas de telhado importadas com inclinação e azimute reais.`,
+        });
+      } else {
+        toast({
+          title: "Google Solar API",
+          description: res.message || "Esta localidade não possui cobertura de malha 3D da Google Solar API. O modo de desenho manual de satélite está ativo com máxima precisão.",
+          variant: res.reason === "out_of_coverage" ? "default" : "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Erro na consulta Google Solar",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSearchingAddress(false);
+    }
+  };
+
   const handleMapClick = (latlng) => {
     if (!pendingObstaclePreset || !latlng) {
       if (editorMode === "select" && selectedEntity.type !== "none") {
@@ -1301,23 +1349,36 @@ export default function SolarProject() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Busca de Endereço / CEP */}
-          <form onSubmit={handleSearchAddress} className="relative hidden lg:flex items-center">
-            <MapPin className="absolute left-2.5 h-3.5 w-3.5 text-[#00d8b8]" />
-            <Input
-              value={searchAddress}
-              onChange={(e) => setSearchAddress(e.target.value)}
-              placeholder="Buscar endereço ou CEP..."
-              className="h-7 w-56 xl:w-72 rounded-lg border-slate-200 bg-slate-50 pl-8 pr-7 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#00d8b8] focus:ring-1 focus:ring-[#00d8b8]"
-            />
+          {/* Busca de Endereço / CEP + Google Solar */}
+          <div className="hidden lg:flex items-center gap-1.5">
+            <form onSubmit={handleSearchAddress} className="relative flex items-center">
+              <MapPin className="absolute left-2.5 h-3.5 w-3.5 text-[#00d8b8]" />
+              <Input
+                value={searchAddress}
+                onChange={(e) => setSearchAddress(e.target.value)}
+                placeholder="Buscar endereço ou CEP..."
+                className="h-7 w-52 xl:w-64 rounded-lg border-slate-200 bg-slate-50 pl-8 pr-7 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#00d8b8] focus:ring-1 focus:ring-[#00d8b8]"
+              />
+              <button
+                type="submit"
+                disabled={searchingAddress}
+                className="absolute right-2 text-slate-400 hover:text-slate-700 transition"
+              >
+                {searchingAddress ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+              </button>
+            </form>
+
             <button
-              type="submit"
+              type="button"
+              onClick={handleGoogleSolarLookup}
               disabled={searchingAddress}
-              className="absolute right-2 text-slate-400 hover:text-slate-700 transition"
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-sm transition shrink-0"
+              title="Detectar Telhado com Google Solar API (Building Insights)"
             >
-              {searchingAddress ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+              <Sparkles className="h-3 w-3 text-[#00d8b8]" />
+              <span className="hidden xl:inline">Google Solar</span>
             </button>
-          </form>
+          </div>
         </div>
 
         {/* Lado Direito do Header: Status, Modos, Desfazer/Refazer, Relatórios e Salvar */}
@@ -2315,6 +2376,17 @@ export default function SolarProject() {
               <span className="hidden sm:inline">Auto FV</span>
             </button>
 
+            <button
+              type="button"
+              onClick={handleGoogleSolarLookup}
+              disabled={searchingAddress}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition hover:bg-slate-100 text-slate-700 hover:text-slate-900"
+              title="Detectar Telhado com Google Solar API (LIDAR 3D)"
+            >
+              <Sun className="h-3.5 w-3.5 text-amber-500" />
+              <span className="hidden md:inline">Google Solar</span>
+            </button>
+
             {/* Dropdown de Obstáculos */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -2439,6 +2511,7 @@ export default function SolarProject() {
               areas={multiAreaLayouts}
               sizing={visualSizing}
               panelPolygons={allVisiblePanelPolygons}
+              onAreaSelect={setSelectedAreaId}
             />
           ) : (
             <SolarDesignerMap

@@ -621,9 +621,18 @@ export function calculateStringGrouping(panelCount, {
   vocModuleV = 49.8,
   impModuleA = 13.25,
   iscModuleA = 14.10,
+  minTempC = 10,
+  maxCellTempC = 70,
+  maxInverterDcVoltageV = 1000,
+  minMpptVoltageV = 140,
+  maxMpptVoltageV = 800,
 } = {}) {
   const totalPanels = Math.max(0, Math.round(Number(panelCount) || 0));
   if (totalPanels <= 0) return [];
+
+  // Coeficientes térmicos típicos mono-PERC (%/°C)
+  const betaVocPct = -0.28; // -0.28%/°C
+  const gammaVmpPct = -0.35; // -0.35%/°C
 
   // Define tamanho ótimo de string (tensão MPPT típica 300V - 600V -> 8 a 15 módulos)
   let stringCount = 1;
@@ -641,9 +650,22 @@ export function calculateStringGrouping(panelCount, {
   for (let i = 0; i < stringCount; i += 1) {
     const size = baseSize + (i < remainder ? 1 : 0);
     const end = currentStart + size - 1;
-    const stringVoc = Math.round(size * vocModuleV * 10) / 10;
-    const stringVmp = Math.round(size * vmpModuleV * 10) / 10;
+
+    // Tensões Nominais STC (25°C)
+    const stringVocStc = Math.round(size * vocModuleV * 10) / 10;
+    const stringVmpStc = Math.round(size * vmpModuleV * 10) / 10;
     const stringPowerKw = Math.round((size * moduleWp) / 10) / 100;
+
+    // Tensão de circuito aberto na temperatura mínima de projeto (Tmin = 10°C) - NBR 16690
+    const vocCold = Math.round(size * vocModuleV * (1 + (betaVocPct / 100) * (minTempC - 25)) * 10) / 10;
+
+    // Tensão MPPT na temperatura máxima de operação da célula (Tcell = 70°C)
+    const vmpHot = Math.round(size * vmpModuleV * (1 + (gammaVmpPct / 100) * (maxCellTempC - 25)) * 10) / 10;
+
+    // Verificações técnicas NBR 16690
+    const isVocSafe = vocCold <= maxInverterDcVoltageV;
+    const isMpptSafe = vmpHot >= minMpptVoltageV && stringVmpStc <= maxMpptVoltageV;
+    const isCompatible = isVocSafe && isMpptSafe;
 
     strings.push({
       id: `string_${i + 1}`,
@@ -653,10 +675,20 @@ export function calculateStringGrouping(panelCount, {
       endModule: end,
       moduleCount: size,
       powerKw: stringPowerKw,
-      vocV: stringVoc,
-      vmpV: stringVmp,
+      vocV: stringVocStc,
+      vmpV: stringVmpStc,
+      vocColdV: vocCold,
+      vmpHotV: vmpHot,
       impA: impModuleA,
       iscA: iscModuleA,
+      isVocSafe,
+      isMpptSafe,
+      isCompatible,
+      statusMessage: !isVocSafe
+        ? `Tensão Voc em Tmin (${vocCold}V) excede o limite máximo do inversor (${maxInverterDcVoltageV}V).`
+        : !isMpptSafe
+        ? `Tensão Vmp em alta temperatura (${vmpHot}V) abaixo da janela MPPT mínima (${minMpptVoltageV}V).`
+        : "String compatível com a janela MPPT e limites do inversor.",
     });
 
     currentStart = end + 1;

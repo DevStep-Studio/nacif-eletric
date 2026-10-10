@@ -1349,40 +1349,56 @@ export default function SolarDesignerMap({
         </button>
       </div>
 
-      {/* HUD Flutuante Inferior (Light Theme) */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-6 rounded-xl border border-slate-200/90 bg-white/95 px-6 py-2.5 text-slate-800 shadow-2xl backdrop-blur-md">
-        {/* Coluna 1: Módulos FV Total/Área */}
-        <div className="flex flex-col items-center min-w-[130px]">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">MÓDULOS FV TOTAL/ÁREA</span>
+      {/* HUD Flutuante Inferior (Light Theme - 4 Métricas Técnicas da Referência) */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[500] flex flex-wrap items-center gap-4 sm:gap-6 rounded-2xl border border-slate-200/90 bg-white/95 px-5 py-2.5 text-slate-800 shadow-2xl backdrop-blur-md">
+        {/* Coluna 1: Módulos FV */}
+        <div className="flex flex-col items-center min-w-[90px] sm:min-w-[110px]">
+          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">MÓDULOS FV</span>
           <span className="text-sm font-black text-slate-900">
-            {totalPanelCount} <span className="text-slate-400">/ {selectedPanelCount} na ativa</span>
+            {totalPanelCount} <span className="text-xs font-bold text-slate-500">un</span>
           </span>
           <div className="mt-1 h-1 w-full rounded-full bg-slate-100 overflow-hidden">
             <div className="h-full bg-emerald-500 rounded-full" style={{ width: totalPanelCount > 0 ? "100%" : "0%" }} />
           </div>
         </div>
 
-        <div className="h-8 w-px bg-slate-200" />
+        <div className="h-7 w-px bg-slate-200 hidden sm:block" />
 
-        {/* Coluna 2: Potência CC Total/Área */}
-        <div className="flex flex-col items-center min-w-[130px]">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">POTÊNCIA CC TOTAL</span>
+        {/* Coluna 2: Potência CC */}
+        <div className="flex flex-col items-center min-w-[90px] sm:min-w-[110px]">
+          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">POTÊNCIA CC</span>
           <span className="text-sm font-black text-slate-900">
-            {totalDcPowerKw.toFixed(1)} <span className="text-slate-400">kWp ({selectedDcPowerKw.toFixed(1)} kWp ativa)</span>
+            {totalDcPowerKw.toFixed(1)} <span className="text-xs font-bold text-slate-500">kWp</span>
           </span>
           <div className="mt-1 h-1 w-full rounded-full bg-slate-100 overflow-hidden">
             <div className="h-full bg-emerald-500 rounded-full" style={{ width: totalPanelCount > 0 ? "100%" : "0%" }} />
           </div>
         </div>
 
-        <div className="h-8 w-px bg-slate-200" />
+        <div className="h-7 w-px bg-slate-200 hidden sm:block" />
 
-        {/* Coluna 3: Produção Anual Est. */}
-        <div className="flex flex-col items-center min-w-[140px]">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">PRODUÇÃO ANUAL TOTAL</span>
+        {/* Coluna 3: Geração Anual */}
+        <div className="flex flex-col items-center min-w-[100px] sm:min-w-[120px]">
+          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">GERAÇÃO ANUAL</span>
           <span className="text-sm font-black text-[#009b84]">
-            {totalAnnualMwh.toFixed(2)} MWh/ano
+            {totalAnnualMwh.toFixed(1)} <span className="text-xs font-bold text-slate-500">MWh/ano</span>
           </span>
+          <div className="mt-1 h-1 w-full rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-full bg-[#00d8b8] rounded-full" style={{ width: totalAnnualMwh > 0 ? "100%" : "0%" }} />
+          </div>
+        </div>
+
+        <div className="h-7 w-px bg-slate-200 hidden sm:block" />
+
+        {/* Coluna 4: Economia Estimada */}
+        <div className="flex flex-col items-center min-w-[110px] sm:min-w-[130px]">
+          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">ECONOMIA ESTIMADA</span>
+          <span className="text-sm font-black text-emerald-600">
+            R$ {Math.round(sizing?.annualSavingsBrl || totalAnnualMwh * 815).toLocaleString("pt-BR")}<span className="text-xs font-bold text-slate-500">/ano</span>
+          </span>
+          <div className="mt-1 h-1 w-full rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-full bg-emerald-500 rounded-full" style={{ width: totalAnnualMwh > 0 ? "100%" : "0%" }} />
+          </div>
         </div>
       </div>
     </div>
