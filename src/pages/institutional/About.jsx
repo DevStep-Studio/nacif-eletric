@@ -11,7 +11,6 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
-  Zap,
 } from "lucide-react";
 
 export default function AboutPage() {
@@ -24,8 +23,8 @@ export default function AboutPage() {
       <div className="space-y-10">
         {/* Hero Card */}
         <div className="rounded-2xl border border-[#CDEFE8] bg-white p-6 sm:p-8 shadow-sm space-y-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E8FCF8] text-[#00d8b8]">
-            <Zap className="h-6 w-6 fill-current" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E8FCF8] p-2 border border-[#CDEFE8]">
+            <img src="/brand-mark-principal.png" alt="Nacif Electric" className="h-8 w-8 object-contain" />
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight">
             Nossa Missão: Revolucionar o Projeto Elétrico no Brasil

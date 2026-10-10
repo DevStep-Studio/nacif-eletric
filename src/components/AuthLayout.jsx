@@ -5,7 +5,7 @@ import authElectricalPanel from "@/assets/auth-electrical-panel.jpg";
 
 export default function AuthLayout({ icon: Icon, title, subtitle, footer, children }) {
   const { branding } = useBranding();
-  const authLogo = branding.authLogoDataUrl || branding.logoDataUrl || branding.compactLogoDataUrl;
+  const authLogo = branding?.authLogoDataUrl || branding?.logoDataUrl || "/brand-logo-principal.png";
   const heroLogo = DEFAULT_LOGO_WHITE_URL;
   const brandName = [branding.appName, branding.appSuffix].filter(Boolean).join(" ") || "NACIF Solutions";
   const currentYear = new Date().getFullYear();

@@ -57,10 +57,11 @@ function BrandLogoUploaderDisplay({ logoUrl }) {
   }
 
   return (
-    <span className="flex items-center gap-1.5 text-xs font-black tracking-wide text-[#0f4f49]">
-      <Zap className="w-3.5 h-3.5 text-[#00d8b8] fill-[#00d8b8]" />
-      <span>NACIF Solutions</span>
-    </span>
+    <img
+      src={DEFAULT_LOGO_URL}
+      className="h-5 max-w-[130px] object-contain"
+      alt="NACIF Solutions Eletric"
+    />
   );
 }
 
@@ -90,7 +91,11 @@ function ProjectThumbBadge({ project, size = "md", customLogo = null }) {
       {isSolar ? (
         <Sun className={`${iconSize} text-amber-500`} />
       ) : (
-        <Zap className={`${iconSize} text-primary`} />
+        <img
+          src="/brand-mark-principal.png"
+          alt="Projeto Elétrico"
+          className={`${iconSize} object-contain`}
+        />
       )}
     </span>
   );

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Home, Zap, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Home, ShieldCheck } from "lucide-react";
 import { useBranding } from "@/lib/appPreferences";
 import { Button } from "@/components/ui/button";
 import PublicFooter from "./PublicFooter";
@@ -37,13 +37,17 @@ export default function SystemPageLayout({
       {showHeader && (
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-[#E2E8F0] bg-white/95 px-4 sm:px-8 backdrop-blur-md">
           <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#00d8b8] text-white font-black shadow-sm">
-                <Zap className="h-4 w-4 fill-current" />
-              </div>
-              <span className="font-extrabold text-sm sm:text-base text-[#0F172A] tracking-tight">
-                {brandName}
-              </span>
+            <Link to="/" className="inline-flex items-center" title={brandName}>
+              <img
+                src={branding.logoDataUrl || "/brand-logo-principal.png"}
+                alt={brandName}
+                className="h-8 max-w-[170px] object-contain object-left"
+                onError={(e) => {
+                  if (e.currentTarget.src !== "/brand-logo-principal.png") {
+                    e.currentTarget.src = "/brand-logo-principal.png";
+                  }
+                }}
+              />
             </Link>
           </div>
 

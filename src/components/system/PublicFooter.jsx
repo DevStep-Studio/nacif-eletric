@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Zap, Shield, HelpCircle, FileText, CheckCircle2 } from "lucide-react";
+import { Shield, HelpCircle, FileText, CheckCircle2 } from "lucide-react";
 import { useBranding } from "@/lib/appPreferences";
 
 export default function PublicFooter({ className = "" }) {
@@ -13,12 +13,18 @@ export default function PublicFooter({ className = "" }) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-[#F1F5F9]">
           {/* Brand Col */}
           <div className="space-y-3 md:col-span-1">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00d8b8] text-white font-black">
-                <Zap className="h-4 w-4 fill-current" />
-              </div>
-              <span className="font-extrabold text-sm text-[#0F172A]">{brandName}</span>
-            </div>
+            <Link to="/" className="inline-flex items-center" title={brandName}>
+              <img
+                src={branding.logoDataUrl || "/brand-logo-principal.png"}
+                alt={brandName}
+                className="h-8 max-w-[170px] object-contain object-left"
+                onError={(e) => {
+                  if (e.currentTarget.src !== "/brand-logo-principal.png") {
+                    e.currentTarget.src = "/brand-logo-principal.png";
+                  }
+                }}
+              />
+            </Link>
             <p className="text-[11px] leading-relaxed text-[#64748B]">
               Plataforma de engenharia elétrica para projetos em conformidade com a NBR 5410, diagramas unifilares e dimensionamento solar.
             </p>

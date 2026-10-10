@@ -97,8 +97,8 @@ export default function OnboardingModal({ user, open, onComplete }) {
           {/* TELA 1: Boas-vindas */}
           {step === 1 && (
             <div className="text-center py-4 space-y-4">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#E8FCF8] text-[#00d8b8] shadow-sm ring-1 ring-[#00d8b8]/30">
-                <Zap className="h-8 w-8" />
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#E8FCF8] p-3 shadow-sm ring-1 ring-[#00d8b8]/30">
+                <img src="/brand-mark-principal.png" alt="Nacif Electric" className="h-10 w-10 object-contain" />
               </div>
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-[#101828]">

@@ -94,31 +94,23 @@ const initialsFromUser = (user) => {
 };
 
 function BrandLogo({ branding, compact = false, className = "" }) {
-  const logo = compact ? branding.compactLogoDataUrl || branding.logoDataUrl : branding.logoDataUrl;
-
-  if (logo) {
-    return (
-      <div className={`flex items-center justify-center shrink-0 ${compact ? "h-8 w-8" : "h-9 max-w-[150px]"} ${className}`}>
-        <img
-          src={logo}
-          alt={`${branding.appName || "Nacif"} ${branding.appSuffix || "Electric"}`}
-          className={`h-full w-full object-contain ${compact ? "object-center" : "object-left"}`}
-        />
-      </div>
-    );
-  }
+  const logo = compact
+    ? branding?.compactLogoDataUrl || "/brand-mark-principal.png"
+    : branding?.logoDataUrl || "/brand-logo-principal.png";
 
   return (
-    <div className="flex items-center gap-2.5 shrink-0">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#00bda1] to-[#00d8b8] text-white font-black shadow-[0_2px_8px_rgba(0,216,184,0.35)]">
-        <Zap className="h-5 w-5 fill-current" />
-      </div>
-      {!compact && (
-        <div className="flex flex-col text-left">
-          <span className="text-base font-black tracking-tight text-[#0F172A] leading-none">Nacif</span>
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#00d8b8] mt-0.5 leading-none">Electric</span>
-        </div>
-      )}
+    <div className={`flex items-center justify-center shrink-0 ${compact ? "h-8 w-8" : "h-9 max-w-[160px]"} ${className}`}>
+      <img
+        src={logo}
+        alt={`${branding?.appName || "Nacif"} ${branding?.appSuffix || "Electric"}`}
+        className={`h-full w-full object-contain ${compact ? "object-center" : "object-left"}`}
+        onError={(e) => {
+          const fallback = compact ? "/brand-mark-principal.png" : "/brand-logo-principal.png";
+          if (e.currentTarget.src !== fallback) {
+            e.currentTarget.src = fallback;
+          }
+        }}
+      />
     </div>
   );
 }

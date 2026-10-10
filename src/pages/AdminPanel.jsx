@@ -47,7 +47,7 @@ function PreviewLogo({ value, label, fallbackIcon: FallbackIcon = Zap }) {
       {value ? (
         <img src={value} alt={label} className="h-full w-full object-contain p-3" />
       ) : (
-        <FallbackIcon className="h-7 w-7 text-primary" />
+        <img src="/brand-mark-principal.png" alt={label} className="h-8 w-8 object-contain" />
       )}
     </div>
   );
@@ -407,10 +407,10 @@ export default function AdminPanel() {
                       <div className="mt-4 rounded-[16px] border border-[#CDEFE8] bg-white p-4">
                         <div className="flex min-h-[78px] items-center gap-4">
                           <span
-                            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[18px] shadow-[0_14px_28px_rgba(15,23,42,0.08)]"
+                            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[18px] shadow-[0_14px_28px_rgba(15,23,42,0.08)] p-2.5"
                             style={{ background: brandingForm[item.bgField], color: brandingForm[item.iconField] }}
                           >
-                            <Zap className="h-9 w-9" strokeWidth={2.5} />
+                            <img src="/brand-mark-principal.png" alt="Nacif Mark" className="h-full w-full object-contain" />
                           </span>
                           <div className="min-w-0">
                             <p className={`${item.size === "large" ? "text-2xl" : "text-xl"} font-extrabold leading-tight text-[#111827]`}>
