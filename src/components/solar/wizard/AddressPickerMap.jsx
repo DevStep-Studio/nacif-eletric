@@ -237,7 +237,7 @@ export default function AddressPickerMap({
         <div ref={mapContainerRef} className="h-full w-full" />
 
         {/* Alternador de camadas (Satélite / Ruas) */}
-        <div className="absolute right-3 top-3 z-[400] flex items-center gap-1 rounded-xl bg-white/90 p-1 shadow-md backdrop-blur-sm border border-border/60">
+        <div className="absolute right-3 top-3 z-[400] flex items-center gap-1 rounded-lg bg-white p-1 shadow-sm border border-slate-200">
           <Button
             type="button"
             size="sm"
@@ -259,7 +259,7 @@ export default function AddressPickerMap({
         </div>
 
         {/* Badge de Coordenadas */}
-        <div className="absolute bottom-3 left-3 z-[400] rounded-lg bg-slate-900/80 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
+        <div className="absolute bottom-3 left-3 z-[400] rounded bg-slate-900 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
           <span className="flex items-center gap-1">
             <Navigation className="h-3 w-3 text-primary" /> {lat.toFixed(6)}, {lng.toFixed(6)}
           </span>

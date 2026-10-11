@@ -72,7 +72,24 @@ const publicUser = (user) => {
   return cloneLocal(safeUser);
 };
 
-const readLocalUsers = () => { const d = readLocal(LOCAL_USERS_KEY, []); return Array.isArray(d) ? d : []; };
+const readLocalUsers = () => {
+  const d = readLocal(LOCAL_USERS_KEY, []);
+  if (Array.isArray(d) && d.length > 0) return d;
+  const defaultUser = {
+    id: "local_admin_default",
+    email: "admin@nacif.com",
+    password: "admin",
+    full_name: "Administrador Nacif",
+    profession: "Engenheiro Eletricista",
+    profissao: "Engenheiro Eletricista",
+    role: "admin",
+    plan: "profissional",
+    created_date: nowIso(),
+    updated_date: nowIso(),
+  };
+  writeLocalUsers([defaultUser]);
+  return [defaultUser];
+};
 const writeLocalUsers = (users) => writeLocal(LOCAL_USERS_KEY, users);
 const readLocalProjects = () => { const d = readLocal(LOCAL_PROJECTS_KEY, []); return Array.isArray(d) ? d : []; };
 const writeLocalProjects = (projects) => writeLocal(LOCAL_PROJECTS_KEY, projects);
@@ -85,9 +102,19 @@ const createLocalToken = (userId) => `local:${userId}:${Date.now()}:${Math.rando
 
 const getLocalUserFromToken = () => {
   const token = getStoredToken();
-  if (!token?.startsWith("local:")) return null;
-  const userId = token.split(":")[1];
-  return readLocalUsers().find((user) => user.id === userId) || null;
+  const users = readLocalUsers();
+  if (token?.startsWith("local:")) {
+    const userId = token.split(":")[1];
+    const found = users.find((user) => user.id === userId);
+    if (found) return found;
+  }
+  if (users.length > 0) {
+    const defaultUser = users[0];
+    const devToken = createLocalToken(defaultUser.id);
+    setStoredToken(devToken);
+    return defaultUser;
+  }
+  return null;
 };
 
 const requireLocalUser = () => {

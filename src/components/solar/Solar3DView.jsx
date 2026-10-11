@@ -494,8 +494,8 @@ export default function Solar3DView({
       onWheel={handleWheel}
       className="relative h-full w-full overflow-hidden select-none cursor-grab active:cursor-grabbing bg-slate-100"
     >
-      {/* ── 1. Barra de Controles 3D Superior ── */}
-      <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 bg-white/95 backdrop-blur-md border border-slate-200/90 p-2 rounded-2xl text-xs shadow-xl text-slate-800 pointer-events-auto">
+      {/* ── 1. Barra de Controles 3D Superior (Solid CAD Style) ── */}
+      <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 bg-white border border-slate-200 p-1.5 rounded-lg text-xs shadow-sm text-slate-800 pointer-events-auto">
         {/* Seletor de Áreas se houver mais de uma */}
         {activeAreas.length > 1 && (
           <div className="flex items-center gap-1 pr-2 border-r border-slate-200">
@@ -508,7 +508,7 @@ export default function Solar3DView({
                   setSelectedAreaId(area.id);
                   onAreaSelect?.(area.id);
                 }}
-                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition ${
+                className={`px-2 py-1 rounded-md text-[11px] font-bold transition ${
                   currentArea.id === area.id
                     ? "bg-[#00d8b8] text-slate-950 font-black shadow-sm"
                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
@@ -521,11 +521,11 @@ export default function Solar3DView({
         )}
 
         {/* Câmeras Pré-definidas */}
-        <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+        <div className="flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-200">
           <button
             type="button"
             onClick={() => setPresetView("iso")}
-            className={`px-2.5 py-1 rounded-lg font-bold transition text-xs ${
+            className={`px-2 py-1 rounded-md font-bold transition text-xs ${
               cameraPreset === "iso" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-800"
             }`}
           >
@@ -534,7 +534,7 @@ export default function Solar3DView({
           <button
             type="button"
             onClick={() => setPresetView("top")}
-            className={`px-2.5 py-1 rounded-lg font-bold transition text-xs ${
+            className={`px-2 py-1 rounded-md font-bold transition text-xs ${
               cameraPreset === "top" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-800"
             }`}
           >
@@ -543,7 +543,7 @@ export default function Solar3DView({
           <button
             type="button"
             onClick={() => setPresetView("front")}
-            className={`px-2.5 py-1 rounded-lg font-bold transition text-xs ${
+            className={`px-2 py-1 rounded-md font-bold transition text-xs ${
               cameraPreset === "front" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-800"
             }`}
           >
@@ -590,7 +590,7 @@ export default function Solar3DView({
         <button
           type="button"
           onClick={() => setCastShadows(!castShadows)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-bold transition text-xs ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-bold transition text-xs ${
             castShadows ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-500"
           }`}
           title="Ativar/desativar sombras dinâmicas de engenharia"
@@ -601,37 +601,16 @@ export default function Solar3DView({
       </div>
 
       {/* ── 2. Azimute e Rosa dos Ventos Flutuante ── */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-2 bg-white/95 backdrop-blur-md border border-slate-200/90 px-3 py-1.5 rounded-2xl text-xs shadow-xl pointer-events-auto">
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs shadow-sm pointer-events-auto">
         <Compass className="h-4 w-4 text-[#00d8b8]" />
-        <span className="font-black text-slate-800">
+        <span className="font-bold text-slate-800">
           Azimute: {azimuth.formatted} ({getAzimuthWithCardinal(currentArea?.roof_rotation_deg || config.roof_rotation_deg || 0).cardinal})
         </span>
       </div>
 
-      {/* ── 3. Rodapé Técnico Informativo ── */}
-      <div className="absolute bottom-4 inset-x-6 z-20 flex flex-wrap items-center justify-between gap-3 bg-white/95 backdrop-blur-md border border-slate-200/90 px-5 py-3 rounded-2xl text-xs shadow-xl text-slate-800 pointer-events-auto">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 font-black text-slate-900">
-            <Zap className="h-4 w-4 text-[#00d8b8]" />
-            <span>
-              {sizing?.panelCount || panelPolygons.length || 0} Módulos Posicionados
-            </span>
-          </div>
-          <span className="text-slate-300">|</span>
-          <div className="text-slate-600">
-            Potência: <strong className="text-slate-900 font-bold">{sizing?.dcPowerKw || 0} kWp</strong>
-          </div>
-          <span className="text-slate-300">|</span>
-          <div className="text-slate-600">
-            Área Utilizada: <strong className="text-slate-900 font-bold">{Math.round(sizing?.roofArea || 0)} m²</strong>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
-          <span>Arraste com o mouse para orbitar</span>
-          <span>·</span>
-          <span>Scroll para zoom</span>
-        </div>
+      {/* ── 3. Dica de Navegação 3D ── */}
+      <div className="absolute top-16 right-4 z-20 text-[10px] text-slate-500 bg-white px-2 py-1 rounded border border-slate-200 pointer-events-none">
+        Arraste com o mouse para orbitar · Scroll para zoom
       </div>
     </div>
   );
