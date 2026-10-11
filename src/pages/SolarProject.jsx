@@ -1777,8 +1777,17 @@ export default function SolarProject() {
                 <div className="space-y-3 animate-in fade-in">
                   <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2.5 shadow-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Área Útil</span>
-                      <span className="font-black text-slate-900">{(selectedArea.roof_area_m2 || visualSizing.roofArea).toFixed(1)} m²</span>
+                      <span className="text-slate-500">Área Projetada (Solo)</span>
+                      <span className="font-bold text-slate-700">{(selectedArea.roof_area_m2 || visualSizing.roofArea).toFixed(1)} m²</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Área Real Inclinada</span>
+                      <span className="font-black text-slate-900">
+                        {(
+                          (selectedArea.roof_area_m2 || visualSizing.roofArea) /
+                          Math.max(0.2, Math.cos(((selectedArea.roof_pitch_deg || 12) * Math.PI) / 180))
+                        ).toFixed(1)} m²
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Azimute</span>
@@ -2564,43 +2573,6 @@ export default function SolarProject() {
               onMapClick={handleMapClick}
             />
           )}
-
-          {/* 3. RESUMO INFERIOR COMPACTO (NACIF LIGHT HUD) */}
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-4 md:gap-6 rounded-2xl border border-slate-200/90 bg-white/95 px-5 md:px-7 py-2.5 text-slate-900 shadow-2xl backdrop-blur-md">
-            <div className="flex flex-col items-center">
-              <span className="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-400">MÓDULOS FV</span>
-              <span className="text-xs md:text-sm font-black text-slate-900">
-                {visualSizing.panelCount} <span className="text-slate-400 text-[10px] font-semibold">un</span>
-              </span>
-            </div>
-
-            <div className="h-6 w-px bg-slate-200" />
-
-            <div className="flex flex-col items-center">
-              <span className="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-400">POTÊNCIA CC</span>
-              <span className="text-xs md:text-sm font-black text-slate-900">
-                {visualSizing.dcPowerKw.toFixed(1)} <span className="text-slate-400 text-[10px] font-semibold">kWp</span>
-              </span>
-            </div>
-
-            <div className="h-6 w-px bg-slate-200" />
-
-            <div className="flex flex-col items-center">
-              <span className="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-400">GERAÇÃO ANUAL</span>
-              <span className="text-xs md:text-sm font-black text-[#009b84]">
-                {(annualGenerationKwh / 1000).toFixed(1)} <span className="text-[#009b84]/70 text-[10px] font-semibold">MWh/ano</span>
-              </span>
-            </div>
-
-            <div className="h-6 w-px bg-slate-200 hidden sm:flex" />
-
-            <div className="flex flex-col items-center hidden sm:flex">
-              <span className="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-400">ECONOMIA ESTIMADA</span>
-              <span className="text-xs md:text-sm font-black text-emerald-600">
-                R$ {annualSavingsBrl.toLocaleString("pt-BR")}<span className="text-emerald-600/70 text-[10px] font-semibold">/ano</span>
-              </span>
-            </div>
-          </div>
         </main>
       </div>
 

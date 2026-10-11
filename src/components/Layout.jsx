@@ -43,6 +43,7 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
+  Sun,
   UserCircle,
   Wrench,
   X,
@@ -540,6 +541,23 @@ export default function Layout() {
                   {!sidebarCollapsed && <span className="truncate">Quadro Elétrico</span>}
                 </div>
               </Link>
+
+              <Link
+                to={effectiveProjectId ? `/solar-project?project=${effectiveProjectId}` : "/solar-project"}
+                title={sidebarCollapsed ? "Projeto Solar" : undefined}
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
+                } ${
+                  isItemActive("/solar-project")
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
+                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                }`}
+              >
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <Sun className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/solar-project") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
+                  {!sidebarCollapsed && <span className="truncate">Projeto Solar</span>}
+                </div>
+              </Link>
             </div>
           </div>
 
@@ -1027,6 +1045,16 @@ export default function Layout() {
                     >
                       <LayoutGrid className="h-4 w-4" />
                       <span>Quadro Elétrico</span>
+                    </Link>
+                    <Link
+                      to={effectiveProjectId ? `/solar-project?project=${effectiveProjectId}` : "/solar-project"}
+                      onClick={() => setMobileDrawerOpen(false)}
+                      className={`flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold ${
+                        isItemActive("/solar-project") ? "bg-[#E8FCF8] text-[#0f4f49]" : "text-[#475467] hover:bg-[#F1F5F9]"
+                      }`}
+                    >
+                      <Sun className="h-4 w-4 text-[#00d8b8]" />
+                      <span>Projeto Solar</span>
                     </Link>
                   </div>
                 </div>

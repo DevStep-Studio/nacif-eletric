@@ -76,6 +76,105 @@ export const MODULE_CATALOG = [
   },
 ];
 
+export const INVERTER_CATALOG = [
+  {
+    id: "growatt-min-5000tl-x",
+    manufacturer: "Growatt",
+    model: "MIN 5000TL-X",
+    label: "Growatt · MIN 5000TL-X (5 kW)",
+    fullTitle: "Growatt · MIN 5000TL-X Monofásico/Bifásico (5.0 kW)",
+    kw: 5.0,
+    mpptCount: 2,
+    minMpptV: 80,
+    maxMpptV: 550,
+    maxDcVoltageV: 550,
+    maxCurrentMpptA: 13.5,
+    maxAcCurrentA: 22.7,
+  },
+  {
+    id: "deye-sun-8k-sg01lp1",
+    manufacturer: "Deye",
+    model: "SUN-8K-SG01LP1",
+    label: "Deye · SUN-8K-SG01LP1 (8 kW)",
+    fullTitle: "Deye · SUN-8K-SG01LP1 Híbrido (8.0 kW)",
+    kw: 8.0,
+    mpptCount: 2,
+    minMpptV: 125,
+    maxMpptV: 500,
+    maxDcVoltageV: 500,
+    maxCurrentMpptA: 26.0,
+    maxAcCurrentA: 36.4,
+  },
+  {
+    id: "sungrow-sg6-0rs",
+    manufacturer: "Sungrow",
+    model: "SG6.0RS",
+    label: "Sungrow · SG6.0RS (6 kW)",
+    fullTitle: "Sungrow · SG6.0RS Residencial (6.0 kW)",
+    kw: 6.0,
+    mpptCount: 2,
+    minMpptV: 120,
+    maxMpptV: 560,
+    maxDcVoltageV: 600,
+    maxCurrentMpptA: 16.0,
+    maxAcCurrentA: 27.3,
+  },
+  {
+    id: "fronius-primo-5-0-1",
+    manufacturer: "Fronius",
+    model: "Primo 5.0-1",
+    label: "Fronius · Primo 5.0-1 (5 kW)",
+    fullTitle: "Fronius · Primo 5.0-1 Premium (5.0 kW)",
+    kw: 5.0,
+    mpptCount: 2,
+    minMpptV: 200,
+    maxMpptV: 800,
+    maxDcVoltageV: 1000,
+    maxCurrentMpptA: 18.0,
+    maxAcCurrentA: 21.7,
+  },
+  {
+    id: "solis-s6-gr1p5k",
+    manufacturer: "Solis",
+    model: "S6-GR1P5K",
+    label: "Solis · S6-GR1P5K (5 kW)",
+    fullTitle: "Solis · S6-GR1P5K (5.0 kW)",
+    kw: 5.0,
+    mpptCount: 2,
+    minMpptV: 90,
+    maxMpptV: 520,
+    maxDcVoltageV: 600,
+    maxCurrentMpptA: 14.0,
+    maxAcCurrentA: 22.7,
+  },
+  {
+    id: "weg-siw500-10k",
+    manufacturer: "WEG",
+    model: "SIW500 T 10K",
+    label: "WEG · SIW500 T (10 kW)",
+    fullTitle: "WEG · SIW500 T Trifásico (10.0 kW)",
+    kw: 10.0,
+    mpptCount: 2,
+    minMpptV: 160,
+    maxMpptV: 850,
+    maxDcVoltageV: 1000,
+    maxCurrentMpptA: 15.0,
+    maxAcCurrentA: 15.2,
+  },
+];
+
+export function getInverterPreset(idOrModel) {
+  if (!idOrModel) return INVERTER_CATALOG[0];
+  const byId = INVERTER_CATALOG.find((inv) => inv.id === idOrModel || inv.model === idOrModel);
+  if (byId) return byId;
+  const numKw = Number(idOrModel);
+  if (Number.isFinite(numKw)) {
+    const byKw = INVERTER_CATALOG.find((inv) => inv.kw === numKw);
+    if (byKw) return byKw;
+  }
+  return INVERTER_CATALOG[0];
+}
+
 export function getModulePreset(idOrWp) {
   if (!idOrWp) return MODULE_CATALOG[0];
   const byId = MODULE_CATALOG.find((m) => m.id === idOrWp || m.model === idOrWp);
@@ -359,13 +458,21 @@ export function getRoofMetricsFromPolygon(points, fallback = {}) {
   const center = getPolygonCentroid(polygon) || getRoofCenterFromConfig(fallback);
   const fallbackWidth = Math.max(0.5, finiteNumber(fallback.roof_width_m, 9));
   const fallbackHeight = Math.max(0.5, finiteNumber(fallback.roof_height_m, 6));
+  const pitchDeg = Math.max(0, Math.min(60, finiteNumber(fallback.roof_pitch_deg, 12)));
+  const pitchRad = (pitchDeg * Math.PI) / 180;
+  const cosPitch = Math.max(0.2, Math.cos(pitchRad));
 
   if (polygon.length < 3) {
+    const projectedArea = round1(fallbackWidth * fallbackHeight);
+    const realTiltedArea = round1(projectedArea / cosPitch);
     return {
       center,
       widthM: fallbackWidth,
       heightM: fallbackHeight,
-      areaM2: fallbackWidth * fallbackHeight,
+      areaM2: projectedArea,
+      projectedAreaM2: projectedArea,
+      realTiltedAreaM2: realTiltedArea,
+      pitchDeg,
       rotationDeg: normalizeRotationDeg(fallback.roof_rotation_deg),
     };
   }
@@ -381,12 +488,17 @@ export function getRoofMetricsFromPolygon(points, fallback = {}) {
   const northValues = localPoints.map((point) => point.north);
   const widthM = Math.max(0.5, Math.max(...eastValues) - Math.min(...eastValues));
   const heightM = Math.max(0.5, Math.max(...northValues) - Math.min(...northValues));
+  const projectedAreaM2 = round1(getPolygonAreaSquareMeters(polygon));
+  const realTiltedAreaM2 = round1(projectedAreaM2 / cosPitch);
 
   return {
     center,
-    widthM,
-    heightM,
-    areaM2: getPolygonAreaSquareMeters(polygon),
+    widthM: round1(widthM),
+    heightM: round1(heightM),
+    areaM2: projectedAreaM2,
+    projectedAreaM2,
+    realTiltedAreaM2,
+    pitchDeg,
     rotationDeg,
   };
 }
@@ -703,7 +815,7 @@ export function calculateStringGrouping(panelCount, {
 export function computeRoofFaceTechnicalAnalysis(roofPolygon, config = {}) {
   const metrics = getRoofMetricsFromPolygon(roofPolygon, config);
   const azimuth = getAzimuthWithCardinal(metrics.rotationDeg);
-  const tiltDeg = config.roof_pitch_deg || 12; // inclinação padrão 12°
+  const tiltDeg = config.roof_pitch_deg || metrics.pitchDeg || 12; // inclinação padrão 12°
 
   // Fator de orientação azimutal para o hemisfério Sul (Norte = 0° é o ideal)
   const angleFromNorth = Math.min(azimuth.degrees, 360 - azimuth.degrees);
@@ -719,6 +831,8 @@ export function computeRoofFaceTechnicalAnalysis(roofPolygon, config = {}) {
   return {
     azimuth,
     tiltDeg,
+    projectedAreaM2: metrics.projectedAreaM2 || metrics.areaM2 || 0,
+    realTiltedAreaM2: metrics.realTiltedAreaM2 || metrics.areaM2 || 0,
     estimatedLossPct: totalLossPct,
     effectiveHsp,
     annualIrradiationKwhM2: Math.round(effectiveHsp * 365),

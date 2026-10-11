@@ -11,6 +11,8 @@ import {
   computeRoofFaceTechnicalAnalysis,
   normalizeSolarAreas,
   createDefaultSolarArea,
+  INVERTER_CATALOG,
+  getInverterPreset,
 } from "../src/lib/solarDesignerGeometry.js";
 import {
   syncSolarToProjectCircuits,
@@ -146,7 +148,21 @@ assert.ok(areaM2 > 0, "Área projetada deve ser positiva");
 const techAnalysis = computeRoofFaceTechnicalAnalysis(polySquare, { roof_pitch_deg: 20 });
 assert.ok(techAnalysis, "Análise técnica deve retornar dados de orientação e HSP");
 assert.ok(techAnalysis.effectiveHsp > 0, "HSP efetivo deve ser positivo");
+assert.ok(techAnalysis.realTiltedAreaM2 > techAnalysis.projectedAreaM2, "Área inclinada real (20°) deve ser estritamente maior que a área projetada no solo");
 console.log("  ✓ Teste 6 aprovado com sucesso!");
+
+// =========================================================================
+// TESTE 7: Catálogo de Inversores Fotovoltaicos Reais
+// =========================================================================
+console.log("▶ Teste 7: Catálogo de inversores fotovoltaicos reais com MPPT...");
+assert.ok(Array.isArray(INVERTER_CATALOG) && INVERTER_CATALOG.length >= 5, "Catálogo deve conter múltiplos inversores reais");
+const growatt = getInverterPreset("growatt-min-5000tl-x");
+assert.equal(growatt.kw, 5.0, "Growatt 5.0 kW");
+assert.equal(growatt.mpptCount, 2, "2 MPPTs");
+assert.ok(growatt.minMpptV < growatt.maxMpptV, "Janela MPPT válida");
+const weg = getInverterPreset("weg-siw500-10k");
+assert.equal(weg.kw, 10.0, "WEG 10 kW");
+console.log("  ✓ Teste 7 aprovado com sucesso!");
 
 console.log("\n========================================================");
 console.log("🎉 TODOS OS TESTES DO MÓDULO SOLAR FORAM APROVADOS COM SUCESSO!");
