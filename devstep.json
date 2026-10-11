@@ -1,0 +1,8 @@
+{
+  "name": "Nacif Eletric",
+  "project_type": "nextjs",
+  "branch": "main",
+  "production_path": "/home/nacifenergy/htdocs/nacifenergy.com.br",
+  "pm2_process": null,
+  "deploy_script": null
+}

@@ -1588,7 +1588,7 @@ const formatCurrencyBR = (value = 0) => (
 );
 
 
-const cropCanvasToContent = (sourceCanvas, padding = 18) => {
+const cropCanvasToContent = (sourceCanvas, padding = 48) => {
   const width = sourceCanvas.width;
   const height = sourceCanvas.height;
   const ctx = sourceCanvas.getContext("2d", { willReadFrequently: true });
@@ -1621,22 +1621,22 @@ const cropCanvasToContent = (sourceCanvas, padding = 18) => {
 
   if (hits < 80 || minX >= maxX || minY >= maxY) return sourceCanvas;
 
-  minX = Math.max(0, minX - padding);
-  minY = Math.max(0, minY - padding);
-  maxX = Math.min(width, maxX + padding);
-  maxY = Math.min(height, maxY + padding);
+  const contentW = maxX - minX;
+  const contentH = maxY - minY;
+  if (contentW < width * 0.05 || contentH < height * 0.05) return sourceCanvas;
 
-  const cropW = maxX - minX;
-  const cropH = maxY - minY;
-  if (cropW < width * 0.1 || cropH < height * 0.1) return sourceCanvas;
+  // Garante margem respirável proporcional e fundo 100% branco sem vazamento de pasteboard
+  const finalPad = Math.max(28, Math.round(padding || Math.min(contentW, contentH) * 0.04));
+  const finalW = contentW + finalPad * 2;
+  const finalH = contentH + finalPad * 2;
 
   const cropped = document.createElement("canvas");
-  cropped.width = cropW;
-  cropped.height = cropH;
+  cropped.width = finalW;
+  cropped.height = finalH;
   const croppedCtx = cropped.getContext("2d");
   croppedCtx.fillStyle = "#ffffff";
-  croppedCtx.fillRect(0, 0, cropW, cropH);
-  croppedCtx.drawImage(sourceCanvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+  croppedCtx.fillRect(0, 0, finalW, finalH);
+  croppedCtx.drawImage(sourceCanvas, minX, minY, contentW, contentH, finalPad, finalPad, contentW, contentH);
   return cropped;
 };
 
@@ -1983,6 +1983,7 @@ export default function PlantaIA() {
   const projectFromUrl = searchParams.get("project") || "";
   const fileInputRef = useRef(null);
   const canvasExportRef = useRef(null);
+  const floorPlanCanvasRef = useRef(null);
   const [imageUrl, setImageUrl]     = useState(null);
   const [imageLayout, setImageLayout] = useState(null);
   const [importedFileName, setImportedFileName] = useState("");
@@ -3029,23 +3030,49 @@ export default function PlantaIA() {
     if (!canvasExportRef.current) return;
     setExporting(true);
     try {
-      const canvas = await html2canvas(canvasExportRef.current, {
-        backgroundColor: "#ffffff",
-        scale: 4,
-        useCORS: true,
-        allowTaint: true,
-        imageTimeout: 0,
-        logging: false,
-      });
-      const cropPadding = Math.max(160, Math.round(Math.max(canvas.width, canvas.height) * 0.07));
-      const exportCanvas = cropCanvasToContent(canvas, cropPadding);
+      // 1. Limpa seleções ativas e rascunhos de ferramentas
+      setSelectedElement(null);
+      setActiveTool("");
+      setArchitectureTool("");
+      setRouteToolActive(false);
+      setRouteDraft(null);
+
+      // 2. Centraliza e reseta enquadramento para exportação limpa
+      floorPlanCanvasRef.current?.resetViewForExport?.();
+      setFitRequest((v) => v + 1);
+
+      // Aguarda 180ms para que o Konva renderize com exporting=true em fundo branco
+      await new Promise((resolve) => setTimeout(resolve, 180));
+
+      let canvas = null;
+      if (floorPlanCanvasRef.current?.exportCanvas) {
+        try {
+          canvas = floorPlanCanvasRef.current.exportCanvas(3);
+        } catch (err) {
+          console.warn("Konva exportCanvas falhou, usando fallback html2canvas:", err);
+        }
+      }
+
+      if (!canvas && canvasExportRef.current) {
+        canvas = await html2canvas(canvasExportRef.current, {
+          backgroundColor: "#ffffff",
+          scale: 3,
+          useCORS: true,
+          allowTaint: true,
+          imageTimeout: 0,
+          logging: false,
+        });
+      }
+
+      const exportCanvas = cropCanvasToContent(canvas, 48);
       const img = exportCanvas.toDataURL("image/png");
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [1189, 841], compress: true });
       const projectForSheet = selectedProject ? projects.find(p => p.id === selectedProject) || selectedProjectData || {} : selectedProjectData || {};
+      
       doc.setProperties({
-        title: `${projectForSheet.name || "Projeto"} - Planta baixa executiva`,
-        subject: "Prancha executiva de planta baixa eletrica",
-        creator: "Volt AI",
+        title: `${projectForSheet.name || "Projeto"} - Planta Baixa Executiva`,
+        subject: "Prancha executiva de instalacoes eletricas residenciais ABNT NBR 5410",
+        creator: "NACIF Solutions Eletric",
       });
       doc.setFillColor(255, 255, 255);
       doc.rect(0, 0, 1189, 841, "F");
@@ -3054,11 +3081,29 @@ export default function PlantaIA() {
       doc.setLineWidth(0.45);
       doc.line(910, 55, 910, 824);
       doc.line(910, 535, 1183, 535);
-      const area = { x: 18, y: 65, w: 875, h: 748 };
+
+      // Área técnica para o desenho da planta (limites milimétricos com margens profissionais)
+      const area = { x: 20, y: 65, w: 870, h: 735 };
       const ratio = Math.min(area.w / exportCanvas.width, area.h / exportCanvas.height);
       const imageW = exportCanvas.width * ratio;
       const imageH = exportCanvas.height * ratio;
       doc.addImage(img, "PNG", area.x + (area.w - imageW) / 2, area.y + (area.h - imageH) / 2, imageW, imageH);
+
+      // Tag de Identificação Técnica do Desenho (Padrão Executivo ABNT NBR 10068)
+      doc.setDrawColor(15, 23, 42);
+      doc.setLineWidth(0.5);
+      doc.circle(28, 808, 6, "S");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(15, 23, 42);
+      doc.text("01", 28, 811.5, { align: "center" });
+      doc.setFontSize(9.5);
+      doc.text("PLANTA BAIXA - INSTALACOES ELETRICAS RESIDENCIAIS", 38, 807);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text("CONFORME NBR 5410 / NBR 10068 · COTAS EM METROS · CARGAS CONFORME QUADRO", 38, 812);
+
       drawPlantLegend(doc, points, routes, {
         pointsCount: points.length,
         roomsCount: rooms.length + roomLabels.length,
@@ -7364,7 +7409,7 @@ export default function PlantaIA() {
         </div>
 
         {/* Canvas area */}
-        <div ref={canvasExportRef} className="relative min-h-0 flex-1 overflow-hidden bg-[#F2FFFC]">
+        <div ref={canvasExportRef} className={`relative min-h-0 flex-1 overflow-hidden ${exporting ? "bg-white" : "bg-[#F2FFFC]"}`}>
           <PlantaCanvasBoundary
             resetKey={`${selectedProject || "blank"}-${points.length}-${routes.length}-${rooms.length}-${walls.length}-${fitRequest}`}
             onReset={() => {
@@ -7377,6 +7422,8 @@ export default function PlantaIA() {
             }}
           >
             <FloorPlanCanvas
+              ref={floorPlanCanvasRef}
+              exporting={exporting}
               imageUrl={imageUrl}
               imageLayout={imageLayout}
               importedPlanElements={importedPlanElements}
