@@ -88,6 +88,7 @@ import {
   Loader2,
   MapPin,
   Maximize2,
+  Minimize2,
   MoreHorizontal,
   MousePointer,
   Pencil,
@@ -337,6 +338,31 @@ export default function SolarProject() {
   });
   const [bottomSummaryExpanded, setBottomSummaryExpanded] = useState(false);
   const [tutorialHelpOpen, setTutorialHelpOpen] = useState(false);
+
+  // Modo Foco (Maximiza tela do mapa, recolhe barras e inspetor)
+  const [focusMode, setFocusMode] = useState(false);
+  const previousSidebarStateRef = useRef(true);
+
+  const toggleFocusMode = useCallback((desiredState) => {
+    setFocusMode((prev) => {
+      const next = typeof desiredState === "boolean" ? desiredState : !prev;
+      if (next) {
+        previousSidebarStateRef.current = sidebarOpen;
+        setSidebarOpen(false);
+        toast({
+          title: "Modo Foco Ativado",
+          description: "Painéis e barras recolhidos. Pressione F ou Esc para sair.",
+        });
+      } else {
+        setSidebarOpen(previousSidebarStateRef.current);
+        toast({
+          title: "Modo Foco Desativado",
+          description: "Disposição completa restaurada.",
+        });
+      }
+      return next;
+    });
+  }, [sidebarOpen, toast]);
 
   const toggleInspectorSection = (sectionKey) => {
     setInspectorSections((prev) => ({
@@ -1181,10 +1207,27 @@ export default function SolarProject() {
       }
 
       if (e.key === "Escape") {
+        if (editorMode === "draw-polygon" || editorMode === "measure") {
+          setEditorMode("select");
+          return;
+        }
+        if (pendingObstaclePreset) {
+          setPendingObstaclePreset(null);
+          return;
+        }
+        if (autoFvPreview) {
+          setAutoFvPreview(null);
+          return;
+        }
+        if (selectedEntity?.type !== "none") {
+          setSelectedEntity({ type: "none", id: null });
+          return;
+        }
+        if (focusMode) {
+          toggleFocusMode(false);
+          return;
+        }
         setEditorMode("select");
-        setSelectedEntity({ type: "none", id: null });
-        setPendingObstaclePreset(null);
-        setAutoFvPreview(null);
         return;
       }
 
@@ -1198,7 +1241,12 @@ export default function SolarProject() {
         return;
       }
 
-      if (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "m") {
+      if (e.key.toLowerCase() === "f") {
+        toggleFocusMode();
+        return;
+      }
+
+      if (e.key.toLowerCase() === "m") {
         handleTriggerAutoFv();
         return;
       }
@@ -1217,7 +1265,7 @@ export default function SolarProject() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undoRoofChange, redoRoofChange, selectedEntity]);
+  }, [undoRoofChange, redoRoofChange, selectedEntity, editorMode, pendingObstaclePreset, autoFvPreview, focusMode, toggleFocusMode, handleTriggerAutoFv]);
 
   if (loadingProject && !project) {
     return (
@@ -1290,7 +1338,7 @@ export default function SolarProject() {
   return (
     <div className="fixed inset-0 z-[45] flex flex-col overflow-hidden bg-[#F8FAFC] font-inter text-slate-900 antialiased select-none">
       {/* 1. TOP BAR COMPACTA & PROFISSIONAL (3 GRUPOS FUNCIONAIS) */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[#E2E8F0] bg-white px-3.5 z-30 shadow-sm">
+      <header className={`flex h-12 shrink-0 items-center justify-between border-b border-[#E2E8F0] bg-white px-3.5 z-30 shadow-sm transition-all ${focusMode ? "hidden" : ""}`}>
         {/* GRUPO ESQUERDO: IDENTIFICAÇÃO (Voltar, Logo, Nome do Projeto, Estado de Salvamento) */}
         <div className="flex items-center gap-2.5">
           {/* Voltar */}
@@ -1463,6 +1511,19 @@ export default function SolarProject() {
               3D
             </button>
           </div>
+
+          <span className="h-4 w-px bg-slate-200" />
+
+          {/* Botão Modo Foco */}
+          <button
+            type="button"
+            onClick={() => toggleFocusMode(true)}
+            className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 hover:text-slate-900 transition shadow-2xs"
+            title="Ativar Modo Foco (F) — Oculta barras para maximizar a área de desenho"
+          >
+            <Maximize2 className="h-3.5 w-3.5 text-[#009b84]" />
+            <span className="hidden xl:inline">Modo Foco</span>
+          </button>
         </div>
 
         {/* GRUPO DIREITO: AÇÕES (Dados do Projeto, Relatórios, Salvar, Menu •••) */}
@@ -1690,6 +1751,25 @@ export default function SolarProject() {
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  {/* Card Informativo do Modo Foco */}
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 space-y-1.5 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                        <Maximize2 className="h-3.5 w-3.5 text-[#009b84]" /> Modo Foco Panorâmico
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleFocusMode(true)}
+                        className="text-[10px] font-black text-[#009b84] hover:text-[#00c4a7] transition"
+                      >
+                        Ativar Foco (F)
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-normal">
+                      Recolha barras e painéis durante a demarcação para obter área máxima livre sobre o telhado.
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -2404,7 +2484,41 @@ export default function SolarProject() {
             >
               <Redo2 className="h-3.5 w-3.5" />
             </button>
+
+            <div className="h-4 w-px bg-slate-200 mx-0.5" />
+
+            {/* GRUPO FOCO */}
+            <button
+              type="button"
+              onClick={() => toggleFocusMode(!focusMode)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-bold transition ${
+                focusMode
+                  ? "bg-[#00d8b8] text-slate-950 font-black shadow-xs"
+                  : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
+              }`}
+              title={focusMode ? "Sair do Modo Foco (F ou Esc)" : "Ativar Modo Foco (F) — Maximizar mapa"}
+            >
+              {focusMode ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              <span className="hidden lg:inline">{focusMode ? "Sair Foco" : "Foco"}</span>
+            </button>
           </div>
+
+          {/* BADGE FLUTUANTE DE MODO FOCO ATIVO */}
+          {focusMode && (
+            <div className="absolute top-3.5 right-3.5 z-[500] flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-slate-800 shadow-sm animate-in fade-in">
+              <span className="flex h-2 w-2 rounded-full bg-[#00d8b8]" />
+              <span className="text-[11px] font-bold text-slate-700">Modo Foco Ativo</span>
+              <button
+                type="button"
+                onClick={() => toggleFocusMode(false)}
+                className="ml-1 flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-800 hover:bg-slate-200 transition"
+                title="Sair do Modo Foco (Esc ou F)"
+              >
+                <Minimize2 className="h-3 w-3" />
+                <span>Sair (Esc)</span>
+              </button>
+            </div>
+          )}
 
           {/* BANNER FLUTUANTE DE PREVIEW DO AUTO FV (CAD LIGHT) */}
           {autoFvPreview && (
