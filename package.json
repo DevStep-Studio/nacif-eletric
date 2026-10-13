@@ -24,6 +24,7 @@
     "test:unified-sync": "node scripts/unified-electrical-sync-smoke.mjs",
     "test:din-positioning": "node scripts/din-rail-positioning-smoke.mjs",
     "test:solar-professional": "node scripts/solar-professional-module-smoke.mjs",
+    "test:solar-visual": "node scripts/solar-visual-improvements-smoke.mjs",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
   },

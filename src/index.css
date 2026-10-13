@@ -255,23 +255,28 @@ label.rounded-full,
 }
 
 .solar-panel-shape {
-  filter: drop-shadow(0 0.8px 1.4px rgba(0, 0, 0, 0.45));
   stroke-linejoin: miter;
-  transition: filter 0.15s ease, stroke 0.15s ease;
+  stroke-linecap: square;
+  shape-rendering: geometricPrecision;
+  transition: filter 0.15s ease, stroke 0.15s ease, fill 0.15s ease;
   pointer-events: auto;
 }
 
 .solar-panel-shape:hover {
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.65)) brightness(1.22);
+  filter: brightness(1.15);
 }
 
 .solar-panel-shape.solar-panel--selected {
-  filter: drop-shadow(0 2px 5px rgba(0, 216, 184, 0.45));
+  filter: drop-shadow(0 0 2px rgba(0, 216, 184, 0.7));
 }
 
-.solar-panel-cell-lines {
+.solar-panel-cell-lines,
+.solar-panel-half-cut-lines,
+.solar-panel-busbars {
   pointer-events: none;
-  stroke-linecap: square;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  shape-rendering: geometricPrecision;
 }
 
 .solar-measure-label {

@@ -122,8 +122,8 @@ const defaultSolarConfig = {
   auto_fill_surface: true,
   rows_per_table: 1,
   base_height_cm: 0,
-  column_gap_cm: 0,
-  row_gap_cm: 0,
+  column_gap_cm: 2,
+  row_gap_cm: 2,
   requested_panel_count: 28,
   roof_area_m2: 96,
   roof_utilization_pct: 85,
@@ -1052,6 +1052,38 @@ export default function SolarProject() {
     toast({ title: "Obstáculo removido" });
   };
 
+  const handleDeleteSelectedModule = (moduleIdx = selectedModuleIdx) => {
+    if (moduleIdx === null && selectedEntity?.type === "module") {
+      moduleIdx = Number(selectedEntity.id);
+    }
+    if (moduleIdx === null || !Number.isFinite(moduleIdx)) return;
+
+    if (selectedArea) {
+      const currentCount = selectedArea.panelCount || selectedArea.panelPolygons?.length || 0;
+      if (currentCount <= 1) {
+        toast({
+          title: "Não é possível remover o último módulo",
+          description: "A área deve conter pelo menos 1 módulo ou ser excluída.",
+          variant: "destructive",
+        });
+        return;
+      }
+      updateSelectedArea("auto_fill_surface", false);
+      updateSelectedArea("requested_panel_count", Math.max(1, currentCount - 1));
+    } else {
+      const currentCount = config.requested_panel_count || totalPanelCount || 0;
+      if (currentCount > 1) {
+        updateConfig("auto_fill_surface", false);
+        updateConfig("requested_panel_count", Math.max(1, currentCount - 1));
+      }
+    }
+    setSelectedEntity({ type: "none", id: null });
+    toast({
+      title: "Módulo excluído",
+      description: `Módulo #${moduleIdx + 1} removido com sucesso.`,
+    });
+  };
+
   // Gatilho de Auto FV com Preview
   const handleTriggerAutoFv = () => {
     if (!hasRoof) {
@@ -1259,13 +1291,15 @@ export default function SolarProject() {
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedEntity?.type === "obstacle" && selectedEntity?.id) {
           handleRemoveObstacle(selectedEntity.id);
+        } else if (selectedEntity?.type === "module" && selectedEntity?.id !== null) {
+          handleDeleteSelectedModule(Number(selectedEntity.id));
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undoRoofChange, redoRoofChange, selectedEntity, editorMode, pendingObstaclePreset, autoFvPreview, focusMode, toggleFocusMode, handleTriggerAutoFv]);
+  }, [undoRoofChange, redoRoofChange, selectedEntity, editorMode, pendingObstaclePreset, autoFvPreview, focusMode, toggleFocusMode, handleTriggerAutoFv, handleDeleteSelectedModule]);
 
   if (loadingProject && !project) {
     return (
@@ -2089,11 +2123,14 @@ export default function SolarProject() {
                                 <Label className="text-[10px] font-bold text-slate-600">Espaç. Colunas (cm)</Label>
                                 <Input
                                   type="number"
-                                  value={selectedArea.column_gap_cm ?? config.column_gap_cm ?? 0}
+                                  min="0"
+                                  max="50"
+                                  value={selectedArea.column_gap_cm ?? config.column_gap_cm ?? 2}
                                   onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10) || 0;
-                                    updateSelectedArea("column_gap_cm", val);
-                                    updateConfig("column_gap_cm", val);
+                                    const val = parseInt(e.target.value, 10);
+                                    const safeVal = Number.isFinite(val) ? Math.max(0, val) : 2;
+                                    updateSelectedArea("column_gap_cm", safeVal);
+                                    updateConfig("column_gap_cm", safeVal);
                                   }}
                                   className="mt-0.5 h-7 rounded border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#00d8b8]"
                                 />
@@ -2102,11 +2139,14 @@ export default function SolarProject() {
                                 <Label className="text-[10px] font-bold text-slate-600">Espaç. Linhas (cm)</Label>
                                 <Input
                                   type="number"
-                                  value={selectedArea.row_gap_cm ?? config.row_gap_cm ?? 0}
+                                  min="0"
+                                  max="50"
+                                  value={selectedArea.row_gap_cm ?? config.row_gap_cm ?? 2}
                                   onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10) || 0;
-                                    updateSelectedArea("row_gap_cm", val);
-                                    updateConfig("row_gap_cm", val);
+                                    const val = parseInt(e.target.value, 10);
+                                    const safeVal = Number.isFinite(val) ? Math.max(0, val) : 2;
+                                    updateSelectedArea("row_gap_cm", safeVal);
+                                    updateConfig("row_gap_cm", safeVal);
                                   }}
                                   className="mt-0.5 h-7 rounded border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#00d8b8]"
                                 />

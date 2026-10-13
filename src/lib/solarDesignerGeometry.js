@@ -3,6 +3,33 @@ export const DEFAULT_SOLAR_MAP_ZOOM = 20;
 export const SOLAR_MODULE_WIDTH_M = 1.134;
 export const SOLAR_MODULE_HEIGHT_M = 2.278;
 
+/**
+ * Paleta de cores oficial para renderização fotovoltaica técnica:
+ * - Superfície principal: azul-marinho escuro (#142B46)
+ * - Variações discretas das células: #1A3553
+ * - Linhas internas: azul-acinzentado (#45617A) com opacidade reduzida
+ * - Moldura: cinza-azulado discreto (#8B9CAC)
+ * - Seleção ativa: ciano/turquesa (#00d8b8)
+ */
+export const SOLAR_PANEL_THEME = {
+  mainSurface: "#142B46",
+  cellVariant: "#1A3553",
+  internalLines: "#45617A",
+  frame: "#8B9CAC",
+  selectionActive: "#00d8b8",
+  selectionActiveDark: "#173456",
+};
+
+// Micro-variações ópticas sutis no silício fotovoltaico mono-PERC
+export const PHOTOVOLTAIC_BASE_COLORS = [
+  "#142B46",
+  "#162E4A",
+  "#132A44",
+  "#17304D",
+  "#152C47",
+  "#1A3553",
+];
+
 export const MODULE_CATALOG = [
   {
     id: "jinko-540-72hl4",
@@ -185,6 +212,33 @@ export function getModulePreset(idOrWp) {
     if (byWp) return byWp;
   }
   return MODULE_CATALOG[0];
+}
+
+/**
+ * Retorna as dimensões geométricas reais do módulo garantindo a proporção comercial (1:1.8 a 1:2.2).
+ * Evita deformações ou módulos quadrados, priorizando medidas reais cadastradas ou o catálogo Tier-1.
+ */
+export function getModuleDimensions(config = {}) {
+  const preset = getModulePreset(config.module_preset_id || config.module_model || config.module_wp);
+  let rawWidth = finiteNumber(config.module_width_m, preset.widthM || SOLAR_MODULE_WIDTH_M);
+  let rawHeight = finiteNumber(config.module_height_m, preset.heightM || SOLAR_MODULE_HEIGHT_M);
+
+  let shortDim = Math.min(rawWidth, rawHeight);
+  let longDim = Math.max(rawWidth, rawHeight);
+  const ratio = longDim / Math.max(0.1, shortDim);
+
+  // Proporção física esperada de painéis solares comerciais: ~1:1.8 a ~1:2.2
+  // Se for deformado, quadrado ou inválido, utiliza os valores reais de catálogo Tier-1
+  if (ratio < 1.6 || ratio > 2.4 || shortDim < 0.8 || longDim < 1.6) {
+    shortDim = preset.widthM || SOLAR_MODULE_WIDTH_M;
+    longDim = preset.heightM || SOLAR_MODULE_HEIGHT_M;
+  }
+
+  return {
+    widthM: round2(shortDim),
+    heightM: round2(longDim),
+    ratio: round2(longDim / shortDim),
+  };
 }
 
 const METERS_PER_DEGREE_LAT = 111_320;
@@ -425,6 +479,106 @@ export function getPolygonEdges(points) {
   });
 }
 
+/**
+ * Interpola coordenadas geográficas entre dois pontos por uma razão linear (0.0 a 1.0).
+ */
+export function interpolateLatLng(start, end, ratio) {
+  return {
+    lat: start.lat + (end.lat - start.lat) * ratio,
+    lng: start.lng + (end.lng - start.lng) * ratio,
+  };
+}
+
+/**
+ * Gera as divisões internas realistas das células fotovoltaicas (half-cell matrix).
+ * Garante fidelidade geométrica aos painéis fotovoltaicos reais (Tier-1):
+ * - 6 colunas de células ao longo do eixo menor (largura ~1.13m, ~18.9 cm por coluna)
+ * - Linha central divisória de corte (half-cut gap)
+ * - Fileiras transversais proporcionais ao longo do eixo maior (comprimento ~2.28m)
+ * - Barramentos finos (busbars) em nível de detalhe avançado
+ * - Funciona perfeitamente em modo retrato (vertical) ou paisagem (horizontal) e em qualquer azimute
+ */
+export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail = false) {
+  if (!Array.isArray(panel) || panel.length < 4) return { primary: [], halfCut: [], secondary: [] };
+  const [p0, p1, p2, p3] = panel;
+
+  // Comprimentos métricos reais dos eixos para determinar com precisão absoluta orientação e proporções
+  const len01 = distanceMeters(p0, p1);
+  const len12 = distanceMeters(p1, p2);
+
+  const primary = [];
+  const halfCut = [];
+  const secondary = [];
+
+  const isLandscape = len01 > len12;
+
+  if (!isLandscape) {
+    // =========================================================================
+    // ORIENTAÇÃO VERTICAL / RETRATO:
+    // Aresta 0-1 (superior) e 3-2 (inferior) = Eixo menor (largura ~1.13m)
+    // Aresta 0-3 (esquerda) e 1-2 (direita) = Eixo maior (altura ~2.28m)
+    // =========================================================================
+
+    // 1. Linhas de colunas de células (6 colunas = 5 divisórias uniformes)
+    const cols = 6;
+    for (let c = 1; c < cols; c++) {
+      const ratioC = c / cols;
+      primary.push([interpolateLatLng(p0, p1, ratioC), interpolateLatLng(p3, p2, ratioC)]);
+    }
+
+    // 2. Linha divisória central longitudinal do Half-Cut
+    halfCut.push([interpolateLatLng(p0, p3, 0.5), interpolateLatLng(p1, p2, 0.5)]);
+
+    // 3. Divisores transversais de células ao longo do comprimento
+    // Em zoom >= 19: 12 fileiras de células (6 por metade)
+    // Em zoom 16 a 18: 6 fileiras (3 por metade)
+    const rows = zoomLevel >= 19 ? 12 : 6;
+    for (let r = 1; r < rows; r++) {
+      if (r === rows / 2) continue; // Meio já é a linha de half-cut
+      const ratioR = r / rows;
+      primary.push([interpolateLatLng(p0, p3, ratioR), interpolateLatLng(p1, p2, ratioR)]);
+    }
+
+    // 4. Barramentos finos (busbars) para zoom elevado (zoom >= 20)
+    if (highDetail && zoomLevel >= 20) {
+      secondary.push([interpolateLatLng(p0, p1, 0.25), interpolateLatLng(p3, p2, 0.25)]);
+      secondary.push([interpolateLatLng(p0, p1, 0.75), interpolateLatLng(p3, p2, 0.75)]);
+    }
+  } else {
+    // =========================================================================
+    // ORIENTAÇÃO HORIZONTAL / PAISAGEM:
+    // Aresta 0-1 (superior) e 3-2 (inferior) = Eixo maior (comprimento ~2.28m)
+    // Aresta 0-3 (esquerda) e 1-2 (direita) = Eixo menor (altura ~1.13m)
+    // =========================================================================
+
+    // 1. Linhas de colunas de células (6 colunas ao longo do eixo menor de ~1.13m)
+    const cols = 6;
+    for (let c = 1; c < cols; c++) {
+      const ratioC = c / cols;
+      primary.push([interpolateLatLng(p0, p3, ratioC), interpolateLatLng(p1, p2, ratioC)]);
+    }
+
+    // 2. Linha divisória central de corte Half-Cut
+    halfCut.push([interpolateLatLng(p0, p1, 0.5), interpolateLatLng(p3, p2, 0.5)]);
+
+    // 3. Divisores transversais de células ao longo do comprimento
+    const rows = zoomLevel >= 19 ? 12 : 6;
+    for (let r = 1; r < rows; r++) {
+      if (r === rows / 2) continue;
+      const ratioR = r / rows;
+      primary.push([interpolateLatLng(p0, p1, ratioR), interpolateLatLng(p3, p2, ratioR)]);
+    }
+
+    // 4. Barramentos finos (busbars) para zoom elevado
+    if (highDetail && zoomLevel >= 20) {
+      secondary.push([interpolateLatLng(p0, p3, 0.25), interpolateLatLng(p1, p2, 0.25)]);
+      secondary.push([interpolateLatLng(p0, p3, 0.75), interpolateLatLng(p1, p2, 0.75)]);
+    }
+  }
+
+  return { primary, halfCut, secondary };
+}
+
 export function getDominantRoofRotation(points, fallbackRotation = 0) {
   if (Number.isFinite(Number(fallbackRotation)) && fallbackRotation !== 0) {
     return normalizeRotationDeg(fallbackRotation);
@@ -578,8 +732,16 @@ function panelCollidesWithObstacle(panelCorners, centerPoint, localObstacles) {
  * Constrói polígonos de módulos considerando obstáculos, afastamentos e a estratégia de simulação
  */
 export function buildPanelPolygons(config = {}, sizing = {}, options = {}) {
-  const columnGapM = Math.max(0.01, (finiteNumber(config.column_gap_cm, 2) / 100) || 0.02);
-  const rowGapM = Math.max(0.01, (finiteNumber(config.row_gap_cm, 2) / 100) || 0.02);
+  // Espaçamento físico garantido em coordenadas métricas (padrão 2 cm = 0.02 m)
+  const rawColGap = config.column_gap_cm !== undefined && config.column_gap_cm !== null && config.column_gap_cm !== ""
+    ? Number(config.column_gap_cm)
+    : 2;
+  const rawRowGap = config.row_gap_cm !== undefined && config.row_gap_cm !== null && config.row_gap_cm !== ""
+    ? Number(config.row_gap_cm)
+    : 2;
+
+  const columnGapM = Math.max(0.005, finiteNumber(rawColGap, 2) / 100);
+  const rowGapM = Math.max(0.005, finiteNumber(rawRowGap, 2) / 100);
   const strategy = (typeof options === "object" ? options?.strategy : null) || config.layout_strategy || "max_generation";
   const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
 
@@ -590,9 +752,10 @@ export function buildPanelPolygons(config = {}, sizing = {}, options = {}) {
   const metrics = getRoofMetricsFromPolygon(roofPolygon, config);
   const panelCount = Math.max(0, Math.min(1200, Math.round(finiteNumber(sizing.panelCount, 0))));
 
-  const preset = getModulePreset(config.module_preset_id || config.module_model || config.module_wp);
-  const moduleWidth = preset.widthM || SOLAR_MODULE_WIDTH_M;
-  const moduleHeight = preset.heightM || SOLAR_MODULE_HEIGHT_M;
+  // Obtém dimensões com proporção rigorosa de módulo comercial Tier-1 (~1:1.8 a 1:2.2)
+  const dims = getModuleDimensions(config);
+  const moduleWidth = dims.widthM;
+  const moduleHeight = dims.heightM;
   
   const orientation = sizing.orientation || config.module_orientation || "vertical";
   const isLandscape = orientation === "horizontal" || orientation === "landscape";
@@ -652,6 +815,10 @@ export function buildPanelPolygons(config = {}, sizing = {}, options = {}) {
 
   const offsetSteps = strategy === "max_utilization" ? 12 : 8;
   let bestLocalPanels = [];
+  let bestDistToCenter = Infinity;
+
+  const roofCenterEast = (effectiveMinEast + effectiveMaxEast) / 2;
+  const roofCenterNorth = (effectiveMinNorth + effectiveMaxNorth) / 2;
 
   for (let offsetRow = 0; offsetRow < offsetSteps; offsetRow += 1) {
     const offsetNorth = (rowPitch * offsetRow) / offsetSteps;
@@ -684,18 +851,53 @@ export function buildPanelPolygons(config = {}, sizing = {}, options = {}) {
         }
       }
 
-      if (localPanels.length > bestLocalPanels.length) {
-        bestLocalPanels = localPanels;
+      if (localPanels.length > 0) {
+        // Baricentro dos painéis para priorizar alinhamento simétrico e centralizado
+        let avgEast = 0;
+        let avgNorth = 0;
+        for (let i = 0; i < localPanels.length; i++) {
+          const p = localPanels[i];
+          avgEast += (p[0].east + p[1].east + p[2].east + p[3].east) / 4;
+          avgNorth += (p[0].north + p[1].north + p[2].north + p[3].north) / 4;
+        }
+        avgEast /= localPanels.length;
+        avgNorth /= localPanels.length;
+        const distToCenter = Math.hypot(avgEast - roofCenterEast, avgNorth - roofCenterNorth);
+
+        if (localPanels.length > bestLocalPanels.length) {
+          bestLocalPanels = localPanels;
+          bestDistToCenter = distToCenter;
+        } else if (localPanels.length === bestLocalPanels.length && distToCenter < bestDistToCenter) {
+          bestLocalPanels = localPanels;
+          bestDistToCenter = distToCenter;
+        }
       }
     }
   }
 
-  // Ordena os painéis para agrupar esteticamente
-  if (strategy === "best_aesthetic") {
-    bestLocalPanels.sort((a, b) => b[0].north - a[0].north || a[0].east - b[0].east);
-  }
+  // Ordena os módulos em fileiras alinhadas e uniformes (Norte para Sul, Oeste para Leste)
+  bestLocalPanels.sort((a, b) => {
+    const centerAy = (a[0].north + a[2].north) / 2;
+    const centerBy = (b[0].north + b[2].north) / 2;
+    if (Math.abs(centerAy - centerBy) > rowPitch * 0.4) {
+      return centerBy - centerAy; // Superior primeiro
+    }
+    const centerAx = (a[0].east + a[2].east) / 2;
+    const centerBx = (b[0].east + b[2].east) / 2;
+    return centerAx - centerBx; // Esquerda para direita
+  });
 
-  return bestLocalPanels.slice(0, panelCount).map((localCorners) => (
+  const excludedIndices = new Set(
+    Array.isArray(config.excluded_module_indices)
+      ? config.excluded_module_indices
+      : (Array.isArray(options?.excludedIndices) ? options.excludedIndices : [])
+  );
+
+  const filteredPanels = excludedIndices.size > 0
+    ? bestLocalPanels.filter((_, idx) => !excludedIndices.has(idx))
+    : bestLocalPanels;
+
+  return filteredPanels.slice(0, panelCount).map((localCorners) => (
     localCorners.map((corner) => {
       const rotated = rotateMeters(corner.east, corner.north, rotation);
       return metersToLatLng(center, rotated.east, rotated.north);
@@ -868,8 +1070,8 @@ export function createDefaultSolarArea(partial = {}, index = 1, fallbackConfig =
     auto_fill_surface: partial.auto_fill_surface !== false,
     rows_per_table: Math.max(1, Math.round(finiteNumber(partial.rows_per_table, fallbackConfig.rows_per_table ?? 1))),
     base_height_cm: finiteNumber(partial.base_height_cm, fallbackConfig.base_height_cm ?? 0),
-    column_gap_cm: finiteNumber(partial.column_gap_cm, fallbackConfig.column_gap_cm ?? 0),
-    row_gap_cm: finiteNumber(partial.row_gap_cm, fallbackConfig.row_gap_cm ?? 0),
+    column_gap_cm: finiteNumber(partial.column_gap_cm, fallbackConfig.column_gap_cm ?? 2),
+    row_gap_cm: finiteNumber(partial.row_gap_cm, fallbackConfig.row_gap_cm ?? 2),
     requested_panel_count: Math.max(1, Math.min(1200, Math.round(finiteNumber(partial.requested_panel_count, fallbackConfig.requested_panel_count ?? 14)))),
     layout_strategy: partial.layout_strategy || fallbackConfig.layout_strategy || "max_generation",
     panelCount: 0,
@@ -934,8 +1136,8 @@ export function computeAreaPanels(area = {}, globalConfig = {}) {
     roof_pitch_deg: area.roof_pitch_deg ?? globalConfig.roof_pitch_deg ?? 12,
     structure_type: area.structure_type || globalConfig.structure_type || "triangle",
     module_orientation: area.module_orientation || globalConfig.module_orientation || "horizontal",
-    column_gap_cm: area.column_gap_cm ?? globalConfig.column_gap_cm ?? 0,
-    row_gap_cm: area.row_gap_cm ?? globalConfig.row_gap_cm ?? 0,
+    column_gap_cm: area.column_gap_cm ?? globalConfig.column_gap_cm ?? 2,
+    row_gap_cm: area.row_gap_cm ?? globalConfig.row_gap_cm ?? 2,
     layout_strategy: area.layout_strategy || globalConfig.layout_strategy || "max_generation",
   };
 

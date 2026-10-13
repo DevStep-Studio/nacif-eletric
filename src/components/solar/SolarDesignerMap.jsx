@@ -33,6 +33,7 @@ import {
   DEFAULT_SOLAR_MAP_CENTER,
   DEFAULT_SOLAR_MAP_ZOOM,
   buildPanelPolygons,
+  buildRealisticPanelCellLines,
   deleteVertex,
   distanceMeters,
   edgeRotationDegrees,
@@ -44,9 +45,14 @@ import {
   getRoofMetricsFromPolygon,
   getRoofPolygonFromConfig,
   insertVertexAtEdge,
+  interpolateLatLng,
   moveVertex,
   normalizeRoofPolygon,
+  SOLAR_PANEL_THEME,
+  PHOTOVOLTAIC_BASE_COLORS,
 } from "@/lib/solarDesignerGeometry";
+
+export { SOLAR_PANEL_THEME, PHOTOVOLTAIC_BASE_COLORS };
 
 const SATELLITE_TILE_URL = "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}";
 const SATELLITE_ATTRIBUTION = "Google Maps Satélite";
@@ -61,79 +67,8 @@ export const STRING_COLORS = [
   { stroke: "#60a5fa", fill: "#2563eb", border: "#bfdbfe", name: "String 6" },
 ];
 
-// Cores realistas de silício fotovoltaico mono-PERC com micro-variação óptica sutil
-export const PHOTOVOLTAIC_BASE_COLORS = [
-  "#112136", // Deep mono-PERC obsidian navy
-  "#14263d", // Rich marine photovoltaic
-  "#0f1e31", // Deep dark silicon
-  "#162a43", // Technical mono-crystalline blue
-  "#122238", // Classic mono-PERC
-  "#152840", // Deep blue-gray silicon
-];
-
 function toLeafletPositions(points) {
   return normalizeRoofPolygon(points).map((point) => [point.lat, point.lng]);
-}
-
-function interpolateLatLng(start, end, ratio) {
-  return {
-    lat: start.lat + (end.lat - start.lat) * ratio,
-    lng: start.lng + (end.lng - start.lng) * ratio,
-  };
-}
-
-/**
- * Gera as divisões internas realistas das células fotovoltaicas (half-cell matrix).
- * Identifica dinamicamente o eixo maior do módulo (comprimento) e traça a linha divisória
- * central longitudinal do half-cut e as divisões transversais das células com LOD.
- */
-function buildRealisticPanelCellLines(panel, zoomLevel, highDetail = false) {
-  if (!Array.isArray(panel) || panel.length < 4) return { primary: [] };
-  const [p0, p1, p2, p3] = panel;
-
-  // Distância aproximada ao quadrado para determinar eixo longo vs curto (orientação)
-  const d01 = Math.pow(p1.lat - p0.lat, 2) + Math.pow(p1.lng - p0.lng, 2);
-  const d12 = Math.pow(p2.lat - p1.lat, 2) + Math.pow(p2.lng - p1.lng, 2);
-
-  const primary = [];
-
-  if (d12 >= d01) {
-    // Orientação Vertical / Retrato (arestas 0-3 e 1-2 são mais longas)
-    // 1. Linha central longitudinal do half-cut
-    primary.push([interpolateLatLng(p0, p1, 0.5), interpolateLatLng(p3, p2, 0.5)]);
-
-    // 2. Divisores transversais de células (6 linhas = 5 divisórias)
-    const rows = 6;
-    for (let i = 1; i < rows; i++) {
-      const ratio = i / rows;
-      primary.push([interpolateLatLng(p0, p3, ratio), interpolateLatLng(p1, p2, ratio)]);
-    }
-
-    // 3. Detalhes finos de busbars para zoom próximo (zoom >= 20)
-    if (highDetail) {
-      primary.push([interpolateLatLng(p0, p1, 0.25), interpolateLatLng(p3, p2, 0.25)]);
-      primary.push([interpolateLatLng(p0, p1, 0.75), interpolateLatLng(p3, p2, 0.75)]);
-    }
-  } else {
-    // Orientação Horizontal / Paisagem (arestas 0-1 e 3-2 são mais longas)
-    // 1. Linha central longitudinal do half-cut
-    primary.push([interpolateLatLng(p0, p3, 0.5), interpolateLatLng(p1, p2, 0.5)]);
-
-    // 2. Divisores transversais de células (6 colunas = 5 divisórias)
-    const cols = 6;
-    for (let i = 1; i < cols; i++) {
-      const ratio = i / cols;
-      primary.push([interpolateLatLng(p0, p1, ratio), interpolateLatLng(p3, p2, ratio)]);
-    }
-
-    // 3. Detalhes finos de busbars para zoom próximo (zoom >= 20)
-    if (highDetail) {
-      primary.push([interpolateLatLng(p0, p3, 0.25), interpolateLatLng(p1, p2, 0.25)]);
-      primary.push([interpolateLatLng(p0, p3, 0.75), interpolateLatLng(p1, p2, 0.75)]);
-    }
-  }
-
-  return { primary };
 }
 
 function ViewportController({ center, zoom, viewportRequest = 0 }) {
@@ -762,23 +697,39 @@ export default function SolarDesignerMap({
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
 
   // LOD Dinâmico por Zoom:
-  // - Zoom < 17: Sem linhas internas (modo visão geral leve e ultra-rápido)
-  // - Zoom 17 a 19: Divisão longitudinal half-cut + 5 linhas transversais de células
-  // - Zoom >= 20: Detalhamento completo com matriz de células + busbars secundárias
-  const panelCellLines = useMemo(() => {
-    if (currentZoom < 17) return [];
-    const isLargeArray = allPanelsFlat.length > 250;
+  // - Zoom < 16: Sem linhas internas (modo visão geral leve e ultra-rápido)
+  // - Zoom 16 a 18: Matriz limpa de células (6 colunas x 6 divisões + meio half-cut)
+  // - Zoom >= 19: Matriz detalhada (6 colunas x 12 divisões + half-cut proeminente)
+  // - Zoom >= 20: Detalhamento completo incluindo busbars finas
+  const { cellLines, halfCutLines, secondaryLines } = useMemo(() => {
+    if (currentZoom < 16) {
+      return { cellLines: [], halfCutLines: [], secondaryLines: [] };
+    }
+    const isLargeArray = allPanelsFlat.length > 200;
     const highDetail = currentZoom >= 20 && !isLargeArray;
 
-    const allLines = [];
+    const allCell = [];
+    const allHalfCut = [];
+    const allSecondary = [];
+
     for (let i = 0; i < allPanelsFlat.length; i++) {
       const res = buildRealisticPanelCellLines(allPanelsFlat[i], currentZoom, highDetail);
       if (res.primary && res.primary.length > 0) {
-        allLines.push(...res.primary);
+        allCell.push(...res.primary);
+      }
+      if (res.halfCut && res.halfCut.length > 0) {
+        allHalfCut.push(...res.halfCut);
+      }
+      if (res.secondary && res.secondary.length > 0) {
+        allSecondary.push(...res.secondary);
       }
     }
 
-    return allLines.map(toLeafletPositions);
+    return {
+      cellLines: allCell.map(toLeafletPositions),
+      halfCutLines: allHalfCut.map(toLeafletPositions),
+      secondaryLines: allSecondary.map(toLeafletPositions),
+    };
   }, [allPanelsFlat, currentZoom]);
 
   const initialCenter = useMemo(
@@ -1056,15 +1007,15 @@ export default function SolarDesignerMap({
               const strColor = STRING_COLORS[strIdx % STRING_COLORS.length];
               const isStringActive = selectedStringIndex === null || selectedStringIndex === strIdx;
 
-              // Paleta realista de silício mono-PERC com micro-variação óptica sutil
-              const realisticSiliconColor = PHOTOVOLTAIC_BASE_COLORS[(globalIndex * 7 + 3) % PHOTOVOLTAIC_BASE_COLORS.length];
+              // Paleta fotovoltaica mono-PERC técnica (#142B46 a #1A3553)
+              const realisticSiliconColor = PHOTOVOLTAIC_BASE_COLORS[(globalIndex * 5 + 1) % PHOTOVOLTAIC_BASE_COLORS.length];
 
-              // Moldura externa de alumínio anodizado escuro / grafite
-              let strokeColor = group.isSelected ? "#1e293b" : "#334155";
+              // Moldura externa cinza-azulada discreta (#8B9CAC) ou ciano na seleção ativa (#00d8b8)
+              let strokeColor = isSelected ? SOLAR_PANEL_THEME.selectionActive : SOLAR_PANEL_THEME.frame;
+              let strokeWidth = isSelected ? 2.0 : 1.1;
               let fillColor = viewMode === "irradiation" ? "#00c853" : realisticSiliconColor;
-              let opacity = group.isSelected ? 0.98 : 0.88;
-              let fillOpacity = group.isSelected ? 0.96 : 0.85;
-              let strokeWidth = group.isSelected ? 1.2 : 0.9;
+              let opacity = 1.0;
+              let fillOpacity = isSelected ? 0.98 : 0.96;
 
               if (electricalMode || selectedStringIndex !== null) {
                 fillColor = strColor.fill;
@@ -1077,11 +1028,11 @@ export default function SolarDesignerMap({
               }
 
               if (isSelected) {
-                strokeColor = "#00d8b8";
-                fillColor = "#1a3b5c";
-                strokeWidth = 2.2;
-                opacity = 1;
-                fillOpacity = 1;
+                strokeColor = SOLAR_PANEL_THEME.selectionActive;
+                fillColor = SOLAR_PANEL_THEME.selectionActiveDark;
+                strokeWidth = 2.0;
+                opacity = 1.0;
+                fillOpacity = 0.98;
               }
 
               return (
@@ -1123,15 +1074,44 @@ export default function SolarDesignerMap({
             })
           )}
           
-          {panelCellLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
+          {/* Linhas internas finas das células fotovoltaicas (#45617A com opacidade reduzida) */}
+          {cellLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
-              positions={panelCellLines}
+              positions={cellLines}
               interactive={false}
               pathOptions={{
-                color: "#93c5fd",
-                className: "solar-panel-cell-lines",
-                opacity: currentZoom >= 20 ? 0.46 : 0.34,
-                weight: currentZoom >= 20 ? 0.75 : 0.55,
+                color: SOLAR_PANEL_THEME.internalLines,
+                className: "solar-panel-cell-lines pointer-events-none",
+                opacity: currentZoom >= 20 ? 0.6 : 0.46,
+                weight: currentZoom >= 20 ? 0.8 : 0.65,
+              }}
+            />
+          )}
+
+          {/* Linha central divisória de corte (Half-Cut gap) */}
+          {halfCutLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
+            <Polyline
+              positions={halfCutLines}
+              interactive={false}
+              pathOptions={{
+                color: "#5f7e9a",
+                className: "solar-panel-half-cut-lines pointer-events-none",
+                opacity: currentZoom >= 20 ? 0.72 : 0.55,
+                weight: currentZoom >= 20 ? 1.0 : 0.8,
+              }}
+            />
+          )}
+
+          {/* Barramentos secundários finos (busbars) em zoom próximo */}
+          {secondaryLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
+            <Polyline
+              positions={secondaryLines}
+              interactive={false}
+              pathOptions={{
+                color: "#526e88",
+                className: "solar-panel-busbars pointer-events-none",
+                opacity: 0.32,
+                weight: 0.5,
               }}
             />
           )}
