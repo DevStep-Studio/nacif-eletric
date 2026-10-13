@@ -751,6 +751,7 @@ const polePhaseLabel = (component = {}, poleIndex = 0) => {
   if (component.isGeneral) return `L${poleIndex + 1}`;
   if (component.phase === "ABC" || component.supply_type === "Trifásico") return ["A", "B", "C"][poleIndex] || "C";
   if (component.phase === "AB" || component.supply_type === "Bifásico") return ["A", "B"][poleIndex] || "B";
+  if (component.phase && String(component.phase).length === 1) return component.phase;
   return poleIndex === 0 ? "A" : "N";
 };
 
@@ -6635,7 +6636,7 @@ export default function PanelGenerator() {
               <line x1={px + MOD / 2} y1={y + BRK_H - 14 - 2.8} x2={px + MOD / 2} y2={y + BRK_H - 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
               {/* Indicador de fase gravado no polo */}
-              <text x={px + MOD / 2} y={y + 31} fill="#334155" fontSize="7.2" textAnchor="middle" fontWeight="900">
+              <text x={px + MOD / 2} y={y + 32} fill="#1e293b" fontSize="7.2" textAnchor="middle" fontWeight="900">
                 {polePhaseLabel(c, pi)}
               </text>
 
@@ -6746,45 +6747,49 @@ export default function PanelGenerator() {
         )}
         
         {/* Marcações técnicas liga/desliga I / O (Norma IEC 60898-1) */}
-        <text x={x + W / 2} y={y + 37.5} fill="#64748b" fontSize="6.5" textAnchor="middle" fontWeight="950">I</text>
-        <text x={x + W / 2} y={y + 73.5} fill="#64748b" fontSize="6.5" textAnchor="middle" fontWeight="950">O</text>
+        <text x={x + W / 2} y={y + 37.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="950">I</text>
+        <text x={x + W / 2} y={y + 67.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="950">O</text>
         
         {/* Janela de inspeção de estado mecânico (Vermelho = Ligado / Verde = Desligado) */}
         <rect
-          x={x + W / 2 - (W > MOD ? 17 : 11)}
-          y={y + 48}
-          width="4.5"
-          height="6.5"
-          rx="1"
+          x={c.poles === 1 ? x + 2 : x + 3.5}
+          y={y + 49}
+          width={c.poles === 1 ? "3" : "4"}
+          height="5.5"
+          rx="0.8"
           fill={c.status === "ON" ? "#ef4444" : "#22c55e"}
           stroke="#1e293b"
           strokeWidth="0.4"
         />
 
         {/* Cartão de etiqueta de identificação técnica embutido na face */}
-        <rect x={x + 2.5} y={y + 68} width={W - 5} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
+        <rect
+          x={c.poles === 1 ? x + 1.5 : x + 2.5}
+          y={y + 69}
+          width={c.poles === 1 ? 15 : W - 5}
+          height="16"
+          fill="#ffffff"
+          rx="2"
+          stroke="#94a3b8"
+          strokeWidth="0.85"
+        />
         {c.poles === 1 ? (
-          <text x={x + W / 2} y={y + 78.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
-            {(shortLabel || displayLabel).slice(0, 10)} · {c.current}A
-          </text>
-        ) : (
           <g>
-            <text x={x + W / 2} y={y + 75.5} fill="#0f172a" fontSize="6.5" fontWeight="900" textAnchor="middle">
-              {displayLabel.slice(0, 18)}
+            <text x={x + W / 2} y={y + 75.8} fill="#0f172a" fontSize="5.8" fontWeight="950" textAnchor="middle">
+              {shortLabel ? (shortLabel.length <= 4 ? shortLabel : shortLabel.slice(0, 4)) : "DJ"}
             </text>
-            <text x={x + W / 2} y={y + 81.5} fill="#dc2626" fontSize="5.6" fontWeight="950" textAnchor="middle">
-              {c.current}A/{c.curve} · {c.poles}P
+            <text x={x + W / 2} y={y + 82} fill="#dc2626" fontSize="5.4" fontWeight="950" textAnchor="middle">
+              {`${c.curve || "C"}${c.current}`}
             </text>
           </g>
-        )}
-        
-        {/* Especificações normativas estampadas a laser */}
-        <text x={x + W / 2} y={y + 27.5} fill="#64748b" fontSize="5.2" fontWeight="900" textAnchor="middle">NBR NM 60898</text>
-        {c.poles > 1 && (
+        ) : (
           <g>
-            {/* Retângulo de capacidade de ruptura 3000A / 6000A */}
-            <rect x={x + W / 2 - 8} y={y + 29.5} width="16" height="5" fill="none" stroke="#64748b" strokeWidth="0.5" />
-            <text x={x + W / 2} y={y + 33.5} fill="#475569" fontSize="3.8" fontWeight="950" textAnchor="middle">3000 [3]</text>
+            <text x={x + W / 2} y={y + 75.8} fill="#0f172a" fontSize={c.poles === 2 ? "5.6" : "6.5"} fontWeight="900" textAnchor="middle">
+              {isGen ? "DJ GERAL" : (displayLabel ? displayLabel.slice(0, c.poles === 2 ? 10 : 18) : "DISJUNTOR")}
+            </text>
+            <text x={x + W / 2} y={y + 82} fill="#dc2626" fontSize={c.poles === 2 ? "5.2" : "5.6"} fontWeight="950" textAnchor="middle">
+              {`${c.current}A/${c.curve || "C"} · ${c.poles}P`}
+            </text>
           </g>
         )}
 
@@ -6884,9 +6889,10 @@ export default function PanelGenerator() {
         />
 
         {/* Cartão de etiqueta técnica com normas IEC 61643-11 */}
-        <rect x={x + 2.5} y={y + 67} width={W - 5} height="17" fill="#ffffff" rx="2" stroke="#7f1d1d" strokeWidth="0.85" />
-        <text x={x + W / 2} y={y + 74.5} fill="#0f172a" fontSize="6.6" fontWeight="900" textAnchor="middle">DPS-{c.phase}</text>
-        <text x={x + W / 2} y={y + 81} fill="#b91c1c" fontSize="5.5" fontWeight="950" textAnchor="middle">Uc 275V·20kA</text>
+        <rect x={x + 1.5} y={y + 66} width={W - 3} height="18.5" fill="#ffffff" rx="2" stroke="#7f1d1d" strokeWidth="0.85" />
+        <text x={x + W / 2} y={y + 72} fill="#0f172a" fontSize="4.8" fontWeight="950" textAnchor="middle">DPS-{c.phase || "A"}</text>
+        <text x={x + W / 2} y={y + 77.5} fill="#b91c1c" fontSize="5.2" fontWeight="950" textAnchor="middle">20 kA</text>
+        <text x={x + W / 2} y={y + 82.5} fill="#64748b" fontSize="4.2" fontWeight="800" textAnchor="middle">275V</text>
 
         {/* Pinos interativos de fiação */}
         {(wiringMode || !!wireMoveMode) && (
@@ -7043,15 +7049,15 @@ export default function PanelGenerator() {
         
         {/* Indicadores I / O */}
         <text x={x + W / 2 + 7} y={y + 37.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
-        <text x={x + W / 2 + 7} y={y + 73.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
+        <text x={x + W / 2 + 7} y={y + 67.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
 
         {/* Cartão de etiqueta de identificação embutido */}
-        <rect x={x + 2.5} y={y + 68} width={W - 5} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
-        <text x={x + W / 2} y={y + 75.5} fill="#0f172a" fontSize="6.8" fontWeight="900" textAnchor="middle">
-          {c.label.slice(0, 14)}
+        <rect x={x + 2.5} y={y + 69} width={W - 5} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
+        <text x={x + W / 2} y={y + 75.8} fill="#0f172a" fontSize={c.poles === 2 ? "5.6" : "6.6"} fontWeight="900" textAnchor="middle">
+          {(c.label || "IDR").slice(0, c.poles === 2 ? 10 : 16)}
         </text>
-        <text x={x + W / 2} y={y + 81.5} fill="#0284c7" fontSize="5.6" fontWeight="950" textAnchor="middle">
-          {c.current}A / IΔn 30mA
+        <text x={x + W / 2} y={y + 82} fill="#0284c7" fontSize={c.poles === 2 ? "5.0" : "5.6"} fontWeight="950" textAnchor="middle">
+          {c.poles === 2 ? `${c.current}A · 30mA` : `${c.current}A / IΔn 30mA`}
         </text>
 
         {isTraced && (
@@ -7096,26 +7102,28 @@ export default function PanelGenerator() {
           pointerEvents="none"
         />
         {/* Badge de contraste central para manter 100% legível sobre o trilho */}
-        {showLegend && (
+        {showLegend && W >= 32 && (
           <>
             <rect
               x={x + W / 2 - badgeW / 2}
-              y={y + BRK_H / 2 - 17}
+              y={y + BRK_H / 2 - (W < 56 ? 12 : 17)}
               width={badgeW}
-              height="34"
-              rx="6"
+              height={W < 56 ? 24 : 34}
+              rx="5"
               fill="#ffffff"
               fillOpacity="0.95"
               stroke="#cbd5e1"
               strokeWidth="0.9"
               pointerEvents="none"
             />
-            <text x={x + W / 2} y={y + BRK_H / 2 - 3} fill="#1e293b" fontSize="9" fontWeight="900" textAnchor="middle" pointerEvents="none">
-              {c.label || "RESERVA"}
+            <text x={x + W / 2} y={y + BRK_H / 2 + (W < 56 ? 4 : -3)} fill="#1e293b" fontSize={W < 56 ? "6.8" : "9"} fontWeight="900" textAnchor="middle" pointerEvents="none">
+              {W < 56 ? "RESERVA" : (c.label || "RESERVA")}
             </text>
-            <text x={x + W / 2} y={y + BRK_H / 2 + 10} fill="#475569" fontSize="7.8" fontWeight="800" textAnchor="middle" pointerEvents="none">
-              {c.poles} Módulos DIN ({W}mm)
-            </text>
+            {W >= 56 && (
+              <text x={x + W / 2} y={y + BRK_H / 2 + 10} fill="#475569" fontSize="7.8" fontWeight="800" textAnchor="middle" pointerEvents="none">
+                {c.poles} Módulos DIN ({W}mm)
+              </text>
+            )}
           </>
         )}
       </g>
@@ -7585,6 +7593,13 @@ export default function PanelGenerator() {
     const fallbackLabel = options.includeDefault === false ? "" : destinationCircuitLabel(wire);
     const label = cleanDisplayText(explicitLabel || fallbackLabel);
     if (!label || !routePoints || routePoints.length < 2) return null;
+
+    // Não renderizar rótulo genérico de componente ("DISJUNTOR", "DISPOSITIVO") como tag solta sobre o trilho
+    if (!explicitLabel) {
+      const upper = label.toUpperCase();
+      if (upper === "DISJUNTOR" || upper === "DISPOSITIVO" || upper.includes("SEM IDENTIFICAÇÃO")) return null;
+      if (!hasLoadEndpoint(descriptor)) return null;
+    }
 
     const wireKind = descriptor?.kind || getWireKind(normalizedWireColor(wire));
     const isNeutral = wireKind === "neutral";
