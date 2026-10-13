@@ -4416,7 +4416,14 @@ export default function PanelGenerator() {
       if (textDrag.annotationId) {
         updateInfrastructure(textDrag.annotationId, { x: snapWireGrid(point.x - textDrag.offsetX), y: snapWireGrid(point.y - textDrag.offsetY) }, { persist: false });
       } else if (textDrag.infraId) {
-        updateInfrastructure(textDrag.infraId, { x: Math.round(point.x - textDrag.offsetX), y: Math.round(point.y - textDrag.offsetY) }, { persist: false });
+        if (isCombBusbarId(textDrag.infraId)) {
+          const rawX = Math.round(point.x - textDrag.offsetX);
+          const rawY = Math.round(point.y - textDrag.offsetY);
+          const snapped = getCombBusbarSnapPosition(textDrag.infraId, rawX, rawY);
+          updateInfrastructure(textDrag.infraId, { x: snapped.x, y: snapped.y }, { persist: false });
+        } else {
+          updateInfrastructure(textDrag.infraId, { x: Math.round(point.x - textDrag.offsetX), y: Math.round(point.y - textDrag.offsetY) }, { persist: false });
+        }
       } else {
         updateWireLabelMeta(textDrag.wireId, { x: snapWireGrid(point.x - textDrag.offsetX), y: snapWireGrid(point.y - textDrag.offsetY) }, { persist: false });
       }
@@ -4515,7 +4522,14 @@ export default function PanelGenerator() {
         updateInfrastructure(textDrag.annotationId, {}, { persist: true });
         commitEditHistory(`annotation:${textDrag.annotationId}`);
       } else if (textDrag.infraId) {
-        updateInfrastructure(textDrag.infraId, {}, { persist: true });
+        if (isCombBusbarId(textDrag.infraId) && point) {
+          const rawX = Math.round(point.x - textDrag.offsetX);
+          const rawY = Math.round(point.y - textDrag.offsetY);
+          const snapped = getCombBusbarSnapPosition(textDrag.infraId, rawX, rawY);
+          updateInfrastructure(textDrag.infraId, { x: snapped.x, y: snapped.y }, { persist: true });
+        } else {
+          updateInfrastructure(textDrag.infraId, {}, { persist: true });
+        }
         commitEditHistory(`infra:${textDrag.infraId}`);
       } else {
         updateWireLabelMeta(textDrag.wireId, {}, { persist: true });
@@ -5873,7 +5887,7 @@ export default function PanelGenerator() {
     );
   };
 
-  const getCombBusbarGroups = (rail = {}) => {
+  function getCombBusbarGroups(rail = {}) {
     const groups = [];
     let currentGroup = [];
     let currentX = 160;
@@ -5896,7 +5910,81 @@ export default function PanelGenerator() {
     }
     if (currentGroup.length >= 2) groups.push(currentGroup);
     return groups;
-  };
+  }
+
+  function getCombBusbarSnapPosition(infraId, rawX, rawY) {
+    let bestX = rawX;
+    let bestY = rawY;
+    let minDiffY = Infinity;
+    let minDiffX = Infinity;
+
+    const SNAP_THRESHOLD_Y = 28;
+    const SNAP_THRESHOLD_X = 22;
+
+    const item = infrastructure.find((i) => i.id === infraId) || {};
+    const isFlipped = Math.abs((Number(item.rotation) || 0) - 180) < 45;
+
+    rails.forEach((rail, rIdx) => {
+      const railY = 190 + rIdx * 240;
+      const compY = railY - 45;
+
+      const breakerComps = (rail.components || []).filter(
+        (c) => c.type === "breaker" || c.type === "dps" || c.type === "dr"
+      );
+      if (!breakerComps.length) return;
+
+      // Posições de encaixe superior e inferior dos disjuntores:
+      // 1. Parte SUPERIOR: compY - 4 (dentes entram nos parafusos superiores)
+      // 2. Parte INFERIOR:
+      //    a) compY + BRK_H - 32 (dentes descendo nos parafusos inferiores)
+      //    b) compY + BRK_H - 4 (face inferior dos bornes quando girado 180°)
+      const topY = compY - 4;
+      const bottomYNormal = compY + BRK_H - 32;
+      const bottomYFlipped = compY + BRK_H - 4;
+      const candidateYs = isFlipped
+        ? [bottomYFlipped, topY, bottomYNormal]
+        : [topY, bottomYNormal, bottomYFlipped];
+
+      candidateYs.forEach((snapY) => {
+        const diffY = Math.abs(rawY - snapY);
+        if (diffY <= SNAP_THRESHOLD_Y && diffY < minDiffY) {
+          minDiffY = diffY;
+          bestY = snapY;
+        }
+      });
+
+      // Alinhamento horizontal com os grupos ou disjuntores do trilho
+      const groups = getCombBusbarGroups(rail);
+      if (groups.length > 0) {
+        groups.forEach((group) => {
+          if (!group.length) return;
+          const first = group[0];
+          const groupDefaultX = first.x + 4;
+          const diffX = Math.abs(rawX - groupDefaultX);
+          if (diffX <= SNAP_THRESHOLD_X && diffX < minDiffX) {
+            minDiffX = diffX;
+            bestX = groupDefaultX;
+          }
+        });
+      } else {
+        let curX = 160;
+        for (const c of rail.components || []) {
+          const compW = c.type === "spacer" ? (Number(c.poles) || 1) * (MOD + 2) - 2 : c.poles * MOD;
+          if (c.type === "breaker" || c.type === "dps" || c.type === "dr") {
+            const snapX = curX + 4;
+            const diffX = Math.abs(rawX - snapX);
+            if (diffX <= SNAP_THRESHOLD_X && diffX < minDiffX) {
+              minDiffX = diffX;
+              bestX = snapX;
+            }
+          }
+          curX += compW + 2;
+        }
+      }
+    });
+
+    return { x: bestX, y: bestY };
+  }
 
   const renderRotationHandle = ({ key, centerX, centerY, handleX, handleY, onPointerDown, label = "Girar" }) => (
     <g key={key} className="cursor-grab active:cursor-grabbing" onPointerDown={onPointerDown}>
