@@ -767,8 +767,8 @@ export function buildPanelPolygons(config = {}, sizing = {}, options = {}) {
     ? Number(config.row_gap_cm)
     : 2;
 
-  const columnGapM = Math.max(0.005, finiteNumber(rawColGap, 2) / 100);
-  const rowGapM = Math.max(0.005, finiteNumber(rawRowGap, 2) / 100);
+  const columnGapM = Math.max(0, finiteNumber(rawColGap, 2) / 100);
+  const rowGapM = Math.max(0, finiteNumber(rawRowGap, 2) / 100);
   const strategy = (typeof options === "object" ? options?.strategy : null) || config.layout_strategy || "max_generation";
   const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
 
@@ -1181,6 +1181,11 @@ export function computeAreaPanels(area = {}, globalConfig = {}) {
     roof_height_m: round1(metrics.heightM),
     roof_area_m2: round1(metrics.areaM2),
     roof_rotation_deg: round2(areaRotation),
+    module_orientation: area.module_orientation || layout.orientation || "horizontal",
+    effectiveOrientation: layout.orientation || "horizontal",
+    structure_type: area.structure_type || globalConfig.structure_type || "triangle",
+    column_gap_cm: area.column_gap_cm ?? globalConfig.column_gap_cm ?? 2,
+    row_gap_cm: area.row_gap_cm ?? globalConfig.row_gap_cm ?? 2,
     panelPolygons: layout.panels,
     panelCount,
     dcPowerKw,

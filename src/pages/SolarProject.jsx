@@ -677,19 +677,21 @@ export default function SolarProject() {
   }, [syncRoofHistoryState, toast]);
 
   // Atualiza campo global de configuração (ex: inversor, modelo do módulo)
-  const updateConfig = (field, value) => {
-    const next = { ...config, [field]: value };
-    if (field === "module_preset_id") {
-      const p = getModulePreset(value);
-      next.module_preset_id = p.id;
-      next.module_manufacturer = p.manufacturer;
-      next.module_model = p.model;
-      next.module_wp = p.wp;
-      next.module_width_m = p.widthM;
-      next.module_height_m = p.heightM;
-    }
-    setConfig(normalizeSolarConfig(next));
-  };
+  const updateConfig = useCallback((field, value) => {
+    setConfig((prevConfig) => {
+      const next = { ...prevConfig, [field]: value };
+      if (field === "module_preset_id") {
+        const p = getModulePreset(value);
+        next.module_preset_id = p.id;
+        next.module_manufacturer = p.manufacturer;
+        next.module_model = p.model;
+        next.module_wp = p.wp;
+        next.module_width_m = p.widthM;
+        next.module_height_m = p.heightM;
+      }
+      return normalizeSolarConfig(next);
+    });
+  }, []);
 
   // Helper para obter com segurança todas as áreas existentes
   const getSafeExistingAreas = useCallback(() => {
@@ -708,6 +710,8 @@ export default function SolarProject() {
             structure_type: config.structure_type || "triangle",
             module_orientation: config.module_orientation || "horizontal",
             auto_fill_surface: config.auto_fill_surface !== false,
+            column_gap_cm: config.column_gap_cm ?? 2,
+            row_gap_cm: config.row_gap_cm ?? 2,
           },
           1,
           config
@@ -718,24 +722,66 @@ export default function SolarProject() {
   }, [config]);
 
   // Atualiza parâmetros da área selecionada (ex: inclinação, azimute, orientação, espaçamento)
-  const updateSelectedArea = (field, value) => {
-    if (!selectedArea) return;
-    const targetId = selectedArea.id;
-    const existing = getSafeExistingAreas();
+  const updateSelectedArea = useCallback((fieldOrUpdates, value) => {
+    const updates =
+      typeof fieldOrUpdates === "object" && fieldOrUpdates !== null
+        ? fieldOrUpdates
+        : { [fieldOrUpdates]: value };
 
-    const nextAreas = existing.map((a) => {
-      if (a.id !== targetId) return a;
-      const updated = { ...a, [field]: value };
-      if (field === "roof_width_m" || field === "roof_height_m") {
-        updated.roof_area_m2 = round1(Number(updated.roof_width_m || 0) * Number(updated.roof_height_m || 0));
+    setConfig((prevConfig) => {
+      let existing = Array.isArray(prevConfig.areas) && prevConfig.areas.length > 0
+        ? [...prevConfig.areas]
+        : [];
+
+      if (existing.length === 0 && Array.isArray(prevConfig.roof_polygon) && prevConfig.roof_polygon.length >= 3) {
+        existing = [
+          createDefaultSolarArea(
+            {
+              id: "area_1",
+              name: "Água 1",
+              polygon: prevConfig.roof_polygon,
+              roof_rotation_deg: prevConfig.roof_rotation_deg || 0,
+              roof_pitch_deg: prevConfig.roof_pitch_deg || 12,
+              structure_type: prevConfig.structure_type || "triangle",
+              module_orientation: prevConfig.module_orientation || "horizontal",
+              auto_fill_surface: prevConfig.auto_fill_surface !== false,
+              column_gap_cm: prevConfig.column_gap_cm ?? 2,
+              row_gap_cm: prevConfig.row_gap_cm ?? 2,
+            },
+            1,
+            prevConfig
+          ),
+        ];
       }
-      return normalizeSolarArea(updated, 1, config);
-    });
 
-    const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
-    setConfig(nextConfig);
-    pushAreasHistory(nextAreas);
-  };
+      const targetId = selectedAreaId || existing[0]?.id;
+      if (!targetId && existing.length === 0) return prevConfig;
+
+      const nextAreas = existing.map((a, idx) => {
+        if (a.id !== targetId && (targetId || idx !== 0)) return a;
+        const updated = { ...a, ...updates };
+        if ("roof_width_m" in updates || "roof_height_m" in updates) {
+          updated.roof_area_m2 = round1(Number(updated.roof_width_m || 0) * Number(updated.roof_height_m || 0));
+        }
+        return normalizeSolarArea(updated, idx + 1, prevConfig);
+      });
+
+      const nextConfigObj = {
+        ...prevConfig,
+        ...updates,
+        areas: nextAreas,
+      };
+
+      if (targetId === existing[0]?.id) {
+        if ("roof_rotation_deg" in updates) nextConfigObj.roof_rotation_deg = updates.roof_rotation_deg;
+        if ("roof_pitch_deg" in updates) nextConfigObj.roof_pitch_deg = updates.roof_pitch_deg;
+      }
+
+      const nextConfig = normalizeSolarConfig(nextConfigObj);
+      pushAreasHistory(nextAreas);
+      return nextConfig;
+    });
+  }, [selectedAreaId, pushAreasHistory]);
 
   // Ação de alinhar os módulos à borda da área ativa
   const handleAlignToEdge = useCallback((azimuthAngle) => {
@@ -1108,8 +1154,15 @@ export default function SolarProject() {
 
   const handleApplyAutoFv = () => {
     if (!autoFvPreview) return;
-    updateConfig("auto_fill_surface", true);
-    updateConfig("requested_panel_count", autoFvPreview.count);
+    if (selectedArea) {
+      updateSelectedArea({
+        auto_fill_surface: true,
+        requested_panel_count: autoFvPreview.count,
+      });
+    } else {
+      updateConfig("auto_fill_surface", true);
+      updateConfig("requested_panel_count", autoFvPreview.count);
+    }
     setAutoFvPreview(null);
     toast({
       title: "Auto FV aplicado com sucesso",
@@ -1966,7 +2019,6 @@ export default function SolarProject() {
                                   onChange={(e) => {
                                     const val = parseFloat(e.target.value) || 0;
                                     updateSelectedArea("roof_pitch_deg", val);
-                                    updateConfig("roof_pitch_deg", val);
                                   }}
                                   className="mt-0.5 h-7 rounded border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#00d8b8]"
                                 />
@@ -1980,7 +2032,6 @@ export default function SolarProject() {
                                   onChange={(e) => {
                                     const val = parseFloat(e.target.value) || 0;
                                     updateSelectedArea("roof_rotation_deg", val);
-                                    updateConfig("roof_rotation_deg", val);
                                   }}
                                   className="mt-0.5 h-7 rounded border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#00d8b8]"
                                 />
@@ -2062,10 +2113,10 @@ export default function SolarProject() {
                                   type="button"
                                   onClick={() => {
                                     updateSelectedArea("module_orientation", "horizontal");
-                                    updateConfig("module_orientation", "horizontal");
                                   }}
                                   className={`py-1 rounded border text-xs font-bold transition ${
-                                    (selectedArea.module_orientation || config.module_orientation) === "horizontal"
+                                    ((selectedArea?.module_orientation || selectedArea?.effectiveOrientation || config.module_orientation) === "horizontal" ||
+                                     (selectedArea?.module_orientation || selectedArea?.effectiveOrientation || config.module_orientation) === "landscape")
                                       ? "border-[#00d8b8] bg-[#E6FAF7] text-[#009b84] font-black"
                                       : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                                   }`}
@@ -2076,10 +2127,10 @@ export default function SolarProject() {
                                   type="button"
                                   onClick={() => {
                                     updateSelectedArea("module_orientation", "vertical");
-                                    updateConfig("module_orientation", "vertical");
                                   }}
                                   className={`py-1 rounded border text-xs font-bold transition ${
-                                    (selectedArea.module_orientation || config.module_orientation) === "vertical"
+                                    ((selectedArea?.module_orientation || selectedArea?.effectiveOrientation || config.module_orientation) === "vertical" ||
+                                     (selectedArea?.module_orientation || selectedArea?.effectiveOrientation || config.module_orientation) === "portrait")
                                       ? "border-[#00d8b8] bg-[#E6FAF7] text-[#009b84] font-black"
                                       : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                                   }`}
@@ -2103,10 +2154,9 @@ export default function SolarProject() {
                                     type="button"
                                     onClick={() => {
                                       updateSelectedArea("structure_type", st.id);
-                                      updateConfig("structure_type", st.id);
                                     }}
                                     className={`py-1 rounded border text-center text-xs transition ${
-                                      (selectedArea.structure_type || config.structure_type) === st.id
+                                      (selectedArea?.structure_type || config.structure_type || "triangle") === st.id
                                         ? "border-[#00d8b8] bg-[#E6FAF7] text-[#009b84] font-black"
                                         : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                                     }`}
@@ -2125,12 +2175,13 @@ export default function SolarProject() {
                                   type="number"
                                   min="0"
                                   max="50"
-                                  value={selectedArea.column_gap_cm ?? config.column_gap_cm ?? 2}
+                                  step="1"
+                                  value={selectedArea?.column_gap_cm !== undefined && selectedArea?.column_gap_cm !== null ? selectedArea.column_gap_cm : (config.column_gap_cm ?? 0)}
                                   onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10);
-                                    const safeVal = Number.isFinite(val) ? Math.max(0, val) : 2;
+                                    const raw = e.target.value;
+                                    const val = raw === "" ? 0 : parseInt(raw, 10);
+                                    const safeVal = Number.isFinite(val) ? Math.max(0, Math.min(100, val)) : 0;
                                     updateSelectedArea("column_gap_cm", safeVal);
-                                    updateConfig("column_gap_cm", safeVal);
                                   }}
                                   className="mt-0.5 h-7 rounded border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#00d8b8]"
                                 />
@@ -2141,12 +2192,13 @@ export default function SolarProject() {
                                   type="number"
                                   min="0"
                                   max="50"
-                                  value={selectedArea.row_gap_cm ?? config.row_gap_cm ?? 2}
+                                  step="1"
+                                  value={selectedArea?.row_gap_cm !== undefined && selectedArea?.row_gap_cm !== null ? selectedArea.row_gap_cm : (config.row_gap_cm ?? 0)}
                                   onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10);
-                                    const safeVal = Number.isFinite(val) ? Math.max(0, val) : 2;
+                                    const raw = e.target.value;
+                                    const val = raw === "" ? 0 : parseInt(raw, 10);
+                                    const safeVal = Number.isFinite(val) ? Math.max(0, Math.min(100, val)) : 0;
                                     updateSelectedArea("row_gap_cm", safeVal);
-                                    updateConfig("row_gap_cm", safeVal);
                                   }}
                                   className="mt-0.5 h-7 rounded border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#00d8b8]"
                                 />
@@ -2157,10 +2209,9 @@ export default function SolarProject() {
                             <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                               <span className="text-[11px] font-bold text-slate-700">Preenchimento Automático</span>
                               <Switch
-                                checked={selectedArea.auto_fill_surface ?? config.auto_fill_surface ?? true}
+                                checked={selectedArea?.auto_fill_surface ?? config.auto_fill_surface ?? true}
                                 onCheckedChange={(checked) => {
                                   updateSelectedArea("auto_fill_surface", checked);
-                                  updateConfig("auto_fill_surface", checked);
                                 }}
                                 className="data-[state=checked]:bg-[#00d8b8]"
                               />
