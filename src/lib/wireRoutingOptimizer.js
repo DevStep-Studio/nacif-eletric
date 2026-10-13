@@ -354,7 +354,8 @@ export function optimizePanelWiring({
   });
 
   const directWires = [];
-  const verticalDuctWires = [];
+  const exitBundleMap = new Map();
+  const step = Math.max(6, Math.min(12, Math.round(minWireSpacing)));
 
   wireMetaList.forEach((meta) => {
     if (!meta.isRoutable) return;
@@ -365,6 +366,16 @@ export function optimizePanelWiring({
       return;
     }
 
+    // Identifica feixe de saída para cabos que deixam o mesmo trilho na mesma direção
+    const railYBucket = Math.round(meta.p1.y / 50);
+    const lateralDir = meta.p2.x < meta.p1.x - 10 ? "LEFT" : (meta.p2.x > meta.p1.x + 10 ? "RIGHT" : "DIRECT");
+    const exitKey = `${railYBucket}_${meta.srcDir}_${lateralDir}`;
+
+    if (!exitBundleMap.has(exitKey)) {
+      exitBundleMap.set(exitKey, []);
+    }
+    exitBundleMap.get(exitKey).push(meta);
+
     // Se a distância horizontal for significativa, atribui ao melhor corredor horizontal
     const bestCorr = findBestHorizontalCorridor(meta.p1, meta.p2, horizontalCorridors);
     if (bestCorr) {
@@ -373,6 +384,51 @@ export function optimizePanelWiring({
     } else {
       directWires.push(meta);
     }
+  });
+
+  // Ordenação planar de feixes paralelos de saída (evita sobreposição e mantém sutil distância legível)
+  exitBundleMap.forEach((bundleWires, exitKey) => {
+    if (bundleWires.length <= 1) {
+      if (bundleWires[0]) {
+        bundleWires[0].exitBundleOffset = 0;
+        bundleWires[0].exitBundleTrackIndex = 0;
+      }
+      return;
+    }
+
+    const isLeft = exitKey.endsWith("_LEFT");
+    const isRight = exitKey.endsWith("_RIGHT");
+
+    bundleWires.sort((a, b) => {
+      if (isLeft) {
+        // Virando para a canaleta esquerda:
+        // O borne mais à esquerda (menor p1.x) é o primeiro a entrar na canaleta,
+        // virando mais perto do componente (menor descida/subida).
+        if (Math.abs(a.p1.x - b.p1.x) > 4) {
+          return a.p1.x - b.p1.x;
+        }
+      } else if (isRight) {
+        // Virando para a canaleta direita:
+        // O borne mais à direita (maior p1.x) é o primeiro a virar para a direita.
+        if (Math.abs(a.p1.x - b.p1.x) > 4) {
+          return b.p1.x - a.p1.x;
+        }
+      }
+
+      // Prioridade por fase (L1, L2, L3, N, PE)
+      const phasePriority = { black: 1, red: 2, brown: 3, orange: 4, blue: 5, green: 6 };
+      const prioA = phasePriority[a.color] || 9;
+      const prioB = phasePriority[b.color] || 9;
+      return prioA - prioB;
+    });
+
+    const total = bundleWires.length;
+    bundleWires.forEach((m, idx) => {
+      m.exitBundleTrackIndex = idx;
+      m.exitBundleTotal = total;
+      // Espaçamento sutil e simétrico estilo CAD (ex: [-8, 0, +8] para 3 condutores)
+      m.exitBundleOffset = (idx - (total - 1) / 2) * step;
+    });
   });
 
   // 3. Ordenação Inteligente dentro de cada corredor para MINIMIZAR CRUZAMENTOS
@@ -395,6 +451,13 @@ export function optimizePanelWiring({
         return exitXA - exitXB;
       }
       return prioA - prioB;
+    });
+
+    const totalTracks = bucketWires.length;
+    bucketWires.forEach((m, trackIndex) => {
+      m.corridorTrackIndex = trackIndex;
+      m.corridorTotalTracks = totalTracks;
+      m.corridorTrackOffset = (trackIndex - Math.floor(totalTracks / 2)) * step + (totalTracks % 2 === 0 ? Math.floor(step / 2) : 0);
     });
   });
 
@@ -427,18 +490,13 @@ export function optimizePanelWiring({
     if (meta.assignedCorridor) {
       const corr = meta.assignedCorridor;
       const bucketWires = corridorBuckets.get(corr.id) || [];
-      const trackIndex = bucketWires.indexOf(meta);
-      const totalTracks = bucketWires.length;
+      const trackIndex = meta.corridorTrackIndex ?? bucketWires.indexOf(meta);
+      const totalTracks = meta.corridorTotalTracks ?? bucketWires.length;
 
       // Centraliza o feixe compacto ao redor de baseY com espaçamento consistente
       const bundleCenterY = snapToGrid(corr.baseY);
-      const step = Math.max(6, Math.round(minWireSpacing));
-      const trackOffset = (trackIndex - Math.floor(totalTracks / 2)) * step + (totalTracks % 2 === 0 ? Math.floor(step / 2) : 0);
+      const trackOffset = meta.corridorTrackOffset ?? ((trackIndex - Math.floor(totalTracks / 2)) * step + (totalTracks % 2 === 0 ? Math.floor(step / 2) : 0));
       const laneY = bundleCenterY + trackOffset;
-
-      // Constrói rota ortogonal limpa (Z-Route pelo corredor)
-      const stub1Y = meta.srcDir === "UP" ? meta.p1.y - portExitOffset : meta.p1.y + portExitOffset;
-      const stub2Y = meta.dstDir === "UP" ? meta.p2.y - portExitOffset : meta.p2.y + portExitOffset;
 
       const candidatePath = [
         meta.p1,
@@ -459,7 +517,16 @@ export function optimizePanelWiring({
     }
 
     // Fallback 1: Caso não caiba no corredor direto, usa o roteador ortogonal inteligente
+    // passando o offset calculado do feixe paralelo para garantir a sutil distância
     if (!calculatedPath) {
+      const chosenOffset = Number.isFinite(meta.exitBundleOffset)
+        ? meta.exitBundleOffset
+        : (Number.isFinite(meta.corridorTrackOffset) ? meta.corridorTrackOffset : 0);
+
+      const chosenIndex = Number.isFinite(meta.exitBundleTrackIndex)
+        ? meta.exitBundleTrackIndex
+        : (Number.isFinite(meta.corridorTrackIndex) ? meta.corridorTrackIndex : wireIndex);
+
       calculatedPath = calculateOrthogonalRoute(meta.p1, meta.p2, obstacles, {
         sourceSide: meta.srcDir,
         targetSide: meta.dstDir,
@@ -469,7 +536,9 @@ export function optimizePanelWiring({
         targetComponentId: meta.dstCompId || wire.targetComponentId,
         sourcePin: wire.source,
         targetPin: wire.target,
-        laneIndex: wireIndex,
+        laneOffset: chosenOffset,
+        laneIndex: chosenIndex,
+        wireSpacing: step,
       });
     }
 

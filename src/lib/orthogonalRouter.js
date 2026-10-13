@@ -380,7 +380,11 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
 
   const portExitOffset = Math.max(8, Number(options.portExitOffset) || PORT_EXIT_OFFSET);
   const obstaclePadding = Math.max(4, Number(options.obstaclePadding) || OBSTACLE_PADDING);
-  const laneOffset = Number(options.laneOffset) || 0;
+  const wireSpacing = Math.max(6, Math.min(14, Number(options.wireSpacing) || Number(options.minWireSpacing) || 8));
+  const laneIndex = Number(options.laneIndex);
+  const laneOffset = Number.isFinite(Number(options.laneOffset))
+    ? Number(options.laneOffset)
+    : (Number.isFinite(laneIndex) ? laneIndex * wireSpacing : 0);
   const sourceSide = options.sourceSide || "auto";
   const targetSide = options.targetSide || "auto";
 
@@ -424,19 +428,42 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
   };
 
   // Se os stubs forem colineares e sem obstáculos no meio (linha reta direta)
-  if (startStub.x === endStub.x || startStub.y === endStub.y) {
+  if ((startStub.x === endStub.x) || (laneOffset === 0 && startStub.y === endStub.y)) {
     const directCandidate = [pSrc, startStub, endStub, pDst];
     if (!pathIntersectsObstacles([startStub, endStub], obstacles, obstaclePadding, excludedIds)) {
       return simplifyOrthogonalPoints(directCandidate);
     }
   }
 
+  // Stubs com espaçamento sutil para rotas paralelas em canaletas (evita fios sobrepostos)
+  const stubOffsetLeft = Math.max(8, portExitOffset + laneOffset);
+  const startStubLeft = {
+    x: pSrc.x + (srcVec.x !== 0 ? srcVec.x * stubOffsetLeft : 0),
+    y: pSrc.y + (srcVec.y !== 0 ? srcVec.y * stubOffsetLeft : 0),
+  };
+  const endStubOffsetLeft = Math.max(8, portExitOffset + laneOffset);
+  const endStubLeft = {
+    x: pDst.x + (dstVec.x !== 0 ? dstVec.x * endStubOffsetLeft : 0),
+    y: pDst.y + (dstVec.y !== 0 ? dstVec.y * endStubOffsetLeft : 0),
+  };
+
+  const stubOffsetRight = Math.max(8, portExitOffset - laneOffset);
+  const startStubRight = {
+    x: pSrc.x + (srcVec.x !== 0 ? srcVec.x * stubOffsetRight : 0),
+    y: pSrc.y + (srcVec.y !== 0 ? srcVec.y * stubOffsetRight : 0),
+  };
+  const endStubOffsetRight = Math.max(8, portExitOffset - laneOffset);
+  const endStubRight = {
+    x: pDst.x + (dstVec.x !== 0 ? dstVec.x * endStubOffsetRight : 0),
+    y: pDst.y + (dstVec.y !== 0 ? dstVec.y * endStubOffsetRight : 0),
+  };
+
   // GERAÇÃO DE CANDIDATOS ORTOGONAIS (H-V, V-H, V-H-V, H-V-H)
   const candidateRoutes = [];
 
   // Corredores padrão do painel
   const leftCorridorX = snapToGrid(Math.max(48, 80)) + laneOffset;
-  const rightCorridorX = snapToGrid(Math.min(PANEL_DESIGN_WIDTH - 48, 760)) + laneOffset;
+  const rightCorridorX = snapToGrid(Math.min(PANEL_DESIGN_WIDTH - 48, 760)) - laneOffset;
   const midCorridorY = snapToGrid((startStub.y + endStub.y) / 2) + laneOffset;
 
   // 1. Rota Z vertical (Vertical -> Horizontal -> Vertical com laneOffset)
@@ -454,52 +481,68 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
   const midCorridorX = snapToGrid((startStub.x + endStub.x) / 2) + laneOffset;
   const zHorizontal = [
     pSrc,
-    startStub,
-    { x: midCorridorX, y: startStub.y },
-    { x: midCorridorX, y: endStub.y },
-    endStub,
+    startStubLeft,
+    { x: midCorridorX, y: startStubLeft.y },
+    { x: midCorridorX, y: endStubLeft.y },
+    endStubLeft,
     pDst,
   ];
   candidateRoutes.push(zHorizontal);
 
-  // 3. Rota pelo canal esquerdo (Left Duct)
+  // 3. Rota pelo canal esquerdo (Left Duct) com stubs espaçados
   const viaLeft = [
     pSrc,
-    startStub,
-    { x: leftCorridorX, y: startStub.y },
-    { x: leftCorridorX, y: endStub.y },
-    endStub,
+    startStubLeft,
+    { x: leftCorridorX, y: startStubLeft.y },
+    { x: leftCorridorX, y: endStubLeft.y },
+    endStubLeft,
     pDst,
   ];
   candidateRoutes.push(viaLeft);
 
-  // 4. Rota pelo canal direito (Right Duct)
+  // 4. Rota pelo canal direito (Right Duct) com stubs espaçados
   const viaRight = [
     pSrc,
-    startStub,
-    { x: rightCorridorX, y: startStub.y },
-    { x: rightCorridorX, y: endStub.y },
-    endStub,
+    startStubRight,
+    { x: rightCorridorX, y: startStubRight.y },
+    { x: rightCorridorX, y: endStubRight.y },
+    endStubRight,
     pDst,
   ];
   candidateRoutes.push(viaRight);
 
-  // 5. Rota L simples (Vertical -> Horizontal)
+  // 5. Rota L simples (Vertical -> Horizontal) com stubs espaçados
+  const isGoingUp = endStub.y <= pSrc.y;
+  const lVertStub = isGoingUp ? startStubRight : startStubLeft;
+  const lVertEndStub = isGoingUp ? endStubRight : endStubLeft;
+  const lTurnY = isGoingUp
+    ? (laneOffset !== 0 ? endStub.y - laneOffset : endStub.y)
+    : (laneOffset !== 0 ? endStub.y + laneOffset : endStub.y);
+
   const lVerticalFirst = [
     pSrc,
-    startStub,
-    { x: startStub.x, y: endStub.y },
-    endStub,
+    lVertStub,
+    { x: lVertStub.x, y: lTurnY },
+    { x: lVertEndStub.x, y: lTurnY },
+    lVertEndStub,
     pDst,
   ];
   candidateRoutes.push(lVerticalFirst);
 
-  // 6. Rota L simples (Horizontal -> Vertical)
+  // 6. Rota L simples (Horizontal -> Vertical) com stubs espaçados
+  const isGoingLeft = endStub.x <= pSrc.x;
+  const lStub = isGoingLeft ? startStubLeft : startStubRight;
+  const lEndStub = isGoingLeft ? endStubLeft : endStubRight;
+  const lTurnX = isGoingLeft
+    ? (laneOffset !== 0 ? endStub.x + laneOffset : endStub.x)
+    : (laneOffset !== 0 ? endStub.x - laneOffset : endStub.x);
+
   const lHorizontalFirst = [
     pSrc,
-    startStub,
-    { x: endStub.x, y: startStub.y },
-    endStub,
+    lStub,
+    { x: lTurnX, y: lStub.y },
+    { x: lTurnX, y: lEndStub.y },
+    lEndStub,
     pDst,
   ];
   candidateRoutes.push(lHorizontalFirst);

@@ -177,6 +177,57 @@ console.log("Iniciando bateria de testes do Otimizador Inteligente de Fiação..
   console.log("✓ TESTE 5: Preservação de neutro, terra e desvio de obstáculos: OK");
 }
 
+// ─── TESTE 6: Feixe saindo de bornes inferiores paralelos (DPS, IDR L1, IDR N) ─
+{
+  const mockRails = [
+    {
+      id: "rail_0",
+      components: [
+        { id: "dps_a", type: "dps", poles: 1 },
+        { id: "idr_geral", type: "dr", poles: 2 },
+      ],
+    },
+    {
+      id: "rail_1",
+      components: [
+        { id: "sp", type: "spacer", poles: 4 },
+        { id: "b1", type: "breaker", poles: 1 },
+        { id: "b2", type: "breaker", poles: 1 },
+      ],
+    },
+  ];
+
+  const mockWires = [
+    { id: "w_dps", source: "comp:dps_a:bottom:0", target: "comp:b1:bottom:0", color: "green" },
+    { id: "w_l1", source: "comp:idr_geral:bottom:0", target: "comp:b2:bottom:0", color: "black" },
+    { id: "w_n", source: "comp:idr_geral:bottom:1", target: "comp:b1:top:0", color: "blue" },
+  ];
+
+  const { optimizedWires } = optimizePanelWiring({
+    wires: mockWires,
+    rails: mockRails,
+    infrastructure: [],
+    panelHeight: 820,
+    options: { minWireSpacing: 9 },
+  });
+
+  assert.equal(optimizedWires.length, 3, "TESTE 6: Todas as 3 conexões devem existir");
+  const ptsDPS = optimizedWires[0].route.points;
+  const ptsL1 = optimizedWires[1].route.points;
+  const ptsN = optimizedWires[2].route.points;
+
+  // Obter o primeiro segmento horizontal de saída de cada condutor
+  const yExitDPS = ptsDPS[1]?.y;
+  const yExitL1 = ptsL1[1]?.y;
+  const yExitN = ptsN[1]?.y;
+
+  assert.ok(yExitDPS && yExitL1 && yExitN, "TESTE 6: Todos devem ter saída ortogonal válida");
+  assert.notEqual(yExitDPS, yExitL1, "TESTE 6: Saída do DPS e L1 não podem se sobrepor");
+  assert.notEqual(yExitL1, yExitN, "TESTE 6: Saída de L1 e N não podem se sobrepor");
+
+  console.log("✓ TESTE 6: Feixe saindo de bornes inferiores paralelos (DPS, IDR) mantém sutil distância: OK");
+}
+
 console.log("\n=======================================================");
 console.log("TODOS OS TESTES DO OTIMIZADOR DE FIAÇÃO PASSARAM COM SUCESSO!");
 console.log("=======================================================\n");
