@@ -1,5 +1,6 @@
 import { Component, useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { backend } from "@/api/backendClient";
+import { backend, readLocalProjects, writeLocalProjects } from "@/api/backendClient";
+import { savePlantToIndexedDB, loadPlantFromIndexedDB } from "@/lib/plantPersistence";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -2271,8 +2272,20 @@ export default function PlantaIA() {
   const loadProjects = async () => {
     const ps = await backend.entities.Project.list();
     setProjects(ps);
-    if (selectedProject) {
-      const currentProject = ps.find((project) => project.id === selectedProject);
+    let activeId = selectedProject;
+    if (!activeId) {
+      const storedActive = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
+      if (storedActive && ps.some((p) => p.id === storedActive)) {
+        activeId = storedActive;
+      } else if (ps.length > 0) {
+        activeId = ps[0].id;
+      }
+      if (activeId) {
+        setSelectedProject(activeId);
+      }
+    }
+    if (activeId) {
+      const currentProject = ps.find((project) => project.id === activeId);
       if (currentProject?.panel_boards || currentProject?.panel_layout) {
         setSelectedProjectData(currentProject);
       }
@@ -2291,6 +2304,11 @@ export default function PlantaIA() {
   useEffect(() => {
     if (!projectFromUrl) return;
     setSelectedProject(projectFromUrl);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("voltai_active_project_id", projectFromUrl);
+      } catch {}
+    }
   }, [projectFromUrl]);
 
   useEffect(() => {
@@ -2304,16 +2322,35 @@ export default function PlantaIA() {
       hydratedProjectRef.current = "";
       return;
     }
+
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("voltai_active_project_id", selectedProject);
+      } catch {}
+    }
+
     let cancelled = false;
     backend.entities.Project.get(selectedProject)
-      .then((project) => {
+      .then(async (project) => {
         if (!cancelled) {
           setSelectedProjectData(project);
           setGeneratedCircuits(normalizeProjectCircuits(project.circuits || []));
           setScannerReport(project.plant_scanner_report || null);
           latestScannerReportRef.current = project.plant_scanner_report || null;
           setRouteCircuitId("auto");
-          const design = normalizePlantDesign(project.plant_design || project.plantDesign);
+
+          let loadedDesign = project.plant_design || project.plantDesign;
+          try {
+            const idbDesign = await loadPlantFromIndexedDB(selectedProject);
+            if (idbDesign && (idbDesign.points?.length || idbDesign.rooms?.length || idbDesign.walls?.length || idbDesign.imageUrl)) {
+              loadedDesign = {
+                ...normalizePlantDesign(loadedDesign),
+                ...idbDesign,
+              };
+            }
+          } catch {}
+
+          const design = normalizePlantDesign(loadedDesign);
           applyDesignSnapshot(design);
           resetDesignHistory(design);
           setActiveTool("");
@@ -2339,29 +2376,34 @@ export default function PlantaIA() {
   const markPlantDesignSaved = () => {
     setSaved(true);
     if (saveFeedbackTimerRef.current) clearTimeout(saveFeedbackTimerRef.current);
-    saveFeedbackTimerRef.current = setTimeout(() => setSaved(false), 1400);
+    saveFeedbackTimerRef.current = setTimeout(() => setSaved(false), 2000);
   };
 
-  const persistPlantDesignSnapshot = async (snapshot, { silent = false } = {}) => {
-    if (!selectedProject || !snapshot) return false;
+  const persistPlantDesignSnapshot = async (snapshot, { silent = false, targetProjectId = null } = {}) => {
+    const projId = targetProjectId || selectedProject;
+    if (!projId || !snapshot) return false;
     if (!silent) setSaving(true);
 
     const report = latestScannerReportRef.current;
-    const currentProj = selectedProjectData || {};
+    const currentProj = selectedProjectData || projects.find((p) => p.id === projId) || {};
     
     // Sincronização inteligente dos pontos da planta para os circuitos e quadro DIN
     let syncedCircuits = currentProj.circuits || [];
     let electricalSyncPayload = {};
-    if (Array.isArray(snapshot?.points) && snapshot.points.length > 0) {
-      const plantSync = syncPlantPointsToCircuits(currentProj, snapshot.points);
-      syncedCircuits = plantSync.circuits;
-      electricalSyncPayload = buildProjectElectricalSyncPayload(currentProj, syncedCircuits);
+    try {
+      if (Array.isArray(snapshot?.points) && snapshot.points.length > 0) {
+        const plantSync = syncPlantPointsToCircuits(currentProj, snapshot.points);
+        syncedCircuits = plantSync.circuits || [];
+        electricalSyncPayload = buildProjectElectricalSyncPayload(currentProj, syncedCircuits) || {};
+      }
+    } catch (syncErr) {
+      console.warn("Aviso na sincronização de circuitos:", syncErr);
     }
 
     const payload = {
       plant_design: snapshot,
-      plant_points_count: snapshot.points.length,
-      plant_routes_count: snapshot.routes.length,
+      plant_points_count: (snapshot.points || []).length,
+      plant_routes_count: (snapshot.routes || []).length,
       plant_scanner_report: report,
       plant_scan_counts: report?.counts || {},
       ...(syncedCircuits.length > 0 ? {
@@ -2373,13 +2415,29 @@ export default function PlantaIA() {
     };
 
     try {
-      const updatedProject = await backend.entities.Project.update(selectedProject, payload);
+      // 1. Salvar no IndexedDB (sem limite de cota de localStorage)
+      savePlantToIndexedDB(projId, snapshot).catch(() => {});
+
+      // 2. Gravar backup de segurança no localStorage
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("voltai_active_project_id", projId);
+          window.localStorage.setItem(`voltai_plant_backup_${projId}`, JSON.stringify({
+            updated_at: new Date().toISOString(),
+            points_count: (snapshot.points || []).length,
+            rooms_count: (snapshot.rooms || []).length,
+          }));
+        }
+      } catch {}
+
+      // 3. Atualizar no backend/localProjects
+      const updatedProject = await backend.entities.Project.update(projId, payload);
       if (syncedCircuits.length > 0) {
         setGeneratedCircuits(normalizeProjectCircuits(syncedCircuits));
       }
       setSelectedProjectData((current) => current ? { ...current, ...payload, ...(updatedProject || {}) } : updatedProject);
       setProjects((current) => current.map((item) => (
-        item.id === selectedProject ? { ...item, ...payload, ...(updatedProject || {}) } : item
+        item.id === projId ? { ...item, ...payload, ...(updatedProject || {}) } : item
       )));
       markPlantDesignSaved();
       return true;
@@ -2392,45 +2450,137 @@ export default function PlantaIA() {
   };
 
   const handleSavePlantDesign = async () => {
-    const snapshot = currentDesignSnapshot();
-    latestPlantSnapshotRef.current = snapshot;
-    await persistPlantDesignSnapshot(snapshot);
+    try {
+      setSaving(true);
+      let targetId = selectedProject;
+      if (!targetId) {
+        const storedActive = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
+        if (storedActive && projects.some((p) => p.id === storedActive)) {
+          targetId = storedActive;
+        } else if (projects.length > 0) {
+          targetId = projects[0].id;
+        } else {
+          const created = await backend.entities.Project.create({
+            name: "Projeto Casa",
+          });
+          targetId = created.id;
+          setProjects([created]);
+        }
+        setSelectedProject(targetId);
+      }
+
+      const snapshot = currentDesignSnapshot();
+      latestPlantSnapshotRef.current = snapshot;
+      const success = await persistPlantDesignSnapshot(snapshot, { targetProjectId: targetId });
+      if (success) {
+        toast({
+          title: "Projeto salvo com sucesso!",
+          description: "Todas as alterações da planta e circuitos foram salvas.",
+        });
+      } else {
+        toast({
+          title: "Erro ao salvar",
+          description: "Não foi possível salvar as alterações. Tente novamente.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Erro ao salvar:", err);
+      toast({
+        title: "Erro ao salvar",
+        description: err.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
+  // Função para salvar imediatamente e de forma síncrona/segura ao fechar/navegar
+  const flushImmediateSave = useCallback(() => {
+    let projId = selectedProject;
+    if (!projId) {
+      try {
+        if (typeof window !== "undefined") {
+          projId = window.localStorage.getItem("voltai_active_project_id");
+        }
+      } catch {}
+    }
+    if (!projId) {
+      const allProjects = readLocalProjects();
+      if (allProjects.length > 0) projId = allProjects[0].id;
+    }
+    if (!projId) return;
+    const snapshot = latestPlantSnapshotRef.current || currentDesignSnapshot();
+
+    // 1. Grava no IndexedDB
+    savePlantToIndexedDB(projId, snapshot).catch(() => {});
+
+    // 2. Grava de forma síncrona no localStorage
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("voltai_active_project_id", projId);
+        const allProjects = readLocalProjects();
+        const pIdx = allProjects.findIndex((p) => p.id === projId);
+        if (pIdx >= 0) {
+          allProjects[pIdx] = {
+            ...allProjects[pIdx],
+            plant_design: snapshot,
+            plant_points_count: (snapshot.points || []).length,
+            plant_routes_count: (snapshot.routes || []).length,
+            updated_date: new Date().toISOString(),
+          };
+          writeLocalProjects(allProjects);
+        }
+      }
+    } catch (e) {
+      console.warn("[flushImmediateSave] Erro no flush:", e);
+    }
+
+    // 3. Executa a persistência completa
+    persistPlantDesignSnapshot(snapshot, { silent: true, targetProjectId: projId });
+  }, [selectedProject]);
+
+  // Ação de voltar para a home com salvamento automático prévio
+  const handleBackToHome = useCallback(() => {
+    flushImmediateSave();
+    navigate("/");
+  }, [flushImmediateSave, navigate]);
+
+  // Autosave contínuo (debounce ao editar)
   useEffect(() => {
     if (!selectedProject || hydratedProjectRef.current !== selectedProject) return undefined;
     const snapshot = currentDesignSnapshot();
     latestPlantSnapshotRef.current = snapshot;
     autosaveTimerRef.current = setTimeout(() => {
       persistPlantDesignSnapshot(snapshot, { silent: true });
-    }, 900);
+    }, 800);
 
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
   }, [selectedProject, imageUrl, imageLayout, importedFileName, importStatus, importedPlanElements, points, rooms, walls, openings, roomLabels, routes, scalePxPerMeter, showWallDimensions, showDeviceDimensions, showPositionLabels, unitSettings, editorLayers, snapSettings, scannerReport]);
 
+  // Salvamento automático quando fechar (beforeunload, pagehide, visibilitychange e desmontagem do componente)
   useEffect(() => {
-    if (!selectedProject || hydratedProjectRef.current !== selectedProject) return undefined;
+    if (!selectedProject) return undefined;
 
-    const flushPendingPlantSave = () => {
-      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-      const snapshot = latestPlantSnapshotRef.current || currentDesignSnapshot();
-      persistPlantDesignSnapshot(snapshot, { silent: true });
-    };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") flushPendingPlantSave();
+      if (document.visibilityState === "hidden") flushImmediateSave();
     };
 
-    window.addEventListener("pagehide", flushPendingPlantSave);
-    window.addEventListener("beforeunload", flushPendingPlantSave);
+    window.addEventListener("pagehide", flushImmediateSave);
+    window.addEventListener("beforeunload", flushImmediateSave);
     document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
-      window.removeEventListener("pagehide", flushPendingPlantSave);
-      window.removeEventListener("beforeunload", flushPendingPlantSave);
+      // Salva automaticamente ao desmontar (navegação para outra rota do app)
+      flushImmediateSave();
+      window.removeEventListener("pagehide", flushImmediateSave);
+      window.removeEventListener("beforeunload", flushImmediateSave);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [selectedProject]);
+  }, [selectedProject, flushImmediateSave]);
 
   useEffect(() => () => {
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
@@ -5193,7 +5343,7 @@ export default function PlantaIA() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/")}
+            onClick={handleBackToHome}
             className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] bg-[#E8FCF8] px-2.5 text-xs font-black text-[#0f4f49] transition hover:bg-[#00d8b8] hover:text-white"
             title="Voltar para a Home"
           >
@@ -5203,12 +5353,29 @@ export default function PlantaIA() {
 
           <div className="h-5 w-px bg-[#CDEFE8] mx-1" />
 
-          <Select value={selectedProject} onValueChange={setSelectedProject} onOpenChange={open => { if (open) loadProjects(); }}>
+          <Select
+            value={selectedProject}
+            onValueChange={(val) => {
+              setSelectedProject(val);
+              if (val && typeof window !== "undefined") {
+                try {
+                  window.localStorage.setItem("voltai_active_project_id", val);
+                } catch {}
+              }
+            }}
+            onOpenChange={(open) => {
+              if (open) loadProjects();
+            }}
+          >
             <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none">
               <SelectValue placeholder="Selecionar projeto..." />
             </SelectTrigger>
             <SelectContent>
-              {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -5260,7 +5427,7 @@ export default function PlantaIA() {
             size="sm"
             className="h-8 rounded-lg bg-[#00d8b8] px-3 text-xs font-black text-white hover:bg-[#00bda1] shadow-sm"
             onClick={handleSavePlantDesign}
-            disabled={!selectedProject || saving}
+            disabled={saving}
             title="Salvar alterações no projeto"
           >
             {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : saved ? <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-white" /> : <Save className="mr-1 h-3.5 w-3.5" />}

@@ -32,8 +32,31 @@ const readLocal = (key, fallback) => {
 const writeLocal = (key, value) => {
   const store = storage();
   if (!store) return value;
-  store.setItem(key, JSON.stringify(value));
-  return value;
+  try {
+    store.setItem(key, JSON.stringify(value));
+    return value;
+  } catch (err) {
+    console.warn(`[writeLocal] Erro ao gravar ${key} no localStorage:`, err);
+    if (key === LOCAL_PROJECTS_KEY && Array.isArray(value)) {
+      try {
+        const sanitized = value.map((p, idx) => {
+          if (idx === 0) return p;
+          if (p?.plant_design?.imageUrl?.startsWith("data:")) {
+            return {
+              ...p,
+              plant_design: { ...p.plant_design, imageUrl: "" },
+            };
+          }
+          return p;
+        });
+        store.setItem(key, JSON.stringify(sanitized));
+        return sanitized;
+      } catch (innerErr) {
+        console.warn(`[writeLocal] Cota estourada no localStorage:`, innerErr);
+      }
+    }
+    return value;
+  }
 };
 
 const cloneLocal = (value) => {
@@ -91,8 +114,8 @@ const readLocalUsers = () => {
   return [defaultUser];
 };
 const writeLocalUsers = (users) => writeLocal(LOCAL_USERS_KEY, users);
-const readLocalProjects = () => { const d = readLocal(LOCAL_PROJECTS_KEY, []); return Array.isArray(d) ? d : []; };
-const writeLocalProjects = (projects) => writeLocal(LOCAL_PROJECTS_KEY, projects);
+export const readLocalProjects = () => { const d = readLocal(LOCAL_PROJECTS_KEY, []); return Array.isArray(d) ? d : []; };
+export const writeLocalProjects = (projects) => writeLocal(LOCAL_PROJECTS_KEY, projects);
 const readLocalNotifications = () => { const d = readLocal(LOCAL_NOTIFICATIONS_KEY, []); return Array.isArray(d) ? d : []; };
 const writeLocalNotifications = (notifications) => writeLocal(LOCAL_NOTIFICATIONS_KEY, notifications);
 const readLocalResetTokens = () => readLocal(LOCAL_RESET_TOKENS_KEY, {});
@@ -492,11 +515,20 @@ const projectEntity = {
       const projects = readLocalProjects();
       const projectIndex = projects.findIndex((item) => item.id === id);
 
+      const nextProjects = [...projects];
       if (projectIndex < 0) {
-        throw createError("Projeto nao encontrado.", 404);
+        const newProject = {
+          id,
+          name: data?.name || "Projeto Elétrico",
+          created_date: nowIso(),
+          updated_date: nowIso(),
+          circuits: [],
+          ...data,
+        };
+        writeLocalProjects([newProject, ...projects]);
+        return cloneLocal(newProject);
       }
 
-      const nextProjects = [...projects];
       nextProjects[projectIndex] = {
         ...nextProjects[projectIndex],
         ...data,
