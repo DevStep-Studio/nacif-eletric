@@ -7501,8 +7501,16 @@ export default function PanelGenerator() {
     const wireKind = descriptor?.kind || getWireKind(normalizedWireColor(wire));
     const isNeutral = wireKind === "neutral";
     const isGround = wireKind === "ground";
-    const endpoint = routePoints[routePoints.length - 1];
     const isPower = wireKind === "power";
+
+    const isSourceLoad = Boolean(wire.source?.startsWith?.("load_out:") || descriptor.sourceMeta?.type === "load");
+    const rawEndpoint = isSourceLoad ? routePoints[0] : routePoints[routePoints.length - 1];
+    const isDraggingEndpoint = wireEndpointDrag?.wireId === wire.id && (
+      isSourceLoad ? wireEndpointDrag?.endpoint === "source" : wireEndpointDrag?.endpoint === "target"
+    );
+    const endpoint = (isDraggingEndpoint && endpointDragCoords) ? endpointDragCoords : rawEndpoint;
+    if (!endpoint || !Number.isFinite(endpoint.x) || !Number.isFinite(endpoint.y)) return null;
+
     const defaultLabelX = isNeutral
       ? Math.min(PANEL_W - 74, endpoint.x + 12)
       : isGround
@@ -7514,32 +7522,19 @@ export default function PanelGenerator() {
         ? endpoint.y - 3
         : endpoint.y + 56;
     
-    const labelX = meta.x ?? wire.labelPosition?.x ?? defaultLabelX;
-    const labelY = meta.y ?? wire.labelPosition?.y ?? defaultLabelY;
+    const labelX = defaultLabelX;
+    const labelY = defaultLabelY;
     const rotationVal = meta.rotation ?? (isPower ? -90 : 0);
     const rotation = rotationVal ? `rotate(${rotationVal} ${labelX} ${labelY})` : undefined;
-    const isMiddleAnchor = isPower && !meta.x && !meta.rotation;
+    const isMiddleAnchor = isPower && !meta.rotation;
 
     return (
       <g
         key={key}
         transform={rotation}
-        className={`cursor-move ${selectedTextWireId === wire.id ? "stroke-emerald-500 stroke-[0.3]" : ""}`}
-        onPointerDown={(e) => startTextDrag(e, wire.id, defaultLabelX, defaultLabelY)}
-        onClick={(e) => {
-          e.stopPropagation();
-          setSelectedTextWireId(wire.id);
-          setActiveTab("text");
-        }}
+        pointerEvents="none"
+        className="pointer-events-none select-none"
       >
-        <rect
-          x={isMiddleAnchor ? labelX - 25 : labelX - 4}
-          y={labelY - 10}
-          width={Math.max(50, label.length * 4.5 + 8)}
-          height={16}
-          fill="transparent"
-          pointerEvents="all"
-        />
         <text
           x={labelX}
           y={labelY}
@@ -7549,6 +7544,8 @@ export default function PanelGenerator() {
           fontWeight="900"
           textAnchor={isMiddleAnchor ? "middle" : "start"}
           pointerEvents="none"
+          className="select-none"
+          style={{ userSelect: "none" }}
         >
           {label}
         </text>
