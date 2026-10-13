@@ -511,6 +511,13 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
   const secondary = [];
 
   const isLandscape = len01 > len12;
+  // Margem de 1.8% para as células não encostarem nem sobreporem a moldura externa de alumínio
+  const inset = 0.018;
+
+  const safeLine = (start, end) => [
+    interpolateLatLng(start, end, inset),
+    interpolateLatLng(start, end, 1 - inset),
+  ];
 
   if (!isLandscape) {
     // =========================================================================
@@ -523,11 +530,15 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
     const cols = 6;
     for (let c = 1; c < cols; c++) {
       const ratioC = c / cols;
-      primary.push([interpolateLatLng(p0, p1, ratioC), interpolateLatLng(p3, p2, ratioC)]);
+      const topPt = interpolateLatLng(p0, p1, ratioC);
+      const btmPt = interpolateLatLng(p3, p2, ratioC);
+      primary.push(safeLine(topPt, btmPt));
     }
 
-    // 2. Linha divisória central longitudinal do Half-Cut
-    halfCut.push([interpolateLatLng(p0, p3, 0.5), interpolateLatLng(p1, p2, 0.5)]);
+    // 2. Linha divisória central transversal do Half-Cut (divide a altura em 2 metades simétricas)
+    const midLeft = interpolateLatLng(p0, p3, 0.5);
+    const midRight = interpolateLatLng(p1, p2, 0.5);
+    halfCut.push(safeLine(midLeft, midRight));
 
     // 3. Divisores transversais de células ao longo do comprimento
     // Em zoom >= 19: 12 fileiras de células (6 por metade)
@@ -536,13 +547,19 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
     for (let r = 1; r < rows; r++) {
       if (r === rows / 2) continue; // Meio já é a linha de half-cut
       const ratioR = r / rows;
-      primary.push([interpolateLatLng(p0, p3, ratioR), interpolateLatLng(p1, p2, ratioR)]);
+      const leftPt = interpolateLatLng(p0, p3, ratioR);
+      const rightPt = interpolateLatLng(p1, p2, ratioR);
+      primary.push(safeLine(leftPt, rightPt));
     }
 
     // 4. Barramentos finos (busbars) para zoom elevado (zoom >= 20)
     if (highDetail && zoomLevel >= 20) {
-      secondary.push([interpolateLatLng(p0, p1, 0.25), interpolateLatLng(p3, p2, 0.25)]);
-      secondary.push([interpolateLatLng(p0, p1, 0.75), interpolateLatLng(p3, p2, 0.75)]);
+      const b1Top = interpolateLatLng(p0, p1, 0.25);
+      const b1Btm = interpolateLatLng(p3, p2, 0.25);
+      const b2Top = interpolateLatLng(p0, p1, 0.75);
+      const b2Btm = interpolateLatLng(p3, p2, 0.75);
+      secondary.push(safeLine(b1Top, b1Btm));
+      secondary.push(safeLine(b2Top, b2Btm));
     }
   } else {
     // =========================================================================
@@ -551,28 +568,38 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
     // Aresta 0-3 (esquerda) e 1-2 (direita) = Eixo menor (altura ~1.13m)
     // =========================================================================
 
-    // 1. Linhas de colunas de células (6 colunas ao longo do eixo menor de ~1.13m)
+    // 1. Linhas de colunas de células (6 faixas uniformes ao longo da largura de ~1.13m)
     const cols = 6;
     for (let c = 1; c < cols; c++) {
       const ratioC = c / cols;
-      primary.push([interpolateLatLng(p0, p3, ratioC), interpolateLatLng(p1, p2, ratioC)]);
+      const leftPt = interpolateLatLng(p0, p3, ratioC);
+      const rightPt = interpolateLatLng(p1, p2, ratioC);
+      primary.push(safeLine(leftPt, rightPt));
     }
 
-    // 2. Linha divisória central de corte Half-Cut
-    halfCut.push([interpolateLatLng(p0, p1, 0.5), interpolateLatLng(p3, p2, 0.5)]);
+    // 2. Linha divisória central de corte Half-Cut (divide o comprimento de 2.28m ao meio)
+    const midTop = interpolateLatLng(p0, p1, 0.5);
+    const midBtm = interpolateLatLng(p3, p2, 0.5);
+    halfCut.push(safeLine(midTop, midBtm));
 
     // 3. Divisores transversais de células ao longo do comprimento
     const rows = zoomLevel >= 19 ? 12 : 6;
     for (let r = 1; r < rows; r++) {
       if (r === rows / 2) continue;
       const ratioR = r / rows;
-      primary.push([interpolateLatLng(p0, p1, ratioR), interpolateLatLng(p3, p2, ratioR)]);
+      const topPt = interpolateLatLng(p0, p1, ratioR);
+      const btmPt = interpolateLatLng(p3, p2, ratioR);
+      primary.push(safeLine(topPt, btmPt));
     }
 
     // 4. Barramentos finos (busbars) para zoom elevado
     if (highDetail && zoomLevel >= 20) {
-      secondary.push([interpolateLatLng(p0, p3, 0.25), interpolateLatLng(p1, p2, 0.25)]);
-      secondary.push([interpolateLatLng(p0, p3, 0.75), interpolateLatLng(p1, p2, 0.75)]);
+      const b1Left = interpolateLatLng(p0, p3, 0.25);
+      const b1Right = interpolateLatLng(p1, p2, 0.25);
+      const b2Left = interpolateLatLng(p0, p3, 0.75);
+      const b2Right = interpolateLatLng(p1, p2, 0.75);
+      secondary.push(safeLine(b1Left, b1Right));
+      secondary.push(safeLine(b2Left, b2Right));
     }
   }
 

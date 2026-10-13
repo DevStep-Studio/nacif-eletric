@@ -255,8 +255,8 @@ label.rounded-full,
 }
 
 .solar-panel-shape {
-  stroke-linejoin: miter;
-  stroke-linecap: square;
+  stroke-linejoin: round;
+  stroke-linecap: round;
   shape-rendering: geometricPrecision;
   transition: filter 0.15s ease, stroke 0.15s ease, fill 0.15s ease;
   pointer-events: auto;
@@ -267,15 +267,15 @@ label.rounded-full,
 }
 
 .solar-panel-shape.solar-panel--selected {
-  filter: drop-shadow(0 0 2px rgba(0, 216, 184, 0.7));
+  filter: drop-shadow(0 0 3px rgba(0, 216, 184, 0.75));
 }
 
 .solar-panel-cell-lines,
 .solar-panel-half-cut-lines,
 .solar-panel-busbars {
   pointer-events: none;
-  stroke-linecap: butt;
-  stroke-linejoin: miter;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   shape-rendering: geometricPrecision;
 }
 

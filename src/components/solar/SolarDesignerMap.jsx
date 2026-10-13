@@ -697,12 +697,12 @@ export default function SolarDesignerMap({
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
 
   // LOD Dinâmico por Zoom:
-  // - Zoom < 16: Sem linhas internas (modo visão geral leve e ultra-rápido)
-  // - Zoom 16 a 18: Matriz limpa de células (6 colunas x 6 divisões + meio half-cut)
-  // - Zoom >= 19: Matriz detalhada (6 colunas x 12 divisões + half-cut proeminente)
-  // - Zoom >= 20: Detalhamento completo incluindo busbars finas
+  // LOD Dinâmico por Zoom:
+  // - Zoom < 18: Sem linhas internas (modo visão geral limpo e leve)
+  // - Zoom 18 a 19: Divisão longitudinal Half-Cut + divisórias com opacidade sutil
+  // - Zoom >= 20: Detalhamento fotovoltaico completo com traços ultra-finos e baixa opacidade
   const { cellLines, halfCutLines, secondaryLines } = useMemo(() => {
-    if (currentZoom < 16) {
+    if (currentZoom < 18) {
       return { cellLines: [], halfCutLines: [], secondaryLines: [] };
     }
     const isLargeArray = allPanelsFlat.length > 200;
@@ -1007,12 +1007,12 @@ export default function SolarDesignerMap({
               const strColor = STRING_COLORS[strIdx % STRING_COLORS.length];
               const isStringActive = selectedStringIndex === null || selectedStringIndex === strIdx;
 
-              // Paleta fotovoltaica mono-PERC técnica (#142B46 a #1A3553)
-              const realisticSiliconColor = PHOTOVOLTAIC_BASE_COLORS[(globalIndex * 5 + 1) % PHOTOVOLTAIC_BASE_COLORS.length];
+              // Paleta fotovoltaica mono-PERC técnica (#142B46 oficial uniforme)
+              const realisticSiliconColor = SOLAR_PANEL_THEME.mainSurface;
 
               // Moldura externa cinza-azulada discreta (#8B9CAC) ou ciano na seleção ativa (#00d8b8)
               let strokeColor = isSelected ? SOLAR_PANEL_THEME.selectionActive : SOLAR_PANEL_THEME.frame;
-              let strokeWidth = isSelected ? 2.0 : 1.1;
+              let strokeWidth = isSelected ? 1.8 : 0.9;
               let fillColor = viewMode === "irradiation" ? "#00c853" : realisticSiliconColor;
               let opacity = 1.0;
               let fillOpacity = isSelected ? 0.98 : 0.96;
@@ -1074,7 +1074,7 @@ export default function SolarDesignerMap({
             })
           )}
           
-          {/* Linhas internas finas das células fotovoltaicas (#45617A com opacidade reduzida) */}
+          {/* Linhas internas finas das células fotovoltaicas (#45617A com opacidade reduzida e traço suave) */}
           {cellLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
               positions={cellLines}
@@ -1082,36 +1082,36 @@ export default function SolarDesignerMap({
               pathOptions={{
                 color: SOLAR_PANEL_THEME.internalLines,
                 className: "solar-panel-cell-lines pointer-events-none",
-                opacity: currentZoom >= 20 ? 0.6 : 0.46,
-                weight: currentZoom >= 20 ? 0.8 : 0.65,
+                opacity: currentZoom >= 20 ? 0.28 : 0.20,
+                weight: 0.5,
               }}
             />
           )}
 
-          {/* Linha central divisória de corte (Half-Cut gap) */}
+          {/* Linha central divisória de corte (Half-Cut gap discreto) */}
           {halfCutLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
               positions={halfCutLines}
               interactive={false}
               pathOptions={{
-                color: "#5f7e9a",
+                color: "#4e7094",
                 className: "solar-panel-half-cut-lines pointer-events-none",
-                opacity: currentZoom >= 20 ? 0.72 : 0.55,
-                weight: currentZoom >= 20 ? 1.0 : 0.8,
+                opacity: currentZoom >= 20 ? 0.48 : 0.36,
+                weight: 0.75,
               }}
             />
           )}
 
-          {/* Barramentos secundários finos (busbars) em zoom próximo */}
+          {/* Barramentos secundários ultra-sutis em zoom muito próximo */}
           {secondaryLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
               positions={secondaryLines}
               interactive={false}
               pathOptions={{
-                color: "#526e88",
+                color: "#45617A",
                 className: "solar-panel-busbars pointer-events-none",
-                opacity: 0.32,
-                weight: 0.5,
+                opacity: 0.12,
+                weight: 0.4,
               }}
             />
           )}
