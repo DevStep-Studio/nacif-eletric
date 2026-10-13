@@ -10217,7 +10217,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     })()}
                     {showLegend && renderWiringLegend()}
 
-                    {/* Tooltip flutuante inteligente de cabo */}
+                    {/* Tooltip flutuante inteligente de cabo posicionado para fora do quadro */}
                     {hoveredWireId && (() => {
                       const wire = wires.find(w => w.id === hoveredWireId) || getEditableWire(hoveredWireId);
                       const info = getWireDisplayInfo(wire);
@@ -10226,37 +10226,67 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       if (!pts || pts.length < 2) return null;
                       const midIdx = Math.floor(pts.length / 2);
                       const anchorX = pts[midIdx]?.x ?? 200;
-                      const anchorY = (pts[midIdx]?.y ?? 200) - 16;
-                      const tooltipW = 180;
-                      const tooltipH = 58;
-                      const clampedX = Math.max(12, Math.min(PANEL_W - tooltipW - 12, anchorX - tooltipW / 2));
-                      const clampedY = Math.max(12, Math.min(panelHeight - tooltipH - 12, anchorY - tooltipH));
+                      const anchorY = pts[midIdx]?.y ?? 200;
+                      const tooltipW = 204;
+                      const tooltipH = 62;
+                      const isLeftPlaced = anchorX >= 550;
+                      const clampedX = isLeftPlaced ? 22 : PANEL_W - tooltipW - 22;
+                      const clampedY = Math.max(20, Math.min(panelHeight - tooltipH - 20, anchorY - tooltipH / 2));
+                      const cardTargetX = isLeftPlaced ? clampedX + tooltipW : clampedX;
+                      const cardTargetY = clampedY + tooltipH / 2;
+                      const wireColorHex = wireDisplayColor(normalizedWireColor(wire));
 
                       return (
-                        <g transform={`translate(${clampedX}, ${clampedY})`} pointerEvents="none" className="animate-in fade-in duration-150">
-                          <rect
-                            width={tooltipW}
-                            height={tooltipH}
-                            rx="6"
-                            fill="#0f172a"
-                            fillOpacity="0.94"
-                            stroke="#334155"
-                            strokeWidth="1"
-                            filter="url(#shadow)"
+                        <g pointerEvents="none" className="animate-in fade-in duration-150">
+                          {/* Linha guia suave conectando o cabo ao painel de informações fora do quadro */}
+                          <line
+                            x1={anchorX}
+                            y1={anchorY}
+                            x2={cardTargetX}
+                            y2={cardTargetY}
+                            stroke={wireColorHex}
+                            strokeWidth="1.2"
+                            strokeDasharray="4,3"
+                            strokeOpacity="0.45"
                           />
-                          <circle cx="14" cy="15" r="4" fill={wireDisplayColor(normalizedWireColor(wire))} stroke="#ffffff" strokeWidth="0.8" />
-                          <text x="24" y="18" fill="#f8fafc" fontSize="8" fontWeight="900">
-                            {(info.main || "Cabo de Potência").slice(0, 22)}
-                          </text>
-                          <text x="14" y="30" fill="#94a3b8" fontSize="7" fontWeight="700">
-                            Bitola: <tspan fill="#38bdf8" fontWeight="900">{wire.gauge || "2.5mm²"}</tspan> • {wire.routingMode === "manual" ? "Manual" : "Ortogonal"}
-                          </text>
-                          <text x="14" y="41" fill="#cbd5e1" fontSize="6.5" fontWeight="600">
-                            Origem: {(info.origin || "-").slice(0, 22)}
-                          </text>
-                          <text x="14" y="51" fill="#cbd5e1" fontSize="6.5" fontWeight="600">
-                            Destino: {(info.destination || "-").slice(0, 22)}
-                          </text>
+                          <circle cx={anchorX} cy={anchorY} r="3.2" fill={wireColorHex} stroke="#ffffff" strokeWidth="1" />
+                          <circle cx={anchorX} cy={anchorY} r="6" fill={wireColorHex} fillOpacity="0.2" />
+
+                          {/* Card flutuante lateral (para fora da área de componentes) */}
+                          <g transform={`translate(${clampedX}, ${clampedY})`}>
+                            <rect
+                              width={tooltipW}
+                              height={tooltipH}
+                              rx="7"
+                              fill="#0f172a"
+                              fillOpacity="0.96"
+                              stroke="#334155"
+                              strokeWidth="1.2"
+                              filter="url(#shadow)"
+                            />
+                            {/* Barra vertical de acento de cor da fase/condutor */}
+                            <rect
+                              x="0"
+                              y="0"
+                              width="4.5"
+                              height={tooltipH}
+                              rx="2"
+                              fill={wireColorHex}
+                            />
+                            <circle cx="16" cy="15" r="4" fill={wireColorHex} stroke="#ffffff" strokeWidth="0.8" />
+                            <text x="26" y="18" fill="#f8fafc" fontSize="8" fontWeight="900">
+                              {(info.main || "Cabo de Potência").slice(0, 26)}
+                            </text>
+                            <text x="14" y="31" fill="#94a3b8" fontSize="7" fontWeight="700">
+                              Bitola: <tspan fill="#38bdf8" fontWeight="900">{wire.gauge || "2.5mm²"}</tspan> • {wire.routingMode === "manual" ? "Manual" : "Ortogonal"}
+                            </text>
+                            <text x="14" y="43" fill="#cbd5e1" fontSize="6.5" fontWeight="600">
+                              Origem: {(info.origin || "-").slice(0, 26)}
+                            </text>
+                            <text x="14" y="53" fill="#cbd5e1" fontSize="6.5" fontWeight="600">
+                              Destino: {(info.destination || "-").slice(0, 26)}
+                            </text>
+                          </g>
                         </g>
                       );
                     })()}
