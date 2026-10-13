@@ -372,7 +372,7 @@ export default function Layout() {
         {/* Topo da Sidebar: Logo */}
         <div
           className={`flex h-16 items-center border-b border-[#F1F5F9] transition-all duration-200 ${
-            sidebarCollapsed ? "justify-center px-2" : "justify-start px-4"
+            sidebarCollapsed ? "justify-center pr-3.5 pl-0.5" : "justify-start px-4"
           }`}
         >
           <Link
