@@ -516,6 +516,7 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
   const primary = [];
   const halfCut = [];
   const secondary = [];
+  const centerLines = [];
 
   const isLandscape = len01 > len12;
   // Margem de 1.8% para as células não encostarem nem sobreporem a moldura externa de alumínio
@@ -539,13 +540,19 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
       const ratioC = c / cols;
       const topPt = interpolateLatLng(p0, p1, ratioC);
       const btmPt = interpolateLatLng(p3, p2, ratioC);
-      primary.push(safeLine(topPt, btmPt));
+      const line = safeLine(topPt, btmPt);
+      primary.push(line);
+      if (c === 3) {
+        centerLines.push(line); // Eixo central longitudinal
+      }
     }
 
     // 2. Linha divisória central transversal do Half-Cut (divide a altura em 2 metades simétricas)
     const midLeft = interpolateLatLng(p0, p3, 0.5);
     const midRight = interpolateLatLng(p1, p2, 0.5);
-    halfCut.push(safeLine(midLeft, midRight));
+    const cutLine = safeLine(midLeft, midRight);
+    halfCut.push(cutLine);
+    centerLines.push(cutLine); // Eixo central transversal
 
     // 3. Divisores transversais de células ao longo do comprimento
     // Em zoom >= 16: 12 fileiras de células (6 por metade)
@@ -581,13 +588,19 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
       const ratioC = c / cols;
       const leftPt = interpolateLatLng(p0, p3, ratioC);
       const rightPt = interpolateLatLng(p1, p2, ratioC);
-      primary.push(safeLine(leftPt, rightPt));
+      const line = safeLine(leftPt, rightPt);
+      primary.push(line);
+      if (c === 3) {
+        centerLines.push(line); // Eixo central transversal em landscape
+      }
     }
 
     // 2. Linha divisória central de corte Half-Cut (divide o comprimento de 2.28m ao meio)
     const midTop = interpolateLatLng(p0, p1, 0.5);
     const midBtm = interpolateLatLng(p3, p2, 0.5);
-    halfCut.push(safeLine(midTop, midBtm));
+    const cutLine = safeLine(midTop, midBtm);
+    halfCut.push(cutLine);
+    centerLines.push(cutLine); // Eixo central de corte em landscape
 
     // 3. Divisores transversais de células ao longo do comprimento
     const rows = zoomLevel >= 16 ? 12 : 6;
@@ -610,7 +623,7 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
     }
   }
 
-  return { primary, halfCut, secondary };
+  return { primary, halfCut, secondary, centerLines };
 }
 
 export function getDominantRoofRotation(points, fallbackRotation = 0) {

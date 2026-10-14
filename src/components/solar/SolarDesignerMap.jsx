@@ -768,14 +768,14 @@ export default function SolarDesignerMap({
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
 
   // LOD Dinâmico por Zoom:
-  // - Zoom < 15: Sem linhas internas (modo visão geral limpo e leve)
-  // - Zoom >= 15: Detalhamento fotovoltaico completo com matriz de células e half-cut
+  // - Zoom < 12: Sem linhas internas (visão macro)
+  // - Zoom >= 12: Detalhamento fotovoltaico completo com linhas centrais e matriz de células
   const { cellLines, halfCutLines, secondaryLines } = useMemo(() => {
-    if (currentZoom < 15) {
+    if (currentZoom < 12) {
       return { cellLines: [], halfCutLines: [], secondaryLines: [] };
     }
-    const isLargeArray = allPanelsFlat.length > 300;
-    const highDetail = currentZoom >= 18 && !isLargeArray;
+    const isLargeArray = allPanelsFlat.length > 500;
+    const highDetail = currentZoom >= 16 && !isLargeArray;
 
     const allCell = [];
     const allHalfCut = [];
@@ -786,7 +786,9 @@ export default function SolarDesignerMap({
       if (res.primary && res.primary.length > 0) {
         allCell.push(...res.primary);
       }
-      if (res.halfCut && res.halfCut.length > 0) {
+      if (res.centerLines && res.centerLines.length > 0) {
+        allHalfCut.push(...res.centerLines);
+      } else if (res.halfCut && res.halfCut.length > 0) {
         allHalfCut.push(...res.halfCut);
       }
       if (res.secondary && res.secondary.length > 0) {
@@ -1145,30 +1147,30 @@ export default function SolarDesignerMap({
             })
           )}
           
-          {/* Linhas internas nítidas das células fotovoltaicas (matriz branca/gelo da imagem de referência) */}
+          {/* Linhas internas nítidas das células fotovoltaicas (matriz branca nítida) */}
           {cellLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
               positions={cellLines}
               interactive={false}
               pathOptions={{
-                color: SOLAR_PANEL_THEME.cellGridWhite || "#DCE8F7",
+                color: "#FFFFFF",
                 className: "solar-panel-cell-lines pointer-events-none",
-                opacity: 0.78,
-                weight: 0.8,
+                opacity: 0.85,
+                weight: 1.1,
               }}
             />
           )}
 
-          {/* Linha central divisória de corte (Half-Cut gap branco nítido) */}
+          {/* Linhas centrais brancas acentuadas do painel (Half-Cut e eixo central nítidos) */}
           {halfCutLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
               positions={halfCutLines}
               interactive={false}
               pathOptions={{
-                color: SOLAR_PANEL_THEME.halfCutWhite || "#FFFFFF",
+                color: "#FFFFFF",
                 className: "solar-panel-half-cut-lines pointer-events-none",
-                opacity: 0.92,
-                weight: 1.2,
+                opacity: 1.0,
+                weight: 2.2,
               }}
             />
           )}

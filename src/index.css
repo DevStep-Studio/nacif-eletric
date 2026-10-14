@@ -271,8 +271,16 @@ label.rounded-full,
   filter: drop-shadow(0 0 5px rgba(0, 229, 191, 0.85));
 }
 
+.solar-panel-half-cut-lines {
+  pointer-events: none;
+  stroke: #ffffff !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  shape-rendering: geometricPrecision;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.7));
+}
+
 .solar-panel-cell-lines,
-.solar-panel-half-cut-lines,
 .solar-panel-busbars {
   pointer-events: none;
   stroke-linecap: round;
