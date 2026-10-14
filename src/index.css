@@ -260,14 +260,15 @@ label.rounded-full,
   shape-rendering: geometricPrecision;
   transition: filter 0.15s ease, stroke 0.15s ease, fill 0.15s ease;
   pointer-events: auto;
+  filter: drop-shadow(0 1.5px 3px rgba(0, 0, 0, 0.55));
 }
 
 .solar-panel-shape:hover {
-  filter: brightness(1.15);
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.7)) brightness(1.12);
 }
 
 .solar-panel-shape.solar-panel--selected {
-  filter: drop-shadow(0 0 3px rgba(0, 216, 184, 0.75));
+  filter: drop-shadow(0 0 5px rgba(0, 229, 191, 0.85));
 }
 
 .solar-panel-cell-lines,

@@ -501,9 +501,40 @@ function EditableRoofPolygonLayer({
   isEditing,
   onSelectRoof,
   onChange,
+  onAlignToEdge,
 }) {
   const hasPositions = positions && positions.length >= 3;
   const edges = useMemo(() => (hasPositions ? getPolygonEdges(positions) : []), [positions, hasPositions]);
+
+  // Haste e handle de rotação estilo foto de referência
+  const topRotationStem = useMemo(() => {
+    if (!hasPositions || edges.length === 0) return null;
+    let topEdge = edges[0];
+    let maxLat = -Infinity;
+    for (const ed of edges) {
+      const avgLat = (ed.start.lat + ed.end.lat) / 2;
+      if (avgLat > maxLat) {
+        maxLat = avgLat;
+        topEdge = ed;
+      }
+    }
+    const centroid = getPolygonCentroid(positions) || topEdge.midpoint;
+    const dLat = topEdge.midpoint.lat - centroid.lat;
+    const dLng = topEdge.midpoint.lng - centroid.lng;
+    const dist = Math.hypot(dLat, dLng) || 0.0001;
+    const stemDist = Math.max(0.00003, dist * 0.32);
+    const handleLat = topEdge.midpoint.lat + (dLat / dist) * stemDist;
+    const handleLng = topEdge.midpoint.lng + (dLng / dist) * stemDist;
+
+    return {
+      stem: [
+        [topEdge.midpoint.lat, topEdge.midpoint.lng],
+        [handleLat, handleLng],
+      ],
+      handlePos: [handleLat, handleLng],
+      azimuth: topEdge.azimuth,
+    };
+  }, [positions, hasPositions, edges]);
 
   if (!hasPositions) return null;
 
@@ -526,7 +557,7 @@ function EditableRoofPolygonLayer({
 
   return (
     <Pane name="solar-roof-pane" style={{ zIndex: 430 }}>
-      {/* Polígono do telhado */}
+      {/* Polígono do telhado / área com borda ciano sólida conforme foto de referência */}
       <Polygon
         positions={toLeafletPositions(positions)}
         interactive={true}
@@ -537,12 +568,11 @@ function EditableRoofPolygonLayer({
           },
         }}
         pathOptions={{
-          color: "#00d8b8",
-          fillColor: "#00d8b8",
-          fillOpacity: 0.05,
-          opacity: 0.85,
-          weight: 1.8,
-          dashArray: "4 4",
+          color: "#00e5bf",
+          fillColor: "#e2e8f0",
+          fillOpacity: 0.18,
+          opacity: 0.95,
+          weight: 1.6,
           className: "cursor-pointer hover:stroke-[#00c4a7] transition-all",
         }}
       />
@@ -550,6 +580,47 @@ function EditableRoofPolygonLayer({
       {/* Vértices arrastáveis (em modo select ou edit) */}
       {isEditing && (
         <>
+          {/* Haste tracejada ciano e botão de rotação no topo estilo foto */}
+          {topRotationStem && (
+            <>
+              <Polyline
+                positions={topRotationStem.stem}
+                interactive={false}
+                pathOptions={{
+                  color: "#00e5bf",
+                  weight: 1.8,
+                  dashArray: "3 3",
+                  opacity: 0.9,
+                }}
+              />
+              <Marker
+                position={topRotationStem.handlePos}
+                eventHandlers={{
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    onAlignToEdge?.((topRotationStem.azimuth + 90) % 360);
+                  },
+                }}
+                icon={L.divIcon({
+                  className: "solar-roof-rotation-handle",
+                  html: `
+                    <div class="group relative flex items-center justify-center cursor-pointer pointer-events-auto -translate-x-1/2 -translate-y-1/2">
+                      <div class="h-6 w-6 rounded-full border-2 border-[#00e5bf] bg-white ring-2 ring-[#00e5bf]/30 shadow-xl transform hover:scale-125 transition-all flex items-center justify-center text-slate-800">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                        </svg>
+                      </div>
+                      <div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1.5 whitespace-nowrap rounded bg-slate-900/90 text-white px-2 py-0.5 text-[10px] font-bold shadow-xl pointer-events-none transition">
+                        Rotacionar (+90°)
+                      </div>
+                    </div>
+                  `,
+                  iconSize: [0, 0],
+                })}
+              />
+            </>
+          )}
+
           {positions.map((pt, idx) => {
             const latVal = Number.isFinite(Number(pt?.lat)) ? Number(pt.lat) : 0;
             const lngVal = Number.isFinite(Number(pt?.lng)) ? Number(pt.lng) : 0;
@@ -558,40 +629,40 @@ function EditableRoofPolygonLayer({
                 key={`roof-vert-${idx}-${latVal.toFixed(6)}-${lngVal.toFixed(6)}`}
                 position={[latVal, lngVal]}
                 draggable={true}
-              eventHandlers={{
-                dragend: (e) => handleVertexDragEnd(idx, e),
-                contextmenu: (e) => {
-                  L.DomEvent.stopPropagation(e);
-                  handleDeleteVertex(idx);
-                },
-                dblclick: (e) => {
-                  L.DomEvent.stopPropagation(e);
-                  handleDeleteVertex(idx);
-                },
-              }}
-              icon={L.divIcon({
-                className: "solar-roof-vertex-handle",
-                html: `
-                  <div class="group relative flex items-center justify-center cursor-move -translate-x-1/2 -translate-y-1/2">
-                    <div class="h-4 w-4 rounded-full border-2 border-white bg-[#00d8b8] ring-2 ring-[#00d8b8]/50 shadow-xl transform group-hover:scale-125 transition-all flex items-center justify-center">
-                      <div class="h-1.5 w-1.5 rounded-full bg-slate-950"></div>
+                eventHandlers={{
+                  dragend: (e) => handleVertexDragEnd(idx, e),
+                  contextmenu: (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    handleDeleteVertex(idx);
+                  },
+                  dblclick: (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    handleDeleteVertex(idx);
+                  },
+                }}
+                icon={L.divIcon({
+                  className: "solar-roof-vertex-handle",
+                  html: `
+                    <div class="group relative flex items-center justify-center cursor-move -translate-x-1/2 -translate-y-1/2">
+                      <div class="h-3.5 w-3.5 rounded-full border-2 border-[#00e5bf] bg-white ring-2 ring-[#00e5bf]/40 shadow-lg transform group-hover:scale-125 transition-all flex items-center justify-center">
+                        <div class="h-1.5 w-1.5 rounded-full bg-slate-900"></div>
+                      </div>
+                      ${
+                        positions.length > 3
+                          ? `<div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-slate-800 border border-[#00e5bf]/60 shadow-xl pointer-events-none transition">
+                              Arrastar · 2 cliques p/ excluir
+                            </div>`
+                          : ""
+                      }
                     </div>
-                    ${
-                      positions.length > 3
-                        ? `<div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-slate-800 border border-[#00d8b8]/60 shadow-xl pointer-events-none transition">
-                            Arrastar · 2 cliques p/ excluir
-                          </div>`
-                        : ""
-                    }
-                  </div>
-                `,
-                iconSize: [0, 0],
-              })}
-            />
-          );
-        })}
+                  `,
+                  iconSize: [0, 0],
+                })}
+              />
+            );
+          })}
 
-          {/* Marcadores de inserção (+) no ponto médio de cada aresta */}
+          {/* Marcadores de inserção no ponto médio de cada aresta estilo foto */}
           {edges.map((edge) => (
             <Marker
               key={`roof-mid-${edge.id}`}
@@ -606,10 +677,10 @@ function EditableRoofPolygonLayer({
                 className: "solar-roof-midpoint-handle",
                 html: `
                   <div class="group relative flex items-center justify-center cursor-pointer -translate-x-1/2 -translate-y-1/2">
-                    <div class="h-3.5 w-3.5 rounded-full border border-white bg-white text-[#009b84] ring-1 ring-[#00d8b8]/60 shadow-lg transform hover:scale-125 hover:bg-[#00d8b8] hover:text-slate-950 transition-all flex items-center justify-center font-black text-[10px]">
-                      +
+                    <div class="h-3 w-3 rounded-full border-2 border-[#00e5bf] bg-white ring-1 ring-[#00e5bf]/50 shadow-md transform hover:scale-125 transition-all flex items-center justify-center">
+                      <div class="h-1 w-1 rounded-full bg-[#00e5bf]"></div>
                     </div>
-                    <div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-[#009b84] border border-[#00d8b8]/60 shadow-xl pointer-events-none transition">
+                    <div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-1 whitespace-nowrap rounded bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-[#009b84] border border-[#00e5bf]/60 shadow-xl pointer-events-none transition">
                       + Adicionar vértice
                     </div>
                   </div>
@@ -697,16 +768,14 @@ export default function SolarDesignerMap({
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
 
   // LOD Dinâmico por Zoom:
-  // LOD Dinâmico por Zoom:
-  // - Zoom < 18: Sem linhas internas (modo visão geral limpo e leve)
-  // - Zoom 18 a 19: Divisão longitudinal Half-Cut + divisórias com opacidade sutil
-  // - Zoom >= 20: Detalhamento fotovoltaico completo com traços ultra-finos e baixa opacidade
+  // - Zoom < 15: Sem linhas internas (modo visão geral limpo e leve)
+  // - Zoom >= 15: Detalhamento fotovoltaico completo com matriz de células e half-cut
   const { cellLines, halfCutLines, secondaryLines } = useMemo(() => {
-    if (currentZoom < 18) {
+    if (currentZoom < 15) {
       return { cellLines: [], halfCutLines: [], secondaryLines: [] };
     }
-    const isLargeArray = allPanelsFlat.length > 200;
-    const highDetail = currentZoom >= 20 && !isLargeArray;
+    const isLargeArray = allPanelsFlat.length > 300;
+    const highDetail = currentZoom >= 18 && !isLargeArray;
 
     const allCell = [];
     const allHalfCut = [];
@@ -960,6 +1029,7 @@ export default function SolarDesignerMap({
             isEditing={editorMode === "edit" || editorMode === "select"}
             onSelectRoof={onSelectRoof}
             onChange={onRoofChange}
+            onAlignToEdge={onAlignToEdge}
           />
         )}
         {isDrawing && selectedRoofPolygon?.length >= 3 && (
@@ -1007,12 +1077,13 @@ export default function SolarDesignerMap({
               const strColor = STRING_COLORS[strIdx % STRING_COLORS.length];
               const isStringActive = selectedStringIndex === null || selectedStringIndex === strIdx;
 
-              // Paleta fotovoltaica mono-PERC técnica (#142B46 oficial uniforme)
-              const realisticSiliconColor = SOLAR_PANEL_THEME.mainSurface;
+              // Paleta fotovoltaica mono-PERC foto-realista da imagem de referência
+              const realisticSiliconColor = SOLAR_PANEL_THEME.realisticSilicon || "#10233f";
+              const aluminumFrameColor = SOLAR_PANEL_THEME.frameAluminum || "#F8FAFC";
 
-              // Moldura externa cinza-azulada discreta (#8B9CAC) ou ciano na seleção ativa (#00d8b8)
-              let strokeColor = isSelected ? SOLAR_PANEL_THEME.selectionActive : SOLAR_PANEL_THEME.frame;
-              let strokeWidth = isSelected ? 1.8 : 0.9;
+              // Moldura externa em alumínio branco/prata nítido ou ciano na seleção ativa
+              let strokeColor = isSelected ? SOLAR_PANEL_THEME.selectionActive : aluminumFrameColor;
+              let strokeWidth = isSelected ? 2.0 : 1.5;
               let fillColor = viewMode === "irradiation" ? "#00c853" : realisticSiliconColor;
               let opacity = 1.0;
               let fillOpacity = isSelected ? 0.98 : 0.96;
@@ -1020,7 +1091,7 @@ export default function SolarDesignerMap({
               if (electricalMode || selectedStringIndex !== null) {
                 fillColor = strColor.fill;
                 strokeColor = strColor.stroke;
-                strokeWidth = 1.4;
+                strokeWidth = 1.6;
                 if (!isStringActive) {
                   opacity = 0.35;
                   fillOpacity = 0.3;
@@ -1030,7 +1101,7 @@ export default function SolarDesignerMap({
               if (isSelected) {
                 strokeColor = SOLAR_PANEL_THEME.selectionActive;
                 fillColor = SOLAR_PANEL_THEME.selectionActiveDark;
-                strokeWidth = 2.0;
+                strokeWidth = 2.2;
                 opacity = 1.0;
                 fillOpacity = 0.98;
               }
@@ -1074,44 +1145,44 @@ export default function SolarDesignerMap({
             })
           )}
           
-          {/* Linhas internas finas das células fotovoltaicas (#45617A com opacidade reduzida e traço suave) */}
+          {/* Linhas internas nítidas das células fotovoltaicas (matriz branca/gelo da imagem de referência) */}
           {cellLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
               positions={cellLines}
               interactive={false}
               pathOptions={{
-                color: SOLAR_PANEL_THEME.internalLines,
+                color: SOLAR_PANEL_THEME.cellGridWhite || "#DCE8F7",
                 className: "solar-panel-cell-lines pointer-events-none",
-                opacity: currentZoom >= 20 ? 0.28 : 0.20,
-                weight: 0.5,
+                opacity: 0.78,
+                weight: 0.8,
               }}
             />
           )}
 
-          {/* Linha central divisória de corte (Half-Cut gap discreto) */}
+          {/* Linha central divisória de corte (Half-Cut gap branco nítido) */}
           {halfCutLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
               positions={halfCutLines}
               interactive={false}
               pathOptions={{
-                color: "#4e7094",
+                color: SOLAR_PANEL_THEME.halfCutWhite || "#FFFFFF",
                 className: "solar-panel-half-cut-lines pointer-events-none",
-                opacity: currentZoom >= 20 ? 0.48 : 0.36,
-                weight: 0.75,
+                opacity: 0.92,
+                weight: 1.2,
               }}
             />
           )}
 
-          {/* Barramentos secundários ultra-sutis em zoom muito próximo */}
+          {/* Barramentos secundários (busbars finos em prata/branco) */}
           {secondaryLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
             <Polyline
               positions={secondaryLines}
               interactive={false}
               pathOptions={{
-                color: "#45617A",
+                color: SOLAR_PANEL_THEME.busbarSilver || "#C2DCF8",
                 className: "solar-panel-busbars pointer-events-none",
-                opacity: 0.12,
-                weight: 0.4,
+                opacity: 0.48,
+                weight: 0.5,
               }}
             />
           )}

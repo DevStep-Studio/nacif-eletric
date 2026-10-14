@@ -18,6 +18,13 @@ export const SOLAR_PANEL_THEME = {
   frame: "#8B9CAC",
   selectionActive: "#00d8b8",
   selectionActiveDark: "#173456",
+  // Paleta de Alta Fidelidade Fotovoltaica (Foto de Referência)
+  realisticSilicon: "#10233f",
+  frameAluminum: "#F8FAFC",
+  frameSilver: "#E2E8F0",
+  cellGridWhite: "#DCE8F7",
+  halfCutWhite: "#FFFFFF",
+  busbarSilver: "#C2DCF8",
 };
 
 // Micro-variações ópticas sutis no silício fotovoltaico mono-PERC
@@ -541,9 +548,9 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
     halfCut.push(safeLine(midLeft, midRight));
 
     // 3. Divisores transversais de células ao longo do comprimento
-    // Em zoom >= 19: 12 fileiras de células (6 por metade)
-    // Em zoom 16 a 18: 6 fileiras (3 por metade)
-    const rows = zoomLevel >= 19 ? 12 : 6;
+    // Em zoom >= 16: 12 fileiras de células (6 por metade)
+    // Em zoom < 16: 6 fileiras (3 por metade)
+    const rows = zoomLevel >= 16 ? 12 : 6;
     for (let r = 1; r < rows; r++) {
       if (r === rows / 2) continue; // Meio já é a linha de half-cut
       const ratioR = r / rows;
@@ -552,8 +559,8 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
       primary.push(safeLine(leftPt, rightPt));
     }
 
-    // 4. Barramentos finos (busbars) para zoom elevado (zoom >= 20)
-    if (highDetail && zoomLevel >= 20) {
+    // 4. Barramentos finos (busbars) para zoom elevado (zoom >= 18)
+    if (highDetail && zoomLevel >= 18) {
       const b1Top = interpolateLatLng(p0, p1, 0.25);
       const b1Btm = interpolateLatLng(p3, p2, 0.25);
       const b2Top = interpolateLatLng(p0, p1, 0.75);
@@ -583,7 +590,7 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
     halfCut.push(safeLine(midTop, midBtm));
 
     // 3. Divisores transversais de células ao longo do comprimento
-    const rows = zoomLevel >= 19 ? 12 : 6;
+    const rows = zoomLevel >= 16 ? 12 : 6;
     for (let r = 1; r < rows; r++) {
       if (r === rows / 2) continue;
       const ratioR = r / rows;
@@ -593,7 +600,7 @@ export function buildRealisticPanelCellLines(panel, zoomLevel = 20, highDetail =
     }
 
     // 4. Barramentos finos (busbars) para zoom elevado
-    if (highDetail && zoomLevel >= 20) {
+    if (highDetail && zoomLevel >= 18) {
       const b1Left = interpolateLatLng(p0, p3, 0.25);
       const b1Right = interpolateLatLng(p1, p2, 0.25);
       const b2Left = interpolateLatLng(p0, p3, 0.75);

@@ -335,16 +335,16 @@ export default function Solar3DView({
 
     // Materiais dos módulos fotovoltaicos
     const frameMaterial = new THREE.MeshStandardMaterial({
-      color: 0x94a3b8, // Alumínio anodizado fosco
-      metalness: 0.8,
-      roughness: 0.25,
+      color: 0xe2e8f0, // Alumínio anodizado prateado/branco brilhante
+      metalness: 0.85,
+      roughness: 0.2,
     });
     const cellMaterial = new THREE.MeshStandardMaterial({
-      color: 0x0f172a, // Silício monocristalino escuro
-      metalness: 0.4,
+      color: 0x10233f, // Silício monocristalino azul-marinho profundo
+      metalness: 0.45,
       roughness: 0.15,
       emissive: 0x001524,
-      emissiveIntensity: 0.2,
+      emissiveIntensity: 0.15,
     });
 
     panelsToRender.forEach((panel) => {
