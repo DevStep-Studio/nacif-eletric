@@ -42,8 +42,9 @@ export const MODULE_CATALOG = [
     id: "jinko-540-72hl4",
     manufacturer: "Jinko Solar",
     model: "JKM540M-72HL4",
-    label: "Jinko | JKM540M-72HL4",
+    label: "Jinko · JKM540M (540 Wp)",
     fullTitle: "Jinko Solar · JKM540M-72HL4 (540 Wp)",
+    technology: "Mono PERC",
     wp: 540,
     widthM: 1.134,
     heightM: 2.278,
@@ -53,11 +54,42 @@ export const MODULE_CATALOG = [
     iscA: 13.85,
   },
   {
+    id: "jinko-575-tiger-neo",
+    manufacturer: "Jinko Solar",
+    model: "JKM575N-72HL4-V",
+    label: "Jinko · Tiger Neo N-Type (575 Wp)",
+    fullTitle: "Jinko Solar · Tiger Neo N-Type 575W (575 Wp)",
+    technology: "TOPCon N-Type",
+    wp: 575,
+    widthM: 1.134,
+    heightM: 2.278,
+    vmpV: 42.22,
+    vocV: 50.88,
+    impA: 13.62,
+    iscA: 14.39,
+  },
+  {
+    id: "jinko-610-tiger-neo",
+    manufacturer: "Jinko Solar",
+    model: "JKM610N-78HL4-V",
+    label: "Jinko · Tiger Neo N-Type (610 Wp)",
+    fullTitle: "Jinko Solar · Tiger Neo N-Type 610W (610 Wp)",
+    technology: "TOPCon N-Type",
+    wp: 610,
+    widthM: 1.134,
+    heightM: 2.465,
+    vmpV: 45.98,
+    vocV: 55.42,
+    impA: 13.27,
+    iscA: 14.03,
+  },
+  {
     id: "canadian-550-hiku6",
     manufacturer: "Canadian Solar",
     model: "CS6W-550MS",
-    label: "Canadian | CS6W-550MS",
-    fullTitle: "Canadian Solar · CS6W-550MS (550 Wp)",
+    label: "Canadian · HiKu6 CS6W (550 Wp)",
+    fullTitle: "Canadian Solar · CS6W-550MS HiKu6 (550 Wp)",
+    technology: "Mono PERC",
     wp: 550,
     widthM: 1.134,
     heightM: 2.278,
@@ -67,11 +99,27 @@ export const MODULE_CATALOG = [
     iscA: 14.00,
   },
   {
+    id: "canadian-665-hiku7",
+    manufacturer: "Canadian Solar",
+    model: "CS7N-665MS",
+    label: "Canadian · HiKu7 CS7N (665 Wp)",
+    fullTitle: "Canadian Solar · CS7N-665MS HiKu7 (665 Wp)",
+    technology: "Mono PERC Bifacial",
+    wp: 665,
+    widthM: 1.303,
+    heightM: 2.384,
+    vmpV: 38.5,
+    vocV: 45.6,
+    impA: 17.28,
+    iscA: 18.51,
+  },
+  {
     id: "longi-545-hbd",
     manufacturer: "LONGi Solar",
     model: "LR5-72HBD-545M",
-    label: "LONGi | LR5-72HBD-545M",
+    label: "LONGi · Hi-MO 5 (545 Wp)",
     fullTitle: "LONGi Solar · LR5-72HBD-545M (545 Wp)",
+    technology: "Mono PERC",
     wp: 545,
     widthM: 1.133,
     heightM: 2.256,
@@ -81,11 +129,42 @@ export const MODULE_CATALOG = [
     iscA: 13.92,
   },
   {
+    id: "longi-580-himo6",
+    manufacturer: "LONGi Solar",
+    model: "LR5-72HTH-580M",
+    label: "LONGi · Hi-MO 6 Explorer (580 Wp)",
+    fullTitle: "LONGi Solar · Hi-MO 6 Explorer HPBC (580 Wp)",
+    technology: "HPBC N-Type",
+    wp: 580,
+    widthM: 1.134,
+    heightM: 2.278,
+    vmpV: 44.06,
+    vocV: 52.21,
+    impA: 13.17,
+    iscA: 14.09,
+  },
+  {
+    id: "longi-600-himox6",
+    manufacturer: "LONGi Solar",
+    model: "LR5-72HGD-600M",
+    label: "LONGi · Hi-MO X6 Max (600 Wp)",
+    fullTitle: "LONGi Solar · Hi-MO X6 Max Bifacial (600 Wp)",
+    technology: "HPBC N-Type",
+    wp: 600,
+    widthM: 1.134,
+    heightM: 2.382,
+    vmpV: 45.10,
+    vocV: 53.80,
+    impA: 13.31,
+    iscA: 14.25,
+  },
+  {
     id: "trina-670-deg21c",
     manufacturer: "Trina Solar",
     model: "TSM-DEG21C.20",
-    label: "Trina | TSM-DEG21C.20",
+    label: "Trina · Vertex TSM-670W (670 Wp)",
     fullTitle: "Trina Solar · Vertex TSM-670W (670 Wp)",
+    technology: "Mono PERC",
     wp: 670,
     widthM: 1.303,
     heightM: 2.384,
@@ -95,11 +174,72 @@ export const MODULE_CATALOG = [
     iscA: 18.62,
   },
   {
+    id: "trina-580-vertex",
+    manufacturer: "Trina Solar",
+    model: "TSM-NEG19RC.20",
+    label: "Trina · Vertex N-Type (580 Wp)",
+    fullTitle: "Trina Solar · Vertex N-Type NEG19RC (580 Wp)",
+    technology: "TOPCon N-Type",
+    wp: 580,
+    widthM: 1.134,
+    heightM: 2.384,
+    vmpV: 43.20,
+    vocV: 51.80,
+    impA: 13.43,
+    iscA: 14.28,
+  },
+  {
+    id: "ja-solar-580-deepblue",
+    manufacturer: "JA Solar",
+    model: "JAM72D40-580/GB",
+    label: "JA Solar · DeepBlue 4.0 Pro (580 Wp)",
+    fullTitle: "JA Solar · DeepBlue 4.0 Pro Bifacial (580 Wp)",
+    technology: "Bycium+ TOPCon",
+    wp: 580,
+    widthM: 1.134,
+    heightM: 2.278,
+    vmpV: 42.60,
+    vocV: 51.10,
+    impA: 13.62,
+    iscA: 14.36,
+  },
+  {
+    id: "astronergy-580-n5",
+    manufacturer: "Astronergy",
+    model: "CHSM72N(DG)/F-BH-580",
+    label: "Astronergy · Astro N5 (580 Wp)",
+    fullTitle: "Astronergy · Astro N5 TOPCon Bifacial (580 Wp)",
+    technology: "TOPCon N-Type",
+    wp: 580,
+    widthM: 1.134,
+    heightM: 2.278,
+    vmpV: 42.45,
+    vocV: 51.05,
+    impA: 13.67,
+    iscA: 14.41,
+  },
+  {
+    id: "deye-580-topcon",
+    manufacturer: "Deye",
+    model: "DY-580-TOPCON",
+    label: "Deye · TopCon N-Type (580 Wp)",
+    fullTitle: "Deye · TopCon N-Type High Efficiency (580 Wp)",
+    technology: "TOPCon N-Type",
+    wp: 580,
+    widthM: 1.134,
+    heightM: 2.278,
+    vmpV: 42.50,
+    vocV: 51.20,
+    impA: 13.65,
+    iscA: 14.40,
+  },
+  {
     id: "generic-550",
     manufacturer: "Padrão Tier-1",
     model: "Mono Half-Cell 550W",
     label: "Módulo FV 550Wp Padrão",
     fullTitle: "Painel Fotovoltaico Monocristalino (550 Wp)",
+    technology: "Mono PERC",
     wp: 550,
     widthM: 1.134,
     heightM: 2.278,
@@ -109,6 +249,73 @@ export const MODULE_CATALOG = [
     iscA: 14.10,
   },
 ];
+
+export const PANEL_VISUAL_STYLES = {
+  realistic: {
+    id: "realistic",
+    name: "Ultra Realista",
+    description: "Mono-PERC azul marinho com divisórias sutis e elegantes",
+    siliconColor: "#0f233d",
+    frameColor: "#cbd5e1",
+    frameWidth: 1.2,
+    cellLineColor: "#6484a4",
+    cellLineOpacity: 0.35,
+    cellLineWidth: 0.65,
+    halfCutColor: "#8baac9",
+    halfCutOpacity: 0.50,
+    halfCutWidth: 1.0,
+    busbarColor: "#93b5d8",
+    busbarOpacity: 0.25,
+  },
+  "full-black": {
+    id: "full-black",
+    name: "Full Black Premium",
+    description: "Estética All-Black moderna, sem reflexos ou linhas brancas",
+    siliconColor: "#0b111a",
+    frameColor: "#1e293b",
+    frameWidth: 1.2,
+    cellLineColor: "#1e2c3d",
+    cellLineOpacity: 0.22,
+    cellLineWidth: 0.5,
+    halfCutColor: "#2a3b50",
+    halfCutOpacity: 0.35,
+    halfCutWidth: 0.8,
+    busbarColor: "#1e2c3d",
+    busbarOpacity: 0.15,
+  },
+  "classic-blue": {
+    id: "classic-blue",
+    name: "Azul Fotovoltaico Clássico",
+    description: "Tons de azul elétrico suave com moldura em alumínio",
+    siliconColor: "#132d4e",
+    frameColor: "#e2e8f0",
+    frameWidth: 1.3,
+    cellLineColor: "#7ea0c2",
+    cellLineOpacity: 0.40,
+    cellLineWidth: 0.7,
+    halfCutColor: "#b0cce8",
+    halfCutOpacity: 0.55,
+    halfCutWidth: 1.1,
+    busbarColor: "#b0cce8",
+    busbarOpacity: 0.30,
+  },
+  technical: {
+    id: "technical",
+    name: "Técnico / Alta Visibilidade",
+    description: "Linhas bem definidas para verificação de montagem e strings",
+    siliconColor: "#10233f",
+    frameColor: "#ffffff",
+    frameWidth: 1.5,
+    cellLineColor: "#dce8f7",
+    cellLineOpacity: 0.65,
+    cellLineWidth: 0.8,
+    halfCutColor: "#ffffff",
+    halfCutOpacity: 0.85,
+    halfCutWidth: 1.4,
+    busbarColor: "#c2dcf8",
+    busbarOpacity: 0.45,
+  },
+};
 
 export const INVERTER_CATALOG = [
   {
@@ -209,13 +416,79 @@ export function getInverterPreset(idOrModel) {
   return INVERTER_CATALOG[0];
 }
 
-export function getModulePreset(idOrWp) {
+export const CUSTOM_MODULES_STORAGE_KEY = "volta_custom_solar_modules";
+
+export function getStoredCustomModules() {
+  if (typeof window === "undefined" || !window.localStorage) return [];
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_MODULES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+export function saveStoredCustomModule(moduleData) {
+  if (typeof window === "undefined" || !window.localStorage) return moduleData;
+  try {
+    const existing = getStoredCustomModules();
+    const id = moduleData.id || `custom-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const fullModule = {
+      ...moduleData,
+      id,
+      isCustom: true,
+      label: `${moduleData.manufacturer || "Custom"} · ${moduleData.model || "Módulo"} (${moduleData.wp} Wp)`,
+      fullTitle: `${moduleData.manufacturer || "Personalizado"} · ${moduleData.model || "Módulo"} (${moduleData.wp} Wp)`,
+      technology: moduleData.technology || "TOPCon N-Type",
+      wp: Number(moduleData.wp) || 580,
+      widthM: Number(moduleData.widthM) || 1.134,
+      heightM: Number(moduleData.heightM) || 2.278,
+      vmpV: Number(moduleData.vmpV) || 42.5,
+      vocV: Number(moduleData.vocV) || 51.0,
+      impA: Number(moduleData.impA) || 13.6,
+      iscA: Number(moduleData.iscA) || 14.4,
+    };
+    const next = [fullModule, ...existing.filter((m) => m.id !== id)];
+    window.localStorage.setItem(CUSTOM_MODULES_STORAGE_KEY, JSON.stringify(next));
+    return fullModule;
+  } catch (err) {
+    return moduleData;
+  }
+}
+
+export function deleteStoredCustomModule(id) {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const existing = getStoredCustomModules();
+    const next = existing.filter((m) => m.id !== id);
+    window.localStorage.setItem(CUSTOM_MODULES_STORAGE_KEY, JSON.stringify(next));
+  } catch (err) {}
+}
+
+export function getAllModulePresets(customModules = []) {
+  const stored = getStoredCustomModules();
+  const customs = [...(Array.isArray(customModules) ? customModules : []), ...stored];
+  const seen = new Set();
+  const uniqueCustoms = [];
+  for (const c of customs) {
+    if (c && c.id && !seen.has(c.id)) {
+      seen.add(c.id);
+      uniqueCustoms.push(c);
+    }
+  }
+  return [...uniqueCustoms, ...MODULE_CATALOG];
+}
+
+export function getModulePreset(idOrWp, customList = []) {
   if (!idOrWp) return MODULE_CATALOG[0];
-  const byId = MODULE_CATALOG.find((m) => m.id === idOrWp || m.model === idOrWp);
+  const all = getAllModulePresets(customList);
+  const byId = all.find((m) => m.id === idOrWp || m.model === idOrWp);
   if (byId) return byId;
   const numWp = Number(idOrWp);
   if (Number.isFinite(numWp)) {
-    const byWp = MODULE_CATALOG.find((m) => m.wp === numWp);
+    const byWp = all.find((m) => m.wp === numWp);
     if (byWp) return byWp;
   }
   return MODULE_CATALOG[0];
@@ -226,7 +499,10 @@ export function getModulePreset(idOrWp) {
  * Evita deformações ou módulos quadrados, priorizando medidas reais cadastradas ou o catálogo Tier-1.
  */
 export function getModuleDimensions(config = {}) {
-  const preset = getModulePreset(config.module_preset_id || config.module_model || config.module_wp);
+  const preset = getModulePreset(
+    config.module_preset_id || config.module_model || config.module_wp,
+    config.custom_modules || []
+  );
   let rawWidth = finiteNumber(config.module_width_m, preset.widthM || SOLAR_MODULE_WIDTH_M);
   let rawHeight = finiteNumber(config.module_height_m, preset.heightM || SOLAR_MODULE_HEIGHT_M);
 

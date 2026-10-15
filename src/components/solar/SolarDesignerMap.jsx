@@ -50,6 +50,7 @@ import {
   normalizeRoofPolygon,
   SOLAR_PANEL_THEME,
   PHOTOVOLTAIC_BASE_COLORS,
+  PANEL_VISUAL_STYLES,
 } from "@/lib/solarDesignerGeometry";
 
 export { SOLAR_PANEL_THEME, PHOTOVOLTAIC_BASE_COLORS };
@@ -767,15 +768,23 @@ export default function SolarDesignerMap({
   const mapZoom = Math.max(3, Math.min(22, Math.round(Number(config.map_zoom) || DEFAULT_SOLAR_MAP_ZOOM)));
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
 
-  // LOD Dinâmico por Zoom:
-  // - Zoom < 12: Sem linhas internas (visão macro)
-  // - Zoom >= 12: Detalhamento fotovoltaico completo com linhas centrais e matriz de células
+  // Estilo visual dos painéis fotovoltaicos (100% customizável)
+  const visualStyleKey = config.panel_visual_style || "realistic";
+  const activeStyle = PANEL_VISUAL_STYLES[visualStyleKey] || PANEL_VISUAL_STYLES.realistic;
+  const effectiveCellOpacity =
+    config.cell_lines_opacity !== undefined
+      ? Math.max(0, Math.min(1, Number(config.cell_lines_opacity)))
+      : activeStyle.cellLineOpacity;
+
+  // LOD Dinâmico por Zoom e estilo visual:
+  // - Zoom < 14: Sem linhas internas para não poluir o mapa
+  // - Zoom >= 14: Detalhamento fotovoltaico sutil e elegante
   const { cellLines, halfCutLines, secondaryLines } = useMemo(() => {
-    if (currentZoom < 12) {
+    if (currentZoom < 14 || effectiveCellOpacity <= 0) {
       return { cellLines: [], halfCutLines: [], secondaryLines: [] };
     }
     const isLargeArray = allPanelsFlat.length > 500;
-    const highDetail = currentZoom >= 16 && !isLargeArray;
+    const highDetail = currentZoom >= 17 && !isLargeArray;
 
     const allCell = [];
     const allHalfCut = [];
@@ -786,9 +795,7 @@ export default function SolarDesignerMap({
       if (res.primary && res.primary.length > 0) {
         allCell.push(...res.primary);
       }
-      if (res.centerLines && res.centerLines.length > 0) {
-        allHalfCut.push(...res.centerLines);
-      } else if (res.halfCut && res.halfCut.length > 0) {
+      if (res.halfCut && res.halfCut.length > 0) {
         allHalfCut.push(...res.halfCut);
       }
       if (res.secondary && res.secondary.length > 0) {
@@ -801,7 +808,7 @@ export default function SolarDesignerMap({
       halfCutLines: allHalfCut.map(toLeafletPositions),
       secondaryLines: allSecondary.map(toLeafletPositions),
     };
-  }, [allPanelsFlat, currentZoom]);
+  }, [allPanelsFlat, currentZoom, effectiveCellOpacity]);
 
   const initialCenter = useMemo(
     () => [mapCenter?.lat || DEFAULT_SOLAR_MAP_CENTER.lat, mapCenter?.lng || DEFAULT_SOLAR_MAP_CENTER.lng],
@@ -811,6 +818,7 @@ export default function SolarDesignerMap({
   const activeAzimuth = selectedArea?.roof_rotation_deg ?? config.roof_rotation_deg ?? 24;
   const azimuthInfo = useMemo(() => getAzimuthWithCardinal(activeAzimuth), [activeAzimuth]);
   const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
+  const [draggingObstacle, setDraggingObstacle] = useState(null);
   const hasRoof = (areas.length > 0 && areas.some((a) => a.polygon?.length >= 3)) || selectedRoofPolygon.length >= 3;
   const isDrawing = editorMode === "draw-polygon" || editorMode === "draw-rectangle";
   const isMeasuring = editorMode === "measure";
@@ -1079,14 +1087,14 @@ export default function SolarDesignerMap({
               const strColor = STRING_COLORS[strIdx % STRING_COLORS.length];
               const isStringActive = selectedStringIndex === null || selectedStringIndex === strIdx;
 
-              // Paleta fotovoltaica mono-PERC foto-realista da imagem de referência
-              const realisticSiliconColor = SOLAR_PANEL_THEME.realisticSilicon || "#10233f";
-              const aluminumFrameColor = SOLAR_PANEL_THEME.frameAluminum || "#F8FAFC";
+              // Paleta fotovoltaica refinada conforme estilo visual ativo
+              const siliconColor = activeStyle.siliconColor || "#0f233d";
+              const frameColor = activeStyle.frameColor || "#94a3b8";
 
-              // Moldura externa em alumínio branco/prata nítido ou ciano na seleção ativa
-              let strokeColor = isSelected ? SOLAR_PANEL_THEME.selectionActive : aluminumFrameColor;
-              let strokeWidth = isSelected ? 2.0 : 1.5;
-              let fillColor = viewMode === "irradiation" ? "#00c853" : realisticSiliconColor;
+              // Moldura externa em alumínio/black refinada ou ciano na seleção ativa
+              let strokeColor = isSelected ? SOLAR_PANEL_THEME.selectionActive : frameColor;
+              let strokeWidth = isSelected ? 2.0 : (activeStyle.frameWidth || 1.2);
+              let fillColor = viewMode === "irradiation" ? "#00c853" : siliconColor;
               let opacity = 1.0;
               let fillOpacity = isSelected ? 0.98 : 0.96;
 
@@ -1147,43 +1155,43 @@ export default function SolarDesignerMap({
             })
           )}
           
-          {/* Linhas internas nítidas das células fotovoltaicas (matriz branca nítida) */}
-          {cellLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
+          {/* Linhas internas elegantes das células fotovoltaicas */}
+          {cellLines.length > 0 && viewMode !== "irradiation" && !electricalMode && effectiveCellOpacity > 0 && (
             <Polyline
               positions={cellLines}
               interactive={false}
               pathOptions={{
-                color: "#FFFFFF",
+                color: activeStyle.cellLineColor || "#6484a4",
                 className: "solar-panel-cell-lines pointer-events-none",
-                opacity: 0.85,
-                weight: 1.1,
+                opacity: effectiveCellOpacity,
+                weight: activeStyle.cellLineWidth || 0.65,
               }}
             />
           )}
 
-          {/* Linhas centrais brancas acentuadas do painel (Half-Cut e eixo central nítidos) */}
-          {halfCutLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
+          {/* Linhas centrais de corte Half-Cut (nítidas e sutis) */}
+          {halfCutLines.length > 0 && viewMode !== "irradiation" && !electricalMode && effectiveCellOpacity > 0 && (
             <Polyline
               positions={halfCutLines}
               interactive={false}
               pathOptions={{
-                color: "#FFFFFF",
+                color: activeStyle.halfCutColor || "#8baac9",
                 className: "solar-panel-half-cut-lines pointer-events-none",
-                opacity: 1.0,
-                weight: 2.2,
+                opacity: Math.min(0.9, effectiveCellOpacity * 1.4),
+                weight: activeStyle.halfCutWidth || 1.0,
               }}
             />
           )}
 
-          {/* Barramentos secundários (busbars finos em prata/branco) */}
-          {secondaryLines.length > 0 && viewMode !== "irradiation" && !electricalMode && (
+          {/* Barramentos secundários (busbars finos) */}
+          {secondaryLines.length > 0 && viewMode !== "irradiation" && !electricalMode && effectiveCellOpacity > 0 && (
             <Polyline
               positions={secondaryLines}
               interactive={false}
               pathOptions={{
-                color: SOLAR_PANEL_THEME.busbarSilver || "#C2DCF8",
+                color: activeStyle.busbarColor || "#93b5d8",
                 className: "solar-panel-busbars pointer-events-none",
-                opacity: 0.48,
+                opacity: activeStyle.busbarOpacity || 0.25,
                 weight: 0.5,
               }}
             />
@@ -1223,45 +1231,83 @@ export default function SolarDesignerMap({
         <Pane name="solar-obstacles-pane" style={{ zIndex: 450, pointerEvents: isDrawing ? "none" : "auto" }}>
           {obstacles.map((obs) => {
             const isSelected = selectedObstacleId === obs.id;
+            const currentPos = (draggingObstacle && draggingObstacle.id === obs.id)
+              ? { lat: draggingObstacle.lat, lng: draggingObstacle.lng }
+              : { lat: obs.lat, lng: obs.lng };
             return (
               <Circle
                 key={`zone-${obs.id}`}
-                center={[obs.lat, obs.lng]}
+                center={[currentPos.lat, currentPos.lng]}
                 radius={(obs.radiusM || 1.0) + 0.3}
+                interactive={!isDrawing}
+                eventHandlers={{
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    onSelectObstacle?.(obs.id);
+                  },
+                }}
                 pathOptions={{
                   color: isSelected ? "#00d8b8" : "#f43f5e",
                   fillColor: isSelected ? "#00d8b8" : "#f43f5e",
                   fillOpacity: isSelected ? 0.35 : 0.22,
-                  weight: isSelected ? 2 : 1.5,
-                  dashArray: "4 4",
+                  weight: isSelected ? 2.5 : 1.5,
+                  dashArray: isSelected ? undefined : "4 4",
                 }}
               />
             );
           })}
           {obstacles.map((obs) => {
             const isSelected = selectedObstacleId === obs.id;
+            const isDraggingThis = draggingObstacle && draggingObstacle.id === obs.id;
+            const currentPos = isDraggingThis
+              ? { lat: draggingObstacle.lat, lng: draggingObstacle.lng }
+              : { lat: obs.lat, lng: obs.lng };
             return (
               <Marker
                 key={`marker-${obs.id}`}
-                position={[obs.lat, obs.lng]}
+                position={[currentPos.lat, currentPos.lng]}
                 draggable={!isDrawing}
                 eventHandlers={{
-                  click: () => onSelectObstacle?.(obs.id),
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    onSelectObstacle?.(obs.id);
+                  },
+                  dragstart: (e) => {
+                    onSelectObstacle?.(obs.id);
+                    const latLng = e.target.getLatLng();
+                    setDraggingObstacle({ id: obs.id, lat: latLng.lat, lng: latLng.lng });
+                  },
+                  drag: (e) => {
+                    const latLng = e.target.getLatLng();
+                    setDraggingObstacle({ id: obs.id, lat: latLng.lat, lng: latLng.lng });
+                  },
                   dragend: (e) => {
                     const latLng = e.target.getLatLng();
+                    setDraggingObstacle(null);
                     onUpdateObstacle?.(obs.id, { lat: latLng.lat, lng: latLng.lng });
                   },
                 }}
                 icon={L.divIcon({
-                  className: "solar-obstacle-marker",
-                  html: `<div class="cursor-grab active:cursor-grabbing flex items-center gap-1.5 rounded-lg border ${
-                    isSelected ? "border-[#00d8b8] bg-white text-[#009b84]" : "border-rose-300 bg-white text-rose-700"
-                  } px-2 py-1 text-[11px] font-bold shadow-sm -translate-x-1/2 -translate-y-1/2">
-                    <span class="h-2 w-2 rounded-full ${isSelected ? "bg-[#00d8b8] animate-ping" : "bg-rose-500"}"></span>
-                    <span>${obs.name || "Obstáculo"}</span>
-                    <span class="text-[9px] text-slate-500">${(obs.radiusM || 1.0).toFixed(1)}m</span>
-                  </div>`,
-                  iconSize: [0, 0],
+                  className: "solar-obstacle-marker-wrapper",
+                  html: `
+                    <div style="cursor: grab;" class="active:cursor-grabbing flex items-center gap-1.5 rounded-lg border ${
+                      isSelected
+                        ? "border-[#00d8b8] bg-slate-900 text-[#00d8b8] shadow-lg ring-2 ring-[#00d8b8]/40"
+                        : "border-rose-400 bg-white text-rose-700 shadow-md hover:border-rose-500"
+                    } px-2.5 py-1 text-[11px] font-bold select-none transition-transform hover:scale-105" title="Clique para selecionar ou arraste para mover pelo mapa">
+                      <span class="flex items-center justify-center w-3 h-3 text-current">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 8h16M4 16h16" />
+                        </svg>
+                      </span>
+                      <span class="truncate max-w-[100px]">${obs.name || "Obstáculo"}</span>
+                      <span class="text-[9px] px-1 py-0.5 rounded ${
+                        isSelected ? "bg-slate-800 text-slate-300" : "bg-rose-100 text-rose-800"
+                      } font-mono">${(obs.radiusM || 1.0).toFixed(1)}m</span>
+                    </div>
+                  `,
+                  iconSize: [160, 32],
+                  iconAnchor: [80, 16],
                 })}
               />
             );
