@@ -152,7 +152,7 @@ function EdgeAlignmentLayer({ roofPolygon, onAlignToEdge }) {
 /**
  * Badge flutuante de identificação e quantidade de módulos por área
  */
-function AreaBadge({ area, isSelected, onClick }) {
+function AreaBadge({ area, isSelected, onClick, isPlacingObstacle, onMapClick }) {
   const centroid = useMemo(() => {
     if (area.panelPolygons && area.panelPolygons.length > 0) {
       return getPolygonCentroid(area.panelPolygons.flat());
@@ -167,6 +167,10 @@ function AreaBadge({ area, isSelected, onClick }) {
       position={[centroid.lat, centroid.lng]}
       eventHandlers={{
         click: (e) => {
+          if (isPlacingObstacle) {
+            onMapClick?.(e.latlng);
+            return;
+          }
           L.DomEvent.stopPropagation(e);
           onClick?.();
         },
@@ -500,6 +504,8 @@ function InteractiveRoofDrawingLayer({
 function EditableRoofPolygonLayer({
   positions,
   isEditing,
+  isPlacingObstacle = false,
+  onMapClick,
   onSelectRoof,
   onChange,
   onAlignToEdge,
@@ -564,6 +570,10 @@ function EditableRoofPolygonLayer({
         interactive={true}
         eventHandlers={{
           click: (e) => {
+            if (isPlacingObstacle) {
+              onMapClick?.(e.latlng);
+              return;
+            }
             L.DomEvent.stopPropagation(e);
             onSelectRoof?.();
           },
@@ -629,8 +639,14 @@ function EditableRoofPolygonLayer({
               <Marker
                 key={`roof-vert-${idx}-${latVal.toFixed(6)}-${lngVal.toFixed(6)}`}
                 position={[latVal, lngVal]}
-                draggable={true}
+                draggable={!isPlacingObstacle}
                 eventHandlers={{
+                  click: (e) => {
+                    if (isPlacingObstacle) {
+                      onMapClick?.(e.latlng);
+                      return;
+                    }
+                  },
                   dragend: (e) => handleVertexDragEnd(idx, e),
                   contextmenu: (e) => {
                     L.DomEvent.stopPropagation(e);
@@ -670,6 +686,10 @@ function EditableRoofPolygonLayer({
               position={[edge.midpoint.lat, edge.midpoint.lng]}
               eventHandlers={{
                 click: (e) => {
+                  if (isPlacingObstacle) {
+                    onMapClick?.(e.latlng);
+                    return;
+                  }
                   L.DomEvent.stopPropagation(e);
                   handleAddVertexAtEdge(edge.index);
                 },
@@ -705,6 +725,7 @@ export default function SolarDesignerMap({
   className = "h-[520px]",
   designerMode = false,
   editorMode = "select",
+  isPlacingObstacle = false,
   fitRoofRequest = 0,
   viewportRequest = 0,
   selectedObstacleId = null,
@@ -906,7 +927,7 @@ export default function SolarDesignerMap({
   }, [strings]);
 
   return (
-    <div className={`relative overflow-hidden bg-slate-100 select-none ${className} ${isDrawing ? "solar-designer-map--drawing" : ""}`}>
+    <div className={`relative overflow-hidden bg-slate-100 select-none ${className} ${isDrawing ? "solar-designer-map--drawing" : ""} ${isPlacingObstacle ? "cursor-crosshair" : ""}`}>
       {/* Banner Superior Contextual de Desenho & Medição (Solid CAD Style) */}
       {isDrawing ? (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[550] pointer-events-none animate-in slide-in-from-top-2">
@@ -979,9 +1000,9 @@ export default function SolarDesignerMap({
         maxZoom={23}
         zoomControl={false}
         scrollWheelZoom={true}
-        doubleClickZoom={editorMode === "select"}
+        doubleClickZoom={editorMode === "select" && !isPlacingObstacle}
         touchZoom={true}
-        className={`solar-designer-map h-full w-full ${isDrawing ? "solar-designer-map--drawing" : ""} ${designerMode ? "solar-designer-map--edge" : ""}`}
+        className={`solar-designer-map h-full w-full ${isDrawing ? "solar-designer-map--drawing" : ""} ${isPlacingObstacle ? "cursor-crosshair" : ""} ${designerMode ? "solar-designer-map--edge" : ""}`}
       >
         <TileLayer url={SATELLITE_TILE_URL} attribution={SATELLITE_ATTRIBUTION} maxNativeZoom={19} maxZoom={23} />
         
@@ -1007,6 +1028,10 @@ export default function SolarDesignerMap({
               eventHandlers={{
                 click: (e) => {
                   if (isDrawing) return;
+                  if (isPlacingObstacle) {
+                    onMapClick?.(e.latlng);
+                    return;
+                  }
                   L.DomEvent.stopPropagation(e);
                   onSelectArea?.(area.id);
                 },
@@ -1037,6 +1062,8 @@ export default function SolarDesignerMap({
           <EditableRoofPolygonLayer
             positions={selectedRoofPolygon}
             isEditing={editorMode === "edit" || editorMode === "select"}
+            isPlacingObstacle={isPlacingObstacle}
+            onMapClick={onMapClick}
             onSelectRoof={onSelectRoof}
             onChange={onRoofChange}
             onAlignToEdge={onAlignToEdge}
@@ -1062,6 +1089,8 @@ export default function SolarDesignerMap({
             key={`badge-${area.id}`}
             area={area}
             isSelected={area.id === selectedArea?.id}
+            isPlacingObstacle={isPlacingObstacle}
+            onMapClick={onMapClick}
             onClick={() => onSelectArea?.(area.id)}
           />
         ))}
@@ -1120,9 +1149,13 @@ export default function SolarDesignerMap({
                 <Polygon
                   key={`panel-${group.areaId}-${idx}`}
                   positions={toLeafletPositions(panel)}
-                  interactive={editorMode === "select" && !isDrawing}
+                  interactive={(editorMode === "select" || isPlacingObstacle) && !isDrawing}
                   eventHandlers={{
                     click: (e) => {
+                      if (isPlacingObstacle) {
+                        onMapClick?.(e.latlng);
+                        return;
+                      }
                       L.DomEvent.stopPropagation(e);
                       if (group.areaId !== selectedArea?.id) {
                         onSelectArea?.(group.areaId);
@@ -1228,7 +1261,7 @@ export default function SolarDesignerMap({
         )}
 
         {/* 9. Camada de Obstáculos Interativos */}
-        <Pane name="solar-obstacles-pane" style={{ zIndex: 450, pointerEvents: isDrawing ? "none" : "auto" }}>
+        <Pane name="solar-obstacles-pane" style={{ zIndex: 550, pointerEvents: isDrawing ? "none" : "auto" }}>
           {obstacles.map((obs) => {
             const isSelected = selectedObstacleId === obs.id;
             const currentPos = (draggingObstacle && draggingObstacle.id === obs.id)
@@ -1242,6 +1275,10 @@ export default function SolarDesignerMap({
                 interactive={!isDrawing}
                 eventHandlers={{
                   click: (e) => {
+                    if (isPlacingObstacle) {
+                      onMapClick?.(e.latlng);
+                      return;
+                    }
                     L.DomEvent.stopPropagation(e);
                     onSelectObstacle?.(obs.id);
                   },
@@ -1266,13 +1303,18 @@ export default function SolarDesignerMap({
               <Marker
                 key={`marker-${obs.id}`}
                 position={[currentPos.lat, currentPos.lng]}
-                draggable={!isDrawing}
+                draggable={!isDrawing && !isPlacingObstacle}
                 eventHandlers={{
                   click: (e) => {
+                    if (isPlacingObstacle) {
+                      onMapClick?.(e.latlng);
+                      return;
+                    }
                     L.DomEvent.stopPropagation(e);
                     onSelectObstacle?.(obs.id);
                   },
                   dragstart: (e) => {
+                    if (isPlacingObstacle) return;
                     onSelectObstacle?.(obs.id);
                     const latLng = e.target.getLatLng();
                     setDraggingObstacle({ id: obs.id, lat: latLng.lat, lng: latLng.lng });

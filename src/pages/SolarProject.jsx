@@ -1089,6 +1089,7 @@ export default function SolarProject() {
     setSelectedEntity({ type: "obstacle", id: newObstacle.id });
     setPendingObstaclePreset(null);
     setSidebarOpen(true);
+    setInspectorSections((prev) => ({ ...prev, obstacles: true }));
     toast({
       title: "Obstáculo adicionado",
       description: `${preset.name} posicionado no telhado.`,
@@ -2363,19 +2364,62 @@ export default function SolarProject() {
                             {(config?.obstacles || []).length === 0 ? (
                               <p className="text-[11px] text-slate-500 text-center py-1">Nenhum obstáculo demarcado.</p>
                             ) : (
-                              <div className="space-y-1 max-h-36 overflow-y-auto">
-                                {(config?.obstacles || []).map((obs) => (
-                                  <div key={obs.id} className="flex items-center justify-between p-1.5 rounded border border-slate-200 bg-slate-50 text-[11px]">
-                                    <span className="font-bold text-slate-800 truncate">{obs.name} ({(obs.radiusM || 1.0).toFixed(1)}m)</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveObstacle(obs.id)}
-                                      className="text-rose-500 hover:text-rose-700 p-0.5"
+                              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                {(config?.obstacles || []).map((obs) => {
+                                  const isSelected = selectedEntity?.type === "obstacle" && selectedEntity.id === obs.id;
+                                  return (
+                                    <div
+                                      key={obs.id}
+                                      onClick={() => {
+                                        setSelectedEntity({ type: "obstacle", id: obs.id });
+                                        setSidebarOpen(true);
+                                      }}
+                                      className={`group flex items-center justify-between p-2 rounded-lg border transition cursor-pointer ${
+                                        isSelected
+                                          ? "border-rose-400 bg-rose-50/90 shadow-xs ring-1 ring-rose-400/30"
+                                          : "border-slate-200 bg-slate-50 hover:bg-slate-100/90 hover:border-slate-300"
+                                      } text-[11px]`}
                                     >
-                                      <Trash2 className="h-3 w-3" />
-                                    </button>
-                                  </div>
-                                ))}
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className={`h-2 w-2 rounded-full shrink-0 ${isSelected ? "bg-rose-500 animate-pulse" : "bg-rose-400"}`} />
+                                        <div className="truncate">
+                                          <span className="font-bold text-slate-800 block truncate">{obs.name || "Obstáculo"}</span>
+                                          <span className="text-[10px] text-slate-500 font-mono">Raio: {(obs.radiusM || 1.0).toFixed(1)}m</span>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedEntity({ type: "obstacle", id: obs.id });
+                                            setSidebarOpen(true);
+                                          }}
+                                          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                                            isSelected
+                                              ? "bg-rose-600 text-white shadow-xs"
+                                              : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                                          }`}
+                                          title="Editar detalhes do obstáculo"
+                                        >
+                                          <Pencil className="h-2.5 w-2.5" />
+                                          <span>Editar</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveObstacle(obs.id);
+                                          }}
+                                          className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-white transition"
+                                          title="Excluir obstáculo"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
 
@@ -2488,13 +2532,22 @@ export default function SolarProject() {
                     <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3 shadow-xs animate-in fade-in">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
                         <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedEntity({ type: "none", id: null })}
+                            className="p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition"
+                            title="Voltar à lista de obstáculos"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
                           <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
                           <span className="text-xs font-black text-slate-900">Editar Obstáculo</span>
                         </div>
                         <button
                           type="button"
                           onClick={() => setSelectedEntity({ type: "none", id: null })}
-                          className="text-slate-400 hover:text-slate-700"
+                          className="text-slate-400 hover:text-slate-700 p-1 rounded hover:bg-slate-100 transition"
+                          title="Fechar edição"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -2949,6 +3002,7 @@ export default function SolarProject() {
               viewMode={viewMode}
               sizing={visualSizing}
               editorMode={editorMode}
+              isPlacingObstacle={Boolean(pendingObstaclePreset)}
               fitRoofRequest={fitRoofRequest}
               viewportRequest={viewportRequest}
               selectedObstacleId={selectedEntity?.type === "obstacle" ? selectedEntity.id : null}
@@ -2981,6 +3035,7 @@ export default function SolarProject() {
               onSelectObstacle={(id) => {
                 setSelectedEntity({ type: "obstacle", id });
                 setSidebarOpen(true);
+                setInspectorSections((prev) => ({ ...prev, obstacles: true }));
               }}
               onSelectModule={(idx) => {
                 setSelectedEntity({ type: "module", id: idx });
