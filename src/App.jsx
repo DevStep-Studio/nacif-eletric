@@ -30,12 +30,13 @@ import SettingsPage from './pages/Settings';
 import Subscription from './pages/Subscription';
 import AdminPanel from './pages/AdminPanel';
 import AvisosErros from './pages/AvisosErros';
+import SuperAdminPage from './pages/SuperAdmin';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import { BrandingBoot } from './lib/appPreferences';
-import { hasFullSystemAccess } from './lib/professionalAccess';
+import { hasFullSystemAccess, isSuperAdmin } from './lib/professionalAccess';
 
 // Error & System Pages
 import NotFoundPage from './pages/system/NotFound';
@@ -127,6 +128,8 @@ const AuthenticatedApp = () => {
   const { user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const fullAccess = hasFullSystemAccess(user);
   const requireFullAccess = (element) => fullAccess ? element : <Navigate to="/planta-ia" replace />;
+  const superAdminAccess = isSuperAdmin(user);
+  const requireSuperAdmin = (element) => superAdminAccess ? element : <Navigate to="/403" replace />;
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -222,6 +225,8 @@ const AuthenticatedApp = () => {
           <Route path="/avisos-erros" element={<AvisosErros />} />
           <Route path="/avisos-erros/:issueId" element={<AvisosErros />} />
           <Route path="/admin" element={requireFullAccess(<AdminPanel />)} />
+          <Route path="/super-admin" element={requireSuperAdmin(<SuperAdminPage />)} />
+          <Route path="/super-admin/*" element={requireSuperAdmin(<SuperAdminPage />)} />
         </Route>
       </Route>
 

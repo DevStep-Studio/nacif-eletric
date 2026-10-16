@@ -50,7 +50,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { hasFullSystemAccess } from "@/lib/professionalAccess";
+import { hasFullSystemAccess, isSuperAdmin } from "@/lib/professionalAccess";
 import { useBranding, useNotifications, formatNotificationTime } from "@/lib/appPreferences";
 import { backend } from "@/api/backendClient";
 import { ISSUES_CHANGED_EVENT } from "@/lib/issuePersistence";
@@ -338,6 +338,7 @@ export default function Layout() {
     if (location.pathname === "/nbr-library") return { section: "Biblioteca", page: "Normas NBR" };
     if (location.pathname === "/budget") return { section: "Relatórios", page: "Orçamento & Materiais" };
     if (location.pathname.startsWith("/avisos-erros")) return { section: "Ferramentas", page: "Avisos e Erros" };
+    if (location.pathname.startsWith("/super-admin")) return { section: "Administração", page: "Painel Super Admin" };
     if (location.pathname === "/subscription") return { section: "Conta", page: "Assinatura e Uso" };
     if (location.pathname === "/settings") return { section: "Conta", page: "Configurações" };
     return { section: "Pages", page: "Nacif Electric" };
@@ -841,6 +842,16 @@ export default function Layout() {
                   <p className="text-xs font-black text-[#0F172A] truncate">{displayName}</p>
                   <p className="text-[10px] text-[#64748B] truncate">{displayEmail}</p>
                 </div>
+                {isSuperAdmin(activeUser) && (
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to="/super-admin"
+                      className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-black text-purple-700 bg-purple-50 hover:bg-purple-100 hover:text-purple-800"
+                    >
+                      <ShieldAlert className="h-4 w-4 text-purple-600" /> Painel Super Admin
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <Link to="/settings" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold">
                     <UserCircle className="h-4 w-4" /> Minha conta
@@ -1027,6 +1038,16 @@ export default function Layout() {
                   <p className="text-xs font-black text-[#0F172A] truncate">{displayName}</p>
                   <p className="text-[10px] text-[#64748B] truncate">{displayEmail}</p>
                 </div>
+                {isSuperAdmin(activeUser) && (
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to="/super-admin"
+                      className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-black text-purple-700 bg-purple-50 hover:bg-purple-100 hover:text-purple-800"
+                    >
+                      <ShieldAlert className="h-4 w-4 text-purple-600" /> Painel Super Admin
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <Link to="/settings" className="flex cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold">
                     <UserCircle className="h-4 w-4" /> Minha conta

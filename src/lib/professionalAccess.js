@@ -29,15 +29,32 @@ export function isArchitectUser(user) {
   return user?.role !== "admin" && normalizeProfession(user?.profession || user?.profissao) === "arquiteto";
 }
 
+export function isSuperAdmin(user) {
+  if (!user) return false;
+  if (user.role === "super_admin") return true;
+  if (user.is_super_admin === true) return true;
+  if (user.role === "admin" && (user.email === "admin@nacif.com" || user.id === "local_admin_default")) {
+    return true;
+  }
+  return false;
+}
+
+export function canAccessSuperAdmin(user) {
+  return isSuperAdmin(user);
+}
+
 export function hasFullSystemAccess(user) {
   if (!user) return false;
-  if (user.role === "admin") return true;
+  if (isSuperAdmin(user) || user.role === "admin") return true;
   const profession = normalizeProfession(user.profession || user.profissao);
   if (!profession) return true;
   return profession === "projetista" || profession === "eletricista";
 }
 
 export function canAccessPath(user, path = "") {
+  if (path === "/super-admin" || path.startsWith("/super-admin/")) {
+    return canAccessSuperAdmin(user);
+  }
   if (hasFullSystemAccess(user)) return true;
   if (!isArchitectUser(user)) return true;
   return path === "/planta-ia" || path.startsWith("/planta-ia?") || path === "/settings";
@@ -48,3 +65,4 @@ export function filterNavItemsForUser(items = [], user) {
   if (!isArchitectUser(user)) return items;
   return items.filter((item) => item.path === "/planta-ia");
 }
+

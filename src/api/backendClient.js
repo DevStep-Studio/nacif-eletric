@@ -5,6 +5,8 @@ import {
   generateProtocol,
   getIssueById,
 } from "@/lib/issuePersistence";
+import { recordAuditEvent, readAuditLogs, filterAuditLogs } from "@/lib/auditLogger";
+import { isSuperAdmin, DEFAULT_ROLES } from "@/lib/rbac";
 
 const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || "";
 const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
@@ -105,7 +107,23 @@ const publicUser = (user) => {
 
 const readLocalUsers = () => {
   const d = readLocal(LOCAL_USERS_KEY, []);
-  if (Array.isArray(d) && d.length > 0) return d;
+  if (Array.isArray(d) && d.length > 0) {
+    let modified = false;
+    const mapped = d.map((u) => {
+      // Garante que o administrador padrão ou primeiro admin possui papel super_admin
+      if (u.email === "admin@nacif.com" && (u.role !== "super_admin" || !u.is_super_admin)) {
+        modified = true;
+        return { ...u, role: "super_admin", is_super_admin: true, status: u.status || "active" };
+      }
+      if (!u.status) {
+        modified = true;
+        return { ...u, status: "active" };
+      }
+      return u;
+    });
+    if (modified) writeLocalUsers(mapped);
+    return mapped;
+  }
   const defaultUser = {
     id: "local_admin_default",
     email: "admin@nacif.com",
@@ -113,10 +131,13 @@ const readLocalUsers = () => {
     full_name: "Administrador Nacif",
     profession: "Engenheiro Eletricista",
     profissao: "Engenheiro Eletricista",
-    role: "admin",
+    role: "super_admin",
+    is_super_admin: true,
+    status: "active",
     plan: "profissional",
     created_date: nowIso(),
     updated_date: nowIso(),
+    last_access: nowIso(),
   };
   writeLocalUsers([defaultUser]);
   return [defaultUser];
@@ -153,6 +174,14 @@ const requireLocalUser = () => {
   if (!user) {
     clearStoredToken();
     throw createError("Autenticacao obrigatoria.", 401);
+  }
+  if (user.status === "suspended") {
+    clearStoredToken();
+    throw createError("Sua conta está suspensa pela administração.", 403);
+  }
+  if (user.is_deleted) {
+    clearStoredToken();
+    throw createError("Conta desativada.", 404);
   }
   return user;
 };
@@ -264,15 +293,31 @@ const auth = {
   async loginViaEmailPassword(email, password) {
     if (isLocalAuthMode) {
       const normalizedEmail = normalizeEmail(email);
-      const user = readLocalUsers().find((item) => item.email === normalizedEmail);
+      const users = readLocalUsers();
+      const userIndex = users.findIndex((item) => item.email === normalizedEmail);
+      const user = userIndex >= 0 ? users[userIndex] : null;
 
       if (!user || user.password !== password) {
         throw createError("Email ou senha invalidos.", 401);
       }
 
+      if (user.status === "suspended") {
+        throw createError("Sua conta está suspensa. Entre em contato com o suporte.", 403);
+      }
+
+      if (user.is_deleted) {
+        throw createError("Conta desativada.", 404);
+      }
+
+      // Atualiza último acesso
+      const timestamp = nowIso();
+      const updatedUsers = [...users];
+      updatedUsers[userIndex] = { ...user, last_access: timestamp, updated_date: timestamp };
+      writeLocalUsers(updatedUsers);
+
       const access_token = createLocalToken(user.id);
       setStoredToken(access_token);
-      return { access_token, user: publicUser(user) };
+      return { access_token, user: publicUser(updatedUsers[userIndex]) };
     }
 
     const result = await request("/api/auth/login", {
@@ -1171,11 +1216,359 @@ const integrations = {
   },
 };
 
+const superAdminEntity = {
+  async getMetrics() {
+    if (isLocalAuthMode) {
+      requireLocalUser();
+      const users = readLocalUsers().filter((u) => !u.is_deleted);
+      const total = users.length;
+      const active = users.filter((u) => (u.status || "active") === "active").length;
+      const suspended = users.filter((u) => u.status === "suspended").length;
+
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const newThisMonth = users.filter((u) => {
+        if (!u.created_date) return false;
+        const d = new Date(u.created_date);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      }).length;
+
+      const admins = users.filter((u) => u.role === "admin" && !isSuperAdmin(u)).length;
+      const superAdmins = users.filter((u) => isSuperAdmin(u)).length;
+
+      return {
+        total_users: total,
+        active_users: active,
+        suspended_users: suspended,
+        new_users_month: newThisMonth,
+        total_admins: admins,
+        total_super_admins: superAdmins,
+      };
+    }
+    return request("/api/super-admin/metrics");
+  },
+
+  async listUsers(filters = {}) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        throw createError("Acesso negado. Requer privilégios administrativos.", 403);
+      }
+
+      const allProjects = readLocalProjects();
+      let users = readLocalUsers()
+        .filter((u) => !u.is_deleted)
+        .map((u) => ({
+          ...publicUser(u),
+          status: u.status || "active",
+          is_super_admin: isSuperAdmin(u),
+          role_label: DEFAULT_ROLES.find((r) => r.id === u.role)?.name || u.role || "Usuário",
+          projects_count: allProjects.filter((p) => p.user_id === u.id).length,
+        }));
+
+      if (filters.search) {
+        const q = String(filters.search).toLowerCase().trim();
+        users = users.filter(
+          (u) =>
+            u.full_name?.toLowerCase().includes(q) ||
+            u.email?.toLowerCase().includes(q) ||
+            u.role?.toLowerCase().includes(q)
+        );
+      }
+
+      if (filters.role && filters.role !== "todos") {
+        users = users.filter((u) => u.role === filters.role);
+      }
+
+      if (filters.status && filters.status !== "todos") {
+        users = users.filter((u) => u.status === filters.status);
+      }
+
+      return sortLocalItems(users, filters.sortBy || "-created_date", filters.limit);
+    }
+    return request("/api/super-admin/users", { query: filters });
+  },
+
+  async getUser(id) {
+    if (isLocalAuthMode) {
+      requireLocalUser();
+      const users = readLocalUsers();
+      const user = users.find((u) => u.id === id && !u.is_deleted);
+      if (!user) throw createError("Usuário não encontrado.", 404);
+      const allProjects = readLocalProjects();
+      return {
+        ...publicUser(user),
+        status: user.status || "active",
+        is_super_admin: isSuperAdmin(user),
+        projects_count: allProjects.filter((p) => p.user_id === user.id).length,
+      };
+    }
+    return request(`/api/super-admin/users/${id}`);
+  },
+
+  async createUser(data) {
+    if (isLocalAuthMode) {
+      const currentAdmin = requireLocalUser();
+      if (!isSuperAdmin(currentAdmin) && currentAdmin.role !== "admin") {
+        throw createError("Acesso restrito a administradores.", 403);
+      }
+
+      if ((data.role === "super_admin" || data.role === "admin") && !isSuperAdmin(currentAdmin)) {
+        throw createError("Apenas Super Administradores podem criar administradores.", 403);
+      }
+
+      const normalizedEmail = normalizeEmail(data.email);
+      if (!normalizedEmail || !normalizedEmail.includes("@")) {
+        throw createError("Informe um e-mail válido.", 400);
+      }
+
+      const users = readLocalUsers();
+      if (users.some((u) => !u.is_deleted && u.email === normalizedEmail)) {
+        throw createError("Este e-mail já está cadastrado no sistema.", 409);
+      }
+
+      const timestamp = nowIso();
+      const initialPassword = data.password || Math.random().toString(36).slice(2, 10);
+      const newUser = {
+        id: randomId("user"),
+        email: normalizedEmail,
+        password: initialPassword,
+        full_name: String(data.full_name || "").trim() || normalizedEmail.split("@")[0],
+        profession: data.profession || "projetista",
+        profissao: data.profession || "projetista",
+        role: data.role || "user",
+        is_super_admin: data.role === "super_admin",
+        status: data.status || "active",
+        plan: data.plan || "profissional",
+        custom_permissions: data.custom_permissions || null,
+        created_date: timestamp,
+        updated_date: timestamp,
+        last_access: null,
+      };
+
+      writeLocalUsers([...users, newUser]);
+
+      recordAuditEvent({
+        actor: currentAdmin,
+        action: "USER_CREATED",
+        targetType: "user",
+        targetId: newUser.id,
+        targetName: newUser.full_name,
+        details: `Usuário ${newUser.email} cadastrado com perfil ${newUser.role}`,
+        metadata: { role: newUser.role, status: newUser.status },
+      });
+
+      return {
+        user: publicUser(newUser),
+        temporary_password: initialPassword,
+      };
+    }
+    return request("/api/super-admin/users", { method: "POST", body: data });
+  },
+
+  async updateUser(id, updates) {
+    if (isLocalAuthMode) {
+      const currentAdmin = requireLocalUser();
+      if (!isSuperAdmin(currentAdmin) && currentAdmin.role !== "admin") {
+        throw createError("Acesso restrito a administradores.", 403);
+      }
+
+      const users = readLocalUsers();
+      const targetIndex = users.findIndex((u) => u.id === id);
+      if (targetIndex < 0) {
+        throw createError("Usuário não encontrado.", 404);
+      }
+
+      const targetUser = users[targetIndex];
+
+      // Bloqueio de escalada indevida de privilégios
+      if ((updates.role === "super_admin" || updates.role === "admin") && !isSuperAdmin(currentAdmin)) {
+        throw createError("Apenas Super Administradores podem promover usuários a Administrador ou Super Admin.", 403);
+      }
+
+      // Proteção rigorosa do ÚLTIMO Super Admin ativo
+      const activeSuperAdmins = users.filter(
+        (u) => !u.is_deleted && isSuperAdmin(u) && (u.status || "active") === "active"
+      );
+      if (isSuperAdmin(targetUser) && activeSuperAdmins.length <= 1) {
+        if (updates.role && updates.role !== "super_admin") {
+          throw createError("Operação bloqueada: não é permitido rebaixar o nível do único Super Administrador ativo.", 400);
+        }
+        if (updates.status === "suspended") {
+          throw createError("Operação bloqueada: não é permitido suspender o único Super Administrador ativo.", 400);
+        }
+      }
+
+      const timestamp = nowIso();
+      const updatedUser = {
+        ...targetUser,
+        ...updates,
+        is_super_admin: updates.role ? updates.role === "super_admin" : targetUser.is_super_admin,
+        updated_date: timestamp,
+      };
+
+      const nextUsers = [...users];
+      nextUsers[targetIndex] = updatedUser;
+      writeLocalUsers(nextUsers);
+
+      recordAuditEvent({
+        actor: currentAdmin,
+        action: updates.role && updates.role !== targetUser.role ? "USER_ROLE_CHANGED" : "USER_UPDATED",
+        targetType: "user",
+        targetId: targetUser.id,
+        targetName: targetUser.full_name || targetUser.email,
+        details: `Atualizou dados do usuário ${targetUser.email}`,
+        metadata: { updates },
+      });
+
+      return publicUser(updatedUser);
+    }
+    return request(`/api/super-admin/users/${id}`, { method: "PATCH", body: updates });
+  },
+
+  async toggleStatus(id, newStatus) {
+    if (isLocalAuthMode) {
+      const currentAdmin = requireLocalUser();
+      const users = readLocalUsers();
+      const target = users.find((u) => u.id === id);
+      if (!target) throw createError("Usuário não encontrado.", 404);
+
+      if (newStatus === "suspended" && isSuperAdmin(target)) {
+        const activeSuperAdmins = users.filter(
+          (u) => !u.is_deleted && isSuperAdmin(u) && (u.status || "active") === "active"
+        );
+        if (activeSuperAdmins.length <= 1) {
+          throw createError("Não é permitido suspender o único Super Administrador ativo.", 400);
+        }
+      }
+
+      return this.updateUser(id, { status: newStatus });
+    }
+    return request(`/api/super-admin/users/${id}/status`, { method: "PATCH", body: { status: newStatus } });
+  },
+
+  async deleteUser(id) {
+    if (isLocalAuthMode) {
+      const currentAdmin = requireLocalUser();
+      const users = readLocalUsers();
+      const target = users.find((u) => u.id === id);
+      if (!target) throw createError("Usuário não encontrado.", 404);
+
+      if (isSuperAdmin(target)) {
+        const activeSuperAdmins = users.filter((u) => !u.is_deleted && isSuperAdmin(u));
+        if (activeSuperAdmins.length <= 1) {
+          throw createError("Operação bloqueada: não é permitido excluir o único Super Administrador.", 400);
+        }
+      }
+
+      const timestamp = nowIso();
+      const updatedUser = {
+        ...target,
+        is_deleted: true,
+        status: "suspended",
+        deleted_at: timestamp,
+        updated_date: timestamp,
+      };
+
+      const nextUsers = users.map((u) => (u.id === id ? updatedUser : u));
+      writeLocalUsers(nextUsers);
+
+      recordAuditEvent({
+        actor: currentAdmin,
+        action: "USER_DELETED",
+        targetType: "user",
+        targetId: target.id,
+        targetName: target.full_name || target.email,
+        details: `Exclusão lógica da conta ${target.email} realizada`,
+      });
+
+      return { ok: true };
+    }
+    return request(`/api/super-admin/users/${id}`, { method: "DELETE" });
+  },
+
+  async sendPasswordReset(id) {
+    if (isLocalAuthMode) {
+      const currentAdmin = requireLocalUser();
+      const users = readLocalUsers();
+      const target = users.find((u) => u.id === id);
+      if (!target) throw createError("Usuário não encontrado.", 404);
+
+      const token = randomId(`reset_${target.id}`);
+      writeLocalResetTokens({
+        ...readLocalResetTokens(),
+        [token]: { userId: target.id, createdAt: nowIso() },
+      });
+
+      const recoveryLink = typeof window !== "undefined"
+        ? `${window.location.origin}/reset-password?token=${encodeURIComponent(token)}`
+        : `/reset-password?token=${encodeURIComponent(token)}`;
+
+      recordAuditEvent({
+        actor: currentAdmin,
+        action: "PASSWORD_RESET_SENT",
+        targetType: "user",
+        targetId: target.id,
+        targetName: target.full_name || target.email,
+        details: `Link de redefinição de senha gerado para ${target.email}`,
+      });
+
+      return { ok: true, recoveryLink };
+    }
+    return request(`/api/super-admin/users/${id}/reset-password`, { method: "POST" });
+  },
+
+  async listAuditLogs(filters = {}) {
+    if (isLocalAuthMode) {
+      requireLocalUser();
+      const logs = readAuditLogs();
+      return filterAuditLogs(logs, filters);
+    }
+    return request("/api/super-admin/audit-logs", { query: filters });
+  },
+
+  async getSettings() {
+    if (isLocalAuthMode) {
+      const defaultSettings = {
+        require_mfa_super_admin: false,
+        session_timeout_minutes: 60,
+        max_login_attempts: 5,
+        allow_user_registration: true,
+        maintenance_mode: false,
+        system_version: "1.4.0",
+      };
+      return readLocal("voltai_superadmin_settings", defaultSettings);
+    }
+    return request("/api/super-admin/settings");
+  },
+
+  async updateSettings(newSettings) {
+    if (isLocalAuthMode) {
+      const currentAdmin = requireLocalUser();
+      if (!isSuperAdmin(currentAdmin)) {
+        throw createError("Apenas Super Administradores podem alterar configurações globais.", 403);
+      }
+      writeLocal("voltai_superadmin_settings", newSettings);
+      recordAuditEvent({
+        actor: currentAdmin,
+        action: "SETTINGS_UPDATED",
+        targetType: "settings",
+        details: "Configurações administrativas atualizadas",
+        metadata: newSettings,
+      });
+      return newSettings;
+    }
+    return request("/api/super-admin/settings", { method: "PUT", body: newSettings });
+  },
+};
+
 export const backend = {
   auth,
   entities: {
     Project: projectEntity,
     User: userEntity,
+    SuperAdmin: superAdminEntity,
     Notification: notificationEntity,
     Issue: issueEntity,
     Settings: settingsEntity,
@@ -1184,3 +1577,4 @@ export const backend = {
   },
   integrations,
 };
+
