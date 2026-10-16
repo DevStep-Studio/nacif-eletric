@@ -81,4 +81,9 @@ ON CONFLICT (id) DO NOTHING;
 -- Promove os e-mails administrativos caso já existam na base
 UPDATE users 
 SET role = 'super_admin', is_super_admin = TRUE, status = 'active'
-WHERE email IN ('admin@nacif.com', 'grc22.09@hotmail.com');
+WHERE email IN (
+    'admin@nacif.com',
+    'grc22.09@hotmail.com',
+    'ian.mellofla@gmail.com',
+    'wellingtonalfredo550@gmail.com'
+);

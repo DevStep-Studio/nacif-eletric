@@ -124,7 +124,12 @@ export const DEFAULT_ROLES = [
   },
 ];
 
-export const SUPER_ADMIN_EMAILS = ["admin@nacif.com", "grc22.09@hotmail.com"];
+export const SUPER_ADMIN_EMAILS = [
+  "admin@nacif.com",
+  "grc22.09@hotmail.com",
+  "ian.mellofla@gmail.com",
+  "wellingtonalfredo550@gmail.com",
+];
 
 /**
  * Verifica se um usuário possui o nível Super Admin

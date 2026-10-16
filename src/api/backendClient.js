@@ -6,7 +6,7 @@ import {
   getIssueById,
 } from "@/lib/issuePersistence";
 import { recordAuditEvent, readAuditLogs, filterAuditLogs } from "@/lib/auditLogger";
-import { isSuperAdmin, DEFAULT_ROLES } from "@/lib/rbac";
+import { isSuperAdmin, DEFAULT_ROLES, SUPER_ADMIN_EMAILS } from "@/lib/rbac";
 
 const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || "";
 const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
@@ -105,18 +105,67 @@ const publicUser = (user) => {
   return cloneLocal(safeUser);
 };
 
+const INITIAL_SUPER_ADMINS = [
+  {
+    id: "local_admin_default",
+    email: "admin@nacif.com",
+    password: "admin",
+    full_name: "Administrador Nacif",
+    profession: "Engenheiro Eletricista",
+    profissao: "Engenheiro Eletricista",
+    role: "super_admin",
+    is_super_admin: true,
+    status: "active",
+    plan: "profissional",
+  },
+  {
+    id: "local_super_admin_grc",
+    email: "grc22.09@hotmail.com",
+    password: "admin",
+    full_name: "Gabriel Nacif",
+    profession: "Engenheiro Eletricista",
+    profissao: "Engenheiro Eletricista",
+    role: "super_admin",
+    is_super_admin: true,
+    status: "active",
+    plan: "profissional",
+  },
+  {
+    id: "local_super_admin_ian",
+    email: "ian.mellofla@gmail.com",
+    password: "admin",
+    full_name: "Ian Mello",
+    profession: "Engenheiro Eletricista",
+    profissao: "Engenheiro Eletricista",
+    role: "super_admin",
+    is_super_admin: true,
+    status: "active",
+    plan: "profissional",
+  },
+  {
+    id: "local_super_admin_wellington",
+    email: "wellingtonalfredo550@gmail.com",
+    password: "admin",
+    full_name: "Wellington Alfredo",
+    profession: "Engenheiro Eletricista",
+    profissao: "Engenheiro Eletricista",
+    role: "super_admin",
+    is_super_admin: true,
+    status: "active",
+    plan: "profissional",
+  },
+];
+
 const readLocalUsers = () => {
   const d = readLocal(LOCAL_USERS_KEY, []);
   if (Array.isArray(d) && d.length > 0) {
     let modified = false;
-    let hasGrc = false;
+    const existingEmails = new Set(d.map((u) => String(u.email || "").toLowerCase().trim()));
+
     const mapped = d.map((u) => {
       const emailLower = String(u.email || "").toLowerCase().trim();
-      if (emailLower === "grc22.09@hotmail.com") {
-        hasGrc = true;
-      }
       // Garante que os administradores principais possuem papel super_admin e status ativo
-      if ((emailLower === "admin@nacif.com" || emailLower === "grc22.09@hotmail.com") &&
+      if (SUPER_ADMIN_EMAILS.includes(emailLower) &&
           (u.role !== "super_admin" || !u.is_super_admin || u.status !== "active")) {
         modified = true;
         return { ...u, role: "super_admin", is_super_admin: true, status: "active" };
@@ -128,60 +177,35 @@ const readLocalUsers = () => {
       return u;
     });
 
-    if (!hasGrc) {
-      modified = true;
-      mapped.push({
-        id: "local_super_admin_grc",
-        email: "grc22.09@hotmail.com",
-        password: "admin",
-        full_name: "Gabriel Nacif",
-        profession: "Engenheiro Eletricista",
-        profissao: "Engenheiro Eletricista",
-        role: "super_admin",
-        is_super_admin: true,
-        status: "active",
-        plan: "profissional",
-        created_date: nowIso(),
-        updated_date: nowIso(),
-        last_access: nowIso(),
-      });
-    }
+    INITIAL_SUPER_ADMINS.forEach((adm) => {
+      if (!existingEmails.has(adm.email.toLowerCase())) {
+        modified = true;
+        const now = nowIso();
+        mapped.push({
+          ...adm,
+          created_date: now,
+          updated_date: now,
+          last_access: now,
+        });
+        existingEmails.add(adm.email.toLowerCase());
+      }
+    });
 
     if (modified) writeLocalUsers(mapped);
     return mapped;
   }
-  const defaultUser = {
-    id: "local_admin_default",
-    email: "admin@nacif.com",
-    password: "admin",
-    full_name: "Administrador Nacif",
-    profession: "Engenheiro Eletricista",
-    profissao: "Engenheiro Eletricista",
-    role: "super_admin",
-    is_super_admin: true,
-    status: "active",
-    plan: "profissional",
-    created_date: nowIso(),
-    updated_date: nowIso(),
-    last_access: nowIso(),
-  };
-  const grcUser = {
-    id: "local_super_admin_grc",
-    email: "grc22.09@hotmail.com",
-    password: "admin",
-    full_name: "Gabriel Nacif",
-    profession: "Engenheiro Eletricista",
-    profissao: "Engenheiro Eletricista",
-    role: "super_admin",
-    is_super_admin: true,
-    status: "active",
-    plan: "profissional",
-    created_date: nowIso(),
-    updated_date: nowIso(),
-    last_access: nowIso(),
-  };
-  writeLocalUsers([defaultUser, grcUser]);
-  return [defaultUser, grcUser];
+
+  const seeded = INITIAL_SUPER_ADMINS.map((adm) => {
+    const now = nowIso();
+    return {
+      ...adm,
+      created_date: now,
+      updated_date: now,
+      last_access: now,
+    };
+  });
+  writeLocalUsers(seeded);
+  return seeded;
 };
 const writeLocalUsers = (users) => writeLocal(LOCAL_USERS_KEY, users);
 export const readLocalProjects = () => { const d = readLocal(LOCAL_PROJECTS_KEY, []); return Array.isArray(d) ? d : []; };
@@ -386,7 +410,7 @@ const auth = {
       }
 
       const timestamp = nowIso();
-      const isSuperAdminEmail = normalizedEmail === "admin@nacif.com" || normalizedEmail === "grc22.09@hotmail.com";
+      const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
       const user = {
         id: randomId("local_user"),
         email: normalizedEmail,

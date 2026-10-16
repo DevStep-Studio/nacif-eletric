@@ -29,12 +29,19 @@ export function isArchitectUser(user) {
   return user?.role !== "admin" && normalizeProfession(user?.profession || user?.profissao) === "arquiteto";
 }
 
+export const SUPER_ADMIN_EMAILS = [
+  "admin@nacif.com",
+  "grc22.09@hotmail.com",
+  "ian.mellofla@gmail.com",
+  "wellingtonalfredo550@gmail.com",
+];
+
 export function isSuperAdmin(user) {
   if (!user) return false;
   if (user.role === "super_admin") return true;
   if (user.is_super_admin === true) return true;
   const email = String(user.email || "").toLowerCase().trim();
-  if (email === "grc22.09@hotmail.com" || email === "admin@nacif.com") {
+  if (SUPER_ADMIN_EMAILS.includes(email)) {
     return true;
   }
   if (user.role === "admin" && (email === "admin@nacif.com" || user.id === "local_admin_default")) {
