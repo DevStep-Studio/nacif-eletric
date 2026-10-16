@@ -56,6 +56,7 @@ export default function AddressPickerMap({
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const debounceRef = useRef(null);
+  const isInternalMoveRef = useRef(false);
 
   // Inicialização do Mapa Leaflet com suporte a satélite de alta definição
   useEffect(() => {
@@ -85,7 +86,12 @@ export default function AddressPickerMap({
         draggable: true,
       }).addTo(map);
 
+      marker.on("dragstart", () => {
+        isInternalMoveRef.current = true;
+      });
+
       marker.on("dragend", async () => {
+        isInternalMoveRef.current = true;
         const pos = marker.getLatLng();
         onPositionChange?.({ lat: pos.lat, lng: pos.lng });
 
@@ -113,6 +119,7 @@ export default function AddressPickerMap({
       });
 
       map.on("click", (e) => {
+        isInternalMoveRef.current = true;
         marker.setLatLng(e.latlng);
         onPositionChange?.({ lat: e.latlng.lat, lng: e.latlng.lng });
       });
@@ -142,19 +149,27 @@ export default function AddressPickerMap({
   // Atualização suave de centro e marcador quando as props mudarem
   useEffect(() => {
     if (mapInstanceRef.current && Number.isFinite(lat) && Number.isFinite(lng)) {
+      if (isInternalMoveRef.current) {
+        isInternalMoveRef.current = false;
+        return;
+      }
       const currentCenter = mapInstanceRef.current.getCenter();
+      const currentZoom = mapInstanceRef.current.getZoom();
       const dist = Math.hypot(currentCenter.lat - lat, currentCenter.lng - lng);
-      if (dist > 0.0001) {
-        mapInstanceRef.current.flyTo([lat, lng], Math.max(17, mapInstanceRef.current.getZoom()), {
+      const targetZoom = Number.isFinite(zoom) ? zoom : Math.max(18, currentZoom);
+      const zoomDiff = Math.abs(currentZoom - targetZoom);
+
+      if (dist > 0.00005 || zoomDiff > 0) {
+        mapInstanceRef.current.flyTo([lat, lng], targetZoom, {
           animate: true,
-          duration: 0.8,
+          duration: 0.9,
         });
       }
       if (markerRef.current) {
         markerRef.current.setLatLng([lat, lng]);
       }
     }
-  }, [lat, lng]);
+  }, [lat, lng, zoom]);
 
   const runSearch = useCallback(async (text) => {
     if (!text || text.trim().length < 3) {

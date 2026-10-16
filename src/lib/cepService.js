@@ -3,7 +3,7 @@
  * Provedores: ViaCEP (primário) -> BrasilAPI (secundário/fallback)
  */
 
-import { cleanDigits } from "./brFormatters";
+import { cleanDigits } from "./brFormatters.js";
 
 let currentAbortController = null;
 
@@ -52,16 +52,32 @@ export async function fetchAddressByCep(cepInput) {
     // Prossegue para o fallback BrasilAPI
   }
 
-  // 2. Fallback: BrasilAPI
+  // 2. Fallback: BrasilAPI (v2 com coordenadas ou v1)
   try {
-    const brasilApiResponse = await fetch(`https://brasilapi.com.br/api/cep/v1/${cep}`, {
+    let brasilApiResponse = await fetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, {
       signal,
       headers: { Accept: "application/json" },
     });
 
+    if (!brasilApiResponse.ok) {
+      brasilApiResponse = await fetch(`https://brasilapi.com.br/api/cep/v1/${cep}`, {
+        signal,
+        headers: { Accept: "application/json" },
+      });
+    }
+
     if (brasilApiResponse.ok) {
       const data = await brasilApiResponse.json();
       if (data && data.cep) {
+        const coords = data.location?.coordinates;
+        const coordinates =
+          coords && Number.isFinite(Number(coords.latitude)) && Number.isFinite(Number(coords.longitude))
+            ? {
+                lat: Number(coords.latitude),
+                lng: Number(coords.longitude),
+              }
+            : null;
+
         return {
           success: true,
           provider: "brasilapi",
@@ -73,6 +89,7 @@ export async function fetchAddressByCep(cepInput) {
             city: data.city || "",
             state: (data.state || "").toUpperCase(),
             ibge: data.ibge || "",
+            coordinates,
           },
         };
       }

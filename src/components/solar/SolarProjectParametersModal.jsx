@@ -144,6 +144,9 @@ export default function SolarProjectParametersModal({
     setSaving(true);
     try {
       const updatedConfigPatch = {
+        map_center_lat: state.map_center_lat,
+        map_center_lng: state.map_center_lng,
+        map_zoom: state.map_zoom || 19,
         inverter_kw: Number(state.inverter_kw) || config.inverter_kw,
         inverter_quantity: Number(state.inverter_quantity) || 1,
         inverter_manufacturer: state.inverter_manufacturer || config.inverter_manufacturer,
@@ -166,6 +169,9 @@ export default function SolarProjectParametersModal({
         name: state.name,
         client_name: state.client_name,
         address: state.address,
+        number: state.number,
+        complement: state.complement,
+        neighborhood: state.neighborhood,
         city: state.city,
         state: state.state,
         zip_code: state.zip_code,

@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, MapPin, Search, Zap, CheckCircle2, Info } from "lucide-react";
+import { Loader2, MapPin, Search, Zap, CheckCircle2 } from "lucide-react";
 import { cleanDigits, maskCep } from "@/lib/brFormatters";
 import { fetchAddressByCep } from "@/lib/cepService";
+import { geocodeAddressCascade } from "@/lib/geocodingService";
 import { identifyDistributorByLocation } from "@/lib/solarDistributorRates";
 import AddressPickerMap from "./AddressPickerMap";
 
@@ -13,13 +14,21 @@ const BR_STATES = [
   "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
 ];
 
-const NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search";
-
 export default function StepLocalizacao({ state, onChange }) {
   const [loadingCep, setLoadingCep] = useState(false);
   const [cepMessage, setCepMessage] = useState("");
   const setField = (field, value) => onChange({ [field]: value });
   const lastQueriedCepRef = useRef("");
+  const requestSeqRef = useRef(0);
+  const abortControllerRef = useRef(null);
+  const numberDebounceRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (numberDebounceRef.current) window.clearTimeout(numberDebounceRef.current);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
+  }, []);
 
   // Identificação automática da distribuidora e tarifa pela localização atual
   const locationConcessionInfo = useMemo(() => {
@@ -47,45 +56,45 @@ export default function StepLocalizacao({ state, onChange }) {
     }
   }, [locationConcessionInfo, state.distributor, state.tariff_brl_kwh]);
 
-  // Geocodificação de endereço para centralizar mapa
-  const geocodeAddress = async (fullAddress) => {
-    if (!fullAddress || fullAddress.trim().length < 5) return;
-    try {
-      const url = `${NOMINATIM_SEARCH_URL}?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(fullAddress)}`;
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const lat = Number(data[0].lat);
-          const lng = Number(data[0].lon);
-          if (Number.isFinite(lat) && Number.isFinite(lng)) {
-            onChange({ map_center_lat: lat, map_center_lng: lng, location_confirmed: true });
-          }
-        }
-      }
-    } catch {
-      // Geocodificação opcional
-    }
-  };
-
+  // Busca de CEP automática ao completar 8 dígitos válidos
   const handleCepChange = async (rawValue) => {
     const masked = maskCep(rawValue);
     setField("zip_code", masked);
     setCepMessage("");
 
     const digits = cleanDigits(masked);
+    if (digits.length < 8) {
+      if (digits !== lastQueriedCepRef.current) {
+        lastQueriedCepRef.current = "";
+      }
+      return;
+    }
+
     if (digits.length === 8 && digits !== lastQueriedCepRef.current) {
       lastQueriedCepRef.current = digits;
+
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+      const signal = abortControllerRef.current.signal;
+      requestSeqRef.current += 1;
+      const seq = requestSeqRef.current;
+
       setLoadingCep(true);
       const result = await fetchAddressByCep(digits);
+
+      if (seq !== requestSeqRef.current || signal.aborted) {
+        return;
+      }
       setLoadingCep(false);
 
       if (result.success && result.data) {
         const d = result.data;
-        const updatedAddress = d.address || state.address;
-        const updatedCity = d.city || state.city;
-        const updatedState = d.state || state.state;
-        const updatedNeighborhood = d.neighborhood || state.neighborhood;
+        const updatedAddress = d.address || state.address || "";
+        const updatedCity = d.city || state.city || "";
+        const updatedState = d.state || state.state || "";
+        const updatedNeighborhood = d.neighborhood || state.neighborhood || "";
 
         // Auto identifica concessionária
         const concession = identifyDistributorByLocation({
@@ -111,15 +120,82 @@ export default function StepLocalizacao({ state, onChange }) {
           patch.tariff_brl_kwh = concession.referenceTariffBrlKwh;
         }
 
-        onChange(patch);
+        // Executa geocodificação em cascata priorizando rua/número/centro do CEP
+        try {
+          const geo = await geocodeAddressCascade({
+            street: updatedAddress,
+            number: state.number,
+            neighborhood: updatedNeighborhood,
+            city: updatedCity,
+            state: updatedState,
+            cep: digits,
+            cepCoordinates: d.coordinates,
+            signal,
+          });
 
-        // Dispara geocodificação para atualizar mapa
-        const searchStr = [updatedAddress, updatedNeighborhood, updatedCity, updatedState, "Brasil"].filter(Boolean).join(", ");
-        geocodeAddress(searchStr);
+          if (seq === requestSeqRef.current && geo && Number.isFinite(geo.lat) && Number.isFinite(geo.lng)) {
+            patch.map_center_lat = geo.lat;
+            patch.map_center_lng = geo.lng;
+            patch.map_zoom = geo.zoom || 18;
+            patch.location_confirmed = true;
+          }
+        } catch {
+          // Em caso de falha na geocodificação, preserva a posição atual do mapa
+        }
+
+        if (seq === requestSeqRef.current) {
+          onChange(patch);
+        }
       } else if (!result.aborted) {
         setCepMessage(result.error || "CEP não encontrado. Preencha o endereço manualmente.");
       }
     }
+  };
+
+  // Refinamento de localização por número do imóvel digitado
+  const handleNumberChange = (value) => {
+    setField("number", value);
+
+    if (numberDebounceRef.current) {
+      window.clearTimeout(numberDebounceRef.current);
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || !state.address || !state.city) {
+      return;
+    }
+
+    numberDebounceRef.current = window.setTimeout(async () => {
+      requestSeqRef.current += 1;
+      const seq = requestSeqRef.current;
+      try {
+        const geo = await geocodeAddressCascade({
+          street: state.address,
+          number: trimmed,
+          neighborhood: state.neighborhood,
+          city: state.city,
+          state: state.state,
+          cep: state.zip_code,
+        });
+
+        if (
+          seq === requestSeqRef.current &&
+          geo &&
+          Number.isFinite(geo.lat) &&
+          Number.isFinite(geo.lng) &&
+          (geo.precision === "exact_number" || geo.precision === "street_neighborhood" || geo.precision === "street")
+        ) {
+          onChange({
+            map_center_lat: geo.lat,
+            map_center_lng: geo.lng,
+            map_zoom: geo.zoom || 19,
+            location_confirmed: true,
+          });
+        }
+      } catch {
+        // Falha no refinamento: preserva coordenadas atuais
+      }
+    }, 600);
   };
 
   const handleAddressSelect = (payload) => {
@@ -144,6 +220,7 @@ export default function StepLocalizacao({ state, onChange }) {
       zip_code: nextZip,
       map_center_lat: payload.lat,
       map_center_lng: payload.lng,
+      map_zoom: 18,
       location_confirmed: true,
     };
 
@@ -169,6 +246,7 @@ export default function StepLocalizacao({ state, onChange }) {
         <AddressPickerMap
           lat={state.map_center_lat}
           lng={state.map_center_lng}
+          zoom={state.map_zoom || 18}
           onPositionChange={handlePositionChange}
           onAddressSelect={handleAddressSelect}
         />
@@ -229,7 +307,7 @@ export default function StepLocalizacao({ state, onChange }) {
             <Input
               placeholder="Ex: 1046"
               value={state.number}
-              onChange={(e) => setField("number", e.target.value)}
+              onChange={(e) => handleNumberChange(e.target.value)}
               className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#00d8b8] focus:ring-2 focus:ring-[#00d8b8]/15 focus:outline-none transition-colors shadow-none"
             />
           </div>
