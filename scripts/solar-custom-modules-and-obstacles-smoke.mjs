@@ -94,7 +94,7 @@ const testRoofPolygon = [
 
 const panelsWithoutObs = buildPanelPolygons(
   { roof_polygon: testRoofPolygon, obstacles: [] },
-  { panelCount: 50 }
+  { panelCount: 1200 }
 );
 
 // Obstáculo com raio 2.3m exatamente como na tela do usuário
@@ -110,7 +110,7 @@ const panelsWithObs = buildPanelPolygons(
     roof_polygon: testRoofPolygon,
     obstacles: [obsCenter],
   },
-  { panelCount: 50 }
+  { panelCount: 1200 }
 );
 
 assert(panelsWithObs.length < panelsWithoutObs.length, "Painéis com obstáculo devem ser menores que sem obstáculo");
