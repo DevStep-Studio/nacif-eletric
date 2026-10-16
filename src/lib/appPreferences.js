@@ -148,6 +148,16 @@ const normalizeBranding = (value) => {
   normalized.compactLogoDataUrl = sanitizeLogoUrl(normalized.compactLogoDataUrl, DEFAULT_BRANDING.compactLogoDataUrl);
   normalized.authLogoDataUrl = sanitizeLogoUrl(normalized.authLogoDataUrl, DEFAULT_BRANDING.authLogoDataUrl);
 
+  if (
+    !normalized.compactLogoDataUrl ||
+    normalized.compactLogoDataUrl === normalized.logoDataUrl ||
+    normalized.compactLogoDataUrl === DEFAULT_LOGO_URL ||
+    normalized.compactLogoDataUrl.includes("brand-logo-principal") ||
+    normalized.compactLogoDataUrl.includes("Logo-Principal")
+  ) {
+    normalized.compactLogoDataUrl = DEFAULT_COMPACT_LOGO_URL;
+  }
+
   return normalized;
 };
 

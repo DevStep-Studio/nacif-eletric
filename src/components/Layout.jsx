@@ -95,9 +95,24 @@ const initialsFromUser = (user) => {
 };
 
 function BrandLogo({ branding, compact = false, className = "" }) {
-  const logo = compact
-    ? branding?.compactLogoDataUrl || "/brand-mark-principal.png"
-    : branding?.logoDataUrl || "/brand-logo-principal.png";
+  const isWideLogo = (url) => {
+    if (!url || typeof url !== "string") return false;
+    return (
+      url.includes("brand-logo") ||
+      url.includes("Logo-Principal") ||
+      url.includes("Logo-black") ||
+      url.includes("Logo-white") ||
+      url === branding?.logoDataUrl
+    );
+  };
+
+  const compactLogo =
+    branding?.compactLogoDataUrl && !isWideLogo(branding.compactLogoDataUrl)
+      ? branding.compactLogoDataUrl
+      : "/brand-mark-principal.png";
+
+  const fullLogo = branding?.logoDataUrl || "/brand-logo-principal.png";
+  const logo = compact ? compactLogo : fullLogo;
 
   return (
     <div className={`flex items-center justify-center shrink-0 ${compact ? "h-8 w-8" : "h-9 max-w-[160px]"} ${className}`}>
@@ -357,9 +372,9 @@ export default function Layout() {
         {/* Botão Flutuante de Expandir / Recolher na Borda */}
         <button
           type="button"
-          aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          aria-label={sidebarCollapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
           onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-          className="absolute -right-3.5 top-5 z-50 flex h-7 w-7 items-center justify-center rounded-full border border-[#CBD5E1] bg-white text-[#64748B] shadow-[0_2px_6px_rgba(0,0,0,0.08)] transition-all hover:scale-110 hover:bg-[#00d8b8] hover:text-white hover:border-[#00d8b8] focus:outline-none"
+          className="absolute -right-3.5 top-5 z-50 flex h-7 w-7 items-center justify-center rounded-full border border-[#CBD5E1] bg-white text-[#64748B] shadow-[0_2px_6px_rgba(0,0,0,0.08)] transition-all hover:scale-110 hover:bg-[#00d8b8] hover:text-white hover:border-[#00d8b8] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8]"
           title={sidebarCollapsed ? "Expandir menu lateral (Ctrl+B)" : "Recolher menu lateral (Ctrl+B)"}
         >
           {sidebarCollapsed ? (
@@ -372,14 +387,14 @@ export default function Layout() {
         {/* Topo da Sidebar: Logo */}
         <div
           className={`flex h-16 items-center border-b border-[#F1F5F9] transition-all duration-200 ${
-            sidebarCollapsed ? "justify-center pr-3.5 pl-0.5" : "justify-start px-4"
+            sidebarCollapsed ? "justify-center px-0" : "justify-start px-4"
           }`}
         >
           <Link
             to="/"
             className={`flex items-center transition-all ${
               sidebarCollapsed
-                ? "h-10 w-10 justify-center rounded-xl hover:bg-[#F8FAFC]"
+                ? "h-10 w-10 mx-auto justify-center rounded-xl hover:bg-[#F8FAFC]"
                 : "h-10 items-center gap-3 overflow-hidden"
             }`}
             title="Nacif Electric - Dashboard"
