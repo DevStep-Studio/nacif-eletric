@@ -716,6 +716,142 @@ function EditableRoofPolygonLayer({
   );
 }
 
+/**
+ * Componente de Obstáculo Interativo e Arrastável de Alta Precisão (CAD Style)
+ * Movimenta o círculo em tempo real sem re-renderizar a árvore do React durante o drag,
+ * garantindo taxa de 60fps estável e controle total sem conflito com o mapa.
+ */
+function DraggableObstacleItem({
+  obs,
+  isSelected,
+  isDrawing,
+  isPlacingObstacle,
+  onSelectObstacle,
+  onUpdateObstacle,
+  onMapClick,
+}) {
+  const markerRef = useRef(null);
+  const circleRef = useRef(null);
+  const map = useMap();
+  const radiusM = Number(obs.radiusM) || 1.0;
+  const safeRadius = radiusM + 0.3;
+
+  useEffect(() => {
+    if (markerRef.current) {
+      markerRef.current.setLatLng([obs.lat, obs.lng]);
+    }
+    if (circleRef.current) {
+      circleRef.current.setLatLng([obs.lat, obs.lng]);
+    }
+  }, [obs.lat, obs.lng]);
+
+  const eventHandlers = useMemo(
+    () => ({
+      click: (e) => {
+        if (isPlacingObstacle) {
+          onMapClick?.(e.latlng);
+          return;
+        }
+        L.DomEvent.stopPropagation(e);
+        onSelectObstacle?.(obs.id);
+      },
+      dragstart: (e) => {
+        if (isPlacingObstacle) return;
+        onSelectObstacle?.(obs.id);
+        map.dragging.disable();
+      },
+      drag: (e) => {
+        const latLng = e.target.getLatLng();
+        if (circleRef.current) {
+          circleRef.current.setLatLng(latLng);
+        }
+      },
+      dragend: (e) => {
+        map.dragging.enable();
+        const latLng = e.target.getLatLng();
+        onUpdateObstacle?.(obs.id, { lat: latLng.lat, lng: latLng.lng });
+      },
+    }),
+    [obs.id, isPlacingObstacle, onMapClick, onSelectObstacle, onUpdateObstacle, map]
+  );
+
+  return (
+    <>
+      <Circle
+        ref={circleRef}
+        center={[obs.lat, obs.lng]}
+        radius={safeRadius}
+        interactive={!isDrawing}
+        eventHandlers={{
+          click: (e) => {
+            if (isPlacingObstacle) {
+              onMapClick?.(e.latlng);
+              return;
+            }
+            L.DomEvent.stopPropagation(e);
+            onSelectObstacle?.(obs.id);
+          },
+          mousedown: (e) => {
+            if (isPlacingObstacle) return;
+            L.DomEvent.stopPropagation(e);
+            onSelectObstacle?.(obs.id);
+          },
+        }}
+        pathOptions={{
+          color: isSelected ? "#00d8b8" : "#f43f5e",
+          fillColor: isSelected ? "#00d8b8" : "#f43f5e",
+          fillOpacity: isSelected ? 0.35 : 0.20,
+          weight: isSelected ? 2.5 : 1.5,
+          dashArray: isSelected ? undefined : "4 4",
+        }}
+      />
+      <Marker
+        ref={markerRef}
+        position={[obs.lat, obs.lng]}
+        draggable={!isDrawing && !isPlacingObstacle}
+        eventHandlers={eventHandlers}
+        icon={L.divIcon({
+          className: "solar-obstacle-marker-wrapper",
+          html: `
+            <div class="relative flex flex-col items-center select-none group pointer-events-auto -translate-x-1/2 -translate-y-1/2" style="cursor: grab;">
+              <!-- Pivot Central de Arraste de Alta Precisão (CAD Style) -->
+              <div class="h-7 w-7 rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 active:scale-95 ${
+                isSelected
+                  ? "bg-slate-900 border-2 border-[#00d8b8] text-[#00d8b8] ring-4 ring-[#00d8b8]/30"
+                  : "bg-white border-2 border-rose-500 text-rose-600 ring-2 ring-rose-200"
+              }">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="5 9 2 12 5 15"></polyline>
+                  <polyline points="9 5 12 2 15 5"></polyline>
+                  <polyline points="15 19 12 22 9 19"></polyline>
+                  <polyline points="19 9 22 12 19 15"></polyline>
+                  <line x1="2" y1="12" x2="22" y2="12"></line>
+                  <line x1="12" y1="2" x2="12" y2="22"></line>
+                </svg>
+              </div>
+
+              <!-- Pill com Nome e Raio Formatado -->
+              <div class="mt-1 flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-black shadow-md whitespace-nowrap transition-all ${
+                isSelected
+                  ? "bg-slate-900 border-[#00d8b8] text-[#00d8b8]"
+                  : "bg-white/95 border-rose-400 text-rose-800 hover:border-rose-600"
+              }">
+                <span class="truncate max-w-[110px]">${obs.name || "Obstáculo"}</span>
+                <span class="opacity-40">·</span>
+                <span class="font-mono text-[9px] px-1 py-0.2 rounded ${
+                  isSelected ? "bg-slate-800 text-emerald-400" : "bg-rose-100 text-rose-900"
+                }">${radiusM.toFixed(1)}m</span>
+              </div>
+            </div>
+          `,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        })}
+      />
+    </>
+  );
+}
+
 export default function SolarDesignerMap({
   config = {},
   areas = [],
@@ -839,7 +975,6 @@ export default function SolarDesignerMap({
   const activeAzimuth = selectedArea?.roof_rotation_deg ?? config.roof_rotation_deg ?? 24;
   const azimuthInfo = useMemo(() => getAzimuthWithCardinal(activeAzimuth), [activeAzimuth]);
   const obstacles = Array.isArray(config.obstacles) ? config.obstacles : [];
-  const [draggingObstacle, setDraggingObstacle] = useState(null);
   const hasRoof = (areas.length > 0 && areas.some((a) => a.polygon?.length >= 3)) || selectedRoofPolygon.length >= 3;
   const isDrawing = editorMode === "draw-polygon" || editorMode === "draw-rectangle";
   const isMeasuring = editorMode === "measure";
@@ -1262,98 +1397,18 @@ export default function SolarDesignerMap({
 
         {/* 9. Camada de Obstáculos Interativos */}
         <Pane name="solar-obstacles-pane" style={{ zIndex: 550, pointerEvents: isDrawing ? "none" : "auto" }}>
-          {obstacles.map((obs) => {
-            const isSelected = selectedObstacleId === obs.id;
-            const currentPos = (draggingObstacle && draggingObstacle.id === obs.id)
-              ? { lat: draggingObstacle.lat, lng: draggingObstacle.lng }
-              : { lat: obs.lat, lng: obs.lng };
-            return (
-              <Circle
-                key={`zone-${obs.id}`}
-                center={[currentPos.lat, currentPos.lng]}
-                radius={(obs.radiusM || 1.0) + 0.3}
-                interactive={!isDrawing}
-                eventHandlers={{
-                  click: (e) => {
-                    if (isPlacingObstacle) {
-                      onMapClick?.(e.latlng);
-                      return;
-                    }
-                    L.DomEvent.stopPropagation(e);
-                    onSelectObstacle?.(obs.id);
-                  },
-                }}
-                pathOptions={{
-                  color: isSelected ? "#00d8b8" : "#f43f5e",
-                  fillColor: isSelected ? "#00d8b8" : "#f43f5e",
-                  fillOpacity: isSelected ? 0.35 : 0.22,
-                  weight: isSelected ? 2.5 : 1.5,
-                  dashArray: isSelected ? undefined : "4 4",
-                }}
-              />
-            );
-          })}
-          {obstacles.map((obs) => {
-            const isSelected = selectedObstacleId === obs.id;
-            const isDraggingThis = draggingObstacle && draggingObstacle.id === obs.id;
-            const currentPos = isDraggingThis
-              ? { lat: draggingObstacle.lat, lng: draggingObstacle.lng }
-              : { lat: obs.lat, lng: obs.lng };
-            return (
-              <Marker
-                key={`marker-${obs.id}`}
-                position={[currentPos.lat, currentPos.lng]}
-                draggable={!isDrawing && !isPlacingObstacle}
-                eventHandlers={{
-                  click: (e) => {
-                    if (isPlacingObstacle) {
-                      onMapClick?.(e.latlng);
-                      return;
-                    }
-                    L.DomEvent.stopPropagation(e);
-                    onSelectObstacle?.(obs.id);
-                  },
-                  dragstart: (e) => {
-                    if (isPlacingObstacle) return;
-                    onSelectObstacle?.(obs.id);
-                    const latLng = e.target.getLatLng();
-                    setDraggingObstacle({ id: obs.id, lat: latLng.lat, lng: latLng.lng });
-                  },
-                  drag: (e) => {
-                    const latLng = e.target.getLatLng();
-                    setDraggingObstacle({ id: obs.id, lat: latLng.lat, lng: latLng.lng });
-                  },
-                  dragend: (e) => {
-                    const latLng = e.target.getLatLng();
-                    setDraggingObstacle(null);
-                    onUpdateObstacle?.(obs.id, { lat: latLng.lat, lng: latLng.lng });
-                  },
-                }}
-                icon={L.divIcon({
-                  className: "solar-obstacle-marker-wrapper",
-                  html: `
-                    <div style="cursor: grab;" class="active:cursor-grabbing flex items-center gap-1.5 rounded-lg border ${
-                      isSelected
-                        ? "border-[#00d8b8] bg-slate-900 text-[#00d8b8] shadow-lg ring-2 ring-[#00d8b8]/40"
-                        : "border-rose-400 bg-white text-rose-700 shadow-md hover:border-rose-500"
-                    } px-2.5 py-1 text-[11px] font-bold select-none transition-transform hover:scale-105" title="Clique para selecionar ou arraste para mover pelo mapa">
-                      <span class="flex items-center justify-center w-3 h-3 text-current">
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 8h16M4 16h16" />
-                        </svg>
-                      </span>
-                      <span class="truncate max-w-[100px]">${obs.name || "Obstáculo"}</span>
-                      <span class="text-[9px] px-1 py-0.5 rounded ${
-                        isSelected ? "bg-slate-800 text-slate-300" : "bg-rose-100 text-rose-800"
-                      } font-mono">${(obs.radiusM || 1.0).toFixed(1)}m</span>
-                    </div>
-                  `,
-                  iconSize: [160, 32],
-                  iconAnchor: [80, 16],
-                })}
-              />
-            );
-          })}
+          {obstacles.map((obs) => (
+            <DraggableObstacleItem
+              key={`obs-item-${obs.id}`}
+              obs={obs}
+              isSelected={selectedObstacleId === obs.id}
+              isDrawing={isDrawing}
+              isPlacingObstacle={isPlacingObstacle}
+              onSelectObstacle={onSelectObstacle}
+              onUpdateObstacle={onUpdateObstacle}
+              onMapClick={onMapClick}
+            />
+          ))}
         </Pane>
 
         {/* 10. Camada de Mapa de Calor de Irradiação */}

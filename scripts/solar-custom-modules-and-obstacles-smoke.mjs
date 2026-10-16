@@ -5,6 +5,8 @@ import {
   getModulePreset,
   getModuleDimensions,
   PANEL_VISUAL_STYLES,
+  buildPanelPolygons,
+  distanceMeters,
 } from "../src/lib/solarDesignerGeometry.js";
 
 console.log("🧪 Iniciando testes: Catálogo Expandido de Módulos, Customização e Obstáculos...\n");
@@ -80,6 +82,48 @@ assert(lngDelta > 0 && lngDelta < 0.0001, "Delta de longitude proporcional");
 const movedNorthLat = lat + latDelta;
 assert(movedNorthLat > lat, "Mover para o norte deve incrementar latitude");
 console.log("  ✓ Nudge métrico direcional validado com sucesso!\n");
+
+// 5. Validação Rigorosa de Exclusão de Obstáculos (AABB vs Círculo de Segurança)
+console.log("▶ Teste 5: Exclusão Matemática Rigorosa de Painéis sob Obstáculos...");
+const testRoofPolygon = [
+  { lat: -23.55052, lng: -46.63331 },
+  { lat: -23.55052, lng: -46.63310 },
+  { lat: -23.55040, lng: -46.63310 },
+  { lat: -23.55040, lng: -46.63331 },
+];
+
+const panelsWithoutObs = buildPanelPolygons(
+  { roof_polygon: testRoofPolygon, obstacles: [] },
+  { panelCount: 50 }
+);
+
+// Obstáculo com raio 2.3m exatamente como na tela do usuário
+const obsCenter = {
+  lat: (-23.55052 + -23.55040) / 2,
+  lng: (-46.63331 + -46.63310) / 2,
+  radiusM: 2.3,
+  excludeArea: true,
+};
+
+const panelsWithObs = buildPanelPolygons(
+  {
+    roof_polygon: testRoofPolygon,
+    obstacles: [obsCenter],
+  },
+  { panelCount: 50 }
+);
+
+assert(panelsWithObs.length < panelsWithoutObs.length, "Painéis com obstáculo devem ser menores que sem obstáculo");
+
+// Verifica que NENHUM vértice dos painéis gerados invade a zona de afastamento
+const safeRadius = 2.3 + 0.3;
+for (const panel of panelsWithObs) {
+  for (const corner of panel) {
+    const dist = distanceMeters(corner, obsCenter);
+    assert(dist >= safeRadius - 0.08, `Vértice do painel não pode invadir raio seguro! Dist: ${dist}m < ${safeRadius}m`);
+  }
+}
+console.log(`  ✓ Obstáculo de 2.3m excluiu rigorosamente os módulos na zona de keepout (${panelsWithoutObs.length} -> ${panelsWithObs.length} módulos)!\n`);
 
 console.log("==================================================================");
 console.log("🎉 TODOS OS TESTES DE MÓDULOS EXPANDIDOS E OBSTÁCULOS PASSARAM!");

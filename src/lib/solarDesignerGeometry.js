@@ -1025,26 +1025,41 @@ function pointInPolygonOrBoundary(point, polygon, toleranceM = 0.03) {
 
 /**
  * Verifica se um painel (retângulo) colide com algum obstáculo ativo no telhado
+ * Utiliza o algoritmo matemático exato de menor distância ponto-a-caixa (AABB vs Círculo de Segurança)
  */
 function panelCollidesWithObstacle(panelCorners, centerPoint, localObstacles) {
   if (!localObstacles || !localObstacles.length) return false;
 
-  for (const obs of localObstacles) {
-    if (!obs.excludeArea) continue;
-    const obsRadius = obs.radiusM || Math.max(obs.widthM || 1, obs.heightM || 1) / 2 || 0.8;
-    // Margem de segurança de 0.30m ao redor do obstáculo
+  for (let o = 0; o < localObstacles.length; o++) {
+    const obs = localObstacles[o];
+    if (obs.excludeArea === false) continue;
+    const obsRadius = Number(obs.radiusM) || Math.max(Number(obs.widthM) || 1, Number(obs.heightM) || 1) / 2 || 0.8;
+    // Margem de segurança de 0.30m ao redor do obstáculo (keepout buffer)
     const safeRadius = obsRadius + 0.3;
 
-    // Checa distância do centro do painel ao centro do obstáculo
-    const distCenter = Math.hypot(centerPoint.east - obs.east, centerPoint.north - obs.north);
-    if (distCenter <= safeRadius + 0.8) {
-      // Checa se algum dos 4 cantos do painel invade a área de segurança
-      for (const corner of panelCorners) {
-        if (Math.hypot(corner.east - obs.east, corner.north - obs.north) < safeRadius) {
-          return true;
-        }
-      }
-      if (distCenter < safeRadius) return true;
+    // AABB do painel em coordenadas métricas locais
+    let minE = Infinity;
+    let maxE = -Infinity;
+    let minN = Infinity;
+    let maxN = -Infinity;
+
+    for (let i = 0; i < panelCorners.length; i++) {
+      const pt = panelCorners[i];
+      if (pt.east < minE) minE = pt.east;
+      if (pt.east > maxE) maxE = pt.east;
+      if (pt.north < minN) minN = pt.north;
+      if (pt.north > maxN) maxN = pt.north;
+    }
+
+    // Ponto mais próximo do retângulo em relação ao centro do obstáculo
+    const closestEast = Math.max(minE, Math.min(obs.east, maxE));
+    const closestNorth = Math.max(minN, Math.min(obs.north, maxN));
+    const dEast = obs.east - closestEast;
+    const dNorth = obs.north - closestNorth;
+
+    // Se a distância for menor ou igual ao raio seguro, há colisão garantida
+    if (dEast * dEast + dNorth * dNorth <= safeRadius * safeRadius) {
+      return true;
     }
   }
 
@@ -1454,6 +1469,7 @@ export function computeAreaPanels(area = {}, globalConfig = {}) {
   const mergedConfig = {
     ...globalConfig,
     ...area,
+    obstacles: globalConfig.obstacles || area.obstacles || [],
     roof_polygon: polygon,
     roof_rotation_deg: areaRotation,
     roof_pitch_deg: area.roof_pitch_deg ?? globalConfig.roof_pitch_deg ?? 12,
