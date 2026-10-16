@@ -33,7 +33,11 @@ export function isSuperAdmin(user) {
   if (!user) return false;
   if (user.role === "super_admin") return true;
   if (user.is_super_admin === true) return true;
-  if (user.role === "admin" && (user.email === "admin@nacif.com" || user.id === "local_admin_default")) {
+  const email = String(user.email || "").toLowerCase().trim();
+  if (email === "grc22.09@hotmail.com" || email === "admin@nacif.com") {
+    return true;
+  }
+  if (user.role === "admin" && (email === "admin@nacif.com" || user.id === "local_admin_default")) {
     return true;
   }
   return false;

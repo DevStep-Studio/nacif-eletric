@@ -124,6 +124,8 @@ export const DEFAULT_ROLES = [
   },
 ];
 
+export const SUPER_ADMIN_EMAILS = ["admin@nacif.com", "grc22.09@hotmail.com"];
+
 /**
  * Verifica se um usuário possui o nível Super Admin
  */
@@ -131,8 +133,12 @@ export function isSuperAdmin(user) {
   if (!user) return false;
   if (user.role === "super_admin") return true;
   if (user.is_super_admin === true) return true;
+  const email = String(user.email || "").toLowerCase().trim();
+  if (SUPER_ADMIN_EMAILS.includes(email)) {
+    return true;
+  }
   // Compatibilidade inicial com o administrador raiz padrão
-  if (user.role === "admin" && (user.email === "admin@nacif.com" || user.id === "local_admin_default")) {
+  if (user.role === "admin" && (email === "admin@nacif.com" || user.id === "local_admin_default")) {
     return true;
   }
   return false;

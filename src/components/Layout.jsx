@@ -293,7 +293,7 @@ export default function Layout() {
       try {
         const data = await backend.entities.Issue.list({ limit: 100 });
         if (!cancelled && Array.isArray(data)) {
-          const isUserAdmin = Boolean(hasFullSystemAccess(activeUser) || activeUser?.role === "admin" || activeUser?.email === "admin@nacif.com");
+          const isUserAdmin = Boolean(hasFullSystemAccess(activeUser) || activeUser?.role === "admin" || activeUser?.role === "super_admin" || isSuperAdmin(activeUser) || activeUser?.email === "admin@nacif.com" || activeUser?.email === "grc22.09@hotmail.com");
           const count = data.filter((i) => (isUserAdmin ? i.unread_admin : i.unread_user)).length;
           setUnreadIssuesCount(count);
         }

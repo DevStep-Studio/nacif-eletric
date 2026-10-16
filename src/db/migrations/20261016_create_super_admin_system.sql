@@ -78,7 +78,7 @@ VALUES ('global_settings', '1.4.0')
 ON CONFLICT (id) DO NOTHING;
 
 -- 5. Função de Provisionamento do Super Admin Inicial
--- Promove o e-mail admin@nacif.com caso já exista na base
+-- Promove os e-mails administrativos caso já existam na base
 UPDATE users 
 SET role = 'super_admin', is_super_admin = TRUE, status = 'active'
-WHERE email = 'admin@nacif.com';
+WHERE email IN ('admin@nacif.com', 'grc22.09@hotmail.com');

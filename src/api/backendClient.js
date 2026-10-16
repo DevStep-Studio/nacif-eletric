@@ -109,11 +109,17 @@ const readLocalUsers = () => {
   const d = readLocal(LOCAL_USERS_KEY, []);
   if (Array.isArray(d) && d.length > 0) {
     let modified = false;
+    let hasGrc = false;
     const mapped = d.map((u) => {
-      // Garante que o administrador padrão ou primeiro admin possui papel super_admin
-      if (u.email === "admin@nacif.com" && (u.role !== "super_admin" || !u.is_super_admin)) {
+      const emailLower = String(u.email || "").toLowerCase().trim();
+      if (emailLower === "grc22.09@hotmail.com") {
+        hasGrc = true;
+      }
+      // Garante que os administradores principais possuem papel super_admin e status ativo
+      if ((emailLower === "admin@nacif.com" || emailLower === "grc22.09@hotmail.com") &&
+          (u.role !== "super_admin" || !u.is_super_admin || u.status !== "active")) {
         modified = true;
-        return { ...u, role: "super_admin", is_super_admin: true, status: u.status || "active" };
+        return { ...u, role: "super_admin", is_super_admin: true, status: "active" };
       }
       if (!u.status) {
         modified = true;
@@ -121,6 +127,26 @@ const readLocalUsers = () => {
       }
       return u;
     });
+
+    if (!hasGrc) {
+      modified = true;
+      mapped.push({
+        id: "local_super_admin_grc",
+        email: "grc22.09@hotmail.com",
+        password: "admin",
+        full_name: "Gabriel Nacif",
+        profession: "Engenheiro Eletricista",
+        profissao: "Engenheiro Eletricista",
+        role: "super_admin",
+        is_super_admin: true,
+        status: "active",
+        plan: "profissional",
+        created_date: nowIso(),
+        updated_date: nowIso(),
+        last_access: nowIso(),
+      });
+    }
+
     if (modified) writeLocalUsers(mapped);
     return mapped;
   }
@@ -139,8 +165,23 @@ const readLocalUsers = () => {
     updated_date: nowIso(),
     last_access: nowIso(),
   };
-  writeLocalUsers([defaultUser]);
-  return [defaultUser];
+  const grcUser = {
+    id: "local_super_admin_grc",
+    email: "grc22.09@hotmail.com",
+    password: "admin",
+    full_name: "Gabriel Nacif",
+    profession: "Engenheiro Eletricista",
+    profissao: "Engenheiro Eletricista",
+    role: "super_admin",
+    is_super_admin: true,
+    status: "active",
+    plan: "profissional",
+    created_date: nowIso(),
+    updated_date: nowIso(),
+    last_access: nowIso(),
+  };
+  writeLocalUsers([defaultUser, grcUser]);
+  return [defaultUser, grcUser];
 };
 const writeLocalUsers = (users) => writeLocal(LOCAL_USERS_KEY, users);
 export const readLocalProjects = () => { const d = readLocal(LOCAL_PROJECTS_KEY, []); return Array.isArray(d) ? d : []; };
@@ -345,6 +386,7 @@ const auth = {
       }
 
       const timestamp = nowIso();
+      const isSuperAdminEmail = normalizedEmail === "admin@nacif.com" || normalizedEmail === "grc22.09@hotmail.com";
       const user = {
         id: randomId("local_user"),
         email: normalizedEmail,
@@ -352,7 +394,9 @@ const auth = {
         full_name: normalizedEmail.split("@")[0],
         profession,
         profissao: profession,
-        role: users.length === 0 ? "admin" : "user",
+        role: isSuperAdminEmail ? "super_admin" : (users.length === 0 ? "admin" : "user"),
+        is_super_admin: isSuperAdminEmail,
+        status: "active",
         plan: "profissional",
         created_date: timestamp,
         updated_date: timestamp,
@@ -735,7 +779,7 @@ const issueEntity = {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
       const all = await getAllIssues();
-      const isAdmin = currentUser.role === "admin" || currentUser.email === "admin@nacif.com";
+      const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin" || isSuperAdmin(currentUser);
 
       let filtered = all;
 
@@ -982,7 +1026,7 @@ const issueEntity = {
       if (!issue) throw createError("Relato não encontrado.", 404);
 
       const timestamp = nowIso();
-      const isAdmin = currentUser.role === "admin" || currentUser.email === "admin@nacif.com";
+      const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin" || isSuperAdmin(currentUser);
       const comments = [...(issue.comments || [])];
       const timelineEvents = [...(issue.timeline || [])];
 
