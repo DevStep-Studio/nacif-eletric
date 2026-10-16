@@ -7,10 +7,11 @@ import { ArrowLeft, Home, RefreshCw, AlertCircle } from "lucide-react";
 
 export default function ServerErrorPage({ error = null }) {
   const [errorId] = useState(() => Math.random().toString(36).substring(2, 9).toUpperCase());
+  const [showStack, setShowStack] = useState(false);
 
   return (
     <SystemPageLayout showBackButton={false} showHeader={true} showFooter={true}>
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center p-4">
         <StatusState
           status="500"
           code="500"
@@ -36,6 +37,24 @@ export default function ServerErrorPage({ error = null }) {
             </Button>
           }
         />
+
+        {error && (
+          <div className="mt-6 max-w-xl w-full text-center">
+            <button
+              type="button"
+              onClick={() => setShowStack((prev) => !prev)}
+              className="text-[11px] text-slate-500 hover:text-slate-700 underline font-medium cursor-pointer"
+            >
+              {showStack ? "Ocultar detalhes técnicos" : "Ver detalhes técnicos do erro"}
+            </button>
+            {showStack && (
+              <pre className="mt-2 p-3 bg-slate-900 text-rose-300 rounded-xl text-[11px] overflow-x-auto whitespace-pre-wrap font-mono text-left">
+                {String(error.message || error)}
+                {error.stack ? `\n\n${error.stack}` : ""}
+              </pre>
+            )}
+          </div>
+        )}
       </div>
     </SystemPageLayout>
   );

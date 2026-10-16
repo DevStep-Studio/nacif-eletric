@@ -41,6 +41,7 @@ import {
   Settings,
   Share2,
   Shield,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Sun,
