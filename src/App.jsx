@@ -29,6 +29,7 @@ import SolarProject from './pages/SolarProject';
 import SettingsPage from './pages/Settings';
 import Subscription from './pages/Subscription';
 import AdminPanel from './pages/AdminPanel';
+import AvisosErros from './pages/AvisosErros';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -218,6 +219,8 @@ const AuthenticatedApp = () => {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/configuracoes/excluir-conta" element={<DeleteAccountPage />} />
           <Route path="/configuracoes/exportar-dados" element={<ExportDataPage />} />
+          <Route path="/avisos-erros" element={<AvisosErros />} />
+          <Route path="/avisos-erros/:issueId" element={<AvisosErros />} />
           <Route path="/admin" element={requireFullAccess(<AdminPanel />)} />
         </Route>
       </Route>

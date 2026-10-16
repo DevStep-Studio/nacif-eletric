@@ -1,3 +1,11 @@
+import {
+  getAllIssues,
+  saveIssue,
+  deleteIssue,
+  generateProtocol,
+  getIssueById,
+} from "@/lib/issuePersistence";
+
 const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || "";
 const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
 const TOKEN_KEYS = ["voltai_access_token", "voltai_token"];
@@ -677,6 +685,369 @@ const notificationEntity = {
   },
 };
 
+const issueEntity = {
+  async list(filters = {}) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const all = await getAllIssues();
+      const isAdmin = currentUser.role === "admin" || currentUser.email === "admin@nacif.com";
+
+      let filtered = all;
+
+      if (!isAdmin || filters.userOnly) {
+        filtered = filtered.filter(
+          (i) => i.user_id === currentUser.id || i.user_email === currentUser.email
+        );
+      }
+
+      if (filters.status && filters.status !== "todos") {
+        filtered = filtered.filter((i) => i.status === filters.status);
+      }
+
+      if (filters.type && filters.type !== "todos") {
+        filtered = filtered.filter((i) => i.type === filters.type);
+      }
+
+      if (filters.module && filters.module !== "todos") {
+        filtered = filtered.filter((i) => i.module === filters.module);
+      }
+
+      if (filters.search) {
+        const q = String(filters.search).toLowerCase().trim();
+        filtered = filtered.filter(
+          (i) =>
+            i.title?.toLowerCase().includes(q) ||
+            i.protocol?.toLowerCase().includes(q) ||
+            i.description?.toLowerCase().includes(q) ||
+            i.user_name?.toLowerCase().includes(q)
+        );
+      }
+
+      return sortLocalItems(filtered, filters.sortBy || "-created_date", filters.limit);
+    }
+
+    return request("/api/issues", { query: filters });
+  },
+
+  async get(id) {
+    if (isLocalAuthMode) {
+      requireLocalUser();
+      const issue = await getIssueById(id);
+      if (!issue) throw createError("Relato não encontrado.", 404);
+      return cloneLocal(issue);
+    }
+    return request(`/api/issues/${id}`);
+  },
+
+  async create(data) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const all = await getAllIssues();
+      const timestamp = nowIso();
+      const protocol = generateProtocol(all);
+
+      const newIssue = {
+        id: randomId("issue"),
+        protocol,
+        type: data.type || "erro",
+        title: String(data.title || "").trim(),
+        module: data.module || "Outros",
+        description: String(data.description || "").trim(),
+        steps_to_reproduce: data.steps_to_reproduce || "",
+        expected_result: data.expected_result || "",
+        actual_result: data.actual_result || "",
+        status: "recebido",
+        priority: "media",
+        user_id: currentUser.id,
+        user_name: currentUser.full_name || currentUser.name || "Usuário",
+        user_email: currentUser.email,
+        workspace_id: data.workspace_id || "default_workspace",
+        project_id: data.project_id || null,
+        technical_info: data.technical_info || {},
+        attachments: Array.isArray(data.attachments) ? data.attachments : [],
+        comments: [],
+        timeline: [
+          {
+            id: randomId("tl"),
+            event: "criado",
+            title: "Relato Aberto",
+            details: `Problema registrado no sistema com protocolo ${protocol}`,
+            actor_name: currentUser.full_name || "Usuário",
+            actor_role: currentUser.role || "user",
+            timestamp,
+          },
+        ],
+        unread_user: false,
+        unread_admin: true,
+        internal_notes: "",
+        created_date: timestamp,
+        updated_date: timestamp,
+      };
+
+      await saveIssue(newIssue);
+
+      try {
+        await notificationEntity.create({
+          title: `Novo problema reportado: ${protocol}`,
+          description: `[${newIssue.type.toUpperCase()}] ${newIssue.title} (${newIssue.module})`,
+          category: "Avisos e Erros",
+          tone: newIssue.type === "erro" ? "warning" : "info",
+          href: `/avisos-erros?issue=${newIssue.id}`,
+          audience: "admin",
+        });
+      } catch (notifErr) {
+        console.warn("[notificationEntity create warning]", notifErr);
+      }
+
+      return cloneLocal(newIssue);
+    }
+
+    return request("/api/issues", { method: "POST", body: data });
+  },
+
+  async update(id, updates) {
+    if (isLocalAuthMode) {
+      requireLocalUser();
+      const issue = await getIssueById(id);
+      if (!issue) throw createError("Relato não encontrado.", 404);
+
+      const timestamp = nowIso();
+      const updated = {
+        ...issue,
+        ...updates,
+        updated_date: timestamp,
+      };
+
+      await saveIssue(updated);
+      return cloneLocal(updated);
+    }
+
+    return request(`/api/issues/${id}`, { method: "PATCH", body: updates });
+  },
+
+  async updateStatusAndPriority(id, { status, priority, admin_response, internal_notes }) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const issue = await getIssueById(id);
+      if (!issue) throw createError("Relato não encontrado.", 404);
+
+      const timestamp = nowIso();
+      const timelineEvents = [...(issue.timeline || [])];
+      const comments = [...(issue.comments || [])];
+
+      if (status && status !== issue.status) {
+        const statusLabels = {
+          recebido: "Recebido",
+          em_analise: "Em análise",
+          em_correcao: "Em correção",
+          resolvido: "Resolvido",
+          encerrado: "Encerrado",
+        };
+        timelineEvents.push({
+          id: randomId("tl"),
+          event: "status_change",
+          title: `Status alterado para "${statusLabels[status] || status}"`,
+          details: `Status alterado por ${currentUser.full_name || "Administrador"}`,
+          actor_name: currentUser.full_name || "Administrador",
+          actor_role: "admin",
+          timestamp,
+        });
+      }
+
+      if (priority && priority !== issue.priority) {
+        timelineEvents.push({
+          id: randomId("tl"),
+          event: "priority_change",
+          title: `Prioridade alterada para "${priority}"`,
+          details: "Prioridade atualizada pela equipe técnica",
+          actor_name: currentUser.full_name || "Administrador",
+          actor_role: "admin",
+          timestamp,
+        });
+      }
+
+      if (admin_response && admin_response.trim()) {
+        const commentId = randomId("comm");
+        comments.push({
+          id: commentId,
+          author_id: currentUser.id,
+          author_name: currentUser.full_name || "Equipe Nacif Electric",
+          author_email: currentUser.email,
+          author_role: "admin",
+          message: admin_response.trim(),
+          is_internal: false,
+          created_date: timestamp,
+        });
+        timelineEvents.push({
+          id: randomId("tl"),
+          event: "team_reply",
+          title: "Resposta da Equipe Técnica",
+          details:
+            admin_response.trim().slice(0, 100) +
+            (admin_response.length > 100 ? "..." : ""),
+          actor_name: currentUser.full_name || "Equipe Nacif Electric",
+          actor_role: "admin",
+          timestamp,
+        });
+      }
+
+      const updated = {
+        ...issue,
+        status: status || issue.status,
+        priority: priority || issue.priority,
+        internal_notes:
+          internal_notes !== undefined ? internal_notes : issue.internal_notes,
+        comments,
+        timeline: timelineEvents,
+        unread_user: true,
+        updated_date: timestamp,
+      };
+
+      await saveIssue(updated);
+
+      try {
+        await notificationEntity.create({
+          title: `Atualização no relato ${issue.protocol}`,
+          description:
+            status === "resolvido"
+              ? `Seu problema "${issue.title}" foi marcado como RESOLVIDO!`
+              : `Status atualizado para "${status}" por nossa equipe técnica.`,
+          category: "Avisos e Erros",
+          tone: status === "resolvido" ? "success" : "info",
+          href: `/avisos-erros?issue=${issue.id}`,
+          user_id: issue.user_id,
+        });
+      } catch (err) {
+        console.warn("[notify user error]", err);
+      }
+
+      return cloneLocal(updated);
+    }
+
+    return request(`/api/issues/${id}/status`, {
+      method: "PATCH",
+      body: { status, priority, admin_response, internal_notes },
+    });
+  },
+
+  async addComment(id, { message, is_internal = false }) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const issue = await getIssueById(id);
+      if (!issue) throw createError("Relato não encontrado.", 404);
+
+      const timestamp = nowIso();
+      const isAdmin = currentUser.role === "admin" || currentUser.email === "admin@nacif.com";
+      const comments = [...(issue.comments || [])];
+      const timelineEvents = [...(issue.timeline || [])];
+
+      const newComment = {
+        id: randomId("comm"),
+        author_id: currentUser.id,
+        author_name: currentUser.full_name || currentUser.name || "Usuário",
+        author_email: currentUser.email,
+        author_role: isAdmin ? "admin" : "user",
+        message: String(message || "").trim(),
+        is_internal: Boolean(is_internal && isAdmin),
+        created_date: timestamp,
+      };
+
+      comments.push(newComment);
+
+      if (!newComment.is_internal) {
+        timelineEvents.push({
+          id: randomId("tl"),
+          event: "comment",
+          title: isAdmin ? "Resposta da Equipe Técnica" : "Comentário do Usuário",
+          details:
+            newComment.message.slice(0, 100) +
+            (newComment.message.length > 100 ? "..." : ""),
+          actor_name: newComment.author_name,
+          actor_role: newComment.author_role,
+          timestamp,
+        });
+      }
+
+      const updated = {
+        ...issue,
+        comments,
+        timeline: timelineEvents,
+        unread_user: isAdmin && !newComment.is_internal ? true : issue.unread_user,
+        unread_admin: !isAdmin ? true : issue.unread_admin,
+        updated_date: timestamp,
+      };
+
+      await saveIssue(updated);
+
+      if (isAdmin && !newComment.is_internal) {
+        await notificationEntity.create({
+          title: `Nova resposta no relato ${issue.protocol}`,
+          description: newComment.message.slice(0, 120),
+          category: "Avisos e Erros",
+          tone: "info",
+          href: `/avisos-erros?issue=${issue.id}`,
+          user_id: issue.user_id,
+        });
+      } else if (!isAdmin) {
+        await notificationEntity.create({
+          title: `Novo comentário no relato ${issue.protocol}`,
+          description: `${currentUser.full_name || "Usuário"}: ${newComment.message.slice(0, 100)}`,
+          category: "Avisos e Erros",
+          tone: "info",
+          href: `/avisos-erros?issue=${issue.id}`,
+          audience: "admin",
+        });
+      }
+
+      return cloneLocal(updated);
+    }
+
+    return request(`/api/issues/${id}/comments`, {
+      method: "POST",
+      body: { message, is_internal },
+    });
+  },
+
+  async markAsRead(id, forUser = true) {
+    if (isLocalAuthMode) {
+      const issue = await getIssueById(id);
+      if (!issue) return { ok: false };
+      const updated = {
+        ...issue,
+        unread_user: forUser ? false : issue.unread_user,
+        unread_admin: !forUser ? false : issue.unread_admin,
+      };
+      await saveIssue(updated);
+      return { ok: true };
+    }
+    return request(`/api/issues/${id}/read`, { method: "PATCH", body: { forUser } });
+  },
+
+  async getStats() {
+    if (isLocalAuthMode) {
+      const all = await getAllIssues();
+      return {
+        total: all.length,
+        recebido: all.filter((i) => i.status === "recebido").length,
+        em_analise: all.filter((i) => i.status === "em_analise").length,
+        em_correcao: all.filter((i) => i.status === "em_correcao").length,
+        resolvido: all.filter((i) => i.status === "resolvido").length,
+        encerrado: all.filter((i) => i.status === "encerrado").length,
+      };
+    }
+    return request("/api/issues/stats");
+  },
+
+  async delete(id) {
+    if (isLocalAuthMode) {
+      requireLocalUser();
+      await deleteIssue(id);
+      return { ok: true };
+    }
+    return request(`/api/issues/${id}`, { method: "DELETE" });
+  },
+};
+
 const settingsEntity = {
   async getBranding() {
     if (isLocalAuthMode) {
@@ -806,6 +1177,7 @@ export const backend = {
     Project: projectEntity,
     User: userEntity,
     Notification: notificationEntity,
+    Issue: issueEntity,
     Settings: settingsEntity,
     Catalog: catalogEntity,
     Analysis: analysisEntity,

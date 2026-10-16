@@ -12,6 +12,7 @@ import {
   Shield,
   Sparkles,
   Zap,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Dialog,
@@ -34,6 +35,12 @@ export const TOOLS_LIST = [
     items: [
       { path: "/scanner", icon: ScanLine, label: "Scanner IA de Plantas", desc: "Digitalização e vetorização de plantas em imagem/PDF." },
       { path: "/ai-assistant", icon: Sparkles, label: "Assistente IA Técnico", desc: "Tire dúvidas sobre normas NBR e dimensionamento." },
+    ],
+  },
+  {
+    category: "Suporte & Diagnóstico",
+    items: [
+      { path: "/avisos-erros", icon: AlertTriangle, label: "Avisos e Erros", desc: "Reporte de bugs, comportamentos inesperados e acompanhamento." },
     ],
   },
 ];

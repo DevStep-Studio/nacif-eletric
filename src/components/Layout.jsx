@@ -53,6 +53,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { hasFullSystemAccess } from "@/lib/professionalAccess";
 import { useBranding, useNotifications, formatNotificationTime } from "@/lib/appPreferences";
 import { backend } from "@/api/backendClient";
+import { ISSUES_CHANGED_EVENT } from "@/lib/issuePersistence";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -283,6 +284,31 @@ export default function Layout() {
   const displayEmail = activeUser?.email || "gabriel@nacifelectric.com.br";
   const subscription = normalizeSubscription(activeUser);
   const usage = useMemo(() => buildUsageFromProjects(shellProjects), [shellProjects]);
+
+  const [unreadIssuesCount, setUnreadIssuesCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadUnreadIssues = async () => {
+      try {
+        const data = await backend.entities.Issue.list({ limit: 100 });
+        if (!cancelled && Array.isArray(data)) {
+          const isUserAdmin = Boolean(hasFullSystemAccess(activeUser) || activeUser?.role === "admin" || activeUser?.email === "admin@nacif.com");
+          const count = data.filter((i) => (isUserAdmin ? i.unread_admin : i.unread_user)).length;
+          setUnreadIssuesCount(count);
+        }
+      } catch {
+        if (!cancelled) setUnreadIssuesCount(0);
+      }
+    };
+
+    loadUnreadIssues();
+    window.addEventListener(ISSUES_CHANGED_EVENT, loadUnreadIssues);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(ISSUES_CHANGED_EVENT, loadUnreadIssues);
+    };
+  }, [activeUser]);
   const usageRows = useMemo(() => getUsageRows(subscription.plan, usage), [subscription.plan, usage]);
   const projectUsage = usageRows.find((row) => row.key === FEATURE_KEYS.PROJECTS);
 
@@ -311,6 +337,7 @@ export default function Layout() {
     if (location.pathname === "/ai-assistant") return { section: "Ferramentas", page: "Assistente IA" };
     if (location.pathname === "/nbr-library") return { section: "Biblioteca", page: "Normas NBR" };
     if (location.pathname === "/budget") return { section: "Relatórios", page: "Orçamento & Materiais" };
+    if (location.pathname.startsWith("/avisos-erros")) return { section: "Ferramentas", page: "Avisos e Erros" };
     if (location.pathname === "/subscription") return { section: "Conta", page: "Assinatura e Uso" };
     if (location.pathname === "/settings") return { section: "Conta", page: "Configurações" };
     return { section: "Pages", page: "Nacif Electric" };
@@ -673,6 +700,28 @@ export default function Layout() {
                 {!sidebarCollapsed && (
                   <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-black ${isItemActive("/budget") ? "bg-[#1E293B] text-[#00d8b8]" : "bg-[#F1F5F9] text-[#64748B]"}`}>
                     2
+                  </span>
+                )}
+              </Link>
+
+              <Link
+                to="/avisos-erros"
+                title={sidebarCollapsed ? "Avisos e Erros" : undefined}
+                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
+                } ${
+                  isItemActive("/avisos-erros")
+                    ? "bg-[#0F172A] text-white font-black shadow-sm"
+                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                }`}
+              >
+                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                  <AlertTriangle className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/avisos-erros") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
+                  {!sidebarCollapsed && <span className="truncate">Avisos e Erros</span>}
+                </div>
+                {!sidebarCollapsed && unreadIssuesCount > 0 && (
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-black ${isItemActive("/avisos-erros") ? "bg-[#1E293B] text-[#00d8b8]" : "bg-[#E8FCF8] text-[#00d8b8]"}`}>
+                    {unreadIssuesCount}
                   </span>
                 )}
               </Link>
@@ -1102,6 +1151,23 @@ export default function Layout() {
                     >
                       <BookOpen className="h-4 w-4" />
                       <span>Biblioteca NBR</span>
+                    </Link>
+                    <Link
+                      to="/avisos-erros"
+                      onClick={() => setMobileDrawerOpen(false)}
+                      className={`flex h-10 items-center justify-between rounded-xl px-3 text-xs font-bold ${
+                        isItemActive("/avisos-erros") ? "bg-[#0F172A] text-white font-black" : "text-[#475467] hover:bg-[#F1F5F9]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="h-4 w-4 text-[#00d8b8]" />
+                        <span>Avisos e Erros</span>
+                      </div>
+                      {unreadIssuesCount > 0 && (
+                        <span className="rounded-md bg-[#E8FCF8] px-1.5 py-0.5 text-[10px] font-black text-[#00d8b8]">
+                          {unreadIssuesCount}
+                        </span>
+                      )}
                     </Link>
                   </div>
                 </div>
