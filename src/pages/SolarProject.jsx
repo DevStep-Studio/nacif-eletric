@@ -32,6 +32,7 @@ import {
   MODULE_CATALOG,
   SOLAR_MODULE_HEIGHT_M,
   SOLAR_MODULE_WIDTH_M,
+  alignRotationToDominantAxis,
   buildRoofPolygon,
   calculateStringGrouping,
   computeAreaPanels,
@@ -184,6 +185,26 @@ function normalizeSolarConfig(config = {}) {
   delete merged.layout_fill_mode;
   
   const normalizedAreas = normalizeSolarAreas(merged.areas, merged);
+
+  // Harmonização automática do alinhamento de painéis entre múltiplas águas:
+  // Se houver uma área principal (Água 1) e alguma área secundária estiver perpendicular (~90°),
+  // alinha ao eixo dominante do edifício para manter os módulos todos em perfeita sincronia.
+  if (normalizedAreas.length > 1 && normalizedAreas[0]) {
+    const primary = normalizedAreas[0];
+    const primaryRot = Number.isFinite(Number(primary.roof_rotation_deg)) ? primary.roof_rotation_deg : null;
+    if (primaryRot !== null) {
+      normalizedAreas.forEach((area, idx) => {
+        if (idx === 0) return;
+        if (Number.isFinite(Number(area.roof_rotation_deg))) {
+          const aligned = alignRotationToDominantAxis(area.roof_rotation_deg, primaryRot);
+          if (aligned !== area.roof_rotation_deg) {
+            area.roof_rotation_deg = round2(aligned);
+          }
+        }
+      });
+    }
+  }
+
   const legacyPolygon = serializeRoofPolygon(normalizeRoofPolygon(merged.roof_polygon));
   const primaryPolygon = normalizedAreas[0]?.polygon || legacyPolygon;
   const hasExplicitRoofState = Object.prototype.hasOwnProperty.call(config || {}, "roof_defined");
@@ -842,15 +863,18 @@ export default function SolarProject() {
 
     // Criação de NOVA ÁGUA adicional (quantas o usuário quiser)
     const newIndex = existingAreas.length + 1;
+    const primary = existingAreas[0];
     const newArea = createDefaultSolarArea(
       {
         id: `area_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         name: `Água ${newIndex}`,
         polygon: normalizedPositions,
-        roof_rotation_deg: config.roof_rotation_deg || 0,
-        roof_pitch_deg: config.roof_pitch_deg || 12,
-        structure_type: config.structure_type || "triangle",
-        module_orientation: config.module_orientation || "horizontal",
+        roof_rotation_deg: primary?.roof_rotation_deg ?? config.roof_rotation_deg ?? 0,
+        roof_pitch_deg: primary?.roof_pitch_deg ?? config.roof_pitch_deg ?? 12,
+        structure_type: primary?.structure_type ?? config.structure_type ?? "triangle",
+        module_orientation: primary?.module_orientation ?? config.module_orientation ?? "horizontal",
+        column_gap_cm: primary?.column_gap_cm ?? config.column_gap_cm ?? 2,
+        row_gap_cm: primary?.row_gap_cm ?? config.row_gap_cm ?? 2,
         auto_fill_surface: true,
       },
       newIndex,
@@ -872,6 +896,55 @@ export default function SolarProject() {
       description: `${newArea.name} demarcada com sucesso (${newArea.roof_area_m2} m²).`,
     });
   }, [config, drawingTargetAreaId, getSafeExistingAreas, pushAreasHistory, toast]);
+
+  // Harmoniza uma área secundária específica com o design e orientação da área principal (Água 1)
+  const handleHarmonizeAreaWithPrimary = useCallback((targetAreaId) => {
+    const existing = getSafeExistingAreas();
+    const primary = existing[0];
+    if (!primary || !targetAreaId) return;
+
+    updateSelectedArea({
+      roof_rotation_deg: primary.roof_rotation_deg,
+      roof_pitch_deg: primary.roof_pitch_deg,
+      module_orientation: primary.module_orientation || "horizontal",
+      structure_type: primary.structure_type || "triangle",
+      column_gap_cm: primary.column_gap_cm ?? 2,
+      row_gap_cm: primary.row_gap_cm ?? 2,
+    });
+
+    toast({
+      title: "Design harmonizado!",
+      description: `Painéis alinhados perfeitamente com ${primary.name || "Água 1"}.`,
+    });
+  }, [getSafeExistingAreas, updateSelectedArea, toast]);
+
+  // Harmoniza todas as áreas do projeto com o design e orientação da área principal (Água 1)
+  const handleHarmonizeAllAreas = useCallback(() => {
+    const existing = getSafeExistingAreas();
+    const primary = existing[0];
+    if (!primary || existing.length <= 1) return;
+
+    const harmonized = existing.map((a, idx) => {
+      if (idx === 0) return a;
+      return {
+        ...a,
+        roof_rotation_deg: primary.roof_rotation_deg,
+        roof_pitch_deg: primary.roof_pitch_deg,
+        module_orientation: primary.module_orientation || "horizontal",
+        structure_type: primary.structure_type || "triangle",
+        column_gap_cm: primary.column_gap_cm ?? 2,
+        row_gap_cm: primary.row_gap_cm ?? 2,
+      };
+    });
+
+    const nextConfig = normalizeSolarConfig({ ...config, areas: harmonized });
+    setConfig(nextConfig);
+    pushAreasHistory(harmonized);
+    toast({
+      title: "Todas as áreas harmonizadas!",
+      description: `Módulos de todas as águas alinhados com o mesmo design e orientação da ${primary.name || "Água 1"}.`,
+    });
+  }, [config, getSafeExistingAreas, pushAreasHistory, toast]);
 
   // Alteração de vértices na área ativa
   const handleRoofGeometryChange = useCallback((positions) => {
@@ -1920,14 +1993,26 @@ export default function SolarProject() {
                       <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                         <Layers className="h-3.5 w-3.5 text-[#009b84]" /> Áreas ({multiAreaLayouts.length})
                       </span>
-                      <button
-                        type="button"
-                        onClick={handleStartDrawNewArea}
-                        className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-[#009b84] hover:bg-[#E6FAF7] rounded transition"
-                        title="Demarcar nova área (A)"
-                      >
-                        <Plus className="h-3 w-3 stroke-[2.5]" /> Nova Área
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {multiAreaLayouts.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={handleHarmonizeAllAreas}
+                            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 hover:text-[#009b84] hover:bg-[#E6FAF7] rounded transition"
+                            title="Harmonizar design e alinhamento de todas as águas com a Área 1"
+                          >
+                            <Sparkles className="h-3 w-3 text-[#009b84]" /> Harmonizar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleStartDrawNewArea}
+                          className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-[#009b84] hover:bg-[#E6FAF7] rounded transition"
+                          title="Demarcar nova área (A)"
+                        >
+                          <Plus className="h-3 w-3 stroke-[2.5]" /> Nova Área
+                        </button>
+                      </div>
                     </div>
 
                     <div className="p-1.5 space-y-1 max-h-44 overflow-y-auto">
@@ -2120,6 +2205,19 @@ export default function SolarProject() {
                                 <Maximize2 className="h-3 w-3 mr-1" /> Focar
                               </Button>
                             </div>
+
+                            {multiAreaLayouts.length > 1 && selectedArea.id !== multiAreaLayouts[0]?.id && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleHarmonizeAreaWithPrimary(selectedArea.id)}
+                                className="w-full h-7 text-[11px] font-bold border-emerald-200 bg-emerald-50/70 text-[#009b84] hover:bg-emerald-100 hover:text-emerald-800 transition flex items-center justify-center gap-1.5 shadow-xs"
+                                title="Alinhar design, orientação e azimute perfeitamente com a Área 1"
+                              >
+                                <Sparkles className="h-3 w-3 text-[#009b84]" /> Harmonizar com {multiAreaLayouts[0]?.name || "Água 1"}
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>

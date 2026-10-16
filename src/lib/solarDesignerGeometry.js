@@ -655,6 +655,30 @@ export function normalizeRotationDeg(value) {
 }
 
 /**
+ * Harmoniza o azimute/rotação de uma área com o eixo longitudinal de referência (Água 1 / edifício).
+ * Se o ângulo estiver perpendicular (~90° ou ~270° de defasagem), alinha ao eixo paralelo
+ * mais próximo, garantindo que o modo Paisagem (horizontal) ou Retrato (vertical)
+ * mantenha rigorosamente a mesma orientação física e estética dos módulos em todas as águas.
+ */
+export function alignRotationToDominantAxis(rotationDeg, referenceRotationDeg) {
+  if (!Number.isFinite(Number(rotationDeg)) || !Number.isFinite(Number(referenceRotationDeg))) {
+    return normalizeRotationDeg(rotationDeg);
+  }
+  const normRot = normalizeRotationDeg(rotationDeg);
+  const normRef = normalizeRotationDeg(referenceRotationDeg);
+  const diff = Math.abs(normalizeRotationDeg(normRot - normRef));
+
+  if (Math.abs(diff - 90) <= 25) {
+    const alt1 = normRef;
+    const alt2 = normalizeRotationDeg(normRef + 180);
+    const d1 = Math.abs(normalizeRotationDeg(normRot - alt1));
+    const d2 = Math.abs(normalizeRotationDeg(normRot - alt2));
+    return d1 <= d2 ? alt1 : alt2;
+  }
+  return normRot;
+}
+
+/**
  * Converte rotação/ângulo de azimute para formato com ponto cardeal (ex: "24° NE", "0° N", "180° S")
  */
 export function getAzimuthWithCardinal(rotationDeg) {
@@ -1386,9 +1410,26 @@ export function createDefaultSolarArea(partial = {}, index = 1, fallbackConfig =
   const fallbackWidth = finiteNumber(fallbackConfig.roof_width_m, 10);
   const fallbackHeight = finiteNumber(fallbackConfig.roof_height_m, 6);
 
-  const roofRotationDeg = Number.isFinite(Number(partial.roof_rotation_deg))
-    ? round2(Number(partial.roof_rotation_deg))
-    : (metrics ? round2(metrics.rotationDeg) : round2(finiteNumber(fallbackConfig.roof_rotation_deg, 0)));
+  // Referência da área principal (Água 1) ou do projeto para harmonização estética automática
+  const primaryArea = Array.isArray(fallbackConfig.areas) && fallbackConfig.areas.length > 0 ? fallbackConfig.areas[0] : null;
+  const referenceRotation = primaryArea && Number.isFinite(Number(primaryArea.roof_rotation_deg))
+    ? primaryArea.roof_rotation_deg
+    : (Number.isFinite(Number(fallbackConfig.roof_rotation_deg)) ? fallbackConfig.roof_rotation_deg : null);
+
+  let rawRotation = Number.isFinite(Number(partial.roof_rotation_deg))
+    ? Number(partial.roof_rotation_deg)
+    : (referenceRotation !== null ? referenceRotation : (metrics ? metrics.rotationDeg : fallbackConfig.roof_rotation_deg || 0));
+
+  if (referenceRotation !== null && index > 1) {
+    rawRotation = alignRotationToDominantAxis(rawRotation, referenceRotation);
+  }
+  const roofRotationDeg = round2(rawRotation);
+
+  const fallbackStructure = primaryArea?.structure_type || fallbackConfig.structure_type || "triangle";
+  const fallbackOrientation = primaryArea?.module_orientation || fallbackConfig.module_orientation || "horizontal";
+  const fallbackPitch = primaryArea?.roof_pitch_deg ?? fallbackConfig.roof_pitch_deg ?? 12;
+  const fallbackColGap = primaryArea?.column_gap_cm ?? fallbackConfig.column_gap_cm ?? 2;
+  const fallbackRowGap = primaryArea?.row_gap_cm ?? fallbackConfig.row_gap_cm ?? 2;
 
   return {
     id,
@@ -1398,18 +1439,18 @@ export function createDefaultSolarArea(partial = {}, index = 1, fallbackConfig =
     roof_height_m: metrics ? round1(metrics.heightM) : finiteNumber(partial.roof_height_m, fallbackHeight),
     roof_area_m2: metrics ? round1(metrics.areaM2) : finiteNumber(partial.roof_area_m2, fallbackWidth * fallbackHeight),
     roof_rotation_deg: roofRotationDeg,
-    roof_pitch_deg: round2(finiteNumber(partial.roof_pitch_deg, fallbackConfig.roof_pitch_deg ?? 12)),
+    roof_pitch_deg: round2(finiteNumber(partial.roof_pitch_deg, fallbackPitch)),
     structure_type: ["coplanar", "triangle", "shed"].includes(partial.structure_type)
       ? partial.structure_type
-      : (fallbackConfig.structure_type || "triangle"),
+      : fallbackStructure,
     module_orientation: ["horizontal", "vertical", "auto"].includes(partial.module_orientation)
       ? partial.module_orientation
-      : (fallbackConfig.module_orientation || "horizontal"),
+      : fallbackOrientation,
     auto_fill_surface: partial.auto_fill_surface !== false,
     rows_per_table: Math.max(1, Math.round(finiteNumber(partial.rows_per_table, fallbackConfig.rows_per_table ?? 1))),
     base_height_cm: finiteNumber(partial.base_height_cm, fallbackConfig.base_height_cm ?? 0),
-    column_gap_cm: finiteNumber(partial.column_gap_cm, fallbackConfig.column_gap_cm ?? 2),
-    row_gap_cm: finiteNumber(partial.row_gap_cm, fallbackConfig.row_gap_cm ?? 2),
+    column_gap_cm: finiteNumber(partial.column_gap_cm, fallbackColGap),
+    row_gap_cm: finiteNumber(partial.row_gap_cm, fallbackRowGap),
     requested_panel_count: Math.max(1, Math.min(1200, Math.round(finiteNumber(partial.requested_panel_count, fallbackConfig.requested_panel_count ?? 14)))),
     layout_strategy: partial.layout_strategy || fallbackConfig.layout_strategy || "max_generation",
     panelCount: 0,
@@ -1462,9 +1503,29 @@ export function computeAreaPanels(area = {}, globalConfig = {}) {
   }
 
   const metrics = getRoofMetricsFromPolygon(polygon, area);
-  const areaRotation = Number.isFinite(Number(area.roof_rotation_deg))
-    ? area.roof_rotation_deg
+  let areaRotation = Number.isFinite(Number(area.roof_rotation_deg))
+    ? Number(area.roof_rotation_deg)
     : metrics.rotationDeg;
+
+  // Harmonização automática de orientação e design entre múltiplas águas:
+  // Se existir uma área principal de referência (Água 1) no projeto e esta área secundária
+  // tiver um azimute perpendicular (~90° de defasagem), alinhamos ao eixo dominante
+  // do telhado para que os módulos fiquem perfeitamente uniformes (mesma orientação física).
+  const primaryArea = Array.isArray(globalConfig.areas) && globalConfig.areas.length > 0
+    ? globalConfig.areas[0]
+    : null;
+  const referenceRotation = primaryArea && primaryArea.id !== area.id && Number.isFinite(Number(primaryArea.roof_rotation_deg))
+    ? primaryArea.roof_rotation_deg
+    : (Number.isFinite(Number(globalConfig.roof_rotation_deg)) ? globalConfig.roof_rotation_deg : null);
+
+  if (referenceRotation !== null && primaryArea && primaryArea.id !== area.id) {
+    areaRotation = alignRotationToDominantAxis(areaRotation, referenceRotation);
+  }
+
+  const inheritedOrientation = area.module_orientation || primaryArea?.module_orientation || globalConfig.module_orientation || "horizontal";
+  const inheritedStructure = area.structure_type || primaryArea?.structure_type || globalConfig.structure_type || "triangle";
+  const inheritedColumnGap = area.column_gap_cm ?? primaryArea?.column_gap_cm ?? globalConfig.column_gap_cm ?? 2;
+  const inheritedRowGap = area.row_gap_cm ?? primaryArea?.row_gap_cm ?? globalConfig.row_gap_cm ?? 2;
 
   const mergedConfig = {
     ...globalConfig,
@@ -1472,11 +1533,11 @@ export function computeAreaPanels(area = {}, globalConfig = {}) {
     obstacles: globalConfig.obstacles || area.obstacles || [],
     roof_polygon: polygon,
     roof_rotation_deg: areaRotation,
-    roof_pitch_deg: area.roof_pitch_deg ?? globalConfig.roof_pitch_deg ?? 12,
-    structure_type: area.structure_type || globalConfig.structure_type || "triangle",
-    module_orientation: area.module_orientation || globalConfig.module_orientation || "horizontal",
-    column_gap_cm: area.column_gap_cm ?? globalConfig.column_gap_cm ?? 2,
-    row_gap_cm: area.row_gap_cm ?? globalConfig.row_gap_cm ?? 2,
+    roof_pitch_deg: area.roof_pitch_deg ?? primaryArea?.roof_pitch_deg ?? globalConfig.roof_pitch_deg ?? 12,
+    structure_type: inheritedStructure,
+    module_orientation: inheritedOrientation,
+    column_gap_cm: inheritedColumnGap,
+    row_gap_cm: inheritedRowGap,
     layout_strategy: area.layout_strategy || globalConfig.layout_strategy || "max_generation",
   };
 
@@ -1493,11 +1554,11 @@ export function computeAreaPanels(area = {}, globalConfig = {}) {
     roof_height_m: round1(metrics.heightM),
     roof_area_m2: round1(metrics.areaM2),
     roof_rotation_deg: round2(areaRotation),
-    module_orientation: area.module_orientation || layout.orientation || "horizontal",
-    effectiveOrientation: layout.orientation || "horizontal",
-    structure_type: area.structure_type || globalConfig.structure_type || "triangle",
-    column_gap_cm: area.column_gap_cm ?? globalConfig.column_gap_cm ?? 2,
-    row_gap_cm: area.row_gap_cm ?? globalConfig.row_gap_cm ?? 2,
+    module_orientation: inheritedOrientation,
+    effectiveOrientation: layout.orientation || inheritedOrientation,
+    structure_type: inheritedStructure,
+    column_gap_cm: inheritedColumnGap,
+    row_gap_cm: inheritedRowGap,
     panelPolygons: layout.panels,
     panelCount,
     dcPowerKw,
