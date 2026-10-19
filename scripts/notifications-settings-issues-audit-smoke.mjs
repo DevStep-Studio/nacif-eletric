@@ -214,6 +214,7 @@ async function runAudit() {
   // Login com a nova senha (deve suceder)
   const newLogin = await backend.auth.loginViaEmailPassword(userA.user.email, "NovaSenhaA123!@#");
   assert(newLogin.access_token, "Login com a nova senha realizado com sucesso");
+  userA.access_token = newLogin.access_token;
   console.log("✅ Fluxo de alteração segura de senha e invalidação da senha anterior comprovado!\n");
 
   // --------------------------------------------------------------------------

@@ -35,6 +35,33 @@ export function writeAuditLogs(logs) {
   }
 }
 
+const SENSITIVE_KEY_PATTERNS = [
+  /pass(word)?/i,
+  /token/i,
+  /secret/i,
+  /auth(orization)?/i,
+  /credit_?card/i,
+  /cvv/i,
+  /cpf/i,
+  /api_?key/i,
+];
+
+export function sanitizeLogMetadata(obj, depth = 0) {
+  if (!obj || typeof obj !== "object" || depth > 4) return obj;
+  if (Array.isArray(obj)) return obj.map((item) => sanitizeLogMetadata(item, depth + 1));
+  const clean = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (SENSITIVE_KEY_PATTERNS.some((pat) => pat.test(k))) {
+      clean[k] = "[CONFIDENCIAL / REDACTED]";
+    } else if (v && typeof v === "object") {
+      clean[k] = sanitizeLogMetadata(v, depth + 1);
+    } else {
+      clean[k] = v;
+    }
+  }
+  return clean;
+}
+
 /**
  * Registra um evento de auditoria
  */
@@ -50,12 +77,8 @@ export function recordAuditEvent({
   const logs = readAuditLogs();
   const timestamp = new Date().toISOString();
 
-  // Higieniza metadata para evitar senhas, tokens ou dados sensíveis
-  const safeMetadata = { ...metadata };
-  delete safeMetadata.password;
-  delete safeMetadata.token;
-  delete safeMetadata.resetToken;
-  delete safeMetadata.creditCard;
+  // Higieniza recursivamente metadata para evitar senhas, tokens ou dados sensíveis em logs
+  const safeMetadata = sanitizeLogMetadata({ ...metadata });
 
   const entry = {
     id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,

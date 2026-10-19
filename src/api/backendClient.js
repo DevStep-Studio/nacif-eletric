@@ -7,6 +7,12 @@ import {
 } from "../lib/issuePersistence.js";
 import { recordAuditEvent, readAuditLogs, filterAuditLogs } from "../lib/auditLogger.js";
 import { isSuperAdmin, DEFAULT_ROLES, SUPER_ADMIN_EMAILS, canOperatorManageTarget } from "../lib/rbac.js";
+import {
+  hashPassword,
+  verifyPassword,
+  sanitizeTextInput,
+  validateUploadedFile,
+} from "../lib/securityCrypto.js";
 
 const rawApiBaseUrl = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.trim() : "");
 const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
@@ -18,6 +24,8 @@ const LOCAL_BUDGETS_KEY = "voltai_local_budgets";
 const LOCAL_NOTIFICATIONS_KEY = "voltai_local_backend_notifications";
 const LOCAL_RESET_TOKENS_KEY = "voltai_local_reset_tokens";
 const LOCAL_BRANDING_KEY = "voltai_branding";
+const LOCAL_RESET_RATE_KEY = "voltai_local_reset_rates";
+const LOCAL_ISSUE_RATE_KEY = "voltai_local_issue_rates";
 
 const createError = (message, status = 400) => Object.assign(new Error(message), { status });
 
@@ -234,6 +242,12 @@ const LOCAL_LOGIN_ATTEMPTS_KEY = "voltai_local_login_attempts";
 const readLocalLoginAttempts = () => readLocal(LOCAL_LOGIN_ATTEMPTS_KEY, {});
 const writeLocalLoginAttempts = (attempts) => writeLocal(LOCAL_LOGIN_ATTEMPTS_KEY, attempts);
 
+const readResetRates = () => readLocal(LOCAL_RESET_RATE_KEY, {});
+const writeResetRates = (rates) => writeLocal(LOCAL_RESET_RATE_KEY, rates);
+
+const readIssueRates = () => readLocal(LOCAL_ISSUE_RATE_KEY, {});
+const writeIssueRates = (rates) => writeLocal(LOCAL_ISSUE_RATE_KEY, rates);
+
 export const SESSION_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 horas de validade de sessão
 export const RESET_TOKEN_EXPIRATION_MS = 60 * 60 * 1000; // 1 hora de validade de token de reset
 export const MAX_LOGIN_ATTEMPTS = 5;
@@ -258,7 +272,17 @@ const getLocalUserFromToken = () => {
     }
 
     const found = users.find((user) => user.id === userId && !user.is_deleted);
-    if (found) return found;
+    if (found) {
+      // Invalidação determinística de sessão se a senha foi alterada após a emissão deste token
+      if (found.password_changed_at) {
+        const passwordChangedTime = Date.parse(found.password_changed_at);
+        if (Number.isFinite(passwordChangedTime) && tokenTime < passwordChangedTime) {
+          clearStoredToken();
+          return null;
+        }
+      }
+      return found;
+    }
   }
 
   // Token inválido, inexistente ou de usuário deletado
@@ -282,21 +306,25 @@ const requireLocalUser = () => {
   return user;
 };
 
-const localUploadFile = (file) => new Promise((resolve, reject) => {
+const localUploadFile = async (file) => {
   if (!file || typeof FileReader === "undefined") {
-    resolve({ file_url: "", file_name: file?.name || "", content_type: file?.type || "" });
-    return;
+    return { file_url: "", file_name: file?.name || "", content_type: file?.type || "" };
   }
 
-  const reader = new FileReader();
-  reader.onload = () => resolve({
-    file_url: reader.result,
-    file_name: file.name,
-    content_type: file.type,
+  // Validação estrita de segurança do arquivo enviado (tipo, tamanho e extensões perigosas)
+  validateUploadedFile(file);
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({
+      file_url: reader.result,
+      file_name: sanitizeTextInput(file.name),
+      content_type: file.type,
+    });
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
-  reader.onerror = reject;
-  reader.readAsDataURL(file);
-});
+};
 
 const getStoredToken = () => {
   if (typeof window === "undefined") return null;
@@ -417,7 +445,9 @@ const auth = {
       const userIndex = users.findIndex((item) => item.email === normalizedEmail);
       const user = userIndex >= 0 ? users[userIndex] : null;
 
-      if (!user || user.password !== password) {
+      const isPasswordValid = user ? await verifyPassword(password, user.password) : false;
+
+      if (!user || !isPasswordValid) {
         const currentCount = (userAttempts?.count || 0) + 1;
         attemptsMap[normalizedEmail] = { count: currentCount, lastAttempt: now };
         writeLocalLoginAttempts(attemptsMap);
@@ -451,10 +481,19 @@ const auth = {
         throw createError("Conta desativada.", 404);
       }
 
-      // Atualiza último acesso
+      // Atualiza último acesso e efetua migração transparente para PBKDF2 se for hash antigo ou texto simples
       const timestamp = nowIso();
       const updatedUsers = [...users];
-      updatedUsers[userIndex] = { ...user, last_access: timestamp, updated_date: timestamp };
+      let updatedUser = { ...user, last_access: timestamp, updated_date: timestamp };
+      if (!String(user.password || "").startsWith("pbkdf2_sha256$")) {
+        try {
+          updatedUser.password = await hashPassword(password);
+          updatedUser.password_changed_at = timestamp;
+        } catch (hashErr) {
+          console.warn("[loginViaEmailPassword] Erro na migração para PBKDF2:", hashErr);
+        }
+      }
+      updatedUsers[userIndex] = updatedUser;
       writeLocalUsers(updatedUsers);
 
       const access_token = createLocalToken(user.id);
@@ -500,6 +539,7 @@ const auth = {
       }
 
       const timestamp = nowIso();
+      const hashedPassword = await hashPassword(password);
       const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
       // Prevenção contra elevação indevida: novos cadastros NUNCA recebem super_admin automaticamente
       const assignedRole = isSuperAdminEmail ? "super_admin" : "user";
@@ -507,10 +547,11 @@ const auth = {
       const user = {
         id: randomId("local_user"),
         email: normalizedEmail,
-        password: String(password),
-        full_name: normalizedEmail.split("@")[0],
-        profession: profession || "projetista",
-        profissao: profession || "projetista",
+        password: hashedPassword,
+        password_changed_at: timestamp,
+        full_name: sanitizeTextInput(normalizedEmail.split("@")[0]),
+        profession: sanitizeTextInput(profession || "projetista"),
+        profissao: sanitizeTextInput(profession || "projetista"),
         role: assignedRole,
         is_super_admin: isSuperAdminEmail,
         status: "active",
@@ -571,6 +612,26 @@ const auth = {
   async resetPasswordRequest(email) {
     if (isLocalAuthMode) {
       const normalizedEmail = normalizeEmail(email);
+      const now = Date.now();
+      const rates = readResetRates();
+      const userRate = rates[normalizedEmail];
+      const RESET_RATE_WINDOW_MS = 15 * 60 * 1000;
+      const MAX_RESET_REQUESTS = 3;
+
+      if (userRate && now - userRate.firstRequest < RESET_RATE_WINDOW_MS) {
+        if (userRate.count >= MAX_RESET_REQUESTS) {
+          const waitMinutes = Math.ceil((RESET_RATE_WINDOW_MS - (now - userRate.firstRequest)) / 60000);
+          throw createError(
+            `Muitas solicitações de redefinição de senha para este e-mail. Aguarde ${waitMinutes} minuto(s) antes de tentar novamente.`,
+            429
+          );
+        }
+        rates[normalizedEmail] = { ...userRate, count: userRate.count + 1 };
+      } else {
+        rates[normalizedEmail] = { count: 1, firstRequest: now };
+      }
+      writeResetRates(rates);
+
       const user = readLocalUsers().find((item) => !item.is_deleted && item.email === normalizedEmail);
 
       // Resposta uniforme para evitar enumeração de contas
@@ -631,11 +692,15 @@ const auth = {
         throw createError("Usuário não encontrado.", 404);
       }
 
+      const timestamp = nowIso();
+      const hashedPassword = await hashPassword(newPassword);
+
       const nextUsers = [...users];
       nextUsers[userIndex] = {
         ...nextUsers[userIndex],
-        password: String(newPassword),
-        updated_date: nowIso(),
+        password: hashedPassword,
+        password_changed_at: timestamp,
+        updated_date: timestamp,
       };
       writeLocalUsers(nextUsers);
 
@@ -697,15 +762,25 @@ const auth = {
         safeData.profissao = safeData.profession;
       }
 
-      // Alteração de senha via updateMe exige senha atual
+      // Sanitização de entradas textuais contra XSS
+      if (safeData.full_name) safeData.full_name = sanitizeTextInput(safeData.full_name);
+      if (safeData.profession) safeData.profession = sanitizeTextInput(safeData.profession);
+      if (safeData.profissao) safeData.profissao = sanitizeTextInput(safeData.profissao);
+      if (safeData.company) safeData.company = sanitizeTextInput(safeData.company);
+      if (safeData.crea) safeData.crea = sanitizeTextInput(safeData.crea);
+      if (safeData.phone) safeData.phone = sanitizeTextInput(safeData.phone);
+
+      // Alteração de senha via updateMe exige senha atual e validação criptográfica
       if (data.new_password) {
-        if (!data.current_password || currentUser.password !== data.current_password) {
+        const isCurrentValid = await verifyPassword(data.current_password, currentUser.password);
+        if (!data.current_password || !isCurrentValid) {
           throw createError("Senha atual incorreta para alteração de senha.", 403);
         }
         if (String(data.new_password).length < 6) {
           throw createError("A nova senha deve ter no mínimo 6 caracteres.", 400);
         }
-        safeData.password = String(data.new_password);
+        safeData.password = await hashPassword(data.new_password);
+        safeData.password_changed_at = nowIso();
       }
 
       const nextUsers = [...users];
@@ -736,22 +811,75 @@ const auth = {
   async deleteAccount() {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
+      const userId = currentUser.id;
+
+      // 1. Remover conta de usuário
       const users = readLocalUsers();
-      const nextUsers = users.filter((item) => item.id !== currentUser.id);
+      const nextUsers = users.filter((item) => item.id !== userId);
       writeLocalUsers(nextUsers);
+
+      // 2. Cascade de projetos próprios (LGPD Art. 18 - Eliminação completa de dados do titular)
+      const projects = readLocalProjects();
+      writeLocalProjects(projects.filter((p) => p.owner_id !== userId && p.user_id !== userId));
+
+      // 3. Cascade de orçamentos próprios
+      const budgets = readLocalBudgets();
+      writeLocalBudgets(budgets.filter((b) => b.owner_id !== userId && b.user_id !== userId));
+
+      // 4. Cascade de notificações do usuário
+      const notifs = readLocalNotifications();
+      writeLocalNotifications(notifs.filter((n) => n.user_id !== userId));
+
+      // 5. Cascade de tokens de reset do usuário
+      const tokens = readLocalResetTokens();
+      const cleanTokens = {};
+      Object.entries(tokens).forEach(([t, entry]) => {
+        if (entry.userId !== userId) cleanTokens[t] = entry;
+      });
+      writeLocalResetTokens(cleanTokens);
+
       clearStoredToken();
 
       recordAuditEvent({
         actor: currentUser,
-        action: "USER_DELETED_ACCOUNT",
+        action: "USER_DELETED_ACCOUNT_LGPD",
         targetType: "user",
-        targetId: currentUser.id,
-        details: `Conta encerrada pelo próprio usuário: ${currentUser.email}`,
+        targetId: userId,
+        details: `Exclusão completa de conta e dados em cascata conforme LGPD Art. 18 para ${currentUser.email}`,
       });
 
       return { ok: true };
     }
     return request("/api/auth/me", { method: "DELETE" });
+  },
+
+  async exportUserData() {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const userId = currentUser.id;
+
+      const userProjects = readLocalProjects().filter((p) => p.owner_id === userId || p.user_id === userId);
+      const userBudgets = readLocalBudgets().filter((b) => b.owner_id === userId || b.user_id === userId);
+      const userNotifications = readLocalNotifications().filter((n) => n.user_id === userId);
+
+      recordAuditEvent({
+        actor: currentUser,
+        action: "LGPD_DATA_EXPORTED",
+        targetType: "user",
+        targetId: userId,
+        details: `Portabilidade/Exportação de dados pessoais solicitada pelo titular ${currentUser.email} (LGPD Art. 18)`,
+      });
+
+      return {
+        exported_at: nowIso(),
+        lgpd_compliance: "Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018) - Art. 18",
+        user_profile: publicUser(currentUser),
+        projects: userProjects,
+        budgets: userBudgets,
+        notifications: userNotifications,
+      };
+    }
+    return request("/api/auth/export-data");
   },
 
   loginWithProvider() {
@@ -827,18 +955,19 @@ const projectEntity = {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
       const timestamp = nowIso();
-      const name = String(data?.name || "").trim() || "Novo Projeto Elétrico";
+      const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
+      const name = sanitizeTextInput(String(safeData?.name || "").trim() || "Novo Projeto Elétrico");
       const project = {
+        circuits: [],
+        panel_boards: [],
+        plant_design: { points: [], routes: [] },
+        status: safeData?.status || "em_andamento",
+        ...safeData,
         id: randomId("local_project"),
         created_date: timestamp,
         updated_date: timestamp,
         owner_id: currentUser.id,
         user_id: currentUser.id,
-        status: data?.status || "em_andamento",
-        circuits: [],
-        panel_boards: [],
-        plant_design: { points: [], routes: [] },
-        ...data,
         name,
       };
       writeLocalProjects([project, ...readLocalProjects()]);
@@ -866,18 +995,19 @@ const projectEntity = {
 
       const nextProjects = [...projects];
       if (projectIndex < 0) {
+        const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
         const newProject = {
+          circuits: [],
+          panel_boards: [],
+          plant_design: { points: [], routes: [] },
+          status: safeData?.status || "em_andamento",
+          ...safeData,
           id,
-          name: String(data?.name || "").trim() || "Projeto Elétrico",
+          name: sanitizeTextInput(String(safeData?.name || "").trim() || "Projeto Elétrico"),
           created_date: nowIso(),
           updated_date: nowIso(),
           owner_id: currentUser.id,
           user_id: currentUser.id,
-          status: data?.status || "em_andamento",
-          circuits: [],
-          panel_boards: [],
-          plant_design: { points: [], routes: [] },
-          ...data,
         };
         writeLocalProjects([newProject, ...projects]);
         return cloneLocal(newProject);
@@ -888,10 +1018,17 @@ const projectEntity = {
         throw createError("Acesso negado para alterar este projeto.", 403);
       }
 
+      const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
+      if (safeData.name) {
+        safeData.name = sanitizeTextInput(safeData.name);
+      }
+
       nextProjects[projectIndex] = {
         ...existing,
-        ...data,
-        id,
+        ...safeData,
+        id, // Protege ID original contra manipulação
+        owner_id: existing.owner_id || currentUser.id, // Previne reatribuição indevida de propriedade
+        user_id: existing.user_id || currentUser.id,
         updated_date: nowIso(),
       };
       writeLocalProjects(nextProjects);
@@ -1291,20 +1428,48 @@ const issueEntity = {
   async create(data) {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
+
+      // Rate limiting: máx 10 relatos por hora por usuário
+      const now = Date.now();
+      const issueRates = readIssueRates();
+      const userRate = issueRates[currentUser.id];
+      const ISSUE_WINDOW_MS = 60 * 60 * 1000;
+      const MAX_ISSUES_PER_HOUR = 10;
+
+      if (userRate && now - userRate.firstRequest < ISSUE_WINDOW_MS) {
+        if (userRate.count >= MAX_ISSUES_PER_HOUR) {
+          const waitMinutes = Math.ceil((ISSUE_WINDOW_MS - (now - userRate.firstRequest)) / 60000);
+          throw createError(
+            `Limite de envio de relatos atingido (máximo de ${MAX_ISSUES_PER_HOUR} por hora). Tente novamente em ${waitMinutes} minuto(s).`,
+            429
+          );
+        }
+        issueRates[currentUser.id] = { ...userRate, count: userRate.count + 1 };
+      } else {
+        issueRates[currentUser.id] = { count: 1, firstRequest: now };
+      }
+      writeIssueRates(issueRates);
+
       const all = await getAllIssues();
       const timestamp = nowIso();
       const protocol = generateProtocol(all);
+
+      const title = sanitizeTextInput(String(data.title || "").trim());
+      const description = sanitizeTextInput(String(data.description || "").trim());
+      const steps_to_reproduce = sanitizeTextInput(String(data.steps_to_reproduce || ""));
+      const expected_result = sanitizeTextInput(String(data.expected_result || ""));
+      const actual_result = sanitizeTextInput(String(data.actual_result || ""));
 
       const newIssue = {
         id: randomId("issue"),
         protocol,
         type: data.type || "erro",
-        title: String(data.title || "").trim(),
+        title,
         module: data.module || "Outros",
-        description: String(data.description || "").trim(),
-        steps_to_reproduce: data.steps_to_reproduce || "",
-        expected_result: data.expected_result || "",
-        actual_result: data.actual_result || "",
+        description,
+        steps_to_reproduce,
+        expected_result,
+        actual_result,
         status: "recebido",
         priority: "media",
         user_id: currentUser.id,
@@ -1526,7 +1691,7 @@ const issueEntity = {
         author_name: currentUser.full_name || currentUser.name || "Usuário",
         author_email: currentUser.email,
         author_role: isAdmin ? "admin" : "user",
-        message: String(message || "").trim(),
+        message: sanitizeTextInput(String(message || "").trim()),
         is_internal: Boolean(is_internal && isAdmin),
         created_date: timestamp,
       };
@@ -1995,13 +2160,15 @@ const superAdminEntity = {
 
       const timestamp = nowIso();
       const initialPassword = data.password || Math.random().toString(36).slice(2, 10);
+      const hashedPassword = await hashPassword(initialPassword);
       const newUser = {
         id: randomId("user"),
         email: normalizedEmail,
-        password: initialPassword,
-        full_name: String(data.full_name || "").trim() || normalizedEmail.split("@")[0],
-        profession: data.profession || "projetista",
-        profissao: data.profession || "projetista",
+        password: hashedPassword,
+        password_changed_at: timestamp,
+        full_name: sanitizeTextInput(String(data.full_name || "").trim() || normalizedEmail.split("@")[0]),
+        profession: sanitizeTextInput(data.profession || "projetista"),
+        profissao: sanitizeTextInput(data.profession || "projetista"),
         role: data.role || "user",
         is_super_admin: data.role === "super_admin",
         status: data.status || "active",
@@ -2279,14 +2446,9 @@ const budgetEntity = {
       const currentUser = requireLocalUser();
       const timestamp = nowIso();
       const id = randomId("budget");
-      const name = String(data?.name || "").trim() || `Orçamento ${new Date().toLocaleDateString("pt-BR")}`;
+      const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
+      const name = sanitizeTextInput(String(safeData?.name || "").trim() || `Orçamento ${new Date().toLocaleDateString("pt-BR")}`);
       const budget = {
-        id,
-        created_date: timestamp,
-        updated_date: timestamp,
-        owner_id: currentUser.id,
-        user_id: currentUser.id,
-        status: data?.status || "Rascunho",
         materials: [],
         services: [],
         margin: 30,
@@ -2300,7 +2462,13 @@ const budgetEntity = {
         validity_days: 15,
         payment_terms: "50% entrada e 50% na conclusão dos serviços",
         execution_deadline: "15 dias úteis",
-        ...data,
+        status: safeData?.status || "Rascunho",
+        ...safeData,
+        id,
+        created_date: timestamp,
+        updated_date: timestamp,
+        owner_id: currentUser.id,
+        user_id: currentUser.id,
         name,
       };
       writeLocalBudgets([budget, ...readLocalBudgets()]);
@@ -2320,11 +2488,16 @@ const budgetEntity = {
       if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && existing.owner_id && existing.owner_id !== currentUser.id) {
         throw createError("Acesso negado para modificar este orçamento.", 403);
       }
+      const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safePatch } = patch || {};
+      if (safePatch.name) {
+        safePatch.name = sanitizeTextInput(safePatch.name);
+      }
       const updated = {
         ...existing,
-        ...patch,
+        ...safePatch,
         id, // Protege ID imutável
-        owner_id: existing.owner_id, // Impede transferência silenciosa
+        owner_id: existing.owner_id || currentUser.id, // Impede transferência silenciosa
+        user_id: existing.user_id || currentUser.id,
         updated_date: nowIso(),
       };
       const nextBudgets = budgets.map((b) => (b.id === id ? updated : b));
