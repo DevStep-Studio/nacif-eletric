@@ -1416,11 +1416,12 @@ export function createDefaultSolarArea(partial = {}, index = 1, fallbackConfig =
     ? primaryArea.roof_rotation_deg
     : (Number.isFinite(Number(fallbackConfig.roof_rotation_deg)) ? fallbackConfig.roof_rotation_deg : null);
 
-  let rawRotation = Number.isFinite(Number(partial.roof_rotation_deg))
+  const hasExplicitRotation = Number.isFinite(Number(partial.roof_rotation_deg));
+  let rawRotation = hasExplicitRotation
     ? Number(partial.roof_rotation_deg)
     : (referenceRotation !== null ? referenceRotation : (metrics ? metrics.rotationDeg : fallbackConfig.roof_rotation_deg || 0));
 
-  if (referenceRotation !== null && index > 1) {
+  if (!hasExplicitRotation && referenceRotation !== null && index > 1) {
     rawRotation = alignRotationToDominantAxis(rawRotation, referenceRotation);
   }
   const roofRotationDeg = round2(rawRotation);
@@ -1503,23 +1504,16 @@ export function computeAreaPanels(area = {}, globalConfig = {}) {
   }
 
   const metrics = getRoofMetricsFromPolygon(polygon, area);
-  let areaRotation = Number.isFinite(Number(area.roof_rotation_deg))
-    ? Number(area.roof_rotation_deg)
-    : metrics.rotationDeg;
-
-  // Harmonização automática de orientação e design entre múltiplas águas:
-  // Se existir uma área principal de referência (Água 1) no projeto e esta área secundária
-  // tiver um azimute perpendicular (~90° de defasagem), alinhamos ao eixo dominante
-  // do telhado para que os módulos fiquem perfeitamente uniformes (mesma orientação física).
   const primaryArea = Array.isArray(globalConfig.areas) && globalConfig.areas.length > 0
     ? globalConfig.areas[0]
     : null;
-  const referenceRotation = primaryArea && primaryArea.id !== area.id && Number.isFinite(Number(primaryArea.roof_rotation_deg))
-    ? primaryArea.roof_rotation_deg
-    : (Number.isFinite(Number(globalConfig.roof_rotation_deg)) ? globalConfig.roof_rotation_deg : null);
+  const hasExplicitRotation = Number.isFinite(Number(area.roof_rotation_deg));
+  let areaRotation = hasExplicitRotation
+    ? Number(area.roof_rotation_deg)
+    : metrics.rotationDeg;
 
-  if (referenceRotation !== null && primaryArea && primaryArea.id !== area.id) {
-    areaRotation = alignRotationToDominantAxis(areaRotation, referenceRotation);
+  if (!hasExplicitRotation && primaryArea && primaryArea.id !== area.id && Number.isFinite(Number(primaryArea.roof_rotation_deg))) {
+    areaRotation = alignRotationToDominantAxis(areaRotation, primaryArea.roof_rotation_deg);
   }
 
   const inheritedOrientation = area.module_orientation || primaryArea?.module_orientation || globalConfig.module_orientation || "horizontal";

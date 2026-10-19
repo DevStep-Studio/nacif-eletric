@@ -31,7 +31,6 @@ import {
   DEFAULT_SOLAR_MAP_ZOOM,
   SOLAR_MODULE_HEIGHT_M,
   SOLAR_MODULE_WIDTH_M,
-  alignRotationToDominantAxis,
   buildRoofPolygon,
   calculateStringGrouping,
   computeMultiAreaLayouts,
@@ -176,25 +175,6 @@ function normalizeSolarConfig(config = {}) {
   delete merged.layout_fill_mode;
   
   const normalizedAreas = normalizeSolarAreas(merged.areas, merged);
-
-  // Harmonização automática do alinhamento de painéis entre múltiplas águas:
-  // Se houver uma área principal (Água 1) e alguma área secundária estiver perpendicular (~90°),
-  // alinha ao eixo dominante do edifício para manter os módulos todos em perfeita sincronia.
-  if (normalizedAreas.length > 1 && normalizedAreas[0]) {
-    const primary = normalizedAreas[0];
-    const primaryRot = Number.isFinite(Number(primary.roof_rotation_deg)) ? primary.roof_rotation_deg : null;
-    if (primaryRot !== null) {
-      normalizedAreas.forEach((area, idx) => {
-        if (idx === 0) return;
-        if (Number.isFinite(Number(area.roof_rotation_deg))) {
-          const aligned = alignRotationToDominantAxis(area.roof_rotation_deg, primaryRot);
-          if (aligned !== area.roof_rotation_deg) {
-            area.roof_rotation_deg = round2(aligned);
-          }
-        }
-      });
-    }
-  }
 
   const legacyPolygon = serializeRoofPolygon(normalizeRoofPolygon(merged.roof_polygon));
   const primaryPolygon = normalizedAreas[0]?.polygon || legacyPolygon;
@@ -791,13 +771,14 @@ export default function SolarProject() {
         return normalizeSolarArea(updated, idx + 1, prevConfig);
       });
 
+      const isPrimary = !targetId || targetId === existing[0]?.id;
       const nextConfigObj = {
         ...prevConfig,
-        ...updates,
+        ...(isPrimary ? updates : {}),
         areas: nextAreas,
       };
 
-      if (targetId === existing[0]?.id) {
+      if (isPrimary) {
         if ("roof_rotation_deg" in updates) nextConfigObj.roof_rotation_deg = updates.roof_rotation_deg;
         if ("roof_pitch_deg" in updates) nextConfigObj.roof_pitch_deg = updates.roof_pitch_deg;
       }
@@ -2419,10 +2400,38 @@ export default function SolarProject() {
                                 checked={selectedArea?.auto_fill_surface ?? config.auto_fill_surface ?? true}
                                 onCheckedChange={(checked) => {
                                   updateSelectedArea("auto_fill_surface", checked);
+                                  if (!checked && !selectedArea?.requested_panel_count) {
+                                    updateSelectedArea("requested_panel_count", selectedArea?.panelCount || 1);
+                                  }
                                 }}
                                 className="data-[state=checked]:bg-[#00d8b8]"
                               />
                             </div>
+
+                            {!(selectedArea?.auto_fill_surface ?? config.auto_fill_surface ?? true) && (
+                              <div className="pt-1 space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-[10px] font-bold text-slate-600">Qtd. Módulos no Conjunto</Label>
+                                  <span className="text-[10px] font-bold text-emerald-600">
+                                    Capacidade: {selectedArea?.metrics?.physicalCapacity || selectedArea?.panelCount || 500} un
+                                  </span>
+                                </div>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max={selectedArea?.metrics?.physicalCapacity || 500}
+                                  step="1"
+                                  value={selectedArea?.requested_panel_count ?? selectedArea?.panelCount ?? 1}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    if (!isNaN(val) && val >= 1) {
+                                      updateSelectedArea("requested_panel_count", val);
+                                    }
+                                  }}
+                                  className="h-7 rounded border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#00d8b8]"
+                                />
+                              </div>
+                            )}
 
                             <Button
                               type="button"

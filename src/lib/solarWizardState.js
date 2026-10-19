@@ -171,7 +171,8 @@ export function getEffectivePanelCount(state) {
   }
 
   const layout = getRoofPhysicalLayout(state);
-  const requested = Math.max(0, Math.round(num(state.requested_panel_count, 0)));
+  const rawRequested = num(state.requested_panel_count, 0);
+  const requested = rawRequested > 0 ? Math.round(rawRequested) : layout.panelCount;
   return {
     panelCount: Math.min(requested, layout.panelCount),
     physicalCapacity: layout.panelCount,
@@ -227,6 +228,14 @@ export function getStepErrors(stepKey, state) {
     if (!state.address?.trim()) errors.push("Informe o endereço.");
     if (!state.city?.trim()) errors.push("Informe a cidade.");
     if (!state.state?.trim()) errors.push("Informe o estado (UF).");
+  }
+
+  if (stepKey === "telhado") {
+    const hasPolygon = Boolean(state.roof_defined) && Array.isArray(state.roof_polygon) && state.roof_polygon.length >= 3;
+    const hasAreas = Array.isArray(state.areas) && state.areas.length > 0 && state.areas.some((a) => Array.isArray(a.polygon) && a.polygon.length >= 3);
+    if (!hasPolygon && !hasAreas) {
+      errors.push("Demarque a área do telhado ou configure os conjuntos de módulos para continuar.");
+    }
   }
 
   if (stepKey === "equipamentos") {
