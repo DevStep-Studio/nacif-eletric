@@ -31,6 +31,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'html2canvas': path.resolve(__dirname, './node_modules/html2canvas/dist/html2canvas.js'),
     },
   },
   plugins: [react(), stableAppAssets()],

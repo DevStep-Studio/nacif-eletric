@@ -216,7 +216,8 @@ export function normalizeElectricalPower({
 } = {}) {
   const fp = Math.max(0.01, Number(power_factor) || 0.92);
   const eta = Math.min(1.0, Math.max(0.1, Number(efficiency) || 1.0));
-  const rawVal = Number(power_w !== null && power_w !== undefined && power_w !== "" ? power_w : power || 0);
+  const rawParsed = Number(power_w !== null && power_w !== undefined && power_w !== "" ? power_w : power || 0);
+  const rawVal = Number.isFinite(rawParsed) ? rawParsed : 0;
   const unit = String(power_unit || "W").trim().toUpperCase();
 
   let activeW = 0;
