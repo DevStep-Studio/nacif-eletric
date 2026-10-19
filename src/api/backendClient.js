@@ -1112,12 +1112,16 @@ const notificationEntity = {
   async list(limit) {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
-      let notifs = readLocalNotifications();
-      // Isolamento de notificações por usuário
-      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
-        notifs = notifs.filter((n) => !n.user_id || n.user_id === currentUser.id);
+      const notifs = readLocalNotifications();
+      const isAdmin = isSuperAdmin(currentUser) || currentUser.role === "admin";
+      // Isolamento estrito de notificações por usuário e audiência
+      let filtered;
+      if (isAdmin) {
+        filtered = notifs.filter((n) => n.audience === "admin" || n.user_id === currentUser.id || !n.user_id);
+      } else {
+        filtered = notifs.filter((n) => n.user_id === currentUser.id && n.audience !== "admin");
       }
-      return cloneLocal(sortLocalItems(notifs, "-created_date", limit));
+      return cloneLocal(sortLocalItems(filtered, "-created_date", limit));
     }
 
     return request("/api/notifications", {
@@ -1134,7 +1138,7 @@ const notificationEntity = {
         read: false,
         created_date: timestamp,
         updated_date: timestamp,
-        user_id: data?.user_id || currentUser.id,
+        user_id: data?.user_id || (data?.audience === "admin" ? null : currentUser.id),
         ...data,
       };
       writeLocalNotifications([notification, ...readLocalNotifications()]);
@@ -1149,8 +1153,15 @@ const notificationEntity = {
 
   async markRead(id) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const notifications = readLocalNotifications();
+      const target = notifications.find((item) => item.id === id);
+      const isAdmin = isSuperAdmin(currentUser) || currentUser.role === "admin";
+
+      if (target && target.user_id && target.user_id !== currentUser.id && !isAdmin) {
+        throw createError("Permissão negada para alterar esta notificação.", 403);
+      }
+
       const nextNotifications = notifications.map((item) => (
         item.id === id ? { ...item, read: true, updated_date: nowIso() } : item
       ));
@@ -1165,13 +1176,20 @@ const notificationEntity = {
 
   async markAllRead() {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const timestamp = nowIso();
-      writeLocalNotifications(readLocalNotifications().map((item) => ({
-        ...item,
-        read: true,
-        updated_date: timestamp,
-      })));
+      const isAdmin = isSuperAdmin(currentUser) || currentUser.role === "admin";
+      writeLocalNotifications(readLocalNotifications().map((item) => {
+        // Usuários comuns marcam como lidas apenas as suas próprias notificações
+        if (!isAdmin && item.user_id && item.user_id !== currentUser.id) {
+          return item;
+        }
+        return {
+          ...item,
+          read: true,
+          updated_date: timestamp,
+        };
+      }));
       return { ok: true };
     }
 
@@ -1182,8 +1200,14 @@ const notificationEntity = {
 
   async clearAll() {
     if (isLocalAuthMode) {
-      requireLocalUser();
-      writeLocalNotifications([]);
+      const currentUser = requireLocalUser();
+      const isAdmin = isSuperAdmin(currentUser) || currentUser.role === "admin";
+      // Usuários comuns limpam exclusivamente as notificações vinculadas à sua conta
+      if (!isAdmin) {
+        writeLocalNotifications(readLocalNotifications().filter((n) => n.user_id !== currentUser.id));
+      } else {
+        writeLocalNotifications(readLocalNotifications().filter((n) => n.user_id && n.user_id !== currentUser.id));
+      }
       return { ok: true };
     }
 
@@ -1239,10 +1263,27 @@ const issueEntity = {
 
   async get(id) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const issue = await getIssueById(id);
       if (!issue) throw createError("Relato não encontrado.", 404);
-      return cloneLocal(issue);
+
+      const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin" || isSuperAdmin(currentUser);
+      const isOwner = issue.user_id === currentUser.id || issue.user_email === currentUser.email;
+
+      // Proteção contra IDOR: apenas o autor ou administradores podem consultar os detalhes
+      if (!isAdmin && !isOwner) {
+        throw createError("Acesso negado ao relato solicitado.", 403);
+      }
+
+      // Sanitização de dados: notas e observações internas restritas à equipe técnica
+      const sanitized = cloneLocal(issue);
+      if (!isAdmin) {
+        delete sanitized.internal_notes;
+        if (Array.isArray(sanitized.comments)) {
+          sanitized.comments = sanitized.comments.filter((c) => !c.is_internal);
+        }
+      }
+      return sanitized;
     }
     return request(`/api/issues/${id}`);
   },
@@ -1315,14 +1356,32 @@ const issueEntity = {
 
   async update(id, updates) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const issue = await getIssueById(id);
       if (!issue) throw createError("Relato não encontrado.", 404);
+
+      const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin" || isSuperAdmin(currentUser);
+      const isOwner = issue.user_id === currentUser.id || issue.user_email === currentUser.email;
+
+      if (!isAdmin && !isOwner) {
+        throw createError("Permissão negada para atualizar este relato.", 403);
+      }
+
+      // Bloqueio de escalada: usuário comum não pode alterar status, prioridade ou notas internas
+      const safeUpdates = { ...updates };
+      if (!isAdmin) {
+        delete safeUpdates.status;
+        delete safeUpdates.priority;
+        delete safeUpdates.internal_notes;
+        delete safeUpdates.timeline;
+        delete safeUpdates.user_id;
+        delete safeUpdates.protocol;
+      }
 
       const timestamp = nowIso();
       const updated = {
         ...issue,
-        ...updates,
+        ...safeUpdates,
         updated_date: timestamp,
       };
 
@@ -1336,6 +1395,11 @@ const issueEntity = {
   async updateStatusAndPriority(id, { status, priority, admin_response, internal_notes }) {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
+      const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin" || isSuperAdmin(currentUser);
+      if (!isAdmin) {
+        throw createError("Apenas administradores podem atualizar o status e a prioridade de relatos.", 403);
+      }
+
       const issue = await getIssueById(id);
       if (!issue) throw createError("Relato não encontrado.", 404);
 
@@ -1444,8 +1508,15 @@ const issueEntity = {
       const issue = await getIssueById(id);
       if (!issue) throw createError("Relato não encontrado.", 404);
 
-      const timestamp = nowIso();
       const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin" || isSuperAdmin(currentUser);
+      const isOwner = issue.user_id === currentUser.id || issue.user_email === currentUser.email;
+
+      // Proteção contra IDOR: somente o autor ou equipe técnica pode comentar
+      if (!isAdmin && !isOwner) {
+        throw createError("Acesso negado para comentar neste relato.", 403);
+      }
+
+      const timestamp = nowIso();
       const comments = [...(issue.comments || [])];
       const timelineEvents = [...(issue.timeline || [])];
 
@@ -1533,14 +1604,17 @@ const issueEntity = {
 
   async getStats() {
     if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin" || isSuperAdmin(currentUser);
       const all = await getAllIssues();
+      const scoped = isAdmin ? all : all.filter((i) => i.user_id === currentUser.id || i.user_email === currentUser.email);
       return {
-        total: all.length,
-        recebido: all.filter((i) => i.status === "recebido").length,
-        em_analise: all.filter((i) => i.status === "em_analise").length,
-        em_correcao: all.filter((i) => i.status === "em_correcao").length,
-        resolvido: all.filter((i) => i.status === "resolvido").length,
-        encerrado: all.filter((i) => i.status === "encerrado").length,
+        total: scoped.length,
+        recebido: scoped.filter((i) => i.status === "recebido").length,
+        em_analise: scoped.filter((i) => i.status === "em_analise").length,
+        em_correcao: scoped.filter((i) => i.status === "em_correcao").length,
+        resolvido: scoped.filter((i) => i.status === "resolvido").length,
+        encerrado: scoped.filter((i) => i.status === "encerrado").length,
       };
     }
     return request("/api/issues/stats");
@@ -1548,7 +1622,17 @@ const issueEntity = {
 
   async delete(id) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
+      const issue = await getIssueById(id);
+      if (!issue) return { ok: true };
+
+      const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin" || isSuperAdmin(currentUser);
+      const isOwner = issue.user_id === currentUser.id || issue.user_email === currentUser.email;
+
+      if (!isAdmin && !isOwner) {
+        throw createError("Permissão insuficiente para excluir este relato.", 403);
+      }
+
       await deleteIssue(id);
       return { ok: true };
     }

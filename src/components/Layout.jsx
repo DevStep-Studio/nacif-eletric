@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { hasFullSystemAccess, isSuperAdmin } from "@/lib/professionalAccess";
-import { useBranding, useNotifications } from "@/lib/appPreferences";
+import { useBranding, useNotifications, formatNotificationTime } from "@/lib/appPreferences";
 import { backend } from "@/api/backendClient";
 import { ISSUES_CHANGED_EVENT } from "@/lib/issuePersistence";
 import { Button } from "@/components/ui/button";
@@ -731,13 +731,25 @@ export default function Layout() {
                   {notifications.length === 0 ? (
                     <p className="p-4 text-center text-xs font-medium text-[#64748B]">Nenhuma notificação recente.</p>
                   ) : (
-                    notifications.slice(0, 6).map((item) => (
+                    notifications.slice(0, 8).map((item) => (
                       <DropdownMenuItem
                         key={item.id}
-                        onClick={() => markRead(item.id)}
-                        className="flex flex-col items-start gap-1 p-2.5 rounded-xl cursor-pointer hover:bg-[#F8FAFC]"
+                        onClick={() => {
+                          markRead(item.id);
+                          if (item.href) navigate(item.href);
+                        }}
+                        className={`flex flex-col items-start gap-1 p-2.5 rounded-xl cursor-pointer transition-colors ${
+                          !item.read ? "bg-[#E8FCF8]/50 hover:bg-[#E8FCF8]" : "hover:bg-[#F8FAFC]"
+                        }`}
                       >
-                        <span className="text-xs font-bold text-[#0F172A]">{item.title}</span>
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className={`text-xs ${!item.read ? "font-black text-[#0F172A]" : "font-semibold text-[#334155]"}`}>
+                            {item.title}
+                          </span>
+                          <span className="text-[10px] font-medium text-[#94A3B8] shrink-0">
+                            {formatNotificationTime(item.createdAt)}
+                          </span>
+                        </div>
                         <span className="text-[11px] text-[#64748B] leading-tight line-clamp-2">{item.description}</span>
                       </DropdownMenuItem>
                     ))
@@ -968,13 +980,25 @@ export default function Layout() {
                   {notifications.length === 0 ? (
                     <p className="p-4 text-center text-xs font-medium text-[#64748B]">Nenhuma notificação recente.</p>
                   ) : (
-                    notifications.slice(0, 6).map((item) => (
+                    notifications.slice(0, 8).map((item) => (
                       <DropdownMenuItem
                         key={item.id}
-                        onClick={() => markRead(item.id)}
-                        className="flex flex-col items-start gap-1 p-2.5 rounded-xl cursor-pointer hover:bg-[#F8FAFC]"
+                        onClick={() => {
+                          markRead(item.id);
+                          if (item.href) navigate(item.href);
+                        }}
+                        className={`flex flex-col items-start gap-1 p-2.5 rounded-xl cursor-pointer transition-colors ${
+                          !item.read ? "bg-[#E8FCF8]/50 hover:bg-[#E8FCF8]" : "hover:bg-[#F8FAFC]"
+                        }`}
                       >
-                        <span className="text-xs font-bold text-[#0F172A]">{item.title}</span>
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className={`text-xs ${!item.read ? "font-black text-[#0F172A]" : "font-semibold text-[#334155]"}`}>
+                            {item.title}
+                          </span>
+                          <span className="text-[10px] font-medium text-[#94A3B8] shrink-0">
+                            {formatNotificationTime(item.createdAt)}
+                          </span>
+                        </div>
                         <span className="text-[11px] text-[#64748B] leading-tight line-clamp-2">{item.description}</span>
                       </DropdownMenuItem>
                     ))
