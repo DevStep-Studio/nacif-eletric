@@ -448,10 +448,16 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <Button variant="outline" className="mx-auto h-11 w-full max-w-5xl rounded-[12px] font-extrabold" onClick={() => logout()}>
-        <LogOut className="h-4 w-4" />
-        Sair da conta
-      </Button>
+      <div className="mx-auto flex w-full max-w-5xl justify-center">
+        <Button
+          variant="outline"
+          className="flex h-11 w-full max-w-5xl items-center justify-center rounded-[12px] font-extrabold"
+          onClick={() => logout()}
+        >
+          <LogOut className="h-4 w-4" />
+          Sair da conta
+        </Button>
+      </div>
     </div>
   );
 }
