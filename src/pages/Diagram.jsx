@@ -126,8 +126,8 @@ function DiagramSVG({ project }) {
 
                 {/* Disjuntor do circuito */}
                 <rect x={cx} y={cy - 15} width="50" height="25" rx="3" fill="none" stroke={color} strokeWidth="1.5" />
-                <text x={cx + 25} y={cy - 5} fill={color} fontSize="8" textAnchor="middle">{c.breaker || "16A"}</text>
-                <text x={cx + 25} y={cy + 6} fill={color} fontSize="7" textAnchor="middle">Curva C</text>
+                <text x={cx + 25} y={cy - 5} fill={color} fontSize="8" textAnchor="middle">{c.breaker_a ? `${c.breaker_a}A` : (c.breaker || "16A")}</text>
+                <text x={cx + 25} y={cy + 6} fill={color} fontSize="7" textAnchor="middle">Curva {c.breaker_curve || "C"}</text>
 
                 {/* Linha para carga */}
                 <line x1={cx + 25} y1={cy + 10} x2={cx + 25} y2={cy + 35} stroke={color} strokeWidth="1.5" />

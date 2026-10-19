@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
 import ProfessionalBoardSheetSVG from "@/components/ProfessionalBoardSheetSVG";
 import QgbtDiagramSheetSVG from "@/components/QgbtDiagramSheetSVG";
-import { buildProfessionalPanelBoardSheets } from "@/lib/professionalPanelBoardLibrary";
+import { buildProfessionalPanelBoardSheets, calcPeConductor, getPhaseColor } from "@/lib/professionalPanelBoardLibrary";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
 import { calcProjectMetrics, autoBalancePhases, selectDrRating, getPrimaryPanelBoard } from "@/lib/electricalEngine";
@@ -555,7 +555,7 @@ function UnifilarSVG({ project, metrics }) {
   );
 
   const Characteristics = () => {
-    const conductorPe = Math.max(10, Math.round(feeder / 2));
+    const conductorPe = calcPeConductor(feeder);
     const demandKvaVal = metrics?.totalDemandKva || Number(((metrics?.totalDemandPower || metrics?.totalPower || 0) / 1000).toFixed(2));
     const rows = [
       ["ORIGEM:", panelName],
@@ -911,7 +911,7 @@ function generateDefaultNodesAndConnections(proj, projMetrics) {
     const cX = 360 + gridCol * 280;
     const cY = 260 + gridRow * 130;
 
-    const phColor = c.phase === "A" ? "#00d8b8" : c.phase === "B" ? "#00d8b8" : c.phase === "C" ? "#16a34a" : "#8b5cf6";
+    const phColor = getPhaseColor(c.phase);
 
     initialNodes.push({
       id: cId,
@@ -974,32 +974,127 @@ function sanitizeDiagramLayout(rawLayout, proj, projMetrics) {
     nodesToRemove.add("node-general-breaker");
   }
 
-  // Prune circuit nodes that no longer exist
+  // 1. Prune circuit nodes that no longer exist in circuitsList
   nodes.forEach((n) => {
     if (n.type === "circuit" || n.id.startsWith("node-circuit-")) {
       const idxMatch = n.id.match(/^node-circuit-(\d+)$/);
-      if (idxMatch) {
-        const idx = Number(idxMatch[1]);
-        if (idx >= circuitCount) {
-          nodesToRemove.add(n.id);
-        }
-      } else if (n.circuit_id) {
-        const exists = circuitsList.some((c) => (
-          String(c.id || c.circuit_id || "") === String(n.circuit_id)
+      let stillExists = false;
+      if (n.circuit_id) {
+        stillExists = circuitsList.some((c, cIdx) => (
+          String(c.id || c.circuit_id || `circuit_${cIdx}`) === String(n.circuit_id) ||
+          (c.name && n.title === c.name)
         ));
-        if (!exists) nodesToRemove.add(n.id);
+      } else if (idxMatch) {
+        const idx = Number(idxMatch[1]);
+        stillExists = idx < circuitCount;
+      }
+      if (!stillExists) {
+        nodesToRemove.add(n.id);
       }
     }
   });
 
-  const filteredNodes = nodes.filter((n) => !nodesToRemove.has(n.id));
+  let filteredNodes = nodes.filter((n) => !nodesToRemove.has(n.id));
   let filteredConns = (rawLayout.connections || []).filter((c) => (
     !nodesToRemove.has(c.from) && !nodesToRemove.has(c.to) &&
     filteredNodes.some((n) => n.id === c.from) &&
     filteredNodes.some((n) => n.id === c.to)
   ));
 
-  // Ensure busbar has incoming connection
+  let didAddOrUpdateCircuits = false;
+
+  // 2. Incremental sync of existing circuits & Addition of missing circuits
+  const occupiedCoords = new Set(filteredNodes.map((n) => `${Math.round(n.x / 40) * 40},${Math.round(n.y / 40) * 40}`));
+
+  circuitsList.forEach((c, idx) => {
+    const cKey = String(c.id || c.circuit_id || `circuit_${idx}`);
+    let matchedNode = filteredNodes.find((n) => (
+      (n.type === "circuit" || n.id.startsWith("node-circuit-")) && (
+        String(n.circuit_id) === cKey ||
+        n.id === `node-circuit-${idx}` ||
+        n.id === `node-circuit-${c.id}` ||
+        (c.name && n.title === c.name)
+      )
+    ));
+
+    if (matchedNode) {
+      // Sincronizar propriedades técnicas mantendo a posição x, y manual intacta
+      const newSubtitle = `${c.type || 'Tomada'} · ${c.wire_gauge || '2.5mm²'}`;
+      const newValue = `${c.breaker_a || 16}A / Curva ${c.breaker_curve || 'B'}`;
+      const newPhase = c.phase || matchedNode.phase || "A";
+
+      if (matchedNode.subtitle !== newSubtitle || matchedNode.value !== newValue || matchedNode.phase !== newPhase) {
+        matchedNode.subtitle = newSubtitle;
+        matchedNode.value = newValue;
+        matchedNode.phase = newPhase;
+        didAddOrUpdateCircuits = true;
+      }
+      if (!matchedNode.circuit_id) {
+        matchedNode.circuit_id = cKey;
+        didAddOrUpdateCircuits = true;
+      }
+    } else {
+      // NOVO CIRCUITO DETECTADO: Adicionar incrementalmente sem apagar layout manual existente
+      const gridCol = idx % 3;
+      const gridRow = Math.floor(idx / 3);
+      let newX = 360 + gridCol * 280;
+      let newY = 260 + gridRow * 130;
+
+      while (occupiedCoords.has(`${Math.round(newX / 40) * 40},${Math.round(newY / 40) * 40}`)) {
+        newY += 130;
+      }
+      occupiedCoords.add(`${Math.round(newX / 40) * 40},${Math.round(newY / 40) * 40}`);
+
+      const newNodeId = `node-circuit-${c.id || idx}`;
+      const newNode = {
+        id: newNodeId,
+        circuit_id: cKey,
+        type: "circuit",
+        x: newX,
+        y: newY,
+        title: c.name || `Circuito ${idx + 1}`,
+        subtitle: `${c.type || 'Tomada'} · ${c.wire_gauge || '2.5mm²'}`,
+        value: `${c.breaker_a || 16}A / Curva ${c.breaker_curve || 'B'}`,
+        phase: c.phase || "A",
+        accentColor: getPhaseColor(c.phase),
+        active: true,
+      };
+
+      filteredNodes.push(newNode);
+      filteredConns.push({
+        id: `c-busbar-to-${newNodeId}`,
+        from: "node-busbar",
+        to: newNodeId,
+        type: "fase",
+      });
+      didAddOrUpdateCircuits = true;
+    }
+  });
+
+  // 3. Atualizar grandezas do disjuntor geral e DR com cálculos atuais
+  const mainBreakerAmps = projMetrics?.generalBreaker;
+  const breakerNode = filteredNodes.find((n) => n.id === "node-general-breaker");
+  if (breakerNode && mainBreakerAmps) {
+    const nextBreakerSubtitle = `${projMetrics?.generalBreakerPoles || 2}P · ${mainBreakerAmps}A / Curva C`;
+    const nextBreakerVal = `${mainBreakerAmps}A`;
+    if (breakerNode.subtitle !== nextBreakerSubtitle || breakerNode.value !== nextBreakerVal) {
+      breakerNode.subtitle = nextBreakerSubtitle;
+      breakerNode.value = nextBreakerVal;
+      breakerNode.active = true;
+      didAddOrUpdateCircuits = true;
+    }
+  }
+
+  const drNode = filteredNodes.find((n) => n.id === "node-dr");
+  if (drNode) {
+    const drAmps = projMetrics?.generalDr || selectDrRating(mainBreakerAmps);
+    if (drAmps && drNode.value !== `${drAmps}A`) {
+      drNode.value = `${drAmps}A`;
+      didAddOrUpdateCircuits = true;
+    }
+  }
+
+  // 4. Garantir que o barramento tenha alimentação a montante
   const hasBusbarIn = filteredConns.some((c) => c.to === "node-busbar");
   if (!hasBusbarIn && filteredNodes.some((n) => n.id === "node-busbar")) {
     const upstream = (showDr && filteredNodes.some((n) => n.id === "node-dr"))
@@ -1016,10 +1111,14 @@ function sanitizeDiagramLayout(rawLayout, proj, projMetrics) {
         to: "node-busbar",
         type: "fase",
       });
+      didAddOrUpdateCircuits = true;
     }
   }
 
-  const didChange = nodes.length !== filteredNodes.length || (rawLayout.connections || []).length !== filteredConns.length;
+  const didChange = nodes.length !== filteredNodes.length ||
+    (rawLayout.connections || []).length !== filteredConns.length ||
+    didAddOrUpdateCircuits;
+
   return { layout: { nodes: filteredNodes, connections: filteredConns }, didChange };
 }
 
@@ -1960,6 +2059,52 @@ export default function UnifilarDiagram() {
     a.click();
   };
 
+  // Exportar Diagrama Interativo em PDF (Formato A3 Paisagem)
+  const downloadInteractivePDF = async () => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    try {
+      const bounds = getLayoutBounds() || { minX: 0, minY: 0, width: 1200, height: 800 };
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a3",
+        compress: true,
+      });
+
+      doc.setProperties({
+        title: `${project?.name || "Projeto"} - Diagrama Interativo`,
+        subject: "Diagrama vetorial interativo unifilar conforme NBR 5410",
+        creator: "Volt AI",
+      });
+
+      const clone = svg.cloneNode(true);
+      const pad = 60;
+      const exportW = Math.max(bounds.width + pad * 2, 800);
+      const exportH = Math.max(bounds.height + pad * 2, 600);
+      clone.setAttribute("width", String(exportW));
+      clone.setAttribute("height", String(exportH));
+      clone.setAttribute("viewBox", `${bounds.minX - pad} ${bounds.minY - pad} ${exportW} ${exportH}`);
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+      const svgContent = new XMLSerializer().serializeToString(clone);
+      await doc.addSvgAsImage(svgContent, 10, 10, 400, 277, "interactive-diagram", "FAST");
+      doc.save(`diagrama_interativo_${safeFileName(project?.name)}.pdf`);
+
+      toast({
+        title: "PDF gerado com sucesso!",
+        description: "Diagrama interativo exportado em formato A3.",
+      });
+    } catch (err) {
+      console.error("Erro ao exportar PDF do diagrama interativo:", err);
+      toast({
+        title: "Erro ao gerar PDF",
+        description: "Não foi possível converter o diagrama interativo para PDF.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Visualizar / Imprimir Legado
   const handlePrintLegacy = (size) => {
     let svgs = Array.from(document.querySelectorAll("#all-sheets-export-container svg"));
@@ -2080,9 +2225,14 @@ export default function UnifilarDiagram() {
             <Button variant="outline" size="sm" className="h-11 rounded-[12px] px-4 font-extrabold" onClick={() => { setScale(1); setPan({ x: 50, y: 30 }); }}>1:1</Button>
             
             {activeTab === "interactive" ? (
-              <Button variant="outline" size="sm" className="h-11 rounded-[12px] px-4 font-extrabold" onClick={exportInteractiveSVG}>
-                <Download className="w-4 h-4 mr-2" />SVG
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button variant="outline" size="sm" className="h-11 rounded-[12px] px-3 font-extrabold" onClick={exportInteractiveSVG}>
+                  <Download className="w-4 h-4 mr-1.5" />SVG
+                </Button>
+                <Button variant="outline" size="sm" className="h-11 rounded-[12px] px-3 font-extrabold" onClick={downloadInteractivePDF}>
+                  <Download className="w-4 h-4 mr-1.5" />PDF
+                </Button>
+              </div>
             ) : (
               project && (
                 <Button variant="outline" size="sm" className="h-11 rounded-[12px] px-4 font-extrabold" onClick={exportLegacySVG}>
@@ -2112,7 +2262,7 @@ export default function UnifilarDiagram() {
               <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
             </label>
 
-            {activeTab !== "interactive" && project && (
+            {project && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="h-11 rounded-[12px] gap-2 px-4 font-extrabold">
@@ -2843,19 +2993,19 @@ export default function UnifilarDiagram() {
                   </div>
                 </div>
               </div>
-
-              {/* Container oculto com todas as pranchas para exportação completa em PDF e Impressão */}
-              <div id="all-sheets-export-container" style={{ display: "none" }} aria-hidden="true">
-                {diagramModel === "qgbt" ? (
-                  <QgbtDiagramSheetSVG project={project} metrics={metrics} />
-                ) : (
-                  panelSheetsData?.sheets?.map((sheet, idx) => (
-                    <ProfessionalBoardSheetSVG key={sheet.id} project={project} metrics={metrics} sheetIndex={idx} />
-                  ))
-                )}
-              </div>
             </div>
           )}
+
+          {/* Container oculto com todas as pranchas para exportação completa em PDF e Impressão */}
+          <div id="all-sheets-export-container" style={{ display: "none" }} aria-hidden="true">
+            {diagramModel === "qgbt" ? (
+              <QgbtDiagramSheetSVG project={project} metrics={metrics} />
+            ) : (
+              panelSheetsData?.sheets?.map((sheet, idx) => (
+                <ProfessionalBoardSheetSVG key={sheet.id} project={project} metrics={metrics} sheetIndex={idx} />
+              ))
+            )}
+          </div>
         </>
       )}
     </div>

@@ -24,6 +24,16 @@ export const PANEL_COLORS = {
   earth: "#16a34a",
 };
 
+export const getPhaseColor = (phase = "A") => {
+  const p = String(phase || "A").toUpperCase();
+  if (p === "B" || p === "S") return "#dc2626";
+  if (p === "C" || p === "T") return "#8b4513";
+  if (p === "N") return "#00d8b8";
+  if (p === "PE") return "#16a34a";
+  if (p.length > 1) return "#005188";
+  return "#1e293b";
+};
+
 const asNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -61,6 +71,25 @@ export function feederGaugeByCurrent(current) {
     [540, 185],
   ];
   return (table.find(([limit]) => value <= limit) || table[table.length - 1])[1];
+}
+
+/**
+ * Seção nominal do condutor de proteção (PE) conforme ABNT NBR 5410:2004, Tabela 58:
+ * - S (fase) <= 16 mm²: Spe = S
+ * - 16 < S <= 35 mm²: Spe = 16 mm²
+ * - S > 35 mm²: Spe = S / 2 (arredondado para seção comercial padronizada)
+ */
+export function calcPeConductor(phaseGauge) {
+  const s = asNumber(phaseGauge, 10);
+  if (s <= 16) return s;
+  if (s <= 35) return 16;
+  if (s <= 50) return 25;
+  if (s <= 70) return 35;
+  if (s <= 95) return 50;
+  if (s <= 120) return 70;
+  if (s <= 150) return 70;
+  if (s <= 185) return 95;
+  return Math.ceil(s / 2);
 }
 
 function phaseSetForCircuit(circuit) {
@@ -548,7 +577,7 @@ export function buildProfessionalPanelBoard(project = {}, metrics = {}) {
       ["Proteção geral", generalBreakerFromLayout ? `Disjuntor termomagnético ${generalPolesFromLayout}P ${generalBreakerFromLayout}A` : "Pendente (sem cargas)"],
       ["DPS", dpsPoleCount ? `Classe II · ${dpsPoleCount} polo(s) no quadro` : "Prever DPS classe II"],
       ["DR", drDeviceCount ? `${drDeviceCount} dispositivo(s) 30mA · ${drProtectedCount} circuito(s)` : "Não instalado no QD"],
-      ["Condutores", `Fase/Neutro ${feederGauge}mm² · PE ${Math.max(6, Math.round(feederGauge / 2))}mm²`],
+      ["Condutores", `Fase/Neutro ${feederGauge}mm² · PE ${calcPeConductor(feederGauge)}mm²`],
     ],
     notes: [
       "Condutores dimensionados conforme NBR 5410:2004, considerando corrente de projeto, agrupamento e queda de tensão.",
