@@ -296,17 +296,27 @@ Classificações adotadas conforme as diretrizes obrigatórias:
 - **Solução Implementada:** Geração automática de novo `session_stamp` em cada redefinição de credencial, invalidando instantaneamente qualquer sessão aberta em outros dispositivos.
 - **Status:** **CORRIGIDO E VALIDADO** (`scripts/security-audit-smoke.mjs` - Teste 2).
 
+### NACIF-011: Bloqueio de Inicialização e Spinner Infinito por Duplicidade de Módulo React (Erro #321)
+- **Módulo Afetado:** Infraestrutura, Pipeline de Build Vite e Inicialização (`App.jsx`).
+- **Tela:** Entrada da Aplicação / Inicialização Global da Plataforma.
+- **Descrição:** A plataforma ficava travada em um spinner centralizado infinito ao ser aberta no navegador. A ferramenta de diagnóstico em navegador real Chrome revelou a exceção cíclica `Minified React error #321` ("Invalid hook call: more than one copy of React in the same app").
+- **Gravidade:** Crítica (Bloqueante).
+- **Prioridade:** P0.
+- **Causa Confirmada:** O plugin customizado `stableAppAssets` no `vite.config.js` injetava uma query string de versão (`/assets/app.js?v=...`) no `index.html`. Com a introdução do code-splitting (React.lazy), os chunks secundários (`Login-*.js`, `Home-*.js`) importavam `./app.js` sem query string. No padrão ES Modules, navegadores modernos tratam specifiers com e sem query string como módulos separados, instanciando duas cópias de React na memória e quebrando o `ReactCurrentDispatcher`.
+- **Solução Implementada:** Eliminação do plugin de query strings e padronização do hash de conteúdo diretamente nos nomes dos arquivos de saída (`assets/app-[hash].js`), garantindo que tanto o HTML quanto todos os módulos assíncronos importem rigorosamente a mesma referência única do bundle principal.
+- **Status:** **CORRIGIDO E VALIDADO** (Comprovado em execução com Chrome Headless renderizando com sucesso a tela de Login sem erros de console).
+
 ---
 
 ## 7. CLASSIFICAÇÃO QUANTITATIVA DE PRIORIDADES
 
 | Prioridade | Total Identificado | Corrigidos e Validados | Pendências Abertas |
 | :--- | :---: | :---: | :---: |
-| **P0 — Bloqueante** | 2 | 2 | **0** |
+| **P0 — Bloqueante** | 3 | 3 | **0** |
 | **P1 — Alta** | 4 | 4 | **0** |
 | **P2 — Média** | 2 | 2 | **0** |
 | **P3 — Baixa (Pós-Lançamento)** | 2 | 0 | **2** |
-| **TOTAL** | **10** | **8** | **2 (P3 Não-Impeditivas)** |
+| **TOTAL** | **11** | **9** | **2 (P3 Não-Impeditivas)** |
 
 ### Detalhamento das 2 Pendências P3 (Não-Impeditivas):
 1. **NACIF-009 (P3):** Suporte a Webhooks assíncronos externos de adquirentes bancárias em ambiente de homologação offline (Estimativa: 12h, Planejamento: Sprint 1.1 pós-lançamento. O sistema atualmente opera perfeitamente com gestão nativa de planos e checkout integrado).
