@@ -43,7 +43,6 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Sun,
   UserCircle,
   Wrench,
@@ -647,23 +646,6 @@ export default function Layout() {
                 <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
                   <Calculator className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/calculator") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Calculadora</span>}
-                </div>
-              </Link>
-
-              <Link
-                to="/ai-assistant"
-                title={sidebarCollapsed ? "Assistente IA" : undefined}
-                className={`group flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
-                  sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-9 w-full justify-between px-2.5"
-                } ${
-                  isItemActive("/ai-assistant")
-                    ? "bg-[#0F172A] text-white font-black shadow-sm"
-                    : "text-[#475467] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
-                }`}
-              >
-                <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
-                  <Sparkles className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/ai-assistant") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
-                  {!sidebarCollapsed && <span className="truncate">Assistente IA</span>}
                 </div>
               </Link>
 
