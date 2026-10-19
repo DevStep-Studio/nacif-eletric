@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import StatusState from "@/components/system/StatusState";
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Home, RefreshCw, AlertCircle } from "lucide-react";
+import { Home, RefreshCw } from "lucide-react";
 
 export default function ServerErrorPage({ error = null }) {
   const [errorId] = useState(() => Math.random().toString(36).substring(2, 9).toUpperCase());

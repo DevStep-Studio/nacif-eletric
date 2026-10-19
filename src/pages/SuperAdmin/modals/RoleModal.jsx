@@ -12,10 +12,8 @@ import { Label } from "@/components/ui/label";
 import {
   AlertCircle,
   CheckCircle2,
-  CheckSquare,
   Loader2,
   Shield,
-  Square,
 } from "lucide-react";
 import { SYSTEM_MODULES, ACTIONS } from "@/lib/rbac";
 import { recordAuditEvent } from "@/lib/auditLogger";

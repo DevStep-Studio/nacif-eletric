@@ -1,12 +1,9 @@
 import { Link } from "react-router-dom";
 import {
-  Activity,
   BookOpen,
   Calculator,
-  Cpu,
   FileSpreadsheet,
   FileText,
-  Flame,
   Layers,
   ScanLine,
   Shield,

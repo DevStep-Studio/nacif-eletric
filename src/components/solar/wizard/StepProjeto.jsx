@@ -2,15 +2,10 @@ import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
-  Building2,
   ChevronDown,
   FileCheck,
-  Info,
   Loader2,
-  MapPin,
   Rocket,
-  Sun,
-  Zap,
 } from "lucide-react";
 import { getInstantResults } from "@/lib/solarWizardState";
 import { DEFAULT_SIZING_PREMISES } from "@/lib/solarSizing";

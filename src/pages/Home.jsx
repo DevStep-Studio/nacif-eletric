@@ -1,44 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Activity,
-  AlertTriangle,
-  ArrowRight,
   ArrowUpRight,
-  BarChart3,
-  BookOpen,
-  Building2,
   Calendar,
-  Calculator,
-  Check,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Coins,
-  Cpu,
   Download,
   Eye,
   FileSpreadsheet,
-  FileText,
-  Filter,
   FolderOpen,
   GitBranch,
-  Grid2X2,
   HelpCircle,
-  Layers,
   LayoutGrid,
   Loader2,
   MoreHorizontal,
-  PencilLine,
   Plus,
-  RefreshCw,
-  ScanLine,
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
   Trash2,
-  Upload,
   Zap,
 } from "lucide-react";
 import {
@@ -56,13 +35,11 @@ import { backend } from "@/api/backendClient";
 import { useAuth } from "@/lib/AuthContext";
 import { calcProjectMetrics } from "@/lib/electricalEngine";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -72,7 +49,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getProjectProgress } from "@/lib/projectProgress";
 
 const CHECKLIST_STORAGE_KEY = "nacif:dashboard-onboarding-checklist-hidden";
 
@@ -208,10 +184,10 @@ export default function Home() {
       }
     });
 
-    const displayPowerKw = totalPower > 0 ? totalPower / 1000 : (projects.length > 0 ? 0 : 124.5);
-    const displayCircuits = totalCircuits > 0 ? totalCircuits : (projects.length > 0 ? 0 : 12);
-    const displayProjects = projects.length > 0 ? projects.length : 8;
-    const estimatedBudget = totalPower > 0 ? totalPower * 0.48 + 12000 : (projects.length > 0 ? 0 : 60652);
+    const displayPowerKw = totalPower > 0 ? totalPower / 1000 : 0;
+    const displayCircuits = totalCircuits;
+    const displayProjects = projects.length;
+    const estimatedBudget = totalPower > 0 ? totalPower * 0.48 + 12000 : 0;
 
     return {
       projectCount: displayProjects,
@@ -728,7 +704,7 @@ export default function Home() {
                     className="cursor-pointer hover:opacity-90 transition-opacity"
                     onClick={(entry) => {
                       if (entry?.id && !String(entry.id).startsWith("demo_")) {
-                        navigate(`/panel?id=${entry.id}`);
+                        navigate(`/panel-generator?project=${entry.id}`);
                       }
                     }}
                   />
@@ -816,7 +792,7 @@ export default function Home() {
                     className="cursor-pointer"
                     onClick={(entry) => {
                       if (entry?.id && !String(entry.id).startsWith("demo_")) {
-                        navigate(`/panel?id=${entry.id}`);
+                        navigate(`/panel-generator?project=${entry.id}`);
                       }
                     }}
                   />
@@ -936,7 +912,7 @@ export default function Home() {
                 ) : (
                   filteredProjects.map((proj) => {
                     const isSelected = selectedProjectIds.has(proj.id);
-                    const powerW = proj.total_demand_w || (proj.circuits?.length ? proj.circuits.reduce((acc, c) => acc + Number(c.power_w || 0), 0) : 15400);
+                    const powerW = proj.total_demand_w || (proj.circuits?.length ? proj.circuits.reduce((acc, c) => acc + Number(c.power_w || 0), 0) : 0);
                     const statusText = proj.status === "concluido" ? "Concluído" : proj.circuits?.length ? "Conforme" : "Em análise";
 
                     return (
@@ -974,10 +950,10 @@ export default function Home() {
                           </span>
                         </td>
                         <td className="py-3.5 px-3 font-semibold text-[#475467] truncate max-w-[160px]">
-                          {proj.client_name || "Engenharia Nacif"}
+                          {proj.client_name || "Não informado"}
                         </td>
                         <td className="py-3.5 px-3 font-semibold text-[#64748B]">
-                          {proj.city || "Belo Horizonte"}
+                          {proj.city || "Não informada"}
                         </td>
                         <td className="py-3.5 px-3">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 border border-emerald-200">

@@ -1,62 +1,38 @@
 import { useEffect, useMemo, useState } from "react";
 import { Outlet, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Activity,
   AlertTriangle,
-  ArrowLeft,
-  BarChart3,
   Bell,
-  BellRing,
   BookOpen,
-  Building2,
   Calculator,
-  CheckCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Compass,
   CreditCard,
   FileSpreadsheet,
-  FileText,
   FolderOpen,
   GitBranch,
-  Grid2X2,
   HelpCircle,
   Home,
-  Info,
-  Layers,
   LayoutGrid,
   LogOut,
   Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelTop,
-  Palette,
-  PencilLine,
   Plus,
-  ScanLine,
   Search,
   Settings,
-  Share2,
-  Shield,
   ShieldAlert,
-  ShieldCheck,
   Sun,
   UserCircle,
-  Wrench,
   X,
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { hasFullSystemAccess, isSuperAdmin } from "@/lib/professionalAccess";
-import { useBranding, useNotifications, formatNotificationTime } from "@/lib/appPreferences";
+import { useBranding, useNotifications } from "@/lib/appPreferences";
 import { backend } from "@/api/backendClient";
 import { ISSUES_CHANGED_EVENT } from "@/lib/issuePersistence";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   DropdownMenu,
   DropdownMenuContent,

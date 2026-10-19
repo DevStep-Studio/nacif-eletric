@@ -11,7 +11,6 @@ import {
   calcMainProtection,
   calcProjectMetrics,
   generateDefaultPanelLayout,
-  generateDefaultPanelWires,
   generateAllPanelWires,
   getPrimaryPanelBoard,
   isDedicatedSolarBoard,
@@ -20,14 +19,13 @@ import {
   nextBusbarIndex,
   remapBusbarIndices,
 } from "@/lib/electricalEngine";
-import { syncPanelDeviceToCircuit, syncCircuitsToPanelBoard } from "@/lib/projectUnifiedSync";
+import { syncPanelDeviceToCircuit } from "@/lib/projectUnifiedSync";
 import { useToast } from "@/components/ui/use-toast";
 import {
   calculateOrthogonalRoute,
   normalizeSavedBoard,
   extractPanelObstacles,
   resolvePinPosition,
-  resolveTerminalPosition,
   getNeutralBusLayout,
   getGroundBusLayout,
   getThreePhaseOutputPin,
@@ -38,9 +36,6 @@ import {
   inferTerminalDirection,
   simplifyOrthogonalPoints,
   isOrthogonalPath,
-  ROUTING_GRID_SIZE,
-  PORT_EXIT_OFFSET,
-  OBSTACLE_PADDING,
   WIRE_SPACING,
   DEFAULT_CORNER_RADIUS,
 } from "@/lib/orthogonalRouter";
@@ -74,20 +69,14 @@ import {
   AlertTriangle,
   Copy,
   RotateCcw,
-  Compass,
   Eye,
   EyeOff,
-  Layers,
   Activity,
-  Sparkles,
-  ShieldCheck,
-  HelpCircle,
   Crosshair,
   Minus,
   Scissors,
   Wand2,
 } from "lucide-react";
-import PageHeader from "@/components/PageHeader";
 
 // ─── CONSTANTES DE DIMENSIONAMENTO DO PAINEL ───────────────────────────────────
 const PANEL_W = 850;

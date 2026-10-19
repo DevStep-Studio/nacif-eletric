@@ -40,19 +40,25 @@ export default function SettingsPage() {
 
   const save = async (patch = form) => {
     setSaving(true);
-    const updated = await backend.auth.updateMe(patch);
-    setUser(updated);
-    setForm({
-      full_name: updated.full_name || "",
-      profession: updated.profession || updated.profissao || "",
-      company: updated.company || "",
-      crea: updated.crea || "",
-      phone: updated.phone || "",
-      avatar_url: updated.avatar_url || "",
-    });
-    window.dispatchEvent(new CustomEvent("voltai:user-updated"));
-    await checkUserAuth();
-    setSaving(false);
+    try {
+      const updated = await backend.auth.updateMe(patch);
+      setUser(updated);
+      setForm({
+        full_name: updated.full_name || "",
+        profession: updated.profession || updated.profissao || "",
+        company: updated.company || "",
+        crea: updated.crea || "",
+        phone: updated.phone || "",
+        avatar_url: updated.avatar_url || "",
+      });
+      window.dispatchEvent(new CustomEvent("voltai:user-updated"));
+      await checkUserAuth();
+    } catch (err) {
+      console.error("Erro ao salvar dados do perfil:", err);
+      alert("Não foi possível salvar as configurações. Verifique os dados e tente novamente.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAvatar = async (file) => {

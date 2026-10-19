@@ -15,10 +15,7 @@ import {
   Trash2,
   Check,
   Sparkles,
-  Zap,
   Info,
-  Maximize2,
-  Tag,
   Factory,
   Search,
 } from "lucide-react";

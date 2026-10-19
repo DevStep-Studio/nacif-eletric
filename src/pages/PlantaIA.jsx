@@ -18,10 +18,10 @@ import {
   Upload,
   Cpu, GitBranch, ChevronRight, Copy, FileText,
   Trash2, Settings2, Download, House, SquarePlus, Minus, RotateCcw,
-  DoorOpen, PanelTop, Cable, MousePointer2, Spline, Type,
+  DoorOpen, PanelTop, Cable, Spline, Type,
   Zap, Lightbulb, Network, ShieldCheck,
   AlertCircle, CheckCircle2, Coins, Calculator, ScanLine, Loader2, Save,
-  Search, X, ChevronDown, ChevronUp, Sparkles, Plus, Check
+  Search, X, ChevronDown, Check
 } from "lucide-react";
 import FloorPlanCanvas, { createKonvaHouseTemplate } from "@/components/planta/FloorPlanCanvas";
 import { createDefaultLayerState, layerVisibilityForLegacyCanvas, normalizeLayerState } from "@/editor/layers/defaultLayers";
@@ -29,7 +29,7 @@ import { normalizePlantDocument } from "@/editor/schemas/plantDocument";
 import { normalizeSnapSettings } from "@/editor/snapping/snapEngine";
 import { normalizeUnitSettings } from "@/editor/units/unitSystem";
 import { autoBalancePhases, buildProjectElectricalSyncPayload, calcCircuit, getDefaultDemandFactor } from "@/lib/electricalEngine";
-import { syncPlantPointsToCircuits, validateUnifiedProject } from "@/lib/projectUnifiedSync";
+import { syncPlantPointsToCircuits } from "@/lib/projectUnifiedSync";
 import {
   BUDGET_MATERIAL_PRICES,
   buildConduitBudgetItems,
@@ -73,7 +73,6 @@ import {
 } from "@/lib/nbr5410RoomPlanning";
 import AIAnalysisPanel from "@/components/planta/AIAnalysisPanel";
 import { ElectricalSymbol, TOOL_TYPES, CATEGORY_LABELS, CATEGORY_STYLES, PLANT_SYMBOL_LABELS, CONDUIT_SYMBOLS } from "@/components/planta/ElectricalSymbols";
-import PageHeader from "@/components/PageHeader";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 

@@ -7,7 +7,7 @@ import { normalizeSubscription } from "@/lib/subscriptionPlans";
 import DangerConfirmDialog from "@/components/system/DangerConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, ArrowLeft, CheckCircle2, CreditCard, Shield, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CreditCard } from "lucide-react";
 
 export default function CancelSubscriptionPage() {
   const navigate = useNavigate();

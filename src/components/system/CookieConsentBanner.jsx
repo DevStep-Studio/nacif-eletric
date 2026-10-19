@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Cookie, Shield, Check, Settings2, X } from "lucide-react";
+import { Cookie, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,7 +10,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 
 const COOKIE_CONSENT_KEY = "nacif_cookie_consent_v1";
 

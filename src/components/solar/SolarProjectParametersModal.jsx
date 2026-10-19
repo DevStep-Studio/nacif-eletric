@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ArrowLeft, Check, Loader2, Save, Sliders, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Loader2, Save, Sliders } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import {
   FULL_PROJECT_STEPS,

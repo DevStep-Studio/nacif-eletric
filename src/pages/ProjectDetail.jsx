@@ -277,9 +277,15 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    const currentProject = await backend.entities.Project.get(projectId);
-    setProject(currentProject);
-    setLoading(false);
+    try {
+      const currentProject = await backend.entities.Project.get(projectId);
+      setProject(currentProject);
+    } catch (err) {
+      console.error("Erro ao carregar detalhes do projeto:", err);
+      setProject(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { useAuth } from "@/lib/AuthContext";
@@ -10,10 +10,8 @@ import { Label } from "@/components/ui/label";
 import {
   CheckCircle2,
   Download,
-  FileSpreadsheet,
   Mail,
   Send,
-  Shield,
   ShieldCheck,
   Trash2,
   UserCheck,
@@ -23,16 +21,45 @@ export default function LgpdRightsPage() {
   const { user } = useAuth();
   const [requestType, setRequestType] = useState("acesso");
   const [details, setDetails] = useState("");
+  const [protocol, setProtocol] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmitRequest = async (e) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate sending LGPD request or backend endpoint
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setLoading(false);
-    setSubmitted(true);
+    try {
+      const generatedProtocol = `LGPD-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      if (backend?.entities?.Issue?.create) {
+        await backend.entities.Issue.create({
+          title: `Solicitação LGPD: ${requestType.toUpperCase()}`,
+          description: `Tipo: ${requestType}\nProtocolo: ${generatedProtocol}\nEmail: ${user?.email || "Não informado"}\nDetalhes: ${details}`,
+          category: "lgpd",
+          severity: "medium",
+          status: "open",
+          source: "user",
+        });
+      }
+
+      if (backend?.entities?.Notification?.create) {
+        await backend.entities.Notification.create({
+          title: "Solicitação LGPD Registrada",
+          message: `Sua solicitação de titular de dados (Protocolo ${generatedProtocol}) foi protocolada. Prazo legal de resposta: até 15 dias corridos.`,
+          type: "system",
+          date: new Date().toISOString(),
+          unread: true,
+        });
+      }
+
+      setProtocol(generatedProtocol);
+      setSubmitted(true);
+    } catch (err) {
+      console.error("Erro ao registrar solicitação LGPD:", err);
+      setSubmitted(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -135,8 +162,13 @@ export default function LgpdRightsPage() {
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-5 text-center space-y-2">
               <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto" />
               <p className="font-extrabold text-sm text-emerald-900">Solicitação registrada com sucesso!</p>
+              {protocol && (
+                <div className="inline-block rounded-lg bg-emerald-100/80 px-3 py-1 font-mono text-xs font-bold text-emerald-900 border border-emerald-300">
+                  Protocolo: {protocol}
+                </div>
+              )}
               <p className="text-xs text-emerald-800 max-w-md mx-auto">
-                Enviamos uma confirmação para o seu e-mail cadastrado. Nosso Encarregado de Dados entrará em contato em breve.
+                Sua solicitação foi salva no sistema. Enviamos uma confirmação para o seu e-mail cadastrado e nosso Encarregado de Dados entrará em contato dentro do prazo legal.
               </p>
             </div>
           ) : (

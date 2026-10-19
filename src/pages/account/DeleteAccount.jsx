@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { useAuth } from "@/lib/AuthContext";
 import { backend } from "@/api/backendClient";
 import DangerConfirmDialog from "@/components/system/DangerConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ShieldAlert, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Trash2 } from "lucide-react";
 
 export default function DeleteAccountPage() {
   const navigate = useNavigate();

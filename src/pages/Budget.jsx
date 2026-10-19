@@ -7,7 +7,6 @@ import {
   Upload,
   ChevronDown,
   FolderOpen,
-  Zap,
   Plus,
   Sparkles,
   Trash2,
@@ -27,17 +26,15 @@ import { downloadBudgetPDF, downloadBudgetCSV } from "@/lib/budgetExportUtils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import PageHeader from "@/components/PageHeader";
-import { DEFAULT_LOGO_URL, DEFAULT_COMPACT_LOGO_URL } from "@/lib/brandingDefaults";
+import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
 import MaterialProductThumb from "@/components/MaterialProductThumb";
 import {
   CATEGORY_STYLES,
-  getMaterialProductInfo,
   getMaterialDataUriForPrint,
 } from "@/lib/materialProductCatalog";
 import {
   buildProjectBudgetMaterials,
   estimateLocalMaterialPrice,
-  getProjectLogo,
   normalizeManualBudgetItems,
 } from "@/lib/projectBudgetMaterials";
 

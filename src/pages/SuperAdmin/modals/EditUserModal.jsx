@@ -14,11 +14,9 @@ import {
   CheckCircle2,
   Edit,
   Loader2,
-  Shield,
-  ShieldAlert,
 } from "lucide-react";
 import { backend } from "@/api/backendClient";
-import { DEFAULT_ROLES, isSuperAdmin } from "@/lib/rbac";
+import { DEFAULT_ROLES } from "@/lib/rbac";
 
 export default function EditUserModal({ open, onOpenChange, user, onUserUpdated }) {
   const [fullName, setFullName] = useState("");

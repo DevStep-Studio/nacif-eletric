@@ -12,7 +12,6 @@ import {
   Copy,
   KeyRound,
   Loader2,
-  ShieldAlert,
 } from "lucide-react";
 import { backend } from "@/api/backendClient";
 

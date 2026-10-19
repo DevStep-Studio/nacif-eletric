@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Home, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Home } from "lucide-react";
 import { useBranding } from "@/lib/appPreferences";
 import { Button } from "@/components/ui/button";
 import PublicFooter from "./PublicFooter";

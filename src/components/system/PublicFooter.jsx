@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { Shield, HelpCircle, FileText, CheckCircle2 } from "lucide-react";
 import { useBranding } from "@/lib/appPreferences";
 
 export default function PublicFooter({ className = "" }) {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, Sparkles, Wrench, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, Wrench, X } from "lucide-react";
 
 export default function SystemBanner({
   id = "default-system-banner",

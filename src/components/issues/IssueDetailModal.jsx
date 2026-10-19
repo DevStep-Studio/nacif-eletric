@@ -2,27 +2,19 @@ import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertOctagon,
   AlertTriangle,
-  Calendar,
-  CheckCircle2,
   Clock,
-  ExternalLink,
   Eye,
-  FileText,
   Lock,
   MessageSquare,
   Send,
   ShieldAlert,
   ShieldCheck,
-  User,
   X,
   ChevronDown,
   ChevronUp,

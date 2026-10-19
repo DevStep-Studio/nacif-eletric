@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Trash2, X, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,

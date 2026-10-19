@@ -1,6 +1,5 @@
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Zap, Wrench, CheckCircle2 } from "lucide-react";
 
 const RELEASES = [
   {

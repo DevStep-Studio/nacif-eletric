@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { useAuth } from "@/lib/AuthContext";
 import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
-import { Download, FileJson, CheckCircle2, ShieldCheck, Database, Loader2 } from "lucide-react";
+import { Download, FileJson, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function ExportDataPage() {
   const { user } = useAuth();

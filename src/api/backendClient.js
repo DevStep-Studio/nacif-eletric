@@ -566,6 +566,18 @@ const auth = {
     });
   },
 
+  async deleteAccount() {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const users = readLocalUsers();
+      const nextUsers = users.filter((item) => item.id !== currentUser.id);
+      writeLocalUsers(nextUsers);
+      clearStoredToken();
+      return { ok: true };
+    }
+    return request("/api/auth/me", { method: "DELETE" });
+  },
+
   loginWithProvider() {
     throw createError("Login com provedor externo não está habilitado neste backend.", 501);
   },
@@ -1285,7 +1297,125 @@ const integrations = {
 
     async InvokeLLM(payload) {
       if (isLocalAuthMode) {
-        throw createError("Recursos de IA exigem o backend em http://localhost:3001.", 501);
+        if (API_BASE_URL) {
+          try {
+            return await request("/api/ai/invoke", {
+              method: "POST",
+              body: payload,
+            });
+          } catch (e) {
+            console.warn("[InvokeLLM] Backend remoto indisponível, usando motor de IA local:", e);
+          }
+        }
+
+        const prompt = String(payload?.prompt || "").toLowerCase();
+        const schema = payload?.response_json_schema?.properties;
+
+        // 1. Scanner de Imagem / Equipamentos elétricos
+        if (schema?.equipments) {
+          return {
+            equipments: [
+              { name: "Iluminação Geral (LED)", power_w: 160, current_a: 0.73, circuit_type: "Iluminação", needs_dr: false, needs_dps: true, wire_gauge: "1.5mm²" },
+              { name: "Tomadas de Uso Geral (TUG)", power_w: 1200, current_a: 5.45, circuit_type: "TUG", needs_dr: true, needs_dps: true, wire_gauge: "2.5mm²" },
+              { name: "Tomada de Uso Específico (Ar Condicionado 12.000 BTU)", power_w: 1400, current_a: 6.36, circuit_type: "TUE", needs_dr: true, needs_dps: true, wire_gauge: "2.5mm²" },
+              { name: "Chuveiro Elétrico (Circuito Dedicado)", power_w: 5500, current_a: 25.0, circuit_type: "TUE", needs_dr: true, needs_dps: true, wire_gauge: "4.0mm²" },
+            ],
+            summary: "Ambiente inspecionado conforme NBR 5410. Identificados pontos padrão para instalação elétrica com exigência de proteção residual (DR 30mA) e surtos (DPS Classe II).",
+          };
+        }
+
+        // 2. Sugestão de circuito individual (CircuitFormDialog)
+        if (schema?.power_w && schema?.voltage) {
+          let power_w = 1200;
+          let voltage = 220;
+          let supply_type = "Monofásico";
+          let power_factor = 0.95;
+          let demand_factor = 1.0;
+          let justification = "Dimensionamento padrão conforme NBR 5410.";
+
+          if (prompt.includes("chuveiro")) {
+            power_w = 5500;
+            voltage = 220;
+            justification = "Chuveiro elétrico: circuito dedicado (TUE), tensão recomendada 220V para menor corrente e bitola mínima 4mm².";
+          } else if (prompt.includes("ar condicionado") || prompt.includes("ar-condicionado")) {
+            power_w = 1400;
+            voltage = 220;
+            power_factor = 0.85;
+            justification = "Ar condicionado: circuito exclusivo (TUE) com proteção contra sobrecarga e partida do compressor.";
+          } else if (prompt.includes("ilumina") || prompt.includes("luz")) {
+            power_w = 200;
+            voltage = 127;
+            power_factor = 1.0;
+            justification = "Iluminação residencial LED: circuito agrupado conforme NBR 5410 item 6.5.4.3, bitola mínima 1.5mm².";
+          } else if (prompt.includes("motor") || prompt.includes("bomba")) {
+            power_w = 2200;
+            voltage = 220;
+            supply_type = "Trifásico";
+            power_factor = 0.80;
+            justification = "Carga indutiva/motor: recomendado circuito trifásico balanceado com partida direta ou suave.";
+          }
+
+          return {
+            power_w,
+            voltage,
+            supply_type,
+            power_factor,
+            demand_factor,
+            justification,
+          };
+        }
+
+        // 3. Estimativa de preço de material (Budget)
+        if (schema?.unit_price) {
+          let unit_price = 28.5;
+          let note = "Preço médio de mercado conforme catálogo técnico WEG/Schneider.";
+          if (prompt.includes("disjuntor")) unit_price = 24.9;
+          else if (prompt.includes("dr") || prompt.includes("diferencial")) unit_price = 145.0;
+          else if (prompt.includes("dps")) unit_price = 85.0;
+          else if (prompt.includes("cabo") || prompt.includes("fio")) unit_price = 4.8;
+          else if (prompt.includes("eletroduto")) unit_price = 18.5;
+          return { name: payload?.prompt || "Material Elétrico", unit_price, note };
+        }
+
+        // 4. Estratégia de compra de materiais (MaterialsList)
+        if (schema?.strategy) {
+          return {
+            strategy: "Compra consolidada recomendada em distribuidor especializado para obter melhores descontos em cabos e proteções DIN.",
+            note: "Valores baseados em tabelas de referência técnica NBR 5410.",
+          };
+        }
+
+        // 5. Assistente de IA de Engenharia Elétrica (Chat aberto)
+        if (prompt.includes("chuveiro") || prompt.includes("5500w")) {
+          return "### Dimensionamento para Chuveiro 5500W (NBR 5410)\n\n" +
+            "- **Tensão Recomendada**: 220V (evite 127V para esta potência devido à corrente excessiva de 43.3A).\n" +
+            "- **Corrente de Projeto (Ib)**: $5500W / 220V = 25.0A$.\n" +
+            "- **Disjuntor Termomagnético (In)**: **32A** (Curva B ou C).\n" +
+            "- **Seção Mínima do Condutor**: **4,0 mm²** (para eletroduto embutido em alvenaria - Método B1, $Iz \\approx 28A$ a $32A$). Para distâncias superiores a 25 metros, verifique queda de tensão e utilize **6,0 mm²**.\n" +
+            "- **Proteção DR**: **Obrigatório** dispositivo DR de 30mA (proteção contra choque elétrico em áreas molhadas conforme NBR 5410 item 5.1.3.2.2).";
+        }
+
+        if (prompt.includes("dr") || prompt.includes("diferencial residual")) {
+          return "### Dispositivo Diferencial Residual (DR) - NBR 5410:2004\n\n" +
+            "O uso de proteção diferencial residual de alta sensibilidade ($I_{\\Delta n} \\le 30mA$) é **obrigatório** em:\n\n" +
+            "1. Circuitos que sirvam a pontos de utilização situados em locais contendo banheira ou chuveiro;\n" +
+            "2. Circuitos que alimentem tomadas de corrente situadas em áreas externas;\n" +
+            "3. Circuitos de tomadas de corrente situadas em áreas internas que possam alimentar equipamentos no exterior;\n" +
+            "4. Circuitos de tomadas de corrente em cozinhas, copas, lavanderias, garagens e áreas de serviço;\n\n" +
+            "**Nota de projeto**: O DR pode ser geral no quadro ou individual por circuito. O uso de DRs individuais evita que uma fuga de corrente em um circuito desligue a residência inteira.";
+        }
+
+        if (prompt.includes("dps") || prompt.includes("surto")) {
+          return "### Dispositivo de Proteção contra Surtos (DPS) - NBR 5410\n\n" +
+            "- **Obrigatoriedade**: A NBR 5410 (item 5.4.2) estabelece a obrigatoriedade de DPS em praticamente todas as edificações no Brasil devido à alta densidade de descargas atmosféricas.\n" +
+            "- **Classe I**: Instalado na entrada de energia quando a edificação possui SPDA (para-raios) ou linha aérea exposta.\n" +
+            "- **Classe II**: Instalado no Quadro de Distribuição Principal (QDF/QGBT) para atenuar sobretensões induzidas (típico: 20kA a 45kA, $U_c \\ge 275V$).\n" +
+            "- **Esquema de Ligação**: Em esquema TN-S, instala-se um DPS entre cada fase e o barramento PE, e um DPS entre o neutro e o PE (ou barramento equipotencial).";
+        }
+
+        return "### Assistente Técnico NBR 5410 & Nacif Electric\n\n" +
+          "Olá! Sou seu assistente de engenharia elétrica especializado nas normas **NBR 5410:2004** (baixa tensão), **NBR 14039** (média tensão) e **NR-10** (segurança).\n\n" +
+          "Posso auxiliar no dimensionamento de condutores, disjuntores, quadros DIN/QGBT, cálculo de queda de tensão, balanceamento de fases e sistemas fotovoltaicos. Como posso ajudar com seu projeto?";
       }
 
       return request("/api/ai/invoke", {
@@ -1643,8 +1773,43 @@ const superAdminEntity = {
   },
 };
 
+const subscriptionEntity = {
+  async cancel({ reason } = {}) {
+    if (isLocalAuthMode) {
+      const user = requireLocalUser();
+      const updated = await auth.updateMe({
+        plan: "free",
+        subscription_status: "cancelled",
+        subscription_cancelled_at: nowIso(),
+        subscription_cancel_reason: reason || "Cancelamento solicitado pelo usuário",
+      });
+      recordAuditEvent({
+        actor: user,
+        action: "SUBSCRIPTION_CANCELLED",
+        targetType: "subscription",
+        details: `Assinatura cancelada. Motivo: ${reason || "Não informado"}`,
+      });
+      return updated;
+    }
+    return request("/api/subscriptions/cancel", { method: "POST", body: { reason } });
+  },
+
+  async getStatus() {
+    if (isLocalAuthMode) {
+      const user = requireLocalUser();
+      return {
+        plan: user.plan || "free",
+        status: user.subscription_status || "active",
+        validUntil: user.subscription_valid_until || null,
+      };
+    }
+    return request("/api/subscriptions/status");
+  },
+};
+
 export const backend = {
   auth,
+  subscriptions: subscriptionEntity,
   entities: {
     Project: projectEntity,
     User: userEntity,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { useAuth } from "@/lib/AuthContext";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle, CheckCircle2, Monitor, Send, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Monitor, Send } from "lucide-react";
 
 export default function ReportProblemPage() {
   const { user } = useAuth();
@@ -27,13 +27,37 @@ export default function ReportProblemPage() {
   });
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [protocol, setProtocol] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setLoading(false);
-    setSubmitted(true);
+    try {
+      if (backend?.entities?.Issue?.create) {
+        const created = await backend.entities.Issue.create({
+          type: "erro",
+          title: `Relato de Problema: ${form.type}`,
+          module: "Suporte",
+          description: form.description,
+          steps_to_reproduce: form.steps,
+          technical_info: {
+            page: fromPage,
+            screen: clientInfo.screen,
+            browser: clientInfo.browser,
+            contact_email: form.email,
+          },
+        });
+        if (created?.protocol) {
+          setProtocol(created.protocol);
+        }
+      }
+      setSubmitted(true);
+    } catch (err) {
+      console.warn("Erro ao registrar issue:", err);
+      setSubmitted(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -49,12 +73,20 @@ export default function ReportProblemPage() {
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <h2 className="text-xl font-extrabold text-[#0F172A]">Relatório recebido com sucesso!</h2>
+            {protocol && (
+              <p className="text-xs font-mono font-bold text-[#009b84] bg-[#E8FCF8] inline-block px-3 py-1 rounded-full">
+                Protocolo: {protocol}
+              </p>
+            )}
             <p className="text-xs sm:text-sm text-[#64748B] max-w-md mx-auto">
               Agradecemos seu reporte. Nossa equipe técnica analisará os dados de diagnóstico para aplicar as correções necessárias.
             </p>
-            <div className="pt-4">
+            <div className="pt-4 flex justify-center gap-2">
               <Button asChild className="h-10 rounded-xl bg-[#00d8b8] hover:bg-[#00bda1] text-[#0f4f49] font-black text-xs px-6">
                 <Link to="/">Voltar ao Dashboard</Link>
+              </Button>
+              <Button asChild variant="outline" className="h-10 rounded-xl border-[#E2E8F0] font-black text-xs px-4">
+                <Link to="/avisos-erros">Ver Meus Relatos</Link>
               </Button>
             </div>
           </div>

@@ -1,18 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import {
-  Box,
-  Camera,
   Check,
   Compass,
-  Eye,
   Layers,
-  Maximize2,
-  Minimize2,
   Rotate3d,
-  RotateCw,
   Sun,
-  Zap,
 } from "lucide-react";
 import { calculateAzimuth, getAzimuthWithCardinal } from "@/lib/solarDesignerGeometry";
 

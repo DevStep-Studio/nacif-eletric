@@ -1,14 +1,12 @@
 import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
   Calendar,
   ChevronDown,
   ChevronRight,
   FileText,
   Printer,
   Search,
-  ShieldCheck,
 } from "lucide-react";
 import { useBranding } from "@/lib/appPreferences";
 import { Button } from "@/components/ui/button";

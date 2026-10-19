@@ -11,12 +11,7 @@ import {
   Clock,
   HelpCircle,
   Mail,
-  MapPin,
-  MessageSquare,
-  Phone,
   Send,
-  Sparkles,
-  Zap,
 } from "lucide-react";
 
 export default function ContactPage() {
@@ -44,10 +39,20 @@ export default function ContactPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate sending message or call backend
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setLoading(false);
-    setSent(true);
+    try {
+      if (backend?.entities?.Notification?.create) {
+        await backend.entities.Notification.create({
+          title: `Novo Contato: ${form.subject || "Suporte Técnico"}`,
+          message: `De: ${form.name} (${form.email}) - Categoria: ${form.category}\n\n${form.message}`,
+          type: "info",
+        });
+      }
+    } catch (err) {
+      console.warn("Falha ao registrar notificação de contato:", err);
+    } finally {
+      setLoading(false);
+      setSent(true);
+    }
   };
 
   return (

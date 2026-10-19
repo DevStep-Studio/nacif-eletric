@@ -6,14 +6,12 @@ import {
   CheckCircle2,
   Clock,
   CreditCard,
-  Home,
   Lock,
   RefreshCw,
   Search,
   ShieldAlert,
   WifiOff,
   Wrench,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

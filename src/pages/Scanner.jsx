@@ -14,16 +14,23 @@ export default function Scanner() {
   const handleUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    setImage(URL.createObjectURL(file));
-    const { file_url } = await backend.integrations.Core.UploadFile({ file });
-    setImageUrl(file_url);
+    const localBlob = URL.createObjectURL(file);
+    setImage(localBlob);
+    try {
+      const { file_url } = await backend.integrations.Core.UploadFile({ file });
+      setImageUrl(file_url || localBlob);
+    } catch (err) {
+      console.warn("Upload falhou, utilizando blob local:", err);
+      setImageUrl(localBlob);
+    }
   };
 
   const analyze = async () => {
     if (!imageUrl) return;
     setLoading(true);
-    const res = await backend.integrations.Core.InvokeLLM({
-      prompt: `Analise esta imagem de um ambiente/instalação elétrica. Identifique todos os equipamentos elétricos visíveis (tomadas, interruptores, luminárias, ar condicionado, chuveiro, motores, quadros elétricos, eletrodomésticos).
+    try {
+      const res = await backend.integrations.Core.InvokeLLM({
+        prompt: `Analise esta imagem de um ambiente/instalação elétrica. Identifique todos os equipamentos elétricos visíveis (tomadas, interruptores, luminárias, ar condicionado, chuveiro, motores, quadros elétricos, eletrodomésticos).
 
 Para cada equipamento encontrado, forneça:
 - nome do equipamento
@@ -35,31 +42,35 @@ Para cada equipamento encontrado, forneça:
 - bitola de fio recomendada
 
 Base nas normas NBR 5410.`,
-      file_urls: [imageUrl],
-      response_json_schema: {
-        type: "object",
-        properties: {
-          equipments: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                name: { type: "string" },
-                power_w: { type: "number" },
-                current_a: { type: "number" },
-                circuit_type: { type: "string" },
-                needs_dr: { type: "boolean" },
-                needs_dps: { type: "boolean" },
-                wire_gauge: { type: "string" }
+        file_urls: [imageUrl],
+        response_json_schema: {
+          type: "object",
+          properties: {
+            equipments: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  power_w: { type: "number" },
+                  current_a: { type: "number" },
+                  circuit_type: { type: "string" },
+                  needs_dr: { type: "boolean" },
+                  needs_dps: { type: "boolean" },
+                  wire_gauge: { type: "string" }
+                }
               }
-            }
-          },
-          summary: { type: "string" }
+            },
+            summary: { type: "string" }
+          }
         }
-      }
-    });
-    setResult(res);
-    setLoading(false);
+      });
+      setResult(res);
+    } catch (err) {
+      console.error("Falha ao analisar ambiente:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -9,10 +9,8 @@ import { getEffectivePanelCount, getRoofPhysicalLayout } from "@/lib/solarWizard
 import {
   AlertTriangle,
   CheckCircle2,
-  Compass,
   Home,
   Info,
-  Layers,
   Maximize2,
   Pencil,
   RotateCw,

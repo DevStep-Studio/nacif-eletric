@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import StatusState from "@/components/system/StatusState";
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { Button } from "@/components/ui/button";
-import { Clock, Home, RefreshCw } from "lucide-react";
+import { Home, RefreshCw } from "lucide-react";
 
 export default function PaymentPendingPage() {
   return (

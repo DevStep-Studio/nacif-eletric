@@ -172,9 +172,14 @@ export default function Projects() {
     const confirmed = window.confirm("Excluir este projeto? Esta ação não pode ser desfeita.");
     if (!confirmed) return;
 
-    await backend.entities.Project.delete(id);
-    setSelectedIds((ids) => ids.filter((selectedId) => selectedId !== id));
-    load();
+    try {
+      await backend.entities.Project.delete(id);
+      setSelectedIds((ids) => ids.filter((selectedId) => selectedId !== id));
+      load();
+    } catch (err) {
+      console.error("Erro ao excluir projeto:", err);
+      alert("Não foi possível excluir o projeto. Tente novamente.");
+    }
   };
 
   const handleBulkDelete = async () => {
@@ -182,9 +187,15 @@ export default function Projects() {
     const confirmed = window.confirm(`Excluir ${selectedIds.length} projeto(s) selecionado(s)? Esta ação não pode ser desfeita.`);
     if (!confirmed) return;
 
-    await Promise.all(selectedIds.map((id) => backend.entities.Project.delete(id)));
-    setSelectedIds([]);
-    load();
+    try {
+      await Promise.all(selectedIds.map((id) => backend.entities.Project.delete(id)));
+      setSelectedIds([]);
+      load();
+    } catch (err) {
+      console.error("Erro ao excluir projetos em lote:", err);
+      alert("Não foi possível excluir alguns dos projetos selecionados.");
+      load();
+    }
   };
 
   const toggleSelected = (id) => {

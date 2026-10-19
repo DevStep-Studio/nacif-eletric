@@ -2,15 +2,9 @@ import { Link } from "react-router-dom";
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { Button } from "@/components/ui/button";
 import {
-  BookOpen,
-  Building2,
-  CheckCircle2,
   Compass,
-  Cpu,
   FileCheck,
   ShieldCheck,
-  Sparkles,
-  Users,
 } from "lucide-react";
 
 export default function AboutPage() {

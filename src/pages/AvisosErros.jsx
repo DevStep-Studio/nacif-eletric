@@ -5,20 +5,13 @@ import {
   AlertTriangle,
   ArrowUpDown,
   CheckCircle2,
-  Clock,
-  Filter,
-  Layers,
   MessageSquare,
   Plus,
-  RefreshCw,
   Search,
   ShieldAlert,
-  ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/AuthContext";
 import { hasFullSystemAccess, isSuperAdmin } from "@/lib/professionalAccess";
 import { backend } from "@/api/backendClient";

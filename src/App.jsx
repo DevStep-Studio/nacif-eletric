@@ -204,6 +204,7 @@ const AuthenticatedApp = () => {
           <Route path="/ai-assistant" element={requireFullAccess(<AIAssistant />)} />
           <Route path="/nbr-library" element={requireFullAccess(<NBRLibrary />)} />
           <Route path="/panel-generator" element={requireFullAccess(<PanelGenerator />)} />
+          <Route path="/panel" element={requireFullAccess(<PanelGenerator />)} />
           <Route path="/budget" element={requireFullAccess(<Budget />)} />
           <Route path="/components-library" element={requireFullAccess(<ComponentsLibrary />)} />
           <Route path="/scanner" element={requireFullAccess(<Scanner />)} />

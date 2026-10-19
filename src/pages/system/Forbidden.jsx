@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import StatusState from "@/components/system/StatusState";
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Home, Lock } from "lucide-react";
+import { ArrowLeft, Home } from "lucide-react";
 
 export default function ForbiddenPage() {
   const navigate = useNavigate();

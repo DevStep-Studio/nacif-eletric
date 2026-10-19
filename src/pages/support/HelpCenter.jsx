@@ -4,20 +4,13 @@ import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  BookOpen,
-  Calculator,
   Compass,
   CreditCard,
-  FileSpreadsheet,
-  FileText,
   GitBranch,
-  HelpCircle,
   LayoutGrid,
   Mail,
-  MessageCircle,
   Search,
   Sun,
-  Zap,
 } from "lucide-react";
 
 const CATEGORIES = [

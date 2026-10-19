@@ -1,6 +1,5 @@
 import LegalPageLayout from "@/components/system/LegalPageLayout";
-import { Link } from "react-router-dom";
-import { ShieldCheck, Lock, Database, RefreshCw, KeyRound, AlertTriangle } from "lucide-react";
+import { ShieldCheck, Lock, Database } from "lucide-react";
 
 const SECTIONS = [
   { id: "arquitetura-seguranca", title: "1. Arquitetura e Proteção em Camadas" },
