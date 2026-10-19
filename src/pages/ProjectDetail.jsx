@@ -6,6 +6,7 @@ import {
   Calculator,
   ChevronDown,
   CheckCircle2,
+  Copy,
   Edit3,
   FileText,
   FolderOpen,
@@ -22,6 +23,7 @@ import { backend } from "@/api/backendClient";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import CircuitFormDialog from "@/components/CircuitFormDialog";
+import EditProjectModal from "@/components/EditProjectModal";
 import PageHeader from "@/components/PageHeader";
 import NextStepCard from "@/components/navigation/NextStepCard";
 import ProjectProgress from "@/components/navigation/ProjectProgress";
@@ -275,6 +277,8 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const load = async () => {
     try {
@@ -285,6 +289,34 @@ export default function ProjectDetail() {
       setProject(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDuplicateProject = async () => {
+    setActionLoading(true);
+    try {
+      const duplicated = await backend.entities.Project.duplicate(projectId);
+      navigate(`/projects/${duplicated.id}`);
+    } catch (err) {
+      console.error("Erro ao duplicar projeto:", err);
+      alert(err?.message || "Não foi possível duplicar o projeto.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    const confirmed = window.confirm(`Tem certeza que deseja excluir o projeto "${project.name}" permanentemente? Todos os circuitos, quadros e plantas associadas serão excluídos.`);
+    if (!confirmed) return;
+
+    setActionLoading(true);
+    try {
+      await backend.entities.Project.delete(projectId);
+      navigate("/projects");
+    } catch (err) {
+      console.error("Erro ao excluir projeto:", err);
+      alert(err?.message || "Não foi possível excluir o projeto.");
+      setActionLoading(false);
     }
   };
 
@@ -356,8 +388,35 @@ export default function ProjectDetail() {
         actionsPlacement="right"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              className="border-[#BCEEE5] bg-white text-[#0f1728] shadow-sm hover:bg-[#F2FFFC]"
+              onClick={() => setIsEditModalOpen(true)}
+              disabled={actionLoading}
+            >
+              <Edit3 className="h-4 w-4 mr-1.5 text-[#00d8b8]" />
+              Editar Dados
+            </Button>
+            <Button
+              variant="outline"
+              className="border-[#BCEEE5] bg-white text-[#0f1728] shadow-sm hover:bg-[#F2FFFC]"
+              onClick={handleDuplicateProject}
+              disabled={actionLoading}
+            >
+              <Copy className="h-4 w-4 mr-1.5 text-[#00d8b8]" />
+              Duplicar
+            </Button>
+            <Button
+              variant="outline"
+              className="border-red-200 bg-white text-red-600 shadow-sm hover:bg-red-50 hover:text-red-700"
+              onClick={handleDeleteProject}
+              disabled={actionLoading}
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Excluir
+            </Button>
             <Button variant="outline" className="border-[#BCEEE5] bg-white text-[#0f1728] shadow-[0_10px_24px_rgba(0,100,166,0.08)] hover:bg-[#F2FFFC]" onClick={() => navigate("/projects")}>
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-4 w-4 mr-1.5" />
               Projetos
             </Button>
           </div>
@@ -477,6 +536,12 @@ export default function ProjectDetail() {
         )}
       </section>
 
+      <EditProjectModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        project={project}
+        onSuccess={(updated) => setProject(updated)}
+      />
     </div>
   );
 }

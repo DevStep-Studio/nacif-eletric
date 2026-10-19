@@ -643,15 +643,28 @@ const projectEntity = {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
       const timestamp = nowIso();
+      const name = String(data?.name || "").trim() || "Novo Projeto Elétrico";
       const project = {
         id: randomId("local_project"),
         created_date: timestamp,
         updated_date: timestamp,
         owner_id: currentUser.id,
+        user_id: currentUser.id,
+        status: data?.status || "em_andamento",
         circuits: [],
+        panel_boards: [],
+        plant_design: { points: [], routes: [] },
         ...data,
+        name,
       };
       writeLocalProjects([project, ...readLocalProjects()]);
+      recordAuditEvent({
+        actor: currentUser,
+        action: "PROJECT_CREATED",
+        targetType: "project",
+        targetId: project.id,
+        details: `Projeto "${name}" criado com sucesso`,
+      });
       return cloneLocal(project);
     }
 
@@ -663,7 +676,7 @@ const projectEntity = {
 
   async update(id, data) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const projects = readLocalProjects();
       const projectIndex = projects.findIndex((item) => item.id === id);
 
@@ -671,18 +684,28 @@ const projectEntity = {
       if (projectIndex < 0) {
         const newProject = {
           id,
-          name: data?.name || "Projeto Elétrico",
+          name: String(data?.name || "").trim() || "Projeto Elétrico",
           created_date: nowIso(),
           updated_date: nowIso(),
+          owner_id: currentUser.id,
+          user_id: currentUser.id,
+          status: data?.status || "em_andamento",
           circuits: [],
+          panel_boards: [],
+          plant_design: { points: [], routes: [] },
           ...data,
         };
         writeLocalProjects([newProject, ...projects]);
         return cloneLocal(newProject);
       }
 
+      const existing = nextProjects[projectIndex];
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && existing.owner_id && existing.owner_id !== currentUser.id) {
+        throw createError("Acesso negado para alterar este projeto.", 403);
+      }
+
       nextProjects[projectIndex] = {
-        ...nextProjects[projectIndex],
+        ...existing,
         ...data,
         id,
         updated_date: nowIso(),
@@ -697,11 +720,125 @@ const projectEntity = {
     });
   },
 
+  async duplicate(id) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const projects = readLocalProjects();
+      const original = projects.find((p) => p.id === id);
+      if (!original) {
+        throw createError("Projeto de origem não encontrado.", 404);
+      }
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && original.owner_id && original.owner_id !== currentUser.id) {
+        throw createError("Acesso negado para duplicar este projeto.", 403);
+      }
+
+      // Clone profundo real
+      const clone = cloneLocal(original);
+      const newProjectId = randomId("local_project");
+      const timestamp = nowIso();
+
+      // Recria IDs dos circuitos para garantir independência total
+      const circuitIdMap = new Map();
+      const newCircuits = (clone.circuits || []).map((c, idx) => {
+        const oldId = c.id || `c_${idx}`;
+        const newId = `ckt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${idx}`;
+        circuitIdMap.set(oldId, newId);
+        return {
+          ...c,
+          id: newId,
+        };
+      });
+
+      // Recria IDs e vínculos dos quadros (panel_boards)
+      const newPanelBoards = (clone.panel_boards || []).map((board, bIdx) => {
+        const newBoardId = `board_${Date.now()}_${bIdx}`;
+        const newComponents = (board.components || []).map((comp, cIdx) => ({
+          ...comp,
+          id: `comp_${Date.now()}_${bIdx}_${cIdx}`,
+          circuit_id: comp.circuit_id && circuitIdMap.has(comp.circuit_id) ? circuitIdMap.get(comp.circuit_id) : comp.circuit_id,
+        }));
+        const newWires = (board.wires || []).map((wire, wIdx) => ({
+          ...wire,
+          id: `wire_${Date.now()}_${bIdx}_${wIdx}`,
+          circuit_id: wire.circuit_id && circuitIdMap.has(wire.circuit_id) ? circuitIdMap.get(wire.circuit_id) : wire.circuit_id,
+        }));
+        return {
+          ...board,
+          id: newBoardId,
+          components: newComponents,
+          wires: newWires,
+        };
+      });
+
+      // Recria planta elétrica (plant_design)
+      let newPlantDesign = clone.plant_design || { points: [], routes: [] };
+      if (clone.plant_design) {
+        const newPoints = (clone.plant_design.points || []).map((pt, pIdx) => ({
+          ...pt,
+          id: `pt_${Date.now()}_${pIdx}`,
+          circuitId: pt.circuitId && circuitIdMap.has(pt.circuitId) ? circuitIdMap.get(pt.circuitId) : pt.circuitId,
+        }));
+        const newRoutes = (clone.plant_design.routes || []).map((rt, rIdx) => ({
+          ...rt,
+          id: `rt_${Date.now()}_${rIdx}`,
+        }));
+        newPlantDesign = {
+          ...clone.plant_design,
+          points: newPoints,
+          routes: newRoutes,
+        };
+      }
+
+      const duplicatedProject = {
+        ...clone,
+        id: newProjectId,
+        name: `${original.name || "Projeto"} (Cópia)`,
+        created_date: timestamp,
+        updated_date: timestamp,
+        owner_id: currentUser.id,
+        user_id: currentUser.id,
+        status: "em_andamento",
+        circuits: newCircuits,
+        panel_boards: newPanelBoards,
+        plant_design: newPlantDesign,
+      };
+
+      writeLocalProjects([duplicatedProject, ...projects]);
+      recordAuditEvent({
+        actor: currentUser,
+        action: "PROJECT_DUPLICATED",
+        targetType: "project",
+        targetId: newProjectId,
+        details: `Projeto "${original.name || original.id}" duplicado para "${duplicatedProject.name}"`,
+      });
+
+      return cloneLocal(duplicatedProject);
+    }
+
+    return request(`/api/projects/${id}/duplicate`, {
+      method: "POST",
+    });
+  },
+
   async delete(id) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const projects = readLocalProjects();
+      const target = projects.find((item) => item.id === id);
+      if (!target) {
+        return { ok: true };
+      }
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && target.owner_id && target.owner_id !== currentUser.id) {
+        throw createError("Acesso negado para excluir este projeto.", 403);
+      }
       writeLocalProjects(projects.filter((item) => item.id !== id));
+      recordAuditEvent({
+        actor: currentUser,
+        action: "PROJECT_DELETED",
+        targetType: "project",
+        targetId: id,
+        details: `Projeto "${target.name || id}" excluído`,
+      });
       return { ok: true };
     }
 

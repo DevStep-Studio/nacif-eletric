@@ -15,18 +15,34 @@ export default function NewProject() {
     name: "",
     client_name: "",
     address: "",
+    city: "",
     project_type: "Solar",
     voltage: 220,
     supply_type: "Monofásico",
   });
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleSave = async () => {
+    if (!form.name.trim()) {
+      setErrorMsg("O nome do projeto é obrigatório.");
+      return;
+    }
+
     setSaving(true);
+    setErrorMsg("");
     try {
-      const project = await backend.entities.Project.create(form);
+      const project = await backend.entities.Project.create({
+        ...form,
+        name: form.name.trim(),
+        client_name: form.client_name.trim(),
+        address: form.address.trim(),
+        city: form.city.trim(),
+      });
       navigate(`/circuit-editor?project=${project.id}`);
-    } catch {
+    } catch (err) {
+      console.error("Erro ao criar projeto:", err);
+      setErrorMsg(err?.message || "Não foi possível criar o projeto. Tente novamente.");
       setSaving(false);
     }
   };
@@ -128,6 +144,11 @@ export default function NewProject() {
         </div>
       ) : (
         <div className="mx-auto w-full max-w-2xl space-y-4 p-6 rounded-3xl bg-white border border-slate-200 shadow-sm">
+          {errorMsg && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-600">
+              {errorMsg}
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs font-black text-foreground">Nome do Projeto *</Label>
             <Input
@@ -135,16 +156,28 @@ export default function NewProject() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="h-11 font-medium"
+              required
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-black text-foreground">Cliente</Label>
-            <Input
-              placeholder="Nome do cliente"
-              value={form.client_name}
-              onChange={(e) => setForm({ ...form, client_name: e.target.value })}
-              className="h-11 font-medium"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Cliente</Label>
+              <Input
+                placeholder="Nome do cliente"
+                value={form.client_name}
+                onChange={(e) => setForm({ ...form, client_name: e.target.value })}
+                className="h-11 font-medium"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-black text-foreground">Cidade / UF</Label>
+              <Input
+                placeholder="Ex: Belo Horizonte - MG"
+                value={form.city}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+                className="h-11 font-medium"
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-black text-foreground">Endereço</Label>

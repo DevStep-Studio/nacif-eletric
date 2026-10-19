@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   BarChart3,
+  Copy,
+  Edit3,
   FileText,
   FolderOpen,
   GitBranch,
@@ -27,6 +29,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import PageHeader from "@/components/PageHeader";
 import ProjectProgress from "@/components/navigation/ProjectProgress";
+import EditProjectModal from "@/components/EditProjectModal";
 
 const statusStyles = {
   Rascunho: "border-[#BCEEE5] bg-[#E8FCF8] text-[#0f4f49]",
@@ -117,6 +120,8 @@ export default function Projects() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [viewMode, setViewMode] = useState("table");
   const [selectedIds, setSelectedIds] = useState([]);
+  const [editingProject, setEditingProject] = useState(null);
+  const [duplicating, setDuplicating] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -139,6 +144,24 @@ export default function Projects() {
   useEffect(() => {
     load();
   }, []);
+
+  const handleDuplicate = async (id) => {
+    setDuplicating(true);
+    try {
+      const duplicated = await backend.entities.Project.duplicate(id);
+      load();
+      alert(`Projeto duplicado com sucesso: "${duplicated.name}"`);
+    } catch (err) {
+      console.error("Erro ao duplicar projeto:", err);
+      alert(err?.message || "Não foi possível duplicar o projeto.");
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
+  const handleEdit = (project) => {
+    setEditingProject(project);
+  };
 
   const statusOptions = useMemo(() => {
     const uniqueStatuses = Array.from(new Set(projects.map((project) => project.status || "Rascunho")));
@@ -258,16 +281,38 @@ export default function Projects() {
             </label>
           </div>
 
-          <div className="flex items-center justify-between gap-2 lg:justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
             {selectedIds.length === 1 && (
-              <Button
-                variant="outline"
-                onClick={() => navigate(`/projects/${selectedIds[0]}`)}
-                className="h-10 rounded-[8px] border-[#00d8b8] bg-[#E8FCF8] text-sm font-extrabold text-[#009b84] hover:bg-[#d0f7ee]"
-              >
-                <FolderOpen className="h-4 w-4" />
-                Abrir projeto
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/projects/${selectedIds[0]}`)}
+                  className="h-10 rounded-[8px] border-[#00d8b8] bg-[#E8FCF8] text-sm font-extrabold text-[#009b84] hover:bg-[#d0f7ee]"
+                >
+                  <FolderOpen className="h-4 w-4 mr-1.5" />
+                  Abrir
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const p = projects.find((item) => item.id === selectedIds[0]);
+                    if (p) handleEdit(p);
+                  }}
+                  className="h-10 rounded-[8px] border-[#D0D5DD] bg-white text-sm font-extrabold text-[#344054] hover:bg-[#F9FAFB]"
+                >
+                  <Edit3 className="h-4 w-4 mr-1.5 text-[#00d8b8]" />
+                  Editar
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleDuplicate(selectedIds[0])}
+                  disabled={duplicating}
+                  className="h-10 rounded-[8px] border-[#D0D5DD] bg-white text-sm font-extrabold text-[#344054] hover:bg-[#F9FAFB]"
+                >
+                  <Copy className="h-4 w-4 mr-1.5 text-[#00d8b8]" />
+                  Duplicar
+                </Button>
+              </div>
             )}
             {selectedIds.length > 0 && (
               <Button variant="outline" onClick={handleBulkDelete} className="h-10 rounded-[8px] border-red-200 text-sm font-extrabold text-red-600 hover:bg-red-50">
@@ -314,7 +359,15 @@ export default function Projects() {
         ) : viewMode === "cards" ? (
           <div className="grid gap-3 p-4 lg:grid-cols-2 xl:grid-cols-3">
             {filteredProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} selected={selectedIds.includes(project.id)} onSelect={() => toggleSelected(project.id)} onDelete={() => handleDelete(project.id)} />
+              <ProjectCard
+                key={project.id}
+                project={project}
+                selected={selectedIds.includes(project.id)}
+                onSelect={() => toggleSelected(project.id)}
+                onEdit={handleEdit}
+                onDuplicate={handleDuplicate}
+                onDelete={() => handleDelete(project.id)}
+              />
             ))}
           </div>
         ) : (
@@ -324,10 +377,22 @@ export default function Projects() {
             allSelected={allFilteredSelected}
             onToggleAll={toggleAllFiltered}
             onToggleSelected={toggleSelected}
+            onEdit={handleEdit}
+            onDuplicate={handleDuplicate}
             onDelete={handleDelete}
           />
         )}
       </section>
+
+      <EditProjectModal
+        isOpen={Boolean(editingProject)}
+        onClose={() => setEditingProject(null)}
+        project={editingProject}
+        onSuccess={() => {
+          setEditingProject(null);
+          load();
+        }}
+      />
     </div>
   );
 }
@@ -377,7 +442,7 @@ function FilteredEmpty({ query }) {
   );
 }
 
-function ProjectTable({ projects, selectedIds, allSelected, onToggleAll, onToggleSelected, onDelete }) {
+function ProjectTable({ projects, selectedIds, allSelected, onToggleAll, onToggleSelected, onEdit, onDuplicate, onDelete }) {
   const navigate = useNavigate();
   return (
     <div className="overflow-hidden">
@@ -435,7 +500,13 @@ function ProjectTable({ projects, selectedIds, allSelected, onToggleAll, onToggl
               </TableCell>
               <TableCell className="px-4 text-sm font-medium text-[#667085]">{formatProjectDate(project)}</TableCell>
               <TableCell className="px-4" onClick={(e) => e.stopPropagation()}>
-                <ProjectActions project={project} onDelete={() => onDelete(project.id)} align="end" />
+                <ProjectActions
+                  project={project}
+                  onEdit={onEdit}
+                  onDuplicate={onDuplicate}
+                  onDelete={() => onDelete(project.id)}
+                  align="end"
+                />
               </TableCell>
             </TableRow>
           ))}
@@ -445,7 +516,7 @@ function ProjectTable({ projects, selectedIds, allSelected, onToggleAll, onToggl
   );
 }
 
-function ProjectCard({ project, selected, onSelect, onDelete }) {
+function ProjectCard({ project, selected, onSelect, onEdit, onDuplicate, onDelete }) {
   const navigate = useNavigate();
   const circuitCount = project?.circuits?.length || 0;
   const tone = projectToneStyles[getProjectTone(project)] || projectToneStyles.blue;
@@ -490,7 +561,13 @@ function ProjectCard({ project, selected, onSelect, onDelete }) {
 
       <div className="mt-4 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
         <StatusBadge status={project.status} />
-        <ProjectActions project={project} onDelete={onDelete} align="end" />
+        <ProjectActions
+          project={project}
+          onEdit={onEdit}
+          onDuplicate={onDuplicate}
+          onDelete={onDelete}
+          align="end"
+        />
       </div>
     </article>
   );
@@ -514,7 +591,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function ProjectActions({ project, onDelete, align = "end" }) {
+function ProjectActions({ project, onEdit, onDuplicate, onDelete, align = "end" }) {
   const actions = getProjectActions(project);
 
   return (
@@ -544,7 +621,7 @@ function ProjectActions({ project, onDelete, align = "end" }) {
             <MoreVertical className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align={align} className="w-56 rounded-[10px] border-[#E4E7EC] bg-white p-1">
+        <DropdownMenuContent align={align} className="w-56 rounded-[10px] border-[#E4E7EC] bg-white p-1 shadow-lg">
           {actions.slice(4).map((action) => {
             const ActionIcon = action.icon;
             return (
@@ -556,6 +633,24 @@ function ProjectActions({ project, onDelete, align = "end" }) {
               </DropdownMenuItem>
             );
           })}
+          {onEdit && (
+            <DropdownMenuItem
+              onClick={() => onEdit(project)}
+              className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold text-slate-800 focus:bg-slate-50"
+            >
+              <Edit3 className="h-4 w-4 text-[#00d8b8]" />
+              Editar dados
+            </DropdownMenuItem>
+          )}
+          {onDuplicate && (
+            <DropdownMenuItem
+              onClick={() => onDuplicate(project.id)}
+              className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold text-slate-800 focus:bg-slate-50"
+            >
+              <Copy className="h-4 w-4 text-[#00d8b8]" />
+              Duplicar projeto
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={onDelete} className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold text-red-600 focus:text-red-600">
             <Trash2 className="h-4 w-4" />
             Excluir
