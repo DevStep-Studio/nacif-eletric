@@ -17,6 +17,7 @@
     "test:budget-audit": "node scripts/budget-audit-smoke.mjs",
     "test:auth-audit": "node scripts/auth-audit-smoke.mjs",
     "test:notifications-audit": "node scripts/notifications-settings-issues-audit-smoke.mjs",
+    "test:ui-ux-audit": "node scripts/ui-ux-audit-smoke.mjs",
     "test:main-protection": "node scripts/main-protection-smoke.mjs",
     "test:electrical-audit": "node scripts/electrical-engine-audit-smoke.mjs",
     "test:solar-sizing": "node scripts/solar-sizing-smoke.mjs",

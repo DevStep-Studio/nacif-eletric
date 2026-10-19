@@ -21,6 +21,7 @@ import {
   Percent,
   Calendar,
   PlusCircle,
+  Package,
 } from "lucide-react";
 import {
   DropdownMenu,

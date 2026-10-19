@@ -52,6 +52,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const formatKw = (watts) =>
   `${(Number(watts || 0) / 1000).toLocaleString("pt-BR", {
@@ -514,46 +524,34 @@ export default function Home() {
   };
 
   const isAllSelected = filteredProjects.length > 0 && selectedProjectIds.size === filteredProjects.length;
+  const [projectToDeleteHome, setProjectToDeleteHome] = useState(null);
+
+  const confirmDeleteHome = async () => {
+    if (!projectToDeleteHome) return;
+    try {
+      await backend.entities.Project.delete(projectToDeleteHome.id);
+      setProjects((prev) => prev.filter((p) => p.id !== projectToDeleteHome.id));
+    } catch (err) {
+      console.error("Erro ao excluir projeto:", err);
+      alert("Não foi possível excluir o projeto.");
+    } finally {
+      setProjectToDeleteHome(null);
+    }
+  };
 
   return (
     <TooltipProvider>
       <div className="w-full max-w-7xl mx-auto space-y-6 pb-12">
-        {/* ── 1. Top Announcement / Upgrade Banner ── */}
-        <section className="relative overflow-hidden rounded-2xl border border-[#00bda1]/20 bg-[#00d8b8] p-5 sm:p-6 text-slate-950 shadow-sm">
-          <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1.5 max-w-2xl">
-              <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-950">
-                Dimensionamento elétrico profissional e instantâneo
-              </h2>
-              <p className="text-xs sm:text-sm font-medium text-slate-900/80 leading-relaxed">
-                Crie projetos elétricos completos, plantas inteligentes, quadros de distribuição e memoriais descritivos conforme as normas vigentes.
-              </p>
-            </div>
-
-            <div className="shrink-0 flex items-center gap-2">
-              <Button
-                asChild
-                className="h-10 rounded-full bg-slate-950 px-5 text-xs font-black text-white shadow-sm hover:bg-slate-900 hover:scale-[1.02] transition-all"
-              >
-                <Link to="/projects/new">
-                  <Plus className="mr-1.5 h-4 w-4 text-[#00d8b8]" />
-                  Novo Projeto
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        {/* ── 2. Overview Section (Header + 4 Metric Cards) ── */}
+        {/* ── Overview Section (Header Técnico + 4 KPI Metric Cards) ── */}
         <section className="space-y-4">
           {/* Header da Seção Overview */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-black tracking-tight text-[#0F172A]">Overview</h2>
-              <p className="text-xs font-medium text-[#64748B]">Métricas e desempenho em tempo real</p>
+              <h1 className="text-2xl font-black tracking-tight text-[#0F172A]">Painel Geral</h1>
+              <p className="text-xs font-medium text-[#64748B]">Métricas técnicas, demanda agregada e projetos em tempo real</p>
             </div>
 
-            {/* Controles da Direita (Date Range Dinâmico + Filter + Export Real) */}
+            {/* Controles da Direita (Date Range Dinâmico + Filter + Export Real + Novo Projeto) */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-bold text-[#475467] shadow-sm">
                 <Calendar className="h-3.5 w-3.5 text-[#00d8b8]" />
@@ -589,12 +587,22 @@ export default function Home() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 rounded-xl border-[#E2E8F0] bg-white px-3 text-xs font-bold text-[#475467] shadow-sm hover:bg-[#F8FAFC]"
+                className="h-9 rounded-xl border-[#E2E8F0] bg-white px-3 text-xs font-bold text-[#475467] shadow-sm hover:bg-[#F8FAFC]"
                 onClick={() => exportDashboardCSV(projects, chartPeriod)}
                 title="Exportar planilha CSV dos projetos"
               >
                 <Download className="mr-1.5 h-3.5 w-3.5 text-[#64748B]" />
                 Exportar CSV
+              </Button>
+
+              <Button
+                asChild
+                className="h-9 rounded-xl bg-[#00d8b8] px-4 text-xs font-black text-slate-950 shadow-sm hover:bg-[#00c4a7] transition-all"
+              >
+                <Link to="/projects/new">
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Novo Projeto
+                </Link>
               </Button>
             </div>
           </div>
@@ -1252,13 +1260,8 @@ export default function Home() {
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onClick={async () => {
-                                  if (window.confirm(`Deseja excluir o projeto ${proj.name}?`)) {
-                                    await backend.entities.Project.delete(proj.id);
-                                    setProjects((prev) => prev.filter((p) => p.id !== proj.id));
-                                  }
-                                }}
-                                className="text-red-600 focus:text-red-600"
+                                onClick={() => setProjectToDeleteHome(proj)}
+                                className="text-red-600 focus:text-red-600 cursor-pointer"
                               >
                                 <Trash2 className="mr-2 h-3.5 w-3.5" />
                                 Excluir projeto
@@ -1302,6 +1305,32 @@ export default function Home() {
           </div>
         </section>
       </div>
+
+      <AlertDialog open={Boolean(projectToDeleteHome)} onOpenChange={(open) => !open && setProjectToDeleteHome(null)}>
+        <AlertDialogContent className="rounded-2xl border-[#E2E8F0] bg-white p-6 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-black text-[#0F172A]">
+              Excluir o projeto "{projectToDeleteHome?.name}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm font-medium text-[#64748B] leading-relaxed">
+              Esta ação é permanente e não pode ser desfeita. Todos os cálculos de demanda, circuitos elétricos e propostas vinculadas serão excluídos definitivamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel
+              className="h-9 rounded-xl border-[#E2E8F0] bg-white px-4 text-xs font-bold text-[#475467] hover:bg-[#F8FAFC]"
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteHome}
+              className="h-9 rounded-xl bg-red-600 px-4 text-xs font-bold text-white hover:bg-red-700 shadow-sm transition"
+            >
+              Excluir definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TooltipProvider>
   );
 }

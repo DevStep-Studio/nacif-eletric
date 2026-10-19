@@ -101,11 +101,18 @@
   }
 }
 
-button.rounded-full,
-a.rounded-full,
-label.rounded-full,
-[role="button"].rounded-full {
-  border-radius: 12px !important;
+/* Padronização de botões de ação técnicos (evita pílulas exageradas em botões de texto, mantendo botões de ícone e avatares circulares íntegros) */
+button.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10):not(.w-11):not(.w-12):not(.h-6):not(.h-7):not(.h-8):not(.h-9):not(.h-10):not(.h-11):not(.h-12),
+a.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10):not(.w-11):not(.w-12):not(.h-6):not(.h-7):not(.h-8):not(.h-9):not(.h-10):not(.h-11):not(.h-12),
+label.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10),
+[role="button"].rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10) {
+  border-radius: 10px !important;
+}
+
+/* Indicador de foco WCAG 2.2 AA nítido e padronizado em azul WEG para navegação por teclado */
+:focus-visible {
+  outline: 2px solid #005B94 !important;
+  outline-offset: 2px !important;
 }
 
 @keyframes appPageIn {

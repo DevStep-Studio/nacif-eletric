@@ -30,40 +30,50 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import PageHeader from "@/components/PageHeader";
 import ProjectProgress from "@/components/navigation/ProjectProgress";
 import EditProjectModal from "@/components/EditProjectModal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const statusStyles = {
-  Rascunho: "border-[#BCEEE5] bg-[#E8FCF8] text-[#0f4f49]",
-  "Em Andamento": "border-[#BCEEE5] bg-[#E8FCF8] text-[#0f4f49]",
-  "Concluído": "border-[#BCEEE5] bg-[#E8FCF8] text-[#0f4f49]",
-  Aprovado: "border-[#BCEEE5] bg-[#E8FCF8] text-[#0f4f49]",
-  Arquivado: "border-[#BCEEE5] bg-[#E8FCF8] text-[#0f4f49]",
+  Rascunho: "border-slate-200 bg-slate-100 text-slate-700",
+  "Em Andamento": "border-[#BCEEE5] bg-[#E8FCF8] text-[#007a68]",
+  "Concluído": "border-emerald-200 bg-emerald-50 text-emerald-800",
+  Aprovado: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  Arquivado: "border-slate-200 bg-slate-50 text-slate-500",
 };
 
 const projectToneStyles = {
   blue: {
-    card: "border-[#BCEEE5] bg-[#F7FBFE] hover:border-[#7DBDDF]",
-    icon: "bg-[#E8FCF8] text-[#00d8b8]",
-    rail: "bg-[#00d8b8]",
+    card: "border-slate-200 bg-white hover:border-[#00d8b8]/60",
+    icon: "bg-blue-50 text-blue-600",
+    rail: "bg-blue-600",
   },
   cyan: {
-    card: "border-[#BCEEE5] bg-[#F7FBFE] hover:border-[#7DBDDF]",
-    icon: "bg-[#E8FCF8] text-[#00d8b8]",
+    card: "border-[#BCEEE5] bg-white hover:border-[#00d8b8]",
+    icon: "bg-[#E8FCF8] text-[#007a68]",
     rail: "bg-[#00d8b8]",
   },
   green: {
-    card: "border-[#BCEEE5] bg-[#F7FBFE] hover:border-[#7DBDDF]",
-    icon: "bg-[#E8FCF8] text-[#00d8b8]",
-    rail: "bg-[#00d8b8]",
+    card: "border-emerald-200 bg-white hover:border-emerald-400",
+    icon: "bg-emerald-50 text-emerald-700",
+    rail: "bg-emerald-600",
   },
   amber: {
-    card: "border-[#BCEEE5] bg-[#F7FBFE] hover:border-[#7DBDDF]",
-    icon: "bg-[#E8FCF8] text-[#00d8b8]",
-    rail: "bg-[#00d8b8]",
+    card: "border-amber-200 bg-white hover:border-amber-400",
+    icon: "bg-amber-50 text-amber-700",
+    rail: "bg-amber-500",
   },
   slate: {
-    card: "border-[#BCEEE5] bg-[#F7FBFE] hover:border-[#7DBDDF]",
-    icon: "bg-[#E8FCF8] text-[#00d8b8]",
-    rail: "bg-[#00d8b8]",
+    card: "border-slate-200 bg-white hover:border-slate-400",
+    icon: "bg-slate-100 text-slate-600",
+    rail: "bg-slate-400",
   },
 };
 
@@ -122,6 +132,7 @@ export default function Projects() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [editingProject, setEditingProject] = useState(null);
   const [duplicating, setDuplicating] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -191,33 +202,36 @@ export default function Projects() {
 
   const allFilteredSelected = filteredProjects.length > 0 && filteredProjects.every((project) => selectedIds.includes(project.id));
 
-  const handleDelete = async (id) => {
-    const confirmed = window.confirm("Excluir este projeto? Esta ação não pode ser desfeita.");
-    if (!confirmed) return;
-
-    try {
-      await backend.entities.Project.delete(id);
-      setSelectedIds((ids) => ids.filter((selectedId) => selectedId !== id));
-      load();
-    } catch (err) {
-      console.error("Erro ao excluir projeto:", err);
-      alert("Não foi possível excluir o projeto. Tente novamente.");
+  const handleDelete = (id) => {
+    const proj = projects.find((p) => p.id === id);
+    if (proj) {
+      setProjectToDelete(proj);
+    } else {
+      setProjectToDelete({ id, name: "este projeto", isBulk: false });
     }
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
-    const confirmed = window.confirm(`Excluir ${selectedIds.length} projeto(s) selecionado(s)? Esta ação não pode ser desfeita.`);
-    if (!confirmed) return;
+    setProjectToDelete({ count: selectedIds.length, isBulk: true });
+  };
 
+  const confirmDeleteAction = async () => {
+    if (!projectToDelete) return;
     try {
-      await Promise.all(selectedIds.map((id) => backend.entities.Project.delete(id)));
-      setSelectedIds([]);
+      if (projectToDelete.isBulk) {
+        await Promise.all(selectedIds.map((id) => backend.entities.Project.delete(id)));
+        setSelectedIds([]);
+      } else {
+        await backend.entities.Project.delete(projectToDelete.id);
+        setSelectedIds((ids) => ids.filter((selectedId) => selectedId !== projectToDelete.id));
+      }
       load();
     } catch (err) {
-      console.error("Erro ao excluir projetos em lote:", err);
-      alert("Não foi possível excluir alguns dos projetos selecionados.");
-      load();
+      console.error("Erro ao excluir projeto(s):", err);
+      alert("Não foi possível excluir o(s) projeto(s) selecionado(s). Tente novamente.");
+    } finally {
+      setProjectToDelete(null);
     }
   };
 
@@ -393,6 +407,34 @@ export default function Projects() {
           load();
         }}
       />
+
+      <AlertDialog open={Boolean(projectToDelete)} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+        <AlertDialogContent className="rounded-2xl border-[#E2E8F0] bg-white p-6 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-black text-[#0F172A]">
+              {projectToDelete?.isBulk
+                ? `Excluir ${projectToDelete.count} projetos selecionados?`
+                : `Excluir o projeto "${projectToDelete?.name}"?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm font-medium text-[#64748B] leading-relaxed">
+              Esta ação é permanente e não pode ser desfeita. Todos os circuitos elétricos, diagramas unifilares, memoriais descritivos e orçamentos vinculados serão permanentemente excluídos do sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel
+              className="h-9 rounded-xl border-[#E2E8F0] bg-white px-4 text-xs font-bold text-[#475467] hover:bg-[#F8FAFC]"
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteAction}
+              className="h-9 rounded-xl bg-red-600 px-4 text-xs font-bold text-white hover:bg-red-700 shadow-sm transition"
+            >
+              Excluir definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -583,9 +625,23 @@ function InfoPill({ label, value }) {
 }
 
 function StatusBadge({ status }) {
+  const norm = normalizeText(status);
+  let badgeStyle = "border-slate-200 bg-slate-100 text-slate-700";
+  if (norm.includes("concluid") || norm.includes("aprovad")) {
+    badgeStyle = "border-emerald-200 bg-emerald-50 text-emerald-800";
+  } else if (norm.includes("andamento")) {
+    badgeStyle = "border-[#BCEEE5] bg-[#E8FCF8] text-[#007a68]";
+  } else if (norm.includes("arquivad")) {
+    badgeStyle = "border-slate-200 bg-slate-50 text-slate-500";
+  } else if (norm.includes("solar")) {
+    badgeStyle = "border-amber-200 bg-amber-50 text-amber-800";
+  } else if (norm.includes("espera") || norm.includes("pendent")) {
+    badgeStyle = "border-amber-200 bg-amber-50 text-amber-800";
+  }
+
   const normalized = status || "Rascunho";
   return (
-    <Badge className={`h-8 rounded-[8px] border px-3 text-xs font-extrabold ${statusStyles[normalized] || statusStyles.Rascunho}`}>
+    <Badge className={`h-7 rounded-lg border px-2.5 text-xs font-bold ${badgeStyle}`}>
       {normalized}
     </Badge>
   );
