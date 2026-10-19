@@ -13,6 +13,16 @@ import {
   sanitizeTextInput,
   validateUploadedFile,
 } from "../lib/securityCrypto.js";
+import {
+  auditProjectComponents,
+  auditBudgetFinancials,
+  findOrphanRecords,
+  sanitizeOrphanRecords,
+  checkOptimisticConcurrency,
+  exportDatabaseBackup,
+  validateBackupArchive,
+  restoreDatabaseBackup,
+} from "../lib/databaseIntegrityManager.js";
 
 const rawApiBaseUrl = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.trim() : "");
 const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
@@ -1018,19 +1028,30 @@ const projectEntity = {
         throw createError("Acesso negado para alterar este projeto.", 403);
       }
 
+      // Verificação de concorrência otimista (prevenção contra sobrescrita de dados recentes)
+      if (data?.expected_updated_date) {
+        checkOptimisticConcurrency(existing, data.expected_updated_date);
+      }
+
       const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
       if (safeData.name) {
         safeData.name = sanitizeTextInput(safeData.name);
       }
 
-      nextProjects[projectIndex] = {
+      const updatedProject = {
         ...existing,
         ...safeData,
         id, // Protege ID original contra manipulação
         owner_id: existing.owner_id || currentUser.id, // Previne reatribuição indevida de propriedade
         user_id: existing.user_id || currentUser.id,
+        version: (existing.version || 1) + 1,
         updated_date: nowIso(),
       };
+
+      // Auditoria preventiva de integridade estrutural dos componentes
+      auditProjectComponents(updatedProject);
+
+      nextProjects[projectIndex] = updatedProject;
       writeLocalProjects(nextProjects);
       return cloneLocal(nextProjects[projectIndex]);
     }
@@ -1153,12 +1174,39 @@ const projectEntity = {
         throw createError("Acesso negado para excluir este projeto.", 403);
       }
       writeLocalProjects(projects.filter((item) => item.id !== id));
+
+      // Integridade referencial: ON DELETE SET NULL para orçamentos vinculados ao projeto
+      const budgets = readLocalBudgets();
+      let budgetsModified = false;
+      const updatedBudgets = budgets.map((b) => {
+        if (b.project_id === id) {
+          budgetsModified = true;
+          return {
+            ...b,
+            project_id: null,
+            project_name: b.project_name ? `${b.project_name} (Projeto Arquivado)` : null,
+            updated_date: nowIso(),
+          };
+        }
+        return b;
+      });
+      if (budgetsModified) {
+        writeLocalBudgets(updatedBudgets);
+      }
+
+      // Limpeza de snapshots residuais de planta no localStorage
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          window.localStorage.removeItem(`voltai_plant_backup_${id}`);
+        } catch {}
+      }
+
       recordAuditEvent({
         actor: currentUser,
         action: "PROJECT_DELETED",
         targetType: "project",
         targetId: id,
-        details: `Projeto "${target.name || id}" excluído`,
+        details: `Projeto "${target.name || id}" excluído com integridade referencial mantida em orçamentos`,
       });
       return { ok: true };
     }
@@ -2488,6 +2536,12 @@ const budgetEntity = {
       if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && existing.owner_id && existing.owner_id !== currentUser.id) {
         throw createError("Acesso negado para modificar este orçamento.", 403);
       }
+
+      // Verificação de concorrência otimista (prevenção contra sobrescrita de orçamentos)
+      if (patch?.expected_updated_date) {
+        checkOptimisticConcurrency(existing, patch.expected_updated_date);
+      }
+
       const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safePatch } = patch || {};
       if (safePatch.name) {
         safePatch.name = sanitizeTextInput(safePatch.name);
@@ -2498,8 +2552,13 @@ const budgetEntity = {
         id, // Protege ID imutável
         owner_id: existing.owner_id || currentUser.id, // Impede transferência silenciosa
         user_id: existing.user_id || currentUser.id,
+        version: (existing.version || 1) + 1,
         updated_date: nowIso(),
       };
+
+      // Auditoria preventiva de integridade financeira
+      auditBudgetFinancials(updated);
+
       const nextBudgets = budgets.map((b) => (b.id === id ? updated : b));
       writeLocalBudgets(nextBudgets);
       return cloneLocal(updated);
@@ -2584,9 +2643,159 @@ const subscriptionEntity = {
   },
 };
 
+const databaseEntity = {
+  async exportBackup() {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        throw createError("Acesso restrito a administradores para exportação de backup completo.", 403);
+      }
+      const users = readLocalUsers();
+      const projects = readLocalProjects();
+      const budgets = readLocalBudgets();
+      const notifications = readLocalNotifications();
+      const issues = await getAllIssues();
+      const audit_logs = readAuditLogs();
+
+      const archive = await exportDatabaseBackup({
+        users,
+        projects,
+        budgets,
+        notifications,
+        issues,
+        audit_logs,
+      });
+
+      recordAuditEvent({
+        actor: currentUser,
+        action: "DATABASE_BACKUP_EXPORTED",
+        targetType: "database",
+        details: `Backup completo do sistema exportado com checksum SHA-256: ${archive.checksum_sha256.slice(0, 16)}...`,
+        metadata: { counts: archive.counts },
+      });
+
+      return archive;
+    }
+    return request("/api/database/backup/export");
+  },
+
+  async validateBackup(archive) {
+    return validateBackupArchive(archive);
+  },
+
+  async restoreBackup(archive) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      if (!isSuperAdmin(currentUser)) {
+        throw createError("Apenas Super Administradores podem restaurar backups da base de dados.", 403);
+      }
+
+      const result = await restoreDatabaseBackup(archive, async (restoredData) => {
+        if (Array.isArray(restoredData.users) && restoredData.users.length > 0) {
+          writeLocalUsers(restoredData.users);
+        }
+        if (Array.isArray(restoredData.projects)) {
+          writeLocalProjects(restoredData.projects);
+        }
+        if (Array.isArray(restoredData.budgets)) {
+          writeLocalBudgets(restoredData.budgets);
+        }
+        if (Array.isArray(restoredData.notifications)) {
+          writeLocalNotifications(restoredData.notifications);
+        }
+      });
+
+      recordAuditEvent({
+        actor: currentUser,
+        action: "DATABASE_BACKUP_RESTORED",
+        targetType: "database",
+        details: "Restauração de backup realizada com sucesso com verificação de checksum SHA-256",
+        metadata: { counts: result.restored_counts },
+      });
+
+      return result;
+    }
+    return request("/api/database/backup/restore", { method: "POST", body: archive });
+  },
+
+  async auditIntegrity() {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const users = readLocalUsers();
+      const projects = readLocalProjects();
+      const budgets = readLocalBudgets();
+      const notifications = readLocalNotifications();
+
+      const orphans = findOrphanRecords({ users, projects, budgets, notifications });
+      const projectAudits = projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        ...auditProjectComponents(p),
+      }));
+      const budgetAudits = budgets.map((b) => ({
+        id: b.id,
+        name: b.name,
+        ...auditBudgetFinancials(b),
+      }));
+
+      const totalProjectIssues = projectAudits.reduce((acc, curr) => acc + curr.issues.length, 0);
+      const totalBudgetIssues = budgetAudits.reduce((acc, curr) => acc + curr.issues.length, 0);
+
+      return {
+        healthy: !orphans.hasOrphans && totalProjectIssues === 0 && totalBudgetIssues === 0,
+        orphans: {
+          hasOrphans: orphans.hasOrphans,
+          projectsCount: orphans.orphanProjects.length,
+          budgetsCount: orphans.orphanBudgets.length,
+          notificationsCount: orphans.orphanNotifications.length,
+        },
+        counts: {
+          users: users.length,
+          projects: projects.length,
+          budgets: budgets.length,
+          notifications: notifications.length,
+        },
+        projectIssuesCount: totalProjectIssues,
+        budgetIssuesCount: totalBudgetIssues,
+        auditedAt: nowIso(),
+      };
+    }
+    return request("/api/database/integrity/audit");
+  },
+
+  async sanitizeOrphans() {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        throw createError("Acesso restrito para saneamento de integridade do banco.", 403);
+      }
+      const users = readLocalUsers();
+      const projects = readLocalProjects();
+      const budgets = readLocalBudgets();
+      const notifications = readLocalNotifications();
+
+      const sanitized = sanitizeOrphanRecords({ users, projects, budgets, notifications });
+      writeLocalProjects(sanitized.projects);
+      writeLocalBudgets(sanitized.budgets);
+      writeLocalNotifications(sanitized.notifications);
+
+      recordAuditEvent({
+        actor: currentUser,
+        action: "DATABASE_ORPHANS_CLEANED",
+        targetType: "database",
+        details: "Saneamento de registros órfãos executado com sucesso",
+      });
+
+      return { ok: true, sanitizedCounts: { projects: sanitized.projects.length, budgets: sanitized.budgets.length } };
+    }
+    return request("/api/database/integrity/sanitize-orphans", { method: "POST" });
+  },
+};
+
 export const backend = {
   auth,
   subscriptions: subscriptionEntity,
+  database: databaseEntity,
   entities: {
     Project: projectEntity,
     Budget: budgetEntity,
@@ -2597,6 +2806,7 @@ export const backend = {
     Settings: settingsEntity,
     Catalog: catalogEntity,
     Analysis: analysisEntity,
+    Database: databaseEntity,
   },
   integrations,
 };
