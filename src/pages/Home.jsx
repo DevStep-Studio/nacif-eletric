@@ -1147,8 +1147,47 @@ export default function Home() {
                   </tr>
                 ) : filteredProjects.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-xs font-semibold text-[#64748B]">
-                      Nenhum projeto encontrado nesta categoria.
+                    <td colSpan={9} className="py-10 px-4 text-center">
+                      {projects.length === 0 ? (
+                        <div className="mx-auto max-w-lg rounded-2xl border border-dashed border-[#00d8b8]/50 bg-[#F7FBFE] p-8 space-y-4">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E8FCF8] text-[#00d8b8] mx-auto shadow-xs">
+                            <FolderOpen className="h-7 w-7" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <h4 className="text-base font-extrabold text-[#0F172A]">
+                              Bem-vindo ao Nacif Electric!
+                            </h4>
+                            <p className="text-xs text-[#64748B] leading-relaxed max-w-md mx-auto">
+                              Você ainda não possui projetos cadastrados. Comece agora mesmo criando seu primeiro estudo ou dimensionamento elétrico em conformidade com a NBR 5410.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                            <Button
+                              asChild
+                              className="h-10 rounded-xl bg-[#00d8b8] hover:bg-[#00c4a7] text-slate-950 font-black text-xs px-5 shadow-sm transition"
+                            >
+                              <Link to="/projects/new">
+                                <Plus className="mr-1.5 h-4 w-4" />
+                                Criar Primeiro Projeto
+                              </Link>
+                            </Button>
+                            <Button
+                              asChild
+                              variant="outline"
+                              className="h-10 rounded-xl border-[#E2E8F0] bg-white text-xs font-bold text-[#475467] hover:bg-[#F8FAFC]"
+                            >
+                              <Link to="/help">
+                                <HelpCircle className="mr-1.5 h-3.5 w-3.5 text-[#00d8b8]" />
+                                Guia Rápido de Uso
+                              </Link>
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="py-12 text-center text-xs font-semibold text-[#64748B]">
+                          Nenhum projeto encontrado nesta categoria de filtro.
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ) : (

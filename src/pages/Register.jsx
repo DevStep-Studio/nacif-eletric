@@ -16,6 +16,7 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [profession, setProfession] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
@@ -33,10 +34,21 @@ export default function Register() {
       setError("Selecione sua profissão para definir os acessos da conta.");
       return;
     }
+    if (!termsAccepted) {
+      setError("Você deve ler e concordar com os Termos de Uso e a Política de Privacidade para criar uma conta.");
+      return;
+    }
     setLoading(true);
     try {
       window.localStorage.setItem(PENDING_REGISTER_PROFESSION_KEY, normalizedProfession);
-      const result = await backend.auth.register({ email, password, profession: normalizedProfession });
+      const result = await backend.auth.register({
+        email,
+        password,
+        profession: normalizedProfession,
+        terms_accepted: true,
+        terms_version: "1.2",
+        terms_accepted_at: new Date().toISOString(),
+      });
       if (isLocalAuthMode) {
         if (result?.access_token) {
           backend.auth.setToken(result.access_token);
@@ -266,6 +278,29 @@ export default function Register() {
             />
           </div>
         </div>
+
+        <div className="flex items-start gap-2.5 pt-1 text-xs">
+          <input
+            id="accept-terms"
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-[#00d8b8]"
+            required
+          />
+          <Label htmlFor="accept-terms" className="text-xs font-normal text-muted-foreground leading-relaxed cursor-pointer select-none">
+            Li e concordo com os{" "}
+            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-primary font-bold hover:underline">
+              Termos de Uso
+            </Link>{" "}
+            e a{" "}
+            <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary font-bold hover:underline">
+              Política de Privacidade
+            </Link>
+            .
+          </Label>
+        </div>
+
         <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
           {loading ? (
             <>

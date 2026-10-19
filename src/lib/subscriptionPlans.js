@@ -201,3 +201,68 @@ export function getUsageRows(plan, usage = {}) {
     };
   });
 }
+
+/**
+ * Política oficial de retenção de dados e continuidade do cliente Nacif Electric.
+ * Garante que cancelamentos ou downgrades NUNCA apaguem projetos existentes.
+ */
+export const DATA_RETENTION_POLICY = {
+  version: "1.0",
+  lastReviewed: "2026-10-19",
+  guarantees: [
+    {
+      topic: "Preservação de Projetos",
+      description:
+        "Projetos, plantas elétricas, quadros de distribuição, diagramas unifilares e orçamentos criados são mantidos integralmente salvos, mesmo em caso de cancelamento da assinatura.",
+    },
+    {
+      topic: "Acesso e Consulta Pós-Cancelamento",
+      description:
+        "O usuário que cancela a assinatura mantém acesso de leitura e consulta aos seus projetos existentes. A conta reverte para as cotas do plano gratuito.",
+    },
+    {
+      topic: "Exportação de Dados",
+      description:
+        "O cliente pode exportar seus dados a qualquer momento em formatos padrão (PDF de pranchas, relatórios e arquivos estruturados JSON/CSV).",
+    },
+    {
+      topic: "Sem Exclusão Silenciosa",
+      description:
+        "Nenhum arquivo ou projeto é excluído silenciosamente quando a conta atinge ou ultrapassa o limite do plano inferior após um downgrade.",
+    },
+  ],
+};
+
+export function getDataRetentionPolicy() {
+  return DATA_RETENTION_POLICY;
+}
+
+/**
+ * Valida se um usuário pode criar um novo projeto com base no plano atual e quantidade existente.
+ * Não bloqueia projetos já existentes.
+ */
+export function checkProjectCreationAllowed(user = {}, currentProjectCount = 0) {
+  const { plan } = normalizeSubscription(user);
+  const limit = getLimit(plan, FEATURE_KEYS.PROJECTS);
+
+  if (limit === Number.POSITIVE_INFINITY) {
+    return {
+      allowed: true,
+      currentCount: currentProjectCount,
+      limit,
+      planCode: plan.code,
+    };
+  }
+
+  const allowed = Number(currentProjectCount) < Number(limit);
+  return {
+    allowed,
+    currentCount: Number(currentProjectCount),
+    limit: Number(limit),
+    planCode: plan.code,
+    reason: allowed
+      ? null
+      : `Limite de ${limit} projetos atingido para o plano ${plan.name}. Faça upgrade para continuar criando novos projetos.`,
+  };
+}
+

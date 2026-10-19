@@ -4,13 +4,16 @@ import { Button } from "@/components/ui/button";
 import {
   Activity,
   CheckCircle2,
+  Clock,
   Database,
   FileSpreadsheet,
   Globe,
   RefreshCw,
+  ShieldAlert,
   Sparkles,
   Zap,
 } from "lucide-react";
+import { INCIDENT_SEVERITY, SUPPORT_CHANNELS } from "@/lib/incidentResponse";
 
 const SERVICES = [
   {
@@ -176,6 +179,72 @@ export default function SystemStatusPage() {
                 <p className="text-[11px] text-[#64748B]">Expansão de servidores de renderização de PDF para pranchas A0/A1.</p>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Protocolo Operacional & SLAs de Atendimento */}
+        <div className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E8FCF8] text-[#00d8b8]">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-[#0F172A]">
+                Protocolo Operacional & Níveis de Serviço (SLA)
+              </h3>
+              <p className="text-[11px] text-[#64748B]">
+                Classificação de ocorrências e tempos máximos de resposta inicial
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-2">
+            {Object.values(INCIDENT_SEVERITY).map((sev) => (
+              <div
+                key={sev.level}
+                className="rounded-xl border border-[#F1F5F9] bg-[#F8FAFC] p-3.5 space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] font-black uppercase text-[#64748B]">
+                    {sev.level}
+                  </span>
+                  <span
+                    className={`font-black text-[11px] px-2 py-0.5 rounded-md ${
+                      sev.level === "P1"
+                        ? "bg-red-100 text-red-800"
+                        : sev.level === "P2"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-slate-200 text-slate-800"
+                    }`}
+                  >
+                    {sev.label}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#475467] leading-relaxed">
+                  {sev.description}
+                </p>
+                <div className="pt-1 border-t border-slate-200/60 text-[11px] font-semibold text-[#0F172A] flex items-center justify-between">
+                  <span>SLA 1ª resposta:</span>
+                  <span className="font-bold text-[#009b84]">
+                    {sev.slaFirstResponseMinutes >= 60
+                      ? `${sev.slaFirstResponseMinutes / 60}h`
+                      : `${sev.slaFirstResponseMinutes} min`}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-2 text-[11px] text-[#64748B] flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-[#F1F5F9]">
+            <p>
+              Canal oficial de suporte:{" "}
+              <a href={`mailto:${SUPPORT_CHANNELS.officialEmail}`} className="font-bold text-[#009b84] underline">
+                {SUPPORT_CHANNELS.officialEmail}
+              </a>
+            </p>
+            <p>
+              Horário de atendimento: {SUPPORT_CHANNELS.businessHours.hours} (dias úteis)
+            </p>
           </div>
         </div>
       </div>

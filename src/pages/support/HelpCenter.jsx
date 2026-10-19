@@ -4,12 +4,16 @@ import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
+  Calculator,
   Compass,
   CreditCard,
+  FileSpreadsheet,
+  FolderOpen,
   GitBranch,
   LayoutGrid,
   Mail,
   Search,
+  ShieldAlert,
   Sun,
 } from "lucide-react";
 
@@ -95,7 +99,84 @@ const CATEGORIES = [
       {
         id: "fat-2",
         title: "Como solicitar alteração ou cancelamento do plano?",
-        content: "Acesse a página de Assinatura no seu menu de perfil. Você pode fazer upgrade a qualquer momento ou cancelar a renovação sem taxas de rescisão.",
+        content: "Acesse a página de Assinatura no seu menu de perfil. Você pode fazer upgrade a qualquer momento ou cancelar a renovação sem taxas de rescisão. Seus projetos existentes continuam salvos e acessíveis sem qualquer exclusão.",
+      },
+    ],
+  },
+  {
+    id: "projetos",
+    title: "Gestão de Projetos",
+    icon: FolderOpen,
+    description: "Criação, duplicação, histórico, exportação e organização de estudos elétricos.",
+    articles: [
+      {
+        id: "proj-1",
+        title: "Como criar, abrir e duplicar projetos?",
+        content: "No painel geral (Dashboard), clique em 'Novo Projeto' e preencha os dados do cliente, tensão de fornecimento e localidade. Para duplicar um estudo ou modelo existente, acesse a listagem de projetos, clique no menu de opções (...) do cartão do projeto e selecione 'Duplicar'.",
+      },
+      {
+        id: "proj-2",
+        title: "Como funciona o salvamento automático e a integridade dos dados?",
+        content: "O Nacif Electric salva automaticamente todas as alterações nos diagramas, plantas e circuitos com mecanismo anti-debounce seguro. As transações são validadas quanto à integridade referencial, garantindo que nenhum circuito ou dispositivo fique órfão.",
+      },
+      {
+        id: "proj-3",
+        title: "O que acontece com meus projetos se eu cancelar minha assinatura?",
+        content: "Nenhum projeto é apagado. O cancelamento apenas reverte a cota de novos projetos para o plano gratuito, mantendo todos os projetos existentes disponíveis para consulta e exportação de dados.",
+      },
+    ],
+  },
+  {
+    id: "calculadora",
+    title: "Calculadora & Dimensionamento NBR 5410",
+    icon: Calculator,
+    description: "Critérios de queda de tensão, ampacidade de condutores de cobre e disjuntores DIN.",
+    articles: [
+      {
+        id: "calc-1",
+        title: "Quais critérios a Calculadora utiliza para dimensionar a fiação?",
+        content: "A calculadora adota os critérios da NBR 5410: Capacidade de Condução de Corrente (ampacidade corrigida por temperatura e agrupamento - Tabelas 36 a 39) e Limite Máximo de Queda de Tensão (máx. 4% para circuitos terminais e 2% para circuitos de alimentação).",
+      },
+      {
+        id: "calc-2",
+        title: "Os cálculos substituem o engenheiro ou a emissão de ART/RRT?",
+        content: "Não. O Nacif Electric é uma ferramenta de produtividade e apoio técnico computacional. A responsabilidade técnica legal, a emissão de ART/TRT/RRT e a conferência in loco cabem exclusivamente ao profissional legalmente habilitado pelo CREA ou CFT.",
+      },
+    ],
+  },
+  {
+    id: "orcamentos",
+    title: "Orçamentos & Lista de Materiais",
+    icon: FileSpreadsheet,
+    description: "Levantamento quantitativo automático de eletrodutos, cabos, proteções, BDI e exportação.",
+    articles: [
+      {
+        id: "bgt-1",
+        title: "Como o quantitativo de materiais é gerado automaticamente?",
+        content: "O sistema calcula o comprimento real de eletrodutos e cabos com base no roteamento ortogonal da planta baixa, somando curvas, caixas de passagem, disjuntores do quadro e dispositivos de proteção (DPS e IDR).",
+      },
+      {
+        id: "bgt-2",
+        title: "Como aplicar taxa de BDI, impostos e exportar a proposta comercial?",
+        content: "No módulo de Orçamento, acesse as opções de composição de custos, informe a margem de lucro e o BDI desejado. Clique em 'Exportar Proposta' para gerar um PDF profissional para apresentar ao cliente final ou exportar uma planilha CSV.",
+      },
+    ],
+  },
+  {
+    id: "suporte",
+    title: "Suporte & Relato de Incidentes",
+    icon: ShieldAlert,
+    description: "Canais oficiais de atendimento, SLAs, página Avisos e Erros e protocolos.",
+    articles: [
+      {
+        id: "sup-1",
+        title: "Como relatar uma inconsistência técnica ou erro de cálculo?",
+        content: "Acesse o menu 'Avisos e Erros' (/avisos-erros) ou clique em 'Reportar Problema' no rodapé. Descreva o comportamento observado e anexe capturas se necessário. Um protocolo formal de atendimento será gerado imediatamente.",
+      },
+      {
+        id: "sup-2",
+        title: "Quais são os prazos de resposta (SLA) e canais de contato?",
+        content: "Para incidentes críticos com impacto em projetos, o primeiro retorno ocorre em até 30 minutos. Para dúvidas gerais, o prazo é de até 1 dia útil. O canal oficial de suporte por e-mail é suporte@nacifelectric.com.br, de segunda a sexta, das 08h às 18h BRT.",
       },
     ],
   },

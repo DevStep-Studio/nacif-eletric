@@ -22,6 +22,7 @@
     "test:database-audit": "node scripts/database-integrity-smoke.mjs",
     "test:perf-audit": "node scripts/performance-stability-smoke.mjs",
     "test:infra-audit": "node scripts/infrastructure-audit-smoke.mjs",
+    "test:commercial-audit": "node scripts/commercial-operational-smoke.mjs",
     "test:main-protection": "node scripts/main-protection-smoke.mjs",
     "test:electrical-audit": "node scripts/electrical-engine-audit-smoke.mjs",
     "test:solar-sizing": "node scripts/solar-sizing-smoke.mjs",
