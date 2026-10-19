@@ -21,7 +21,7 @@ import {
   DoorOpen, PanelTop, Cable, Spline, Type,
   Zap, Lightbulb, Network, ShieldCheck,
   AlertCircle, CheckCircle2, Coins, Calculator, ScanLine, Loader2, Save,
-  Search, X, ChevronDown, Check
+  Search, X, ChevronDown, Check, Printer
 } from "lucide-react";
 import FloorPlanCanvas, { createKonvaHouseTemplate } from "@/components/planta/FloorPlanCanvas";
 import { createDefaultLayerState, layerVisibilityForLegacyCanvas, normalizeLayerState } from "@/editor/layers/defaultLayers";
@@ -3268,6 +3268,19 @@ export default function PlantaIA() {
     }
   };
 
+  const handlePrintFloorPlan = () => {
+    setSelectedElement(null);
+    setActiveTool("");
+    setArchitectureTool("");
+    setRouteToolActive(false);
+    setRouteDraft(null);
+    floorPlanCanvasRef.current?.resetViewForExport?.();
+    setFitRequest((v) => v + 1);
+    setTimeout(() => {
+      window.print();
+    }, 250);
+  };
+
   const architectureTools = [
     { label: "Modelo casa", detail: "base 1:50", icon: House, onClick: loadHouseTemplate },
     { label: "Planta do zero", detail: "desenho livre", icon: Minus, onClick: startBlankArchitecturalPlan },
@@ -5084,14 +5097,14 @@ export default function PlantaIA() {
     if (!selectedElement?.id) return;
     if (selectedElement.type === "point") {
       commitDesign({
-        points: points.map(point => point.id === selectedElement.id
+        points: points.map(point => sameId(point.id, selectedElement.id)
           ? { ...point, rotation: ((Number(point.rotation) || 0) + delta + 360) % 360 }
           : point),
       });
     }
     if (selectedElement.type === "room") {
       commitDesign({
-        rooms: rooms.map(room => room.id === selectedElement.id
+        rooms: rooms.map(room => sameId(room.id, selectedElement.id)
           ? { ...room, rotation: ((Number(room.rotation) || 0) + delta + 360) % 360 }
           : room),
       });
@@ -5136,11 +5149,11 @@ export default function PlantaIA() {
   const duplicateSelected = () => {
     if (!selectedElement?.id) return;
     if (selectedElement.type === "point") {
-      const point = points.find(item => item.id === selectedElement.id);
+      const point = points.find(item => sameId(item.id, selectedElement.id));
       if (!point) return;
       const copy = {
         ...point,
-        id: `point-${Date.now()}`,
+        id: `point-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         x: clampPct(Number(point.x) + 2, Number(point.x) + 2),
         y: clampPct(Number(point.y) + 2, Number(point.y) + 2),
       };
@@ -5148,11 +5161,11 @@ export default function PlantaIA() {
       setSelectedElement({ type: "point", id: copy.id });
     }
     if (selectedElement.type === "room") {
-      const room = rooms.find(item => item.id === selectedElement.id);
+      const room = rooms.find(item => sameId(item.id, selectedElement.id));
       if (!room) return;
       const copy = {
         ...room,
-        id: `room-${Date.now()}`,
+        id: `room-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         label: `${room.label || "Comodo"} copia`,
         x: clampPct(Number(room.x) + 3, Number(room.x) + 3),
         y: clampPct(Number(room.y) + 3, Number(room.y) + 3),
@@ -5163,7 +5176,7 @@ export default function PlantaIA() {
     if (selectedElement.type === "wall") {
       const wall = walls.find((item) => sameId(item.id, selectedElement.id));
       if (!wall) return;
-      const copyId = `wall-${Date.now()}`;
+      const copyId = `wall-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const copy = {
         ...wall,
         id: copyId,
@@ -5178,7 +5191,11 @@ export default function PlantaIA() {
       };
       const copiedOpenings = openings
         .filter((opening) => sameId(opening.wallId, wall.id))
-        .map((opening, index) => ({ ...opening, id: `${opening.kind || "opening"}-${Date.now()}-${index}`, wallId: copyId }));
+        .map((opening, index) => ({
+          ...opening,
+          id: `${opening.kind || "opening"}-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
+          wallId: copyId,
+        }));
       commitDesign({ walls: [...walls, copy], openings: [...openings, ...copiedOpenings] });
       setSelectedElement({ type: "wall", id: copy.id });
     }
@@ -5187,7 +5204,7 @@ export default function PlantaIA() {
       if (!opening) return;
       const copy = {
         ...opening,
-        id: `${opening.kind || "opening"}-${Date.now()}`,
+        id: `${opening.kind || "opening"}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         position: Math.max(0.05, Math.min(0.95, Number(opening.position || 0.5) + 0.08)),
       };
       commitDesign({ openings: [...openings, copy] });
@@ -5198,7 +5215,7 @@ export default function PlantaIA() {
       if (!label) return;
       const copy = {
         ...label,
-        id: `room-label-${Date.now()}`,
+        id: `room-label-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         name: `${label.name || "Cômodo"} cópia`,
         x: clampPct(Number(label.x) + 2, Number(label.x) + 2),
         y: clampPct(Number(label.y) + 2, Number(label.y) + 2),
@@ -5443,6 +5460,18 @@ export default function PlantaIA() {
           >
             <Download className="mr-1 h-3.5 w-3.5" />
             <span className="hidden sm:inline">Baixar A0</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
+            onClick={handlePrintFloorPlan}
+            disabled={exporting}
+            title="Imprimir planta baixa técnica"
+          >
+            <Printer className="mr-1 h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Imprimir</span>
           </Button>
 
           {generatedCircuits.length > 0 && (
@@ -7575,7 +7604,7 @@ export default function PlantaIA() {
         </div>
 
         {/* Canvas area */}
-        <div ref={canvasExportRef} className={`relative min-h-0 flex-1 overflow-hidden ${exporting ? "bg-white" : "bg-[#F2FFFC]"}`}>
+        <div id="print-canvas-area" ref={canvasExportRef} className={`relative min-h-0 flex-1 overflow-hidden print-canvas-area ${exporting ? "bg-white" : "bg-[#F2FFFC]"}`}>
           <PlantaCanvasBoundary
             resetKey={`${selectedProject || "blank"}-${points.length}-${routes.length}-${rooms.length}-${walls.length}-${fitRequest}`}
             onReset={() => {

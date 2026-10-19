@@ -111,7 +111,10 @@ export const normalizePlantDocument = (design, { defaultScalePxPerMeter = DEFAUL
     points: normalizeEntityArray(source.points, "electrical"),
     rooms: normalizeEntityArray(source.rooms, "rooms"),
     walls: (Array.isArray(source.walls) ? source.walls : []).map(normalizeWall),
-    openings: normalizeEntityArray(source.openings, "openings"),
+    openings: (() => {
+      const wallIdSet = new Set((Array.isArray(source.walls) ? source.walls : []).map((w) => String(w.id)));
+      return normalizeEntityArray(source.openings, "openings").filter((op) => !op.wallId || wallIdSet.has(String(op.wallId)));
+    })(),
     roomLabels: normalizeEntityArray(source.roomLabels, "texts"),
     routes: normalizeCableRoutes(source.routes || []),
     scalePxPerMeter,

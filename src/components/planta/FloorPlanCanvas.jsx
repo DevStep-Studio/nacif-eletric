@@ -2366,7 +2366,7 @@ function ImportedPlanLayer({ elements }) {
 }
 
 function DeviceDimensionsLayer({
-  points,
+  points = [],
   walls = [],
   rooms = [],
   scalePxPerMeter,
@@ -2377,6 +2377,7 @@ function DeviceDimensionsLayer({
   onUpdatePointDimension,
 }) {
   if (!points || !points.length) return null;
+  const safeScale = normalizeScalePxPerMeter(scalePxPerMeter);
 
   const vSegments = [];
   const hSegments = [];
@@ -2429,7 +2430,7 @@ function DeviceDimensionsLayer({
     if (hiddenDimensions[key] === true || legacyHiddenKeys.includes(key)) return null;
     const distPx = Math.hypot(x2 - x1, y2 - y1);
     if (distPx < 12) return null;
-    const distM = distPx / scalePxPerMeter;
+    const distM = distPx / safeScale;
     const text = formatMeters(distM);
     const isHorizontal = Math.abs(y2 - y1) <= Math.abs(x2 - x1);
     const cx = (x1 + x2) / 2;
@@ -2525,7 +2526,7 @@ function DeviceDimensionsLayer({
   };
 
   const dimensionElements = [];
-  const maxWallDistPx = scalePxPerMeter * 3.5;
+  const maxWallDistPx = safeScale * 3.5;
 
   points.forEach((point, idx) => {
     const px = pctToPx(point.x, width);
