@@ -357,7 +357,13 @@ export const inferTerminalDirection = (pinId = "", point = { x: 0, y: 0 }, rails
   return "DOWN";
 };
 
-// ─── ROTEADOR ORTOGONAL AUTOMÁTICO ─────────────────────────────────────────────
+// ─── CACHE LRU DE ROTEAMENTO ORTOGONAL (ALTO DESEMPENHO) ────────────────────────
+const ROUTE_CACHE_MAX_SIZE = 1500;
+const _routeMemoCache = new Map();
+
+export const clearOrthogonalRouteCache = () => {
+  _routeMemoCache.clear();
+};
 
 /**
  * calculateOrthogonalRoute(source, target, obstacles, options)
@@ -387,6 +393,27 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
     : (Number.isFinite(laneIndex) ? laneIndex * wireSpacing : 0);
   const sourceSide = options.sourceSide || "auto";
   const targetSide = options.targetSide || "auto";
+
+  // Verificação de cache LRU para recuperação instantânea em O(1)
+  const obsCount = Array.isArray(obstacles) ? obstacles.length : 0;
+  const cacheKey = `${pSrc.x},${pSrc.y}|${pDst.x},${pDst.y}|${laneOffset}|${sourceSide}|${targetSide}|${obsCount}|${options.sourceComponentId ?? ""}|${options.targetComponentId ?? ""}`;
+
+  if (_routeMemoCache.has(cacheKey)) {
+    const cached = _routeMemoCache.get(cacheKey);
+    _routeMemoCache.delete(cacheKey);
+    _routeMemoCache.set(cacheKey, cached);
+    return cached.map((pt) => ({ ...pt }));
+  }
+
+  const storeRoute = (res) => {
+    if (!res || res.length === 0) return res;
+    if (_routeMemoCache.size >= ROUTE_CACHE_MAX_SIZE) {
+      const oldestKey = _routeMemoCache.keys().next().value;
+      _routeMemoCache.delete(oldestKey);
+    }
+    _routeMemoCache.set(cacheKey, res.map((pt) => ({ ...pt })));
+    return res;
+  };
 
   // Identificadores de componentes de origem e destino a excluir da colisão de saída imediata
   const excludedIds = new Set();
@@ -431,7 +458,7 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
   if ((startStub.x === endStub.x) || (laneOffset === 0 && startStub.y === endStub.y)) {
     const directCandidate = [pSrc, startStub, endStub, pDst];
     if (!pathIntersectsObstacles([startStub, endStub], obstacles, obstaclePadding, excludedIds)) {
-      return simplifyOrthogonalPoints(directCandidate);
+      return storeRoute(simplifyOrthogonalPoints(directCandidate));
     }
   }
 
@@ -624,11 +651,11 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
   if (bestScore >= 100000) {
     const aStarRoute = findAStarOrthogonalRoute(pSrc, pDst, startStub, endStub, obstacles, obstaclePadding, excludedIds, laneOffset);
     if (aStarRoute && aStarRoute.length >= 2) {
-      return simplifyOrthogonalPoints(aStarRoute);
+      return storeRoute(simplifyOrthogonalPoints(aStarRoute));
     }
   }
 
-  return bestRoute || simplifyOrthogonalPoints(zVertical);
+  return storeRoute(bestRoute || simplifyOrthogonalPoints(zVertical));
 };
 
 // ─── ALGORITMO A* EM GRID ORTOGONAL PARA CASOS COMPLEXOS ──────────────────────

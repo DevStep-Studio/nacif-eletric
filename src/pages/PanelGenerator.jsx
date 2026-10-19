@@ -1579,6 +1579,8 @@ export default function PanelGenerator() {
   const [legendPosition, setLegendPosition] = useState(() => ({ x: PANEL_W - 230, y: 38 }));
   const [legendDrag, setLegendDrag] = useState(null);
   const layoutSaveFeedbackTimerRef = useRef(null);
+  const autoSaveDebounceTimerRef = useRef(null);
+  const pendingSavePayloadRef = useRef(null);
   const latestPanelBoardsRef = useRef([]);
   const latestActiveBoardIdRef = useRef("");
   const latestPanelLayoutRef = useRef({ rails: [], wires: [], infrastructure: [] });
@@ -2166,7 +2168,21 @@ export default function PanelGenerator() {
     const nextBoards = currentBoards.map((board) => (
       board.id === activeBoardId ? { ...board, layout: layoutObj } : board
     ));
-    await persistPanelBoards(nextBoards, activeBoardId);
+    if (options.immediate) {
+      if (autoSaveDebounceTimerRef.current) clearTimeout(autoSaveDebounceTimerRef.current);
+      pendingSavePayloadRef.current = null;
+      await persistPanelBoards(nextBoards, activeBoardId);
+    } else {
+      pendingSavePayloadRef.current = { boards: nextBoards, activeId: activeBoardId };
+      if (autoSaveDebounceTimerRef.current) clearTimeout(autoSaveDebounceTimerRef.current);
+      autoSaveDebounceTimerRef.current = setTimeout(async () => {
+        if (pendingSavePayloadRef.current) {
+          const { boards, activeId } = pendingSavePayloadRef.current;
+          pendingSavePayloadRef.current = null;
+          await persistPanelBoards(boards, activeId, { silent: true });
+        }
+      }, 350);
+    }
   };
 
   const panelBoardsWithCurrentLayout = () => {
@@ -2192,6 +2208,11 @@ export default function PanelGenerator() {
   };
 
   const handleSavePanelLayout = async () => {
+    if (autoSaveDebounceTimerRef.current) {
+      clearTimeout(autoSaveDebounceTimerRef.current);
+      autoSaveDebounceTimerRef.current = null;
+    }
+    pendingSavePayloadRef.current = null;
     const { boards, activeId } = panelBoardsWithCurrentLayout();
     if (!boards.length) return;
     await persistPanelBoards(boards, activeId, { silent: false });
@@ -2201,6 +2222,16 @@ export default function PanelGenerator() {
     if (!selectedId) return undefined;
 
     const flushPendingPanelSave = () => {
+      if (autoSaveDebounceTimerRef.current) {
+        clearTimeout(autoSaveDebounceTimerRef.current);
+        autoSaveDebounceTimerRef.current = null;
+      }
+      if (pendingSavePayloadRef.current) {
+        const { boards, activeId } = pendingSavePayloadRef.current;
+        pendingSavePayloadRef.current = null;
+        persistPanelBoards(boards, activeId, { silent: true });
+        return;
+      }
       const currentBoards = latestPanelBoardsRef.current.length > 0
         ? latestPanelBoardsRef.current
         : normalizePanelBoards(project);
@@ -2227,6 +2258,7 @@ export default function PanelGenerator() {
 
   useEffect(() => () => {
     if (layoutSaveFeedbackTimerRef.current) clearTimeout(layoutSaveFeedbackTimerRef.current);
+    if (autoSaveDebounceTimerRef.current) clearTimeout(autoSaveDebounceTimerRef.current);
   }, []);
 
   const restoreLayoutSnapshot = (snapshot) => {

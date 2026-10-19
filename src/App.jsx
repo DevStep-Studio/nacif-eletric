@@ -7,69 +7,71 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Layout from './components/Layout';
-import Home from './pages/Home';
-import Projects from './pages/Projects';
-import NewProject from './pages/NewProject';
-import ProjectDetail from './pages/ProjectDetail';
-import Calculator from './pages/Calculator';
-import AIAssistant from './pages/AIAssistant';
-import NBRLibrary from './pages/NBRLibrary';
-import PanelGenerator from './pages/PanelGenerator';
-import Budget from './pages/Budget';
-import ComponentsLibrary from './pages/ComponentsLibrary';
-import Scanner from './pages/Scanner';
-import PhaseBalance from './pages/PhaseBalance';
-import Diagram from './pages/Diagram';
-import CircuitEditor from './pages/CircuitEditor';
-import UnifilarDiagram from './pages/UnifilarDiagram';
-import MemorialDescritivo from './pages/MemorialDescritivo';
-import PlantaIA from './pages/PlantaIA';
-import MaterialsList from './pages/MaterialsList';
-import SolarProject from './pages/SolarProject';
-import SettingsPage from './pages/Settings';
-import Subscription from './pages/Subscription';
-import AdminPanel from './pages/AdminPanel';
-import AvisosErros from './pages/AvisosErros';
-import SuperAdminPage from './pages/SuperAdmin';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
+// Páginas principais e editores técnicos com Code Splitting (React.lazy)
+const Home = React.lazy(() => import('./pages/Home'));
+const Projects = React.lazy(() => import('./pages/Projects'));
+const NewProject = React.lazy(() => import('./pages/NewProject'));
+const ProjectDetail = React.lazy(() => import('./pages/ProjectDetail'));
+const Calculator = React.lazy(() => import('./pages/Calculator'));
+const AIAssistant = React.lazy(() => import('./pages/AIAssistant'));
+const NBRLibrary = React.lazy(() => import('./pages/NBRLibrary'));
+const PanelGenerator = React.lazy(() => import('./pages/PanelGenerator'));
+const Budget = React.lazy(() => import('./pages/Budget'));
+const ComponentsLibrary = React.lazy(() => import('./pages/ComponentsLibrary'));
+const Scanner = React.lazy(() => import('./pages/Scanner'));
+const PhaseBalance = React.lazy(() => import('./pages/PhaseBalance'));
+const Diagram = React.lazy(() => import('./pages/Diagram'));
+const CircuitEditor = React.lazy(() => import('./pages/CircuitEditor'));
+const UnifilarDiagram = React.lazy(() => import('./pages/UnifilarDiagram'));
+const MemorialDescritivo = React.lazy(() => import('./pages/MemorialDescritivo'));
+const PlantaIA = React.lazy(() => import('./pages/PlantaIA'));
+const MaterialsList = React.lazy(() => import('./pages/MaterialsList'));
+const SolarProject = React.lazy(() => import('./pages/SolarProject'));
+const SettingsPage = React.lazy(() => import('./pages/Settings'));
+const Subscription = React.lazy(() => import('./pages/Subscription'));
+const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
+const AvisosErros = React.lazy(() => import('./pages/AvisosErros'));
+const SuperAdminPage = React.lazy(() => import('./pages/SuperAdmin'));
+const Login = React.lazy(() => import('./pages/Login'));
+const Register = React.lazy(() => import('./pages/Register'));
+const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
+
 import { BrandingBoot } from './lib/appPreferences';
 import { hasFullSystemAccess, isSuperAdmin } from './lib/professionalAccess';
 
 // Error & System Pages
-import NotFoundPage from './pages/system/NotFound';
-import ForbiddenPage from './pages/system/Forbidden';
-import UnauthorizedPage from './pages/system/Unauthorized';
 import ServerErrorPage from './pages/system/ServerError';
-import ServiceUnavailablePage from './pages/system/ServiceUnavailable';
-import MaintenancePage from './pages/system/Maintenance';
-import OfflinePage from './pages/system/Offline';
-import UnsupportedBrowserPage from './pages/system/UnsupportedBrowser';
+const NotFoundPage = React.lazy(() => import('./pages/system/NotFound'));
+const ForbiddenPage = React.lazy(() => import('./pages/system/Forbidden'));
+const UnauthorizedPage = React.lazy(() => import('./pages/system/Unauthorized'));
+const ServiceUnavailablePage = React.lazy(() => import('./pages/system/ServiceUnavailable'));
+const MaintenancePage = React.lazy(() => import('./pages/system/Maintenance'));
+const OfflinePage = React.lazy(() => import('./pages/system/Offline'));
+const UnsupportedBrowserPage = React.lazy(() => import('./pages/system/UnsupportedBrowser'));
 
 // Legal & Compliance Pages
-import TermsOfServicePage from './pages/legal/TermsOfService';
-import PrivacyPolicyPage from './pages/legal/PrivacyPolicy';
-import CookiePolicyPage from './pages/legal/CookiePolicy';
-import SecurityPolicyPage from './pages/legal/SecurityPolicy';
-import LgpdRightsPage from './pages/legal/LgpdRights';
+const TermsOfServicePage = React.lazy(() => import('./pages/legal/TermsOfService'));
+const PrivacyPolicyPage = React.lazy(() => import('./pages/legal/PrivacyPolicy'));
+const CookiePolicyPage = React.lazy(() => import('./pages/legal/CookiePolicy'));
+const SecurityPolicyPage = React.lazy(() => import('./pages/legal/SecurityPolicy'));
+const LgpdRightsPage = React.lazy(() => import('./pages/legal/LgpdRights'));
 
 // Support & Institutional Pages
-import HelpCenterPage from './pages/support/HelpCenter';
-import ContactPage from './pages/support/Contact';
-import SystemStatusPage from './pages/support/SystemStatus';
-import ChangelogPage from './pages/support/Changelog';
-import AboutPage from './pages/institutional/About';
-import ReportProblemPage from './pages/support/ReportProblem';
+const HelpCenterPage = React.lazy(() => import('./pages/support/HelpCenter'));
+const ContactPage = React.lazy(() => import('./pages/support/Contact'));
+const SystemStatusPage = React.lazy(() => import('./pages/support/SystemStatus'));
+const ChangelogPage = React.lazy(() => import('./pages/support/Changelog'));
+const AboutPage = React.lazy(() => import('./pages/institutional/About'));
+const ReportProblemPage = React.lazy(() => import('./pages/support/ReportProblem'));
 
 // Billing & Account Pages
-import PaymentSuccessPage from './pages/billing/PaymentSuccess';
-import PaymentFailedPage from './pages/billing/PaymentFailed';
-import PaymentPendingPage from './pages/billing/PaymentPending';
-import CancelSubscriptionPage from './pages/billing/CancelSubscription';
-import DeleteAccountPage from './pages/account/DeleteAccount';
-import ExportDataPage from './pages/account/ExportData';
+const PaymentSuccessPage = React.lazy(() => import('./pages/billing/PaymentSuccess'));
+const PaymentFailedPage = React.lazy(() => import('./pages/billing/PaymentFailed'));
+const PaymentPendingPage = React.lazy(() => import('./pages/billing/PaymentPending'));
+const CancelSubscriptionPage = React.lazy(() => import('./pages/billing/CancelSubscription'));
+const DeleteAccountPage = React.lazy(() => import('./pages/account/DeleteAccount'));
+const ExportDataPage = React.lazy(() => import('./pages/account/ExportData'));
 
 // System Components
 import CookieConsentBanner from './components/system/CookieConsentBanner';
@@ -150,11 +152,19 @@ const AuthenticatedApp = () => {
     }
   }
 
+const PageLoadingFallback = () => (
+  <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 space-y-4">
+    <div className="w-10 h-10 border-4 border-[#005B94]/20 border-t-[#005B94] rounded-full animate-spin"></div>
+    <span className="text-xs font-medium text-slate-500 animate-pulse">Carregando módulo Nacif...</span>
+  </div>
+);
+
   // Render the main app
   return (
-    <Routes>
-      {/* Auth Public Routes */}
-      <Route path="/login" element={<Login />} />
+    <React.Suspense fallback={<PageLoadingFallback />}>
+      <Routes>
+        {/* Auth Public Routes */}
+        <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -234,6 +244,7 @@ const AuthenticatedApp = () => {
       {/* Wildcard Fallback */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+  </React.Suspense>
   );
 };
 
