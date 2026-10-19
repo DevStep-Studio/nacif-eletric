@@ -79,6 +79,7 @@ function BrandLogo({ branding, compact = false, className = "" }) {
       url.includes("Logo-Principal") ||
       url.includes("Logo-black") ||
       url.includes("Logo-white") ||
+      url.includes("lg.png") ||
       url === branding?.logoDataUrl
     );
   };
@@ -96,7 +97,7 @@ function BrandLogo({ branding, compact = false, className = "" }) {
       <img
         src={logo}
         alt={`${branding?.appName || "Nacif"} ${branding?.appSuffix || "Electric"}`}
-        className={`h-full w-full object-contain ${compact ? "object-center" : "object-left"}`}
+        className={`h-full w-full object-contain transition-transform duration-200 group-hover:scale-105 ${compact ? "object-center" : "object-left"}`}
         onError={(e) => {
           const fallback = compact ? "/brand-mark-principal.png" : "/brand-logo-principal.png";
           if (e.currentTarget.src !== fallback) {
@@ -396,7 +397,7 @@ export default function Layout() {
         >
           <Link
             to="/"
-            className={`flex items-center transition-all ${
+            className={`group flex items-center transition-all ${
               sidebarCollapsed
                 ? "h-10 w-10 mx-auto justify-center rounded-xl hover:bg-[#F8FAFC]"
                 : "h-10 items-center gap-3 overflow-hidden"
