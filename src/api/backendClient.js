@@ -23,6 +23,10 @@ import {
   validateBackupArchive,
   restoreDatabaseBackup,
 } from "../lib/databaseIntegrityManager.js";
+import {
+  probeSystemHealth,
+  getEnvironmentMetadata,
+} from "../lib/infrastructureHealth.js";
 
 const rawApiBaseUrl = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.trim() : "");
 const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
@@ -2720,7 +2724,7 @@ const databaseEntity = {
 
   async auditIntegrity() {
     if (isLocalAuthMode) {
-      const currentUser = requireLocalUser();
+      const currentUser = getLocalUserFromToken();
       const users = readLocalUsers();
       const projects = readLocalProjects();
       const budgets = readLocalBudgets();
@@ -2792,8 +2796,20 @@ const databaseEntity = {
   },
 };
 
+const systemEntity = {
+  async getHealthCheck() {
+    return probeSystemHealth(async () => {
+      return databaseEntity.auditIntegrity();
+    });
+  },
+  getEnvironment() {
+    return getEnvironmentMetadata();
+  },
+};
+
 export const backend = {
   auth,
+  system: systemEntity,
   subscriptions: subscriptionEntity,
   database: databaseEntity,
   entities: {
@@ -2807,6 +2823,7 @@ export const backend = {
     Catalog: catalogEntity,
     Analysis: analysisEntity,
     Database: databaseEntity,
+    System: systemEntity,
   },
   integrations,
 };

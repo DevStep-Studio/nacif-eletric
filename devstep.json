@@ -1,8 +1,9 @@
 {
   "name": "Nacif Eletric",
-  "project_type": "nextjs",
+  "project_type": "vite",
   "branch": "main",
   "production_path": "/home/nacifenergy/htdocs/nacifenergy.com.br",
+  "build_output": "dist",
   "pm2_process": null,
-  "deploy_script": null
+  "deploy_script": "npm run build"
 }

@@ -1,0 +1,69 @@
+name: Nacif Electric CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main]
+
+jobs:
+  audit-and-build:
+    name: Build, Auditoria e Validação Automatizada
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js (v20 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Instalação Limpa de Dependências
+        run: npm ci
+
+      - name: Compilação de Produção (Build)
+        run: npm run build
+
+      - name: Validação de Integridade do Banco e Migrations
+        run: npm run test:database-audit
+
+      - name: Validação de Segurança e Conformidade LGPD
+        run: npm run test:security-audit
+
+      - name: Validação de Desempenho e Code-Splitting
+        run: npm run test:perf-audit
+
+      - name: Conformidade Elétrica NBR 5410
+        run: npm run test:electrical-audit
+
+      - name: Validação do Motor de Orçamentos e Precisão Monetária
+        run: npm run test:budget-audit
+
+      - name: Roteamento Ortogonal e Posicionamento DIN
+        run: npm run test:orthogonal-router
+
+      - name: Otimizador Inteligente de Fiação CAD
+        run: npm run test:wire-optimizer
+
+      - name: Dimensionamento Solar Fotovoltaico
+        run: npm run test:solar-sizing
+
+      - name: Auditoria de Acessibilidade e Interface UI/UX
+        run: npm run test:ui-ux-audit
+
+      - name: Empacotamento de Artefatos para Rollback Seguro
+        if: github.ref == 'refs/heads/main'
+        run: |
+          tar -czf release-artifact-${{ github.sha }}.tar.gz dist/
+          echo "Release artifact created for commit ${{ github.sha }}"
+
+      - name: Upload de Artefato de Produção
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-build
+          path: dist/
+          retention-days: 14
