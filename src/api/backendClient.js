@@ -14,6 +14,7 @@ const TOKEN_KEYS = ["voltai_access_token", "voltai_token"];
 export const isLocalAuthMode = true;
 const LOCAL_USERS_KEY = "voltai_local_users";
 const LOCAL_PROJECTS_KEY = "voltai_local_projects";
+const LOCAL_BUDGETS_KEY = "voltai_local_budgets";
 const LOCAL_NOTIFICATIONS_KEY = "voltai_local_backend_notifications";
 const LOCAL_RESET_TOKENS_KEY = "voltai_local_reset_tokens";
 const LOCAL_BRANDING_KEY = "voltai_branding";
@@ -222,6 +223,8 @@ const readLocalUsers = () => {
 const writeLocalUsers = (users) => writeLocal(LOCAL_USERS_KEY, users);
 export const readLocalProjects = () => { const d = readLocal(LOCAL_PROJECTS_KEY, []); return Array.isArray(d) ? d : []; };
 export const writeLocalProjects = (projects) => writeLocal(LOCAL_PROJECTS_KEY, projects);
+export const readLocalBudgets = () => { const d = readLocal(LOCAL_BUDGETS_KEY, []); return Array.isArray(d) ? d : []; };
+export const writeLocalBudgets = (budgets) => writeLocal(LOCAL_BUDGETS_KEY, budgets);
 const readLocalNotifications = () => { const d = readLocal(LOCAL_NOTIFICATIONS_KEY, []); return Array.isArray(d) ? d : []; };
 const writeLocalNotifications = (notifications) => writeLocal(LOCAL_NOTIFICATIONS_KEY, notifications);
 const readLocalResetTokens = () => readLocal(LOCAL_RESET_TOKENS_KEY, {});
@@ -1917,6 +1920,142 @@ const superAdminEntity = {
   },
 };
 
+const budgetEntity = {
+  async list(sortBy = "-updated_date", limit = 100) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      let budgets = readLocalBudgets();
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        budgets = budgets.filter((b) => !b.owner_id || b.owner_id === currentUser.id);
+      }
+      return cloneLocal(sortLocalItems(budgets, sortBy, limit));
+    }
+    return request("/api/budgets", { query: { sortBy, limit } });
+  },
+
+  async filter(criteria = {}, sortBy = "-updated_date", limit = 100) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      let budgets = readLocalBudgets();
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        budgets = budgets.filter((b) => !b.owner_id || b.owner_id === currentUser.id);
+      }
+      if (criteria.project_id) {
+        budgets = budgets.filter((b) => b.project_id === criteria.project_id);
+      }
+      if (criteria.status) {
+        budgets = budgets.filter((b) => b.status === criteria.status);
+      }
+      return cloneLocal(sortLocalItems(budgets, sortBy, limit));
+    }
+    return request("/api/budgets/filter", { method: "POST", body: criteria, query: { sortBy, limit } });
+  },
+
+  async get(id) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const budget = readLocalBudgets().find((b) => b.id === id);
+      if (!budget) {
+        throw createError("Orçamento não encontrado.", 404);
+      }
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && budget.owner_id && budget.owner_id !== currentUser.id) {
+        throw createError("Acesso negado a este orçamento.", 403);
+      }
+      return cloneLocal(budget);
+    }
+    return request(`/api/budgets/${id}`);
+  },
+
+  async create(data = {}) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const timestamp = nowIso();
+      const id = randomId("budget");
+      const name = String(data?.name || "").trim() || `Orçamento ${new Date().toLocaleDateString("pt-BR")}`;
+      const budget = {
+        id,
+        created_date: timestamp,
+        updated_date: timestamp,
+        owner_id: currentUser.id,
+        user_id: currentUser.id,
+        status: data?.status || "Rascunho",
+        materials: [],
+        services: [],
+        margin: 30,
+        labor_cost: 0,
+        product_adjustment: 0,
+        discount_type: "percent",
+        discount_value: 0,
+        surcharge_type: "percent",
+        surcharge_value: 0,
+        notes: "",
+        validity_days: 15,
+        payment_terms: "50% entrada e 50% na conclusão dos serviços",
+        execution_deadline: "15 dias úteis",
+        ...data,
+        name,
+      };
+      writeLocalBudgets([budget, ...readLocalBudgets()]);
+      return cloneLocal(budget);
+    }
+    return request("/api/budgets", { method: "POST", body: data });
+  },
+
+  async update(id, patch = {}) {
+    if (isLocalAuthMode) {
+      requireLocalUser();
+      const budgets = readLocalBudgets();
+      const existing = budgets.find((b) => b.id === id);
+      if (!existing) {
+        throw createError("Orçamento não encontrado para atualização.", 404);
+      }
+      const updated = {
+        ...existing,
+        ...patch,
+        updated_date: nowIso(),
+      };
+      const nextBudgets = budgets.map((b) => (b.id === id ? updated : b));
+      writeLocalBudgets(nextBudgets);
+      return cloneLocal(updated);
+    }
+    return request(`/api/budgets/${id}`, { method: "PUT", body: patch });
+  },
+
+  async delete(id) {
+    if (isLocalAuthMode) {
+      requireLocalUser();
+      const budgets = readLocalBudgets();
+      const filtered = budgets.filter((b) => b.id !== id);
+      writeLocalBudgets(filtered);
+      return { ok: true };
+    }
+    return request(`/api/budgets/${id}`, { method: "DELETE" });
+  },
+
+  async duplicate(id) {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      const original = readLocalBudgets().find((b) => b.id === id);
+      if (!original) {
+        throw createError("Orçamento de origem não encontrado.", 404);
+      }
+      const timestamp = nowIso();
+      const duplicated = {
+        ...cloneLocal(original),
+        id: randomId("budget"),
+        name: `${original.name || "Orçamento"} (Cópia)`,
+        status: "Rascunho",
+        created_date: timestamp,
+        updated_date: timestamp,
+        owner_id: currentUser.id,
+      };
+      writeLocalBudgets([duplicated, ...readLocalBudgets()]);
+      return cloneLocal(duplicated);
+    }
+    return request(`/api/budgets/${id}/duplicate`, { method: "POST" });
+  },
+};
+
 const subscriptionEntity = {
   async cancel({ reason } = {}) {
     if (isLocalAuthMode) {
@@ -1956,6 +2095,7 @@ export const backend = {
   subscriptions: subscriptionEntity,
   entities: {
     Project: projectEntity,
+    Budget: budgetEntity,
     User: userEntity,
     SuperAdmin: superAdminEntity,
     Notification: notificationEntity,
