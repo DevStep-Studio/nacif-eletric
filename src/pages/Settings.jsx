@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PROFESSIONS, professionLabel, isSuperAdmin } from "@/lib/professionalAccess";
+import { getPlanByCode } from "@/lib/subscriptionPlans";
 import {
   CreditCard,
   Lock,
@@ -183,7 +184,9 @@ export default function SettingsPage() {
             <div className="min-w-0">
               <p className="truncate text-lg font-extrabold text-[#0f1728]">{form.full_name || user?.email}</p>
               <p className="truncate text-sm font-medium text-[#5f6877]">{user?.email}</p>
-              <Badge className="mt-2 w-fit rounded-[10px] bg-primary text-primary-foreground">{user?.plan || "gratuito"}</Badge>
+              <Badge className="mt-2 w-fit rounded-[10px] bg-primary text-primary-foreground capitalize">
+                {getPlanByCode(user?.plan)?.name || user?.plan || "Gratuito"}
+              </Badge>
               <p className="mt-2 text-xs font-bold uppercase tracking-[0.08em] text-[#7a8495]">
                 {professionLabel(form.profession || user?.profession || user?.profissao)}
               </p>
