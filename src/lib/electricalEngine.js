@@ -23,6 +23,72 @@ export const WIRE_TABLE = [
   { gauge: "240mm²",  area: 240,  B2: 286, B1: 350, D1: 403, resistance: 0.075 },
 ];
 
+export const WIRE_TABLE_ALUMINUM = [
+  // NBR 5410 Tabela 38 (Alumínio, PVC 70°C). Notar item 6.2.5.3: Proibido alumínio < 16mm²
+  { gauge: "16mm²",   area: 16,   B2: 43,  B1: 51,  D1: 59,  resistance: 1.91 },
+  { gauge: "25mm²",   area: 25,   B2: 57,  B1: 65,  D1: 75,  resistance: 1.20 },
+  { gauge: "35mm²",   area: 35,   B2: 70,  B1: 81,  D1: 93,  resistance: 0.868 },
+  { gauge: "50mm²",   area: 50,   B2: 84,  B1: 98,  D1: 113, resistance: 0.641 },
+  { gauge: "70mm²",   area: 70,   B2: 107, B1: 126, D1: 144, resistance: 0.443 },
+  { gauge: "95mm²",   area: 95,   B2: 129, B1: 153, D1: 175, resistance: 0.320 },
+  { gauge: "120mm²",  area: 120,  B2: 149, B1: 178, D1: 203, resistance: 0.253 },
+  { gauge: "150mm²",  area: 150,  B2: 170, B1: 205, D1: 235, resistance: 0.206 },
+  { gauge: "185mm²",  area: 185,  B2: 194, B1: 236, D1: 270, resistance: 0.164 },
+  { gauge: "240mm²",  area: 240,  B2: 227, B1: 278, D1: 320, resistance: 0.125 },
+];
+
+export const WIRE_TABLE_XLPE = [
+  // NBR 5410 Tabela 37 (Cobre, EPR/XLPE 90°C)
+  { gauge: "1.5mm²",  area: 1.5,  B2: 17,  B1: 19.5, D1: 22,  resistance: 12.1 },
+  { gauge: "2.5mm²",  area: 2.5,  B2: 23,  B1: 27,   D1: 30,  resistance: 7.41 },
+  { gauge: "4mm²",    area: 4,    B2: 31,  B1: 36,   D1: 40,  resistance: 4.61 },
+  { gauge: "6mm²",    area: 6,    B2: 40,  B1: 46,   D1: 52,  resistance: 3.08 },
+  { gauge: "10mm²",   area: 10,   B2: 54,  B1: 63,   D1: 71,  resistance: 1.83 },
+  { gauge: "16mm²",   area: 16,   B2: 73,  B1: 85,   D1: 96,  resistance: 1.15 },
+  { gauge: "25mm²",   area: 25,   B2: 95,  B1: 112,  D1: 119, resistance: 0.727 },
+  { gauge: "35mm²",   area: 35,   B2: 117, B1: 138,  D1: 147, resistance: 0.524 },
+  { gauge: "50mm²",   area: 50,   B2: 141, B1: 168,  D1: 179, resistance: 0.387 },
+  { gauge: "70mm²",   area: 70,   B2: 179, B1: 213,  D1: 229, resistance: 0.268 },
+  { gauge: "95mm²",   area: 95,   B2: 216, B1: 258,  D1: 278, resistance: 0.193 },
+  { gauge: "120mm²",  area: 120,  B2: 249, B1: 299,  D1: 322, resistance: 0.153 },
+  { gauge: "150mm²",  area: 150,  B2: 285, B1: 344,  D1: 371, resistance: 0.124 },
+  { gauge: "185mm²",  area: 185,  B2: 324, B1: 392,  D1: 424, resistance: 0.099 },
+  { gauge: "240mm²",  area: 240,  B2: 380, B1: 461,  D1: 500, resistance: 0.075 },
+];
+
+// ─── Eletrodutos comerciais padronizados (NBR 15465 / NBR 6150 / NBR 13057) ─────────────────
+export const CONDUIT_SIZES = [
+  { name: '1/2"', dn: 20, internalDiameter: 16.0, internalArea: 201 },
+  { name: '3/4"', dn: 25, internalDiameter: 20.4, internalArea: 327 },
+  { name: '1"', dn: 32, internalDiameter: 27.0, internalArea: 572 },
+  { name: '1 1/4"', dn: 40, internalDiameter: 35.0, internalArea: 962 },
+  { name: '1 1/2"', dn: 50, internalDiameter: 41.0, internalArea: 1320 },
+  { name: '2"', dn: 60, internalDiameter: 51.5, internalArea: 2083 },
+  { name: '2 1/2"', dn: 75, internalDiameter: 66.0, internalArea: 3421 },
+  { name: '3"', dn: 85, internalDiameter: 78.5, internalArea: 4840 },
+  { name: '4"', dn: 110, internalDiameter: 100.0, internalArea: 7854 },
+];
+
+// ─── Diâmetros externos e áreas totais de cabos isolados (750V / 1kV NBR NM 247-3 / 7288) ────
+export const WIRE_OVERALL_AREAS = {
+  1.5: { externalDiameter: 3.0, totalArea: 8.0 },
+  2.5: { externalDiameter: 3.6, totalArea: 11.9 },
+  4.0: { externalDiameter: 4.2, totalArea: 15.2 },
+  6.0: { externalDiameter: 4.8, totalArea: 20.4 },
+  10.0: { externalDiameter: 6.1, totalArea: 34.2 },
+  16.0: { externalDiameter: 7.3, totalArea: 50.3 },
+  25.0: { externalDiameter: 9.2, totalArea: 80.1 },
+  35.0: { externalDiameter: 10.5, totalArea: 105.7 },
+  50.0: { externalDiameter: 12.5, totalArea: 151.7 },
+  70.0: { externalDiameter: 14.5, totalArea: 206.1 },
+  95.0: { externalDiameter: 17.0, totalArea: 277.6 },
+  120.0: { externalDiameter: 18.8, totalArea: 346.4 },
+  150.0: { externalDiameter: 20.8, totalArea: 422.7 },
+  185.0: { externalDiameter: 23.0, totalArea: 515.3 },
+  240.0: { externalDiameter: 26.0, totalArea: 660.5 },
+};
+
+
 // ─── Fatores de correção NBR 5410 Tabela 40 (temperatura ambiente para condutores PVC) ─────────
 export const TEMP_FACTORS = {
   25: 1.06, 30: 1.00, 35: 0.94, 40: 0.87, 45: 0.79, 50: 0.71, 55: 0.61, 60: 0.50,
@@ -389,22 +455,497 @@ export function calcMainProtection(project = {}, precomputedMetrics = null) {
   };
 }
 
-// ─── Cálculo da Queda de Tensão (NBR 5410 item 6.2.7) ──────────────────────────────────────────
-export function calcVoltageDrop(power_w, voltage, supply_type, length_m, wire_gauge, power_factor = 0.92) {
-  const wireData = WIRE_TABLE.find(w => w.gauge === wire_gauge) || WIRE_TABLE[1];
-  const I = calcNominalCurrent(power_w, voltage, supply_type, power_factor);
-  const R = wireData.resistance / 1000; // Ω/km → Ω/m
-  const isTri = supply_type === "Trifásico";
-  // ΔU = (√3 ou 2) × I × R × L  /  tensão  × 100
-  const factor = isTri ? Math.sqrt(3) : 2;
-  const deltaU = factor * I * R * length_m;
-  const pct = voltage > 0 ? (deltaU / voltage) * 100 : 0;
+// ─── Dimensionamento do Neutro (NBR 5410 item 6.2.6.2 e Tabela 48) ───────────────────────────
+export function calcNeutralWireGauge(phaseArea, isThreePhase = false, options = {}) {
+  const { hasHighHarmonics = false } = options;
+  const area = Number(phaseArea) || 2.5;
+
+  if (!isThreePhase) {
+    return {
+      area,
+      gauge: `${area}mm²`,
+      ratio: 1.0,
+      criterion: "NBR 5410 item 6.2.6.2.1: Em circuitos monofásicos e bifásicos, a seção do neutro deve ser igual à da fase.",
+    };
+  }
+
+  if (hasHighHarmonics) {
+    const factorArea = area * 1.45;
+    const commercial = WIRE_TABLE.find(w => w.area >= factorArea) || WIRE_TABLE[WIRE_TABLE.length - 1];
+    return {
+      area: commercial.area,
+      gauge: commercial.gauge,
+      ratio: Math.round((commercial.area / area) * 100) / 100,
+      criterion: "NBR 5410 item 6.2.6.2.3: Circuito trifásico com harmônicas de 3ª ordem > 33%. Seção do neutro sobredimensionada.",
+    };
+  }
+
+  let snArea = area;
+  if (area <= 25) snArea = area;
+  else if (area <= 35) snArea = 25;
+  else if (area <= 50) snArea = 25;
+  else if (area <= 70) snArea = 35;
+  else if (area <= 95) snArea = 50;
+  else if (area <= 120) snArea = 70;
+  else if (area <= 150) snArea = 70;
+  else if (area <= 185) snArea = 95;
+  else snArea = 120;
+
+  const wire = WIRE_TABLE.find(w => w.area >= snArea) || WIRE_TABLE.find(w => w.area === snArea) || { gauge: `${snArea}mm²`, area: snArea };
+
   return {
-    drop_v:   Math.round(deltaU * 100) / 100,
-    drop_pct: Math.round(pct * 100) / 100,
-    ok: pct <= 4, // NBR 5410 item 6.2.7 — limite de 4% para circuitos terminais
+    area: wire.area,
+    gauge: wire.gauge,
+    ratio: Math.round((wire.area / area) * 100) / 100,
+    criterion: area <= 25
+      ? "NBR 5410 Tabela 48: Para fase ≤ 25mm², seção do neutro igual à da fase."
+      : `NBR 5410 Tabela 48: Redução permitida para fase ${area}mm² → neutro ${wire.area}mm².`,
   };
 }
+
+// ─── Dimensionamento do Condutor de Proteção / Terra (NBR 5410 Tabela 58) ────────────────────
+export function calcProtectionWireGauge(phaseArea) {
+  const area = Number(phaseArea) || 2.5;
+
+  let speArea = area;
+  if (area <= 16) {
+    speArea = area;
+  } else if (area <= 35) {
+    speArea = 16;
+  } else {
+    const half = area / 2;
+    const commercial = WIRE_TABLE.find(w => w.area >= half) || WIRE_TABLE[WIRE_TABLE.length - 1];
+    speArea = commercial.area;
+  }
+
+  const wire = WIRE_TABLE.find(w => w.area >= speArea) || { gauge: `${speArea}mm²`, area: speArea };
+
+  return {
+    area: wire.area,
+    gauge: wire.gauge,
+    ratio: Math.round((wire.area / area) * 100) / 100,
+    criterion: area <= 16
+      ? "NBR 5410 Tabela 58: Para fase ≤ 16mm², Spe = Sf."
+      : area <= 35
+        ? "NBR 5410 Tabela 58: Para 16mm² < Sf ≤ 35mm², Spe = 16mm²."
+        : `NBR 5410 Tabela 58: Para Sf > 35mm², Spe = Sf / 2 → ${wire.area}mm².`,
+  };
+}
+
+// ─── Cálculo da Taxa de Ocupação de Eletrodutos (NBR 5410 item 6.2.11.1) ──────────────────────
+export function calcConduitOccupation(cables = [], customConduitDn = null) {
+  let totalCableArea = 0;
+  let totalConductorCount = 0;
+  const cableDetails = [];
+
+  for (const item of (Array.isArray(cables) ? cables : [])) {
+    const rawArea = Number(item.area) || (item.gauge ? Number(String(item.gauge).replace(/[^\d.]/g, "")) : 2.5);
+    const count = Math.max(1, Number(item.count) || 1);
+    const wireOverall = WIRE_OVERALL_AREAS[rawArea] || {
+      externalDiameter: Math.round((Math.sqrt(rawArea * 4 / Math.PI) + 1.6) * 10) / 10,
+      totalArea: Math.round((Math.PI * Math.pow(Math.sqrt(rawArea * 4 / Math.PI) + 1.6, 2) / 4) * 10) / 10,
+    };
+    const subTotalArea = wireOverall.totalArea * count;
+    totalCableArea += subTotalArea;
+    totalConductorCount += count;
+    cableDetails.push({
+      gauge: `${rawArea}mm²`,
+      area: rawArea,
+      count,
+      unitTotalArea: wireOverall.totalArea,
+      subTotalArea: Math.round(subTotalArea * 10) / 10,
+    });
+  }
+
+  const maxFillRatio = totalConductorCount === 1 ? 0.53 : totalConductorCount === 2 ? 0.31 : 0.40;
+  const maxFillPct = maxFillRatio * 100;
+  const minRequiredInternalArea = maxFillRatio > 0 ? totalCableArea / maxFillRatio : 0;
+
+  let selectedConduit = null;
+  if (customConduitDn) {
+    selectedConduit = CONDUIT_SIZES.find(c => c.dn === Number(customConduitDn) || c.name === String(customConduitDn));
+  }
+  if (!selectedConduit) {
+    selectedConduit = CONDUIT_SIZES.find(c => c.internalArea >= minRequiredInternalArea) || CONDUIT_SIZES[CONDUIT_SIZES.length - 1];
+  }
+
+  const actualFillPct = selectedConduit.internalArea > 0
+    ? (totalCableArea / selectedConduit.internalArea) * 100
+    : 0;
+
+  const ok = actualFillPct <= maxFillPct;
+  const recommendedConduit = CONDUIT_SIZES.find(c => c.internalArea >= minRequiredInternalArea) || CONDUIT_SIZES[CONDUIT_SIZES.length - 1];
+
+  return {
+    totalConductorCount,
+    totalCableArea: Math.round(totalCableArea * 10) / 10,
+    minRequiredInternalArea: Math.round(minRequiredInternalArea * 10) / 10,
+    maxFillRatio,
+    maxFillPct,
+    actualFillPct: Math.round(actualFillPct * 10) / 10,
+    selectedConduit,
+    recommendedConduit,
+    cableDetails,
+    ok,
+    statusMessage: ok
+      ? `Ocupação de ${Math.round(actualFillPct * 10) / 10}% no eletroduto ${selectedConduit.name} (DN ${selectedConduit.dn}) está dentro da taxa máxima permitida de ${maxFillPct}% (NBR 5410 item 6.2.11.1).`
+      : `ATENÇÃO: Ocupação de ${Math.round(actualFillPct * 10) / 10}% no eletroduto ${selectedConduit.name} (DN ${selectedConduit.dn}) excede o limite normativo de ${maxFillPct}%. Recomendado utilizar ${recommendedConduit?.name || 'bitola maior'}.`,
+  };
+}
+
+// ─── Conversor Completo de Grandezas e Unidades Elétricas ─────────────────────────────────────
+export function convertElectricalUnits({
+  value = 0,
+  fromUnit = "W",
+  power_factor = 0.92,
+  efficiency = 1.0,
+  voltage = 220,
+  supply_type = "Monofásico",
+} = {}) {
+  const norm = normalizeElectricalPower({
+    power: value,
+    power_unit: fromUnit,
+    power_factor,
+    efficiency,
+  });
+
+  const pW = norm.power_w;
+  const pKw = Math.round((pW / 1000) * 1000) / 1000;
+  const sVa = norm.power_va;
+  const sKva = Math.round((sVa / 1000) * 1000) / 1000;
+  const fp = norm.power_factor;
+  const eta = norm.efficiency;
+
+  // Mecânica
+  const pMecW = pW * eta;
+  const cv = Math.round((pMecW / 735.49875) * 100) / 100;
+  const hp = Math.round((pMecW / 745.69987) * 100) / 100;
+
+  // Reativo: Q = sqrt(S² - P²)
+  const qVar = Math.round(Math.sqrt(Math.max(0, sVa * sVa - pW * pW)) * 10) / 10;
+  const qKvar = Math.round((qVar / 1000) * 1000) / 1000;
+
+  // Corrente nominal na tensão e sistema informados
+  const current_a = calcNominalCurrent(pW, voltage, supply_type, fp, sVa);
+
+  return {
+    w: pW,
+    kw: pKw,
+    va: sVa,
+    kva: sKva,
+    var: qVar,
+    kvar: qKvar,
+    cv,
+    hp,
+    power_factor: fp,
+    efficiency: eta,
+    voltage,
+    supply_type,
+    current_a,
+  };
+}
+
+// ─── Cálculo da Queda de Tensão Paramétrico (NBR 5410 item 6.2.7) ──────────────────────────────
+export function calcVoltageDrop(
+  power_w,
+  voltage,
+  supply_type,
+  length_m,
+  wire_gauge,
+  power_factor = 0.92,
+  options = {}
+) {
+  const {
+    current = null,
+    material = "Cobre",
+    insulation = "PVC",
+    temperature = 70,
+    max_drop_pct = 4.0,
+    reactance_ohm_per_km = 0.08,
+  } = options;
+
+  const v = Number(voltage) || 0;
+  const l = Math.max(0, Number(length_m) || 0);
+  const fp = Math.min(1.0, Math.max(0.1, Number(power_factor) || 0.92));
+  const sinPhi = Math.sqrt(Math.max(0, 1 - fp * fp));
+
+  if (v <= 0) {
+    return {
+      drop_v: 0,
+      drop_pct: 0,
+      voltage_final: 0,
+      power_loss_w: 0,
+      ok: false,
+      limit_pct: max_drop_pct,
+      statusMessage: "Tensão deve ser superior a zero",
+    };
+  }
+
+  const I = (current !== null && current !== undefined && Number(current) > 0)
+    ? Number(current)
+    : calcNominalCurrent(power_w, v, supply_type, fp);
+
+  if (I <= 0 || l <= 0) {
+    return {
+      drop_v: 0,
+      drop_pct: 0,
+      voltage_final: v,
+      power_loss_w: 0,
+      ok: true,
+      limit_pct: max_drop_pct,
+      statusMessage: "Queda nula (corrente ou comprimento igual a zero)",
+    };
+  }
+
+  const isAluminum = String(material).toLowerCase().includes("alum");
+  const table = isAluminum ? WIRE_TABLE_ALUMINUM : WIRE_TABLE;
+
+  const wireData = table.find(w => w.gauge === wire_gauge)
+    || table.find(w => String(w.area) === String(wire_gauge).replace(/[^\d.]/g, ""))
+    || table[1]
+    || WIRE_TABLE[1];
+
+  const alpha = isAluminum ? 0.00403 : 0.00393;
+  const tOp = Number(temperature) || (String(insulation).toUpperCase().includes("XLPE") ? 90 : 70);
+  const tempCorrection = 1 + alpha * (tOp - 20);
+
+  const R_ohm_per_km_20 = wireData.resistance;
+  const R_ohm_per_m = (R_ohm_per_km_20 * tempCorrection) / 1000;
+  const X_ohm_per_m = (Number(reactance_ohm_per_km) || 0.08) / 1000;
+
+  const isTri = supply_type === "Trifásico";
+  const factor = isTri ? Math.sqrt(3) : 2;
+
+  const deltaU = factor * I * (R_ohm_per_m * fp + X_ohm_per_m * sinPhi) * l;
+  const pct = (deltaU / v) * 100;
+  const vFinal = Math.max(0, v - deltaU);
+  const powerLossW = factor * R_ohm_per_m * l * (I * I);
+
+  const roundedDropV = Math.round(deltaU * 100) / 100;
+  const roundedPct = Math.round(pct * 100) / 100;
+  const ok = roundedPct <= max_drop_pct;
+
+  return {
+    drop_v: roundedDropV,
+    drop_pct: roundedPct,
+    voltage_final: Math.round(vFinal * 10) / 10,
+    power_loss_w: Math.round(powerLossW * 10) / 10,
+    ok,
+    limit_pct: max_drop_pct,
+    current_a: I,
+    wire_gauge: wireData.gauge,
+    wire_area: wireData.area,
+    resistance_ohm_per_km: Math.round(R_ohm_per_m * 1000 * 1000) / 1000,
+    factor,
+    supply_type,
+    material: isAluminum ? "Alumínio" : "Cobre",
+    statusMessage: ok
+      ? `Queda de tensão de ${roundedPct}% está dentro do limite admissível (${max_drop_pct}%) conforme NBR 5410.`
+      : `ATENÇÃO: Queda de tensão de ${roundedPct}% excede o limite admissível de ${max_drop_pct}%. Aumente a bitola.`,
+  };
+}
+
+// ─── Dimensionamento Integrado NBR 5410 Completo ──────────────────────────────────────────────
+export function dimensionCircuitNBR5410(input = {}) {
+  const {
+    power = 1000,
+    power_unit = "W",
+    voltage = 220,
+    supply_type = "Monofásico",
+    type = "Tomadas de Uso Geral",
+    power_factor = null,
+    efficiency = 1.0,
+    demand_factor = null,
+    length_m = 15,
+    install_method = "Eletroduto Embutido em Parede",
+    temp_ambient = 30,
+    group_count = 1,
+    material = "Cobre",
+    insulation = "PVC",
+    max_drop_pct = 4.0,
+    manual_breaker_a = null,
+  } = input;
+
+  const normType = String(type || "").toLowerCase();
+  const defaultFp = (normType.includes("chuveiro") || normType.includes("resistiv") || normType.includes("forno") || normType.includes("aquecedor") || normType.includes("cooktop") || normType.includes("ducha"))
+    ? 1.0
+    : (normType.includes("motor") || normType.includes("ar condicionado") || normType.includes("bomba") || normType.includes("split"))
+      ? 0.85
+      : (normType.includes("ilumin") ? 0.92 : 0.92);
+
+  const resolvedFp = (power_factor !== null && power_factor !== undefined && power_factor !== "")
+    ? Math.min(1.0, Math.max(0.1, Number(power_factor) || defaultFp))
+    : defaultFp;
+
+  const normalizedPower = normalizeElectricalPower({
+    power,
+    power_unit,
+    power_factor: resolvedFp,
+    efficiency,
+  });
+
+  const rawDemand = (demand_factor !== null && demand_factor !== undefined && demand_factor !== "")
+    ? Number(demand_factor)
+    : getDefaultDemandFactor(type);
+  const resolvedDemandFactor = Number.isFinite(rawDemand) && rawDemand > 0 ? rawDemand : 1.0;
+
+  const installedPowerW = normalizedPower.power_w;
+  const demandPowerW = Math.round(installedPowerW * resolvedDemandFactor * 100) / 100;
+  const installedPowerVa = normalizedPower.power_va;
+  const demandPowerVa = Math.round(installedPowerVa * resolvedDemandFactor * 100) / 100;
+
+  const fp = normalizedPower.power_factor;
+  const eta = normalizedPower.efficiency;
+
+  const nominal_a = calcNominalCurrent(installedPowerW, voltage, supply_type, fp, installedPowerVa);
+  const project_current_a = calcNominalCurrent(demandPowerW, voltage, supply_type, fp, demandPowerVa);
+
+  const ft = TEMP_FACTORS[temp_ambient] || 1.0;
+  const fg = GROUP_FACTORS[Math.min(Math.max(1, Number(group_count) || 1), 9)] || 0.50;
+  const f_tot = ft * fg;
+  const corrected_current_a = f_tot > 0 ? Math.round((project_current_a / f_tot) * 100) / 100 : project_current_a;
+
+  const isAluminum = String(material).toLowerCase().includes("alum");
+  let minArea = minimumWireAreaForCircuit(type);
+  if (isAluminum) {
+    minArea = Math.max(minArea, 16);
+  }
+
+  const isXlpe = String(insulation).toUpperCase().includes("XLPE");
+  const table = isAluminum ? WIRE_TABLE_ALUMINUM : (isXlpe ? WIRE_TABLE_XLPE : WIRE_TABLE);
+  const col = METHOD_COL[install_method] || "B2";
+  let wireData = table.find(w => w[col] >= corrected_current_a && w.area >= minArea) || table[table.length - 1];
+
+  let vd = calcVoltageDrop(demandPowerW, voltage, supply_type, length_m, wireData.gauge, fp, {
+    material,
+    insulation,
+    max_drop_pct,
+    current: project_current_a,
+  });
+
+  let wireUpscaledForVoltageDrop = false;
+  if (!vd.ok) {
+    const higherWire = table.find(w => (
+      w.area >= wireData.area &&
+      w.area >= minArea &&
+      w[col] >= corrected_current_a &&
+      calcVoltageDrop(demandPowerW, voltage, supply_type, length_m, w.gauge, fp, {
+        material,
+        insulation,
+        max_drop_pct,
+        current: project_current_a,
+      }).ok
+    ));
+    if (higherWire) {
+      wireData = higherWire;
+      wireUpscaledForVoltageDrop = true;
+      vd = calcVoltageDrop(demandPowerW, voltage, supply_type, length_m, wireData.gauge, fp, {
+        material,
+        insulation,
+        max_drop_pct,
+        current: project_current_a,
+      });
+    }
+  }
+
+  const baseAmpacity = wireData[col] || 0;
+  const iz = Math.round(baseAmpacity * f_tot * 10) / 10;
+
+  const rawBreaker = selectBreaker(project_current_a);
+  const normalizedType = String(type || "").toLowerCase();
+  const isBranchCircuit = !normalizedType.includes("alimentador") && !normalizedType.includes("subquadro") && !normalizedType.includes("entrada");
+  const minTerminalBreaker = isBranchCircuit ? 10 : 6;
+  const autoBreaker = rawBreaker ? Math.max(rawBreaker, minTerminalBreaker) : minTerminalBreaker;
+
+  const isManualBreaker = Boolean(manual_breaker_a) && Number(manual_breaker_a) > 0;
+  const breaker_a = isManualBreaker ? Number(manual_breaker_a) : autoBreaker;
+
+  const isOverloadProtected = breaker_a >= project_current_a;
+  const isCableProtected = breaker_a <= iz;
+  const isCoordinationOk = isOverloadProtected && isCableProtected;
+
+  const isTri = supply_type === "Trifásico";
+  const neutralData = calcNeutralWireGauge(wireData.area, isTri);
+  const protectionData = calcProtectionWireGauge(wireData.area);
+
+  const numPhases = POLES(supply_type);
+  const numNeutro = (supply_type === "Trifásico" || supply_type === "Monofásico") ? 1 : 0;
+  const numTerra = 1;
+
+  const conductorsForConduit = [
+    { area: wireData.area, gauge: wireData.gauge, count: numPhases },
+    ...(numNeutro > 0 ? [{ area: neutralData.area, gauge: neutralData.gauge, count: numNeutro }] : []),
+    { area: protectionData.area, gauge: protectionData.gauge, count: numTerra },
+  ];
+  const conduitData = calcConduitOccupation(conductorsForConduit);
+
+  const needsDr = NEEDS_DR(type);
+  const curve = BREAKER_CURVE(type);
+  const breakingKa = BREAKING_CAPACITY(voltage);
+
+  const warnings = [];
+  if (!isOverloadProtected) {
+    warnings.push(`Disjuntor (${breaker_a}A) menor que a corrente de projeto Ib (${project_current_a}A).`);
+  }
+  if (!isCableProtected) {
+    warnings.push(`Disjuntor (${breaker_a}A) maior que a capacidade corrigida do condutor Iz (${iz}A). Condutor desprotegido contra sobrecarga!`);
+  }
+  if (!vd.ok) {
+    warnings.push(`Queda de tensão de ${vd.drop_pct}% excede o limite normativo de ${max_drop_pct}%.`);
+  }
+  if (isAluminum && wireData.area < 16) {
+    warnings.push("Condutores de alumínio são proibidos para seções inferiores a 16mm² (NBR 5410 item 6.2.5.3).");
+  }
+
+  return {
+    power_w: installedPowerW,
+    demand_power_w: demandPowerW,
+    power_va: installedPowerVa,
+    demand_power_va: demandPowerVa,
+    power_factor: fp,
+    efficiency: eta,
+    demand_factor: resolvedDemandFactor,
+    nominal_current_a: nominal_a,
+    project_current_a,
+    corrected_current_a,
+    ft,
+    fg,
+    f_tot: Math.round(f_tot * 100) / 100,
+    wire: {
+      gauge: wireData.gauge,
+      area: wireData.area,
+      material: isAluminum ? "Alumínio" : "Cobre",
+      insulation,
+      baseAmpacity,
+      iz,
+      install_method,
+      minArea,
+      wireUpscaledForVoltageDrop,
+    },
+    neutral: neutralData,
+    protection: protectionData,
+    voltage_drop: vd,
+    breaker: {
+      current: breaker_a,
+      poles: numPhases,
+      curve,
+      breaking_capacity_ka: breakingKa,
+      isManual: isManualBreaker,
+      isOverloadProtected,
+      isCableProtected,
+      isCoordinationOk,
+      coordinationRule: `Ib (${project_current_a}A) ≤ In (${breaker_a}A) ≤ Iz (${iz}A)`,
+    },
+    conduit: conduitData,
+    needs_dr: needsDr,
+    needs_dps: true,
+    warnings,
+    statusMessage: isCoordinationOk && vd.ok && warnings.length === 0
+      ? "Circuito plenamente dimensionado e aprovado conforme NBR 5410."
+      : "Circuito requer ajustes nos parâmetros ou seções para conformidade normativa.",
+  };
+}
+
 
 // ─── Cálculo Completo de um Circuito Individual ───────────────────────────────────────────────
 export function calcCircuit(circuit = {}) {
