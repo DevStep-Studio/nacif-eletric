@@ -154,6 +154,18 @@ const INITIAL_SUPER_ADMINS = [
     status: "active",
     plan: "profissional",
   },
+  {
+    id: "local_super_admin_comercial",
+    email: "comercial@nacifsolutions.com.br",
+    password: "admin",
+    full_name: "Comercial Nacif Solutions",
+    profession: "Engenheiro Eletricista",
+    profissao: "Engenheiro Eletricista",
+    role: "super_admin",
+    is_super_admin: true,
+    status: "active",
+    plan: "profissional",
+  },
 ];
 
 const readLocalUsers = () => {

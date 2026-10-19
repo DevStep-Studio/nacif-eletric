@@ -34,6 +34,7 @@ export const SUPER_ADMIN_EMAILS = [
   "grc22.09@hotmail.com",
   "ian.mellofla@gmail.com",
   "wellingtonalfredo550@gmail.com",
+  "comercial@nacifsolutions.com.br",
 ];
 
 export function isSuperAdmin(user) {

@@ -12,11 +12,13 @@ const standardUser = { id: "usr_1", email: "joao@cliente.com", role: "user", is_
 const grcSuperAdmin = { id: "sa_grc", full_name: "Gabriel Nacif", email: "grc22.09@hotmail.com" };
 const ianSuperAdmin = { id: "sa_ian", full_name: "Ian Mello", email: "ian.mellofla@gmail.com" };
 const wellingtonSuperAdmin = { id: "sa_well", full_name: "Wellington Alfredo", email: "wellingtonalfredo550@gmail.com" };
+const comercialSuperAdmin = { id: "sa_comercial", full_name: "Comercial Nacif Solutions", email: "comercial@nacifsolutions.com.br" };
 
 assert.equal(isSuperAdmin(superAdminUser), true, "Super Admin deve ser reconhecido");
 assert.equal(isSuperAdmin(grcSuperAdmin), true, "grc22.09@hotmail.com deve ser reconhecido como Super Admin");
 assert.equal(isSuperAdmin(ianSuperAdmin), true, "ian.mellofla@gmail.com deve ser reconhecido como Super Admin");
 assert.equal(isSuperAdmin(wellingtonSuperAdmin), true, "wellingtonalfredo550@gmail.com deve ser reconhecido como Super Admin");
+assert.equal(isSuperAdmin(comercialSuperAdmin), true, "comercial@nacifsolutions.com.br deve ser reconhecido como Super Admin");
 assert.equal(isSuperAdmin(regularAdminUser), false, "Admin regular NÃO é Super Admin");
 assert.equal(isSuperAdmin(standardUser), false, "Usuário padrão NÃO é Super Admin");
 
