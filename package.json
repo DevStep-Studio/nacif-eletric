@@ -15,6 +15,7 @@
     "test:wire-optimizer": "node scripts/wire-routing-optimizer-smoke.mjs",
     "test:budget": "node scripts/budget-materials-smoke.mjs",
     "test:budget-audit": "node scripts/budget-audit-smoke.mjs",
+    "test:auth-audit": "node scripts/auth-audit-smoke.mjs",
     "test:main-protection": "node scripts/main-protection-smoke.mjs",
     "test:electrical-audit": "node scripts/electrical-engine-audit-smoke.mjs",
     "test:solar-sizing": "node scripts/solar-sizing-smoke.mjs",

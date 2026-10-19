@@ -4,11 +4,11 @@ import {
   deleteIssue,
   generateProtocol,
   getIssueById,
-} from "@/lib/issuePersistence";
-import { recordAuditEvent, readAuditLogs, filterAuditLogs } from "@/lib/auditLogger";
-import { isSuperAdmin, DEFAULT_ROLES, SUPER_ADMIN_EMAILS } from "@/lib/rbac";
+} from "../lib/issuePersistence.js";
+import { recordAuditEvent, readAuditLogs, filterAuditLogs } from "../lib/auditLogger.js";
+import { isSuperAdmin, DEFAULT_ROLES, SUPER_ADMIN_EMAILS, canOperatorManageTarget } from "../lib/rbac.js";
 
-const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || "";
+const rawApiBaseUrl = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.trim() : "");
 const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
 const TOKEN_KEYS = ["voltai_access_token", "voltai_token"];
 export const isLocalAuthMode = true;
@@ -230,22 +230,38 @@ const writeLocalNotifications = (notifications) => writeLocal(LOCAL_NOTIFICATION
 const readLocalResetTokens = () => readLocal(LOCAL_RESET_TOKENS_KEY, {});
 const writeLocalResetTokens = (tokens) => writeLocal(LOCAL_RESET_TOKENS_KEY, tokens);
 
+const LOCAL_LOGIN_ATTEMPTS_KEY = "voltai_local_login_attempts";
+const readLocalLoginAttempts = () => readLocal(LOCAL_LOGIN_ATTEMPTS_KEY, {});
+const writeLocalLoginAttempts = (attempts) => writeLocal(LOCAL_LOGIN_ATTEMPTS_KEY, attempts);
+
+export const SESSION_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 horas de validade de sessão
+export const RESET_TOKEN_EXPIRATION_MS = 60 * 60 * 1000; // 1 hora de validade de token de reset
+export const MAX_LOGIN_ATTEMPTS = 5;
+export const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutos de bloqueio temporário por força bruta
+
 const createLocalToken = (userId) => `local:${userId}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 
 const getLocalUserFromToken = () => {
   const token = getStoredToken();
+  if (!token) return null;
+
   const users = readLocalUsers();
-  if (token?.startsWith("local:")) {
-    const userId = token.split(":")[1];
-    const found = users.find((user) => user.id === userId);
+  if (token.startsWith("local:")) {
+    const parts = token.split(":");
+    const userId = parts[1];
+    const tokenTime = Number(parts[2]);
+
+    // Verificação rigorosa de expiração da sessão
+    if (Number.isFinite(tokenTime) && tokenTime > 0 && Date.now() - tokenTime > SESSION_EXPIRATION_MS) {
+      clearStoredToken();
+      return null;
+    }
+
+    const found = users.find((user) => user.id === userId && !user.is_deleted);
     if (found) return found;
   }
-  if (users.length > 0) {
-    const defaultUser = users[0];
-    const devToken = createLocalToken(defaultUser.id);
-    setStoredToken(devToken);
-    return defaultUser;
-  }
+
+  // Token inválido, inexistente ou de usuário deletado
   return null;
 };
 
@@ -373,16 +389,62 @@ const auth = {
   async loginViaEmailPassword(email, password) {
     if (isLocalAuthMode) {
       const normalizedEmail = normalizeEmail(email);
+      if (!normalizedEmail) {
+        throw createError("Informe um endereço de e-mail válido.", 400);
+      }
+
+      // Proteção contra força bruta (Rate limiting / lockout por tentativas sucessivas)
+      const attemptsMap = readLocalLoginAttempts();
+      const userAttempts = attemptsMap[normalizedEmail];
+      const now = Date.now();
+
+      if (userAttempts && userAttempts.count >= MAX_LOGIN_ATTEMPTS) {
+        const timeRemaining = LOGIN_LOCKOUT_MS - (now - userAttempts.lastAttempt);
+        if (timeRemaining > 0) {
+          const minutesLeft = Math.ceil(timeRemaining / 60000);
+          throw createError(
+            `Muitas tentativas incorretas. Conta temporariamente bloqueada por segurança. Tente novamente em ${minutesLeft} minuto(s).`,
+            429
+          );
+        } else {
+          // Janela de bloqueio expirada, reseta contador
+          delete attemptsMap[normalizedEmail];
+          writeLocalLoginAttempts(attemptsMap);
+        }
+      }
+
       const users = readLocalUsers();
       const userIndex = users.findIndex((item) => item.email === normalizedEmail);
       const user = userIndex >= 0 ? users[userIndex] : null;
 
       if (!user || user.password !== password) {
-        throw createError("Email ou senha invalidos.", 401);
+        const currentCount = (userAttempts?.count || 0) + 1;
+        attemptsMap[normalizedEmail] = { count: currentCount, lastAttempt: now };
+        writeLocalLoginAttempts(attemptsMap);
+
+        recordAuditEvent({
+          actor: { email: normalizedEmail, id: "anonymous" },
+          action: "LOGIN_FAILED",
+          targetType: "auth",
+          details: `Tentativa de login malsucedida para ${normalizedEmail} (Tentativa ${currentCount} de ${MAX_LOGIN_ATTEMPTS})`,
+        });
+
+        const remaining = MAX_LOGIN_ATTEMPTS - currentCount;
+        if (remaining > 0) {
+          throw createError(`Email ou senha inválidos. Restam ${remaining} tentativa(s) antes do bloqueio temporário.`, 401);
+        } else {
+          throw createError("Muitas tentativas incorretas. Conta temporariamente bloqueada por 15 minutos.", 429);
+        }
+      }
+
+      // Login bem-sucedido: limpa registro de tentativas falhas
+      if (attemptsMap[normalizedEmail]) {
+        delete attemptsMap[normalizedEmail];
+        writeLocalLoginAttempts(attemptsMap);
       }
 
       if (user.status === "suspended") {
-        throw createError("Sua conta está suspensa. Entre em contato com o suporte.", 403);
+        throw createError("Sua conta está suspensa. Entre em contato com o suporte da administração.", 403);
       }
 
       if (user.is_deleted) {
@@ -397,6 +459,14 @@ const auth = {
 
       const access_token = createLocalToken(user.id);
       setStoredToken(access_token);
+
+      recordAuditEvent({
+        actor: updatedUsers[userIndex],
+        action: "LOGIN_SUCCESS",
+        targetType: "auth",
+        details: `Login efetuado com sucesso para ${user.email}`,
+      });
+
       return { access_token, user: publicUser(updatedUsers[userIndex]) };
     }
 
@@ -415,32 +485,49 @@ const auth = {
   async register({ email, password, profession }) {
     if (isLocalAuthMode) {
       const normalizedEmail = normalizeEmail(email);
-      if (!normalizedEmail) {
-        throw createError("Informe um email valido.", 400);
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+        throw createError("Informe um endereço de e-mail válido.", 400);
+      }
+
+      if (!password || String(password).length < 6) {
+        throw createError("A senha deve conter no mínimo 6 caracteres.", 400);
       }
 
       const users = readLocalUsers();
-      if (users.some((item) => item.email === normalizedEmail)) {
-        throw createError("Este email ja esta cadastrado.", 409);
+      if (users.some((item) => !item.is_deleted && item.email === normalizedEmail)) {
+        throw createError("Este e-mail já está cadastrado no sistema.", 409);
       }
 
       const timestamp = nowIso();
       const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
+      // Prevenção contra elevação indevida: novos cadastros NUNCA recebem super_admin automaticamente
+      const assignedRole = isSuperAdminEmail ? "super_admin" : "user";
+
       const user = {
         id: randomId("local_user"),
         email: normalizedEmail,
-        password,
+        password: String(password),
         full_name: normalizedEmail.split("@")[0],
-        profession,
-        profissao: profession,
-        role: isSuperAdminEmail ? "super_admin" : (users.length === 0 ? "admin" : "user"),
+        profession: profession || "projetista",
+        profissao: profession || "projetista",
+        role: assignedRole,
         is_super_admin: isSuperAdminEmail,
         status: "active",
         plan: "profissional",
         created_date: timestamp,
         updated_date: timestamp,
+        last_access: timestamp,
       };
       writeLocalUsers([...users, user]);
+
+      recordAuditEvent({
+        actor: user,
+        action: "USER_REGISTERED",
+        targetType: "user",
+        targetId: user.id,
+        details: `Novo cadastro de usuário efetuado: ${normalizedEmail}`,
+      });
 
       const access_token = createLocalToken(user.id);
       setStoredToken(access_token);
@@ -461,7 +548,7 @@ const auth = {
 
   async verifyOtp({ email, otpCode }) {
     if (isLocalAuthMode) {
-      throw createError("Verificacao por codigo nao e usada no modo local.", 501);
+      throw createError("Verificação por código não é usada no modo local.", 501);
     }
 
     return request("/api/auth/verify-otp", {
@@ -472,7 +559,7 @@ const auth = {
 
   async resendOtp(email) {
     if (isLocalAuthMode) {
-      throw createError("Reenvio de codigo nao esta disponivel no modo local.", 501);
+      throw createError("Reenvio de código não está disponível no modo local.", 501);
     }
 
     return request("/api/auth/resend-otp", {
@@ -484,10 +571,11 @@ const auth = {
   async resetPasswordRequest(email) {
     if (isLocalAuthMode) {
       const normalizedEmail = normalizeEmail(email);
-      const user = readLocalUsers().find((item) => item.email === normalizedEmail);
+      const user = readLocalUsers().find((item) => !item.is_deleted && item.email === normalizedEmail);
 
+      // Resposta uniforme para evitar enumeração de contas
       if (!user) {
-        return { ok: true };
+        return { ok: true, message: "Se o e-mail estiver cadastrado, um link de recuperação será gerado." };
       }
 
       const token = randomId(`reset_${user.id}`);
@@ -500,6 +588,13 @@ const auth = {
         ? `${window.location.origin}/reset-password?token=${encodeURIComponent(token)}`
         : `/reset-password?token=${encodeURIComponent(token)}`;
 
+      recordAuditEvent({
+        actor: { email: normalizedEmail, id: user.id },
+        action: "PASSWORD_RESET_REQUESTED",
+        targetType: "auth",
+        details: `Solicitação de redefinição de senha para ${normalizedEmail}`,
+      });
+
       return { ok: true, recoveryLink };
     }
 
@@ -511,28 +606,50 @@ const auth = {
 
   async resetPassword({ resetToken, newPassword }) {
     if (isLocalAuthMode) {
+      if (!newPassword || String(newPassword).length < 6) {
+        throw createError("A nova senha deve conter no mínimo 6 caracteres.", 400);
+      }
+
       const tokens = readLocalResetTokens();
       const entry = tokens[resetToken];
 
       if (!entry) {
-        throw createError("Link de redefinicao invalido ou expirado.", 400);
+        throw createError("Link de redefinição inválido ou já utilizado.", 400);
+      }
+
+      // Verificação de expiração estrita (1 hora)
+      const tokenTime = Date.parse(entry.createdAt || 0);
+      if (Date.now() - tokenTime > RESET_TOKEN_EXPIRATION_MS) {
+        delete tokens[resetToken];
+        writeLocalResetTokens(tokens);
+        throw createError("Link de redefinição expirado. Solicite um novo link.", 400);
       }
 
       const users = readLocalUsers();
-      const userIndex = users.findIndex((item) => item.id === entry.userId);
+      const userIndex = users.findIndex((item) => item.id === entry.userId && !item.is_deleted);
       if (userIndex < 0) {
-        throw createError("Usuario nao encontrado.", 404);
+        throw createError("Usuário não encontrado.", 404);
       }
 
       const nextUsers = [...users];
       nextUsers[userIndex] = {
         ...nextUsers[userIndex],
-        password: newPassword,
+        password: String(newPassword),
         updated_date: nowIso(),
       };
       writeLocalUsers(nextUsers);
+
+      // Invalidação imediata do token de uso único
       delete tokens[resetToken];
       writeLocalResetTokens(tokens);
+
+      recordAuditEvent({
+        actor: nextUsers[userIndex],
+        action: "PASSWORD_RESET_COMPLETED",
+        targetType: "auth",
+        details: `Senha redefinida com sucesso para ${nextUsers[userIndex].email}`,
+      });
+
       return { ok: true };
     }
 
@@ -549,17 +666,64 @@ const auth = {
       const userIndex = users.findIndex((item) => item.id === currentUser.id);
 
       if (userIndex < 0) {
-        throw createError("Usuario nao encontrado.", 404);
+        throw createError("Usuário não encontrado.", 404);
+      }
+
+      // Prevenção rigorosa contra elevação de privilégios:
+      // Usuário comum não pode alterar seu papel, status, email ou identificador via updateMe
+      const safeData = {};
+      const allowedKeys = [
+        "full_name",
+        "profession",
+        "profissao",
+        "company",
+        "crea",
+        "phone",
+        "avatar_url",
+        "profile_photo_url",
+        "photo_url",
+        "theme",
+        "preferences",
+      ];
+
+      allowedKeys.forEach((key) => {
+        if (data[key] !== undefined) {
+          safeData[key] = data[key];
+        }
+      });
+
+      if (data.profession || data.profissao) {
+        safeData.profession = data.profession || data.profissao;
+        safeData.profissao = safeData.profession;
+      }
+
+      // Alteração de senha via updateMe exige senha atual
+      if (data.new_password) {
+        if (!data.current_password || currentUser.password !== data.current_password) {
+          throw createError("Senha atual incorreta para alteração de senha.", 403);
+        }
+        if (String(data.new_password).length < 6) {
+          throw createError("A nova senha deve ter no mínimo 6 caracteres.", 400);
+        }
+        safeData.password = String(data.new_password);
       }
 
       const nextUsers = [...users];
       nextUsers[userIndex] = {
         ...nextUsers[userIndex],
-        ...data,
-        profissao: data?.profession ?? data?.profissao ?? nextUsers[userIndex].profissao,
+        ...safeData,
         updated_date: nowIso(),
       };
       writeLocalUsers(nextUsers);
+
+      recordAuditEvent({
+        actor: currentUser,
+        action: "USER_UPDATED_PROFILE",
+        targetType: "user",
+        targetId: currentUser.id,
+        details: `Perfil atualizado por ${currentUser.email}`,
+      });
+
       return publicUser(nextUsers[userIndex]);
     }
 
@@ -576,6 +740,15 @@ const auth = {
       const nextUsers = users.filter((item) => item.id !== currentUser.id);
       writeLocalUsers(nextUsers);
       clearStoredToken();
+
+      recordAuditEvent({
+        actor: currentUser,
+        action: "USER_DELETED_ACCOUNT",
+        targetType: "user",
+        targetId: currentUser.id,
+        details: `Conta encerrada pelo próprio usuário: ${currentUser.email}`,
+      });
+
       return { ok: true };
     }
     return request("/api/auth/me", { method: "DELETE" });
@@ -588,6 +761,14 @@ const auth = {
   logout(redirectTo) {
     const target = redirectTo === undefined ? "/login" : redirectTo;
     clearStoredToken();
+
+    // Limpeza de resíduos de sessão e projeto ativo
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem("voltai_active_project_id");
+        window.sessionStorage.clear();
+      } catch {}
+    }
 
     if (target !== false && typeof window !== "undefined") {
       window.location.href = typeof target === "string" ? target : "/login";
@@ -854,8 +1035,11 @@ const projectEntity = {
 const userEntity = {
   async list() {
     if (isLocalAuthMode) {
-      requireLocalUser();
-      return readLocalUsers().map(publicUser);
+      const currentUser = requireLocalUser();
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        throw createError("Acesso negado. Apenas administradores podem listar usuários.", 403);
+      }
+      return readLocalUsers().filter((u) => !u.is_deleted).map(publicUser);
     }
 
     return request("/api/users");
@@ -863,22 +1047,57 @@ const userEntity = {
 
   async update(id, data) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const users = readLocalUsers();
       const userIndex = users.findIndex((item) => item.id === id);
 
       if (userIndex < 0) {
-        throw createError("Usuario nao encontrado.", 404);
+        throw createError("Usuário não encontrado.", 404);
+      }
+
+      const targetUser = users[userIndex];
+
+      // Verificação de permissão para modificar outro usuário
+      if (currentUser.id !== id) {
+        if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+          throw createError("Acesso negado para modificar outro usuário.", 403);
+        }
+        if (!canOperatorManageTarget(currentUser, targetUser)) {
+          throw createError("Permissão insuficiente para alterar este usuário.", 403);
+        }
+      }
+
+      // Prevenção contra elevação de privilégios para super_admin por não-super-admins
+      if ((data.role === "super_admin" || data.is_super_admin) && !isSuperAdmin(currentUser)) {
+        throw createError("Apenas Super Administradores podem conceder o perfil de Super Admin.", 403);
+      }
+
+      // Usuários comuns não podem alterar papel ou status
+      const safeData = { ...data };
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        delete safeData.role;
+        delete safeData.is_super_admin;
+        delete safeData.status;
       }
 
       const nextUsers = [...users];
       nextUsers[userIndex] = {
         ...nextUsers[userIndex],
-        ...data,
-        profissao: data?.profession ?? data?.profissao ?? nextUsers[userIndex].profissao,
+        ...safeData,
+        profissao: safeData?.profession ?? safeData?.profissao ?? nextUsers[userIndex].profissao,
         updated_date: nowIso(),
       };
       writeLocalUsers(nextUsers);
+
+      recordAuditEvent({
+        actor: currentUser,
+        action: "USER_UPDATED",
+        targetType: "user",
+        targetId: targetUser.id,
+        targetName: targetUser.full_name,
+        details: `Usuário ${targetUser.email} atualizado por ${currentUser.email}`,
+      });
+
       return publicUser(nextUsers[userIndex]);
     }
 
@@ -892,8 +1111,13 @@ const userEntity = {
 const notificationEntity = {
   async list(limit) {
     if (isLocalAuthMode) {
-      requireLocalUser();
-      return cloneLocal(sortLocalItems(readLocalNotifications(), "-created_date", limit));
+      const currentUser = requireLocalUser();
+      let notifs = readLocalNotifications();
+      // Isolamento de notificações por usuário
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        notifs = notifs.filter((n) => !n.user_id || n.user_id === currentUser.id);
+      }
+      return cloneLocal(sortLocalItems(notifs, "-created_date", limit));
     }
 
     return request("/api/notifications", {
@@ -2003,15 +2227,20 @@ const budgetEntity = {
 
   async update(id, patch = {}) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const budgets = readLocalBudgets();
       const existing = budgets.find((b) => b.id === id);
       if (!existing) {
         throw createError("Orçamento não encontrado para atualização.", 404);
       }
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && existing.owner_id && existing.owner_id !== currentUser.id) {
+        throw createError("Acesso negado para modificar este orçamento.", 403);
+      }
       const updated = {
         ...existing,
         ...patch,
+        id, // Protege ID imutável
+        owner_id: existing.owner_id, // Impede transferência silenciosa
         updated_date: nowIso(),
       };
       const nextBudgets = budgets.map((b) => (b.id === id ? updated : b));
@@ -2023,8 +2252,13 @@ const budgetEntity = {
 
   async delete(id) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const budgets = readLocalBudgets();
+      const existing = budgets.find((b) => b.id === id);
+      if (!existing) return { ok: true };
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && existing.owner_id && existing.owner_id !== currentUser.id) {
+        throw createError("Acesso negado para excluir este orçamento.", 403);
+      }
       const filtered = budgets.filter((b) => b.id !== id);
       writeLocalBudgets(filtered);
       return { ok: true };
@@ -2039,11 +2273,14 @@ const budgetEntity = {
       if (!original) {
         throw createError("Orçamento de origem não encontrado.", 404);
       }
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && original.owner_id && original.owner_id !== currentUser.id) {
+        throw createError("Acesso negado para duplicar este orçamento.", 403);
+      }
       const timestamp = nowIso();
       const duplicated = {
         ...cloneLocal(original),
         id: randomId("budget"),
-        name: `${original.name || "Orçamento"} (Cópia)`,
+        name: `Cópia de ${original.name || "Orçamento"}`,
         status: "Rascunho",
         created_date: timestamp,
         updated_date: timestamp,

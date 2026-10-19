@@ -27,7 +27,7 @@ export function writeAuditLogs(logs) {
   if (!store) return;
   try {
     store.setItem(LOCAL_AUDIT_LOGS_KEY, JSON.stringify(logs.slice(0, 500)));
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
       window.dispatchEvent(new CustomEvent(AUDIT_LOGS_EVENT, { detail: logs[0] }));
     }
   } catch (err) {

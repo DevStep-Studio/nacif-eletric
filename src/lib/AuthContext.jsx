@@ -15,6 +15,24 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkAppState();
+
+    const handleStorage = (e) => {
+      if (e.key === "voltai_access_token" || e.key === "voltai_token") {
+        if (!e.newValue) {
+          setUser(null);
+          setIsAuthenticated(false);
+          setIsLoadingAuth(false);
+          setAuthChecked(true);
+        } else {
+          checkUserAuth();
+        }
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", handleStorage);
+      return () => window.removeEventListener("storage", handleStorage);
+    }
   }, []);
 
   const resolvePendingProfession = async (currentUser) => {

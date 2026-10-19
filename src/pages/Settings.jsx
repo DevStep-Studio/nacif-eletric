@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PROFESSIONS, professionLabel } from "@/lib/professionalAccess";
+import { PROFESSIONS, professionLabel, isSuperAdmin } from "@/lib/professionalAccess";
 import { CreditCard, LogOut, Palette, Save, Settings as SettingsIcon, Upload } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 
@@ -75,7 +75,7 @@ export default function SettingsPage() {
         icon={SettingsIcon}
         title="Configurações"
         subtitle="Conta, perfil profissional e plano de uso."
-        actions={user?.role === "admin" && (
+        actions={(isSuperAdmin(user) || user?.role === "admin") && (
           <Button asChild variant="outline" className="h-11 rounded-[12px] font-extrabold">
             <Link to="/admin">
               <Palette className="h-4 w-4" />

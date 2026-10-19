@@ -32,7 +32,7 @@ import {
   useBranding,
   useNotifications,
 } from "@/lib/appPreferences";
-import { PROFESSIONS, professionLabel } from "@/lib/professionalAccess";
+import { PROFESSIONS, professionLabel, isSuperAdmin } from "@/lib/professionalAccess";
 
 const profileInitials = (user) => {
   const source = user?.full_name || user?.email || "Admin";
@@ -106,7 +106,7 @@ export default function AdminPanel() {
   useEffect(() => {
     const load = async () => {
       const me = await backend.auth.me();
-      if (me.role !== "admin") {
+      if (!isSuperAdmin(me) && me.role !== "admin") {
         navigate("/");
         return;
       }
