@@ -601,8 +601,12 @@ const auth = {
 const projectEntity = {
   async list(sortBy, limit) {
     if (isLocalAuthMode) {
-      requireLocalUser();
-      return cloneLocal(sortLocalItems(readLocalProjects(), sortBy, limit));
+      const currentUser = requireLocalUser();
+      let projects = readLocalProjects();
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        projects = projects.filter((p) => !p.owner_id || p.owner_id === currentUser.id);
+      }
+      return cloneLocal(sortLocalItems(projects, sortBy, limit));
     }
 
     return request("/api/projects", {
@@ -612,10 +616,13 @@ const projectEntity = {
 
   async get(id) {
     if (isLocalAuthMode) {
-      requireLocalUser();
+      const currentUser = requireLocalUser();
       const project = readLocalProjects().find((item) => item.id === id);
       if (!project) {
         throw createError("Projeto nao encontrado.", 404);
+      }
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && project.owner_id && project.owner_id !== currentUser.id) {
+        throw createError("Acesso negado a este projeto.", 403);
       }
       return cloneLocal(project);
     }
