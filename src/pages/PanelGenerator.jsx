@@ -76,6 +76,7 @@ import {
   Minus,
   Scissors,
   Wand2,
+  Printer,
 } from "lucide-react";
 
 // ─── CONSTANTES DE DIMENSIONAMENTO DO PAINEL ───────────────────────────────────
@@ -5493,6 +5494,20 @@ export default function PanelGenerator() {
     URL.revokeObjectURL(url);
   };
 
+  // IMPRIMIR QUADRO
+  const handlePrintBoard = () => {
+    setSelectedComponentId("");
+    setSelectedWireId("");
+    setSelectedTextWireId("");
+    setSelectedAnnotationId("");
+    setSelectedInfrastructureId("");
+    setWiringStart("");
+    setWiringMode(false);
+    setTimeout(() => {
+      window.print();
+    }, 200);
+  };
+
   // WIRING INTERATIVO
   function handlePinClick(pinId) {
     if (wireMoveMode === "source" && selectedWireId) {
@@ -5513,13 +5528,95 @@ export default function PanelGenerator() {
       if (wiringStart === pinId) {
         setWiringStart("");
         return;
-	      }
-	      // Conectar
-	      const manualName = cleanDisplayText(wireName);
-	      const manualDisplayText = cleanDisplayText(wireDisplayText);
-	      const newWire = {
-	        id: `wire_${Date.now()}`,
-	        name: manualName || `${getConductorDisplayLabel({ color: wireColor })} manual`,
+      }
+
+      // PREVENÇÃO DE CABOS DUPLICADOS (Seção 15)
+      const isDuplicate = wires.some((w) => {
+        const s = String(w.source || w.originId || "");
+        const t = String(w.target || w.destinationId || "");
+        return (s === wiringStart && t === pinId) || (s === pinId && t === wiringStart);
+      });
+      if (isDuplicate) {
+        toast({
+          title: "Condutor duplicado",
+          description: "Já existe uma conexão ativa entre estes dois terminais. A criação de cabos duplicados foi impedida.",
+          variant: "destructive",
+        });
+        setWiringStart("");
+        setWiringMode(false);
+        return;
+      }
+
+      // PREVENÇÃO DE CONEXÕES INVÁLIDAS E CURTO-CIRCUITOS (Seção 16 / NBR 5410)
+      if (wiringStart.startsWith("comp:") && pinId.startsWith("comp:")) {
+        const partsA = wiringStart.split(":");
+        const partsB = pinId.split(":");
+        if (partsA[1] === partsB[1] && partsA[3] === partsB[3] && partsA[2] !== partsB[2]) {
+          toast({
+            title: "Conexão tecnicamente inválida",
+            description: "Não é permitido curto-circuitar a entrada e a saída do mesmo polo de um dispositivo.",
+            variant: "destructive",
+          });
+          setWiringStart("");
+          setWiringMode(false);
+          return;
+        }
+      }
+
+      const isGroundPin = (p) => p.startsWith("busbar_ground:") || p.startsWith("backbone_ground:") || p === "terminal_left_top:0";
+      const isPhaseInputPin = (p) => ["terminal_left_top:2", "terminal_left_top:3", "terminal_left_top:4"].includes(p);
+      const isNeutralPin = (p) => p.startsWith("busbar_neutral:") || p.startsWith("backbone_neutral:") || p === "terminal_left_top:1";
+
+      if ((isGroundPin(wiringStart) && isPhaseInputPin(pinId)) || (isGroundPin(pinId) && isPhaseInputPin(wiringStart))) {
+        toast({
+          title: "Curto-circuito proibido (NBR 5410)",
+          description: "Conexão direta proibida entre condutor de proteção (PE) e barramento/terminal de fase (L).",
+          variant: "destructive",
+        });
+        setWiringStart("");
+        setWiringMode(false);
+        return;
+      }
+
+      if ((isNeutralPin(wiringStart) && isPhaseInputPin(pinId)) || (isNeutralPin(pinId) && isPhaseInputPin(wiringStart))) {
+        toast({
+          title: "Curto-circuito proibido (NBR 5410)",
+          description: "Conexão direta proibida entre condutor neutro (N) e barramento/terminal de fase (L).",
+          variant: "destructive",
+        });
+        setWiringStart("");
+        setWiringMode(false);
+        return;
+      }
+
+      if (isPhaseInputPin(wiringStart) && isPhaseInputPin(pinId) && wiringStart !== pinId) {
+        toast({
+          title: "Curto-circuito entre fases (NBR 5410)",
+          description: "Conexão direta proibida entre fases distintas de alimentação (L1/L2/L3).",
+          variant: "destructive",
+        });
+        setWiringStart("");
+        setWiringMode(false);
+        return;
+      }
+
+      if ((isGroundPin(wiringStart) && isNeutralPin(pinId)) || (isGroundPin(pinId) && isNeutralPin(wiringStart))) {
+        toast({
+          title: "Violação de Esquema TN-S (NBR 5410, item 6.4.3.1)",
+          description: "Neutro (N) e Proteção (PE) não devem ser interligados a jusante do ponto de separação no quadro de distribuição.",
+          variant: "destructive",
+        });
+        setWiringStart("");
+        setWiringMode(false);
+        return;
+      }
+
+      // Conectar
+      const manualName = cleanDisplayText(wireName);
+      const manualDisplayText = cleanDisplayText(wireDisplayText);
+      const newWire = {
+        id: `wire_${Date.now()}`,
+        name: manualName || `${getConductorDisplayLabel({ color: wireColor })} manual`,
         color: wireColor,
         gauge: wireGauge,
         section: wireGauge,
@@ -5536,31 +5633,31 @@ export default function PanelGenerator() {
         sourcePortId: wiringStart,
         targetComponentId: getCableComponentId(pinId),
         targetPortId: pinId,
-	        points: [],
-	        originId: wiringStart,
-	        destinationId: pinId,
-	        label: wireGauge,
-	        labelMeta: manualDisplayText
-	          ? {
-	              text: manualDisplayText,
-	              hidden: false,
-	              fontSize: 7,
-	              rotation: wireColor === "green" || wireColor === "blue" ? 0 : -90,
-	            }
-	          : undefined,
-	      };
-	      const nextWires = [...wires, newWire];
+        points: [],
+        originId: wiringStart,
+        destinationId: pinId,
+        label: wireGauge,
+        labelMeta: manualDisplayText
+          ? {
+              text: manualDisplayText,
+              hidden: false,
+              fontSize: 7,
+              rotation: wireColor === "green" || wireColor === "blue" ? 0 : -90,
+            }
+          : undefined,
+      };
+      const nextWires = [...wires, newWire];
       updateWires(nextWires);
       setSelectedWireId(newWire.id);
       setSelectedComponentId("");
       setActiveTab("wiring");
       setWiringStart("");
-	      setWiringMode(false);
-	      setHoveredPinId("");
-	      setWireName("");
-	      setWireDisplayText("");
-	    }
-	  };
+      setWiringMode(false);
+      setHoveredPinId("");
+      setWireName("");
+      setWireDisplayText("");
+    }
+  };
 
   const handleResetLayout = () => {
     if (!window.confirm("Deseja realmente redefinir o quadro elétrico? Isso apagará todas as customizações.")) return;
@@ -9326,6 +9423,17 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           </Button>
 
           <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
+            onClick={handlePrintBoard}
+            title="Imprimir Diagrama do Quadro"
+          >
+            <Printer className="mr-1 h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Imprimir</span>
+          </Button>
+
+          <Button
             size="sm"
             variant="outline"
             className="h-8 rounded-lg border-[#CDEFE8] px-2.5 text-xs font-bold text-[#0f4f49]"
@@ -9556,6 +9664,9 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                   <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={handleExportSvg} aria-label="Exportar SVG" title="Exportar SVG">
                     <Download className="h-4 w-4" />
                   </Button>
+                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={handlePrintBoard} aria-label="Imprimir Quadro" title="Imprimir Quadro">
+                    <Printer className="h-4 w-4" />
+                  </Button>
                   <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg border-red-200 text-red-500" onClick={handleClearWires} aria-label="Limpar fiação" title="Limpar fiação">
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -9564,7 +9675,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
             </div>
 
             {/* PAINEL DE DESENHO VETORIAL */}
-            <div ref={panelViewportRef} className="overflow-auto rounded-2xl border border-slate-200 bg-[#eef2f6] p-6 shadow-lg min-h-[600px] flex items-center justify-center">
+            <div id="print-panel-area" ref={panelViewportRef} className="print-panel-area overflow-auto rounded-2xl border border-slate-200 bg-[#eef2f6] p-6 shadow-lg min-h-[600px] flex items-center justify-center">
               <div
                 style={{
                   width: PANEL_W * activeScale,
