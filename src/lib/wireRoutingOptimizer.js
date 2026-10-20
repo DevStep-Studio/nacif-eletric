@@ -109,7 +109,10 @@ export function identifyPanelCorridors(rails = [], infrastructure = [], panelHei
   const maxCompX = rails.reduce((max, rail) => {
     let currX = RAIL_START_X;
     (rail.components || []).forEach((c) => {
-      currX += (Number(c.poles || 1) * DIN_MODULE_WIDTH) + 2;
+      const compW = c.type === "spacer"
+        ? (Number(c.poles) || 1) * (DIN_MODULE_WIDTH + 2) - 2
+        : (Number(c.poles) || 1) * DIN_MODULE_WIDTH;
+      currX += compW + 2;
     });
     return Math.max(max, currX);
   }, RAIL_START_X + 260);

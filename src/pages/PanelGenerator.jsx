@@ -2106,11 +2106,19 @@ export default function PanelGenerator() {
       }
 
       const visualRoute = wirePathsRef.current[wire.id] || wireRouteMetaRef.current[wire.id]?.routePoints;
-      const savedRoute = Array.isArray(wire.route?.points) && wire.route.points.length >= 2 && isOrthogonalPath(wire.route.points)
+      const isVisualAligned = Array.isArray(visualRoute) && visualRoute.length >= 2 &&
+        Math.hypot(visualRoute[0].x - p1.x, visualRoute[0].y - p1.y) < 1.5 &&
+        Math.hypot(visualRoute[visualRoute.length - 1].x - p2.x, visualRoute[visualRoute.length - 1].y - p2.y) < 1.5;
+
+      const isWireRouteAligned = Array.isArray(wire.route?.points) && wire.route.points.length >= 2 &&
+        Math.hypot(wire.route.points[0].x - p1.x, wire.route.points[0].y - p1.y) < 1.5 &&
+        Math.hypot(wire.route.points[wire.route.points.length - 1].x - p2.x, wire.route.points[wire.route.points.length - 1].y - p2.y) < 1.5;
+
+      const savedRoute = (isWireRouteAligned && isOrthogonalPath(wire.route.points))
         ? wire.route.points
         : Array.isArray(wire.route_points) && wire.route_points.length > 0
           ? [p1, ...wire.route_points, p2]
-          : Array.isArray(visualRoute) && visualRoute.length >= 2 && isOrthogonalPath(visualRoute)
+          : (isVisualAligned && isOrthogonalPath(visualRoute))
             ? visualRoute
             : null;
 
@@ -4334,14 +4342,25 @@ export default function PanelGenerator() {
     const pHeight = 180 + normalizedRails.length * 240 + 100;
 
     const nextWires = wires.map((wire) => {
-      const isSourceAffected = String(wire.source || "").includes(componentId) || String(wire.sourceComponentId || "") === componentId;
-      const isTargetAffected = String(wire.target || "").includes(componentId) || String(wire.targetComponentId || "") === componentId;
-      if (!isSourceAffected && !isTargetAffected) {
-        return wire;
-      }
       const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
       const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
       if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const currentPoints = wire.route?.points;
+      const currentFirst = currentPoints?.[0];
+      const currentLast = currentPoints?.[currentPoints.length - 1];
+      const endpointsMoved = !currentFirst || !currentLast ||
+        Math.hypot(currentFirst.x - p1.x, currentFirst.y - p1.y) > 0.5 ||
+        Math.hypot(currentLast.x - p2.x, currentLast.y - p2.y) > 0.5;
+
+      const isSourceAffected = String(wire.source || "").includes(componentId) || String(wire.sourceComponentId || "") === componentId;
+      const isTargetAffected = String(wire.target || "").includes(componentId) || String(wire.targetComponentId || "") === componentId;
+      if (!endpointsMoved && !isSourceAffected && !isTargetAffected) {
+        return wire;
+      }
+
+      delete wirePathsRef.current[wire.id];
+      delete wireRouteMetaRef.current[wire.id];
 
       const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
       const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
@@ -5180,13 +5199,23 @@ export default function PanelGenerator() {
     const pHeight = 180 + normalizedRails.length * 240 + 100;
 
     const nextWires = wires.map((wire) => {
-      const isSourceAffected = String(wire.source || "").includes(component.id) || String(wire.sourceComponentId || "") === component.id;
-      const isTargetAffected = String(wire.target || "").includes(component.id) || String(wire.targetComponentId || "") === component.id;
-      if (!isSourceAffected && !isTargetAffected) return wire;
-
       const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
       const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
       if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const currentPoints = wire.route?.points;
+      const currentFirst = currentPoints?.[0];
+      const currentLast = currentPoints?.[currentPoints.length - 1];
+      const endpointsMoved = !currentFirst || !currentLast ||
+        Math.hypot(currentFirst.x - p1.x, currentFirst.y - p1.y) > 0.5 ||
+        Math.hypot(currentLast.x - p2.x, currentLast.y - p2.y) > 0.5;
+
+      const isSourceAffected = String(wire.source || "").includes(component.id) || String(wire.sourceComponentId || "") === component.id;
+      const isTargetAffected = String(wire.target || "").includes(component.id) || String(wire.targetComponentId || "") === component.id;
+      if (!endpointsMoved && !isSourceAffected && !isTargetAffected) return wire;
+
+      delete wirePathsRef.current[wire.id];
+      delete wireRouteMetaRef.current[wire.id];
 
       const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
       const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
@@ -5234,13 +5263,23 @@ export default function PanelGenerator() {
     const pHeight = 180 + normalizedRails.length * 240 + 100;
 
     const nextWires = wires.map((wire) => {
-      const isSourceAffected = String(wire.source || "").includes(component.id) || String(wire.sourceComponentId || "") === component.id;
-      const isTargetAffected = String(wire.target || "").includes(component.id) || String(wire.targetComponentId || "") === component.id;
-      if (!isSourceAffected && !isTargetAffected) return wire;
-
       const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
       const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
       if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const currentPoints = wire.route?.points;
+      const currentFirst = currentPoints?.[0];
+      const currentLast = currentPoints?.[currentPoints.length - 1];
+      const endpointsMoved = !currentFirst || !currentLast ||
+        Math.hypot(currentFirst.x - p1.x, currentFirst.y - p1.y) > 0.5 ||
+        Math.hypot(currentLast.x - p2.x, currentLast.y - p2.y) > 0.5;
+
+      const isSourceAffected = String(wire.source || "").includes(component.id) || String(wire.sourceComponentId || "") === component.id;
+      const isTargetAffected = String(wire.target || "").includes(component.id) || String(wire.targetComponentId || "") === component.id;
+      if (!endpointsMoved && !isSourceAffected && !isTargetAffected) return wire;
+
+      delete wirePathsRef.current[wire.id];
+      delete wireRouteMetaRef.current[wire.id];
 
       const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
       const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
@@ -5302,13 +5341,23 @@ export default function PanelGenerator() {
     const pHeight = 180 + normalizedRails.length * 240 + 100;
 
     const nextWires = wires.map((wire) => {
-      const isSourceAffected = String(wire.source || "").includes(componentId) || String(wire.sourceComponentId || "") === componentId;
-      const isTargetAffected = String(wire.target || "").includes(componentId) || String(wire.targetComponentId || "") === componentId;
-      if (!isSourceAffected && !isTargetAffected) return wire;
-
       const p1 = resolvePinPosition(wire.source, normalizedRails, pHeight, infrastructure);
       const p2 = resolvePinPosition(wire.target, normalizedRails, pHeight, infrastructure);
       if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
+
+      const currentPoints = wire.route?.points;
+      const currentFirst = currentPoints?.[0];
+      const currentLast = currentPoints?.[currentPoints.length - 1];
+      const endpointsMoved = !currentFirst || !currentLast ||
+        Math.hypot(currentFirst.x - p1.x, currentFirst.y - p1.y) > 0.5 ||
+        Math.hypot(currentLast.x - p2.x, currentLast.y - p2.y) > 0.5;
+
+      const isSourceAffected = String(wire.source || "").includes(componentId) || String(wire.sourceComponentId || "") === componentId;
+      const isTargetAffected = String(wire.target || "").includes(componentId) || String(wire.targetComponentId || "") === componentId;
+      if (!endpointsMoved && !isSourceAffected && !isTargetAffected) return wire;
+
+      delete wirePathsRef.current[wire.id];
+      delete wireRouteMetaRef.current[wire.id];
 
       const sourceSide = inferTerminalDirection(wire.source, p1, normalizedRails, pHeight);
       const targetSide = inferTerminalDirection(wire.target, p2, normalizedRails, pHeight);
@@ -7963,14 +8012,25 @@ export default function PanelGenerator() {
       ? getEffectiveWireThickness(activeWire, fallbackThickness)
       : fallbackThickness;
 
-    const candidateSavedPoints = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+    const pStart = routePoints[0];
+    const pEnd = routePoints[routePoints.length - 1];
+
+    const isStoredAligned = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 &&
+      Math.hypot(storedWire.route.points[0].x - pStart.x, storedWire.route.points[0].y - pStart.y) < 1.5 &&
+      Math.hypot(storedWire.route.points[storedWire.route.points.length - 1].x - pEnd.x, storedWire.route.points[storedWire.route.points.length - 1].y - pEnd.y) < 1.5;
+
+    const isActiveAligned = Array.isArray(activeWire?.route?.points) && activeWire.route.points.length >= 2 &&
+      Math.hypot(activeWire.route.points[0].x - pStart.x, activeWire.route.points[0].y - pStart.y) < 1.5 &&
+      Math.hypot(activeWire.route.points[activeWire.route.points.length - 1].x - pEnd.x, activeWire.route.points[activeWire.route.points.length - 1].y - pEnd.y) < 1.5;
+
+    const candidateSavedPoints = isStoredAligned
       ? storedWire.route.points
       : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
-        ? [routePoints[0], ...storedWire.route_points, routePoints[routePoints.length - 1]]
-        : Array.isArray(activeWire?.route?.points) && activeWire.route.points.length >= 2 && isOrthogonalPath(activeWire.route.points)
+        ? [pStart, ...storedWire.route_points, pEnd]
+        : isActiveAligned
           ? activeWire.route.points
           : Array.isArray(activeWire?.route_points) && activeWire.route_points.length > 0
-            ? [routePoints[0], ...activeWire.route_points, routePoints[routePoints.length - 1]]
+            ? [pStart, ...activeWire.route_points, pEnd]
             : null;
 
     const baseRoutePoints = (candidateSavedPoints && candidateSavedPoints.length >= 2 && isOrthogonalPath(candidateSavedPoints))
@@ -7983,8 +8043,20 @@ export default function PanelGenerator() {
       colorName: activeWire.color || descriptor.color,
       thickness,
     });
-    const editableRoutePoints = getEditableWireRoutePoints(activeWire, registeredRoutePoints);
-    if (!editableRoutePoints || editableRoutePoints.length < 2) return null;
+    const rawEditablePoints = getEditableWireRoutePoints(activeWire, registeredRoutePoints);
+    if (!rawEditablePoints || rawEditablePoints.length < 2) return null;
+
+    // Garante ancoragem estritamente centralizada nos bornes de entrada e saída
+    const editableRoutePoints = [...rawEditablePoints];
+    editableRoutePoints[0] = { x: pStart.x, y: pStart.y };
+    if (editableRoutePoints.length > 2 && Math.abs(editableRoutePoints[1].x - editableRoutePoints[0].x) <= 2) {
+      editableRoutePoints[1] = { ...editableRoutePoints[1], x: pStart.x };
+    }
+    const lastIdx = editableRoutePoints.length - 1;
+    editableRoutePoints[lastIdx] = { x: pEnd.x, y: pEnd.y };
+    if (editableRoutePoints.length > 2 && Math.abs(editableRoutePoints[lastIdx - 1].x - editableRoutePoints[lastIdx].x) <= 2) {
+      editableRoutePoints[lastIdx - 1] = { ...editableRoutePoints[lastIdx - 1], x: pEnd.x };
+    }
     const pathStr = getRoundedPath(editableRoutePoints, getCableCornerRadius(activeWire, options.radius ?? DEFAULT_CABLE_CORNER_RADIUS));
     const isTraced = tracedCircuitId && isWireMatchingCircuit(activeWire || descriptor.wire, tracedCircuitId);
     const isDimmed = tracedCircuitId && !isTraced;
@@ -8077,7 +8149,11 @@ export default function PanelGenerator() {
     const obstacles = extractPanelObstacles(rails, infrastructure);
 
     const storedWire = getStoredWire(descriptor.wire?.id);
-    if (Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)) {
+    const hasSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points);
+    const savedAligned = hasSaved &&
+      Math.hypot(storedWire.route.points[0].x - p1.x, storedWire.route.points[0].y - p1.y) < 1.5 &&
+      Math.hypot(storedWire.route.points[storedWire.route.points.length - 1].x - p2.x, storedWire.route.points[storedWire.route.points.length - 1].y - p2.y) < 1.5;
+    if (savedAligned) {
       return storedWire.route.points;
     }
 
@@ -8280,7 +8356,12 @@ export default function PanelGenerator() {
       >
         {descriptors.map((descriptor, descriptorIndex) => {
           const storedWire = getStoredWire(descriptor.wire.id);
-          const savedRoute = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+          const hasSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points);
+          const savedAligned = hasSaved &&
+            Math.hypot(storedWire.route.points[0].x - descriptor.p1.x, storedWire.route.points[0].y - descriptor.p1.y) < 1.5 &&
+            Math.hypot(storedWire.route.points[storedWire.route.points.length - 1].x - descriptor.p2.x, storedWire.route.points[storedWire.route.points.length - 1].y - descriptor.p2.y) < 1.5;
+
+          const savedRoute = savedAligned
             ? storedWire.route.points
             : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
               ? [descriptor.p1, ...storedWire.route_points, descriptor.p2]
@@ -8315,7 +8396,12 @@ export default function PanelGenerator() {
 
     const obstacles = extractPanelObstacles(rails, infrastructure);
     const storedWire = getStoredWire(descriptor.wire.id);
-    const savedRoute = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+    const hasSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points);
+    const savedAligned = hasSaved &&
+      Math.hypot(storedWire.route.points[0].x - devicePoint.x, storedWire.route.points[0].y - devicePoint.y) < 1.5 &&
+      Math.hypot(storedWire.route.points[storedWire.route.points.length - 1].x - loadEndpoint.point.x, storedWire.route.points[storedWire.route.points.length - 1].y - loadEndpoint.point.y) < 1.5;
+
+    const savedRoute = savedAligned
       ? storedWire.route.points
       : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
         ? [devicePoint, ...storedWire.route_points, loadEndpoint.point]
@@ -8547,14 +8633,23 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       if (isValidWirePoint(targetPoint)) anchoredPoints[anchoredPoints.length - 1] = targetPoint;
       fallbackPoints = cleanRoutePoints(anchoredPoints);
     }
-    const candidateSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points)
+    const pStart = fallbackPoints[0];
+    const pEnd = fallbackPoints[fallbackPoints.length - 1];
+    const isStoredAligned = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 &&
+      Math.hypot(storedWire.route.points[0].x - pStart.x, storedWire.route.points[0].y - pStart.y) < 1.5 &&
+      Math.hypot(storedWire.route.points[storedWire.route.points.length - 1].x - pEnd.x, storedWire.route.points[storedWire.route.points.length - 1].y - pEnd.y) < 1.5;
+    const isActiveAligned = Array.isArray(activeWire?.route?.points) && activeWire.route.points.length >= 2 &&
+      Math.hypot(activeWire.route.points[0].x - pStart.x, activeWire.route.points[0].y - pStart.y) < 1.5 &&
+      Math.hypot(activeWire.route.points[activeWire.route.points.length - 1].x - pEnd.x, activeWire.route.points[activeWire.route.points.length - 1].y - pEnd.y) < 1.5;
+
+    const candidateSaved = isStoredAligned
       ? storedWire.route.points
       : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
-        ? [fallbackPoints[0], ...storedWire.route_points, fallbackPoints[fallbackPoints.length - 1]]
-        : Array.isArray(activeWire?.route?.points) && activeWire.route.points.length >= 2 && isOrthogonalPath(activeWire.route.points)
+        ? [pStart, ...storedWire.route_points, pEnd]
+        : isActiveAligned
           ? activeWire.route.points
           : Array.isArray(activeWire?.route_points) && activeWire.route_points.length > 0
-            ? [fallbackPoints[0], ...activeWire.route_points, fallbackPoints[fallbackPoints.length - 1]]
+            ? [pStart, ...activeWire.route_points, pEnd]
             : null;
     const effectiveRoutePoints = (candidateSaved && isOrthogonalPath(candidateSaved)) ? candidateSaved : fallbackPoints;
     fallbackPoints = cleanRoutePoints(effectiveRoutePoints);

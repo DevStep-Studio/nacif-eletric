@@ -436,6 +436,33 @@ console.log("Iniciando bateria de testes obrigatórios do Roteador Ortogonal e P
   console.log("✓ TESTE 14: Bloco de entrada trifásica mapeia PE, N, L1, L2, L3 para parafusos específicos.");
 }
 
+// ─── TESTE 15: Alinhamento perfeito de bornes após espaçadores (Reservas Técnicas) ──
+{
+  const railsWithSpacers = [
+    {
+      id: "rail_1",
+      components: [
+        { id: "b1", type: "breaker", poles: 2 },
+        { id: "sp1", type: "spacer", poles: 3 },
+        { id: "b2", type: "breaker", poles: 1 },
+      ],
+    },
+  ];
+
+  // b1: x = 160, poles = 2 (compW = 52), nextX = 160 + 52 + 2 = 214
+  // sp1: poles = 3, compW = 3 * 28 - 2 = 82, nextX = 214 + 82 + 2 = 298
+  // b2: x = 298, poles = 1, center x = 298 + 13 = 311
+  const b2_top = resolvePinPosition("comp:b2:top:0", railsWithSpacers);
+  const b2_bottom = resolvePinPosition("comp:b2:bottom:0", railsWithSpacers);
+
+  assert.equal(b2_top.x, 311, "TESTE 15: b2 após spacer de 3 módulos ancorado exatamente em x = 311");
+  assert.equal(b2_top.y, 190 - 31, "TESTE 15: b2 top ancorado em y = 159");
+  assert.equal(b2_bottom.x, 311, "TESTE 15: b2 bottom ancorado exatamente em x = 311");
+  assert.equal(b2_bottom.y, 190 + 51, "TESTE 15: b2 bottom ancorado em y = 241");
+
+  console.log("✓ TESTE 15: Espaçadores mantêm o alinhamento 100% centralizado de bornes subsequentes.");
+}
+
 console.log("\n=======================================================");
-console.log("TODOS OS 14 TESTES OBRIGATÓRIOS PASSARAM COM SUCESSO!");
+console.log("TODOS OS 15 TESTES OBRIGATÓRIOS PASSARAM COM SUCESSO!");
 console.log("=======================================================\n");

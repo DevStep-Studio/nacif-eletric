@@ -279,7 +279,9 @@ export const extractPanelObstacles = (rails = [], infrastructure = [], options =
 
     (rail.components || []).forEach((comp) => {
       const poles = Number(comp.poles || 1);
-      const width = poles * DIN_MODULE_WIDTH;
+      const width = comp.type === "spacer"
+        ? poles * (DIN_MODULE_WIDTH + 2) - 2
+        : poles * DIN_MODULE_WIDTH;
       if (comp.type !== "spacer") {
         obstacles.push({
           id: comp.id,
@@ -964,7 +966,9 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
       let currentX = RAIL_START_X;
 
       for (const comp of rail.components || []) {
-        const compW = (comp.poles || 1) * DIN_MODULE_WIDTH;
+        const compW = comp.type === "spacer"
+          ? (Number(comp.poles) || 1) * (DIN_MODULE_WIDTH + 2) - 2
+          : (Number(comp.poles) || 1) * DIN_MODULE_WIDTH;
         if (comp.id === compId || comp.circuit_id === compId) {
           const poleIdx = parseInt(poleToken, 10) || 0;
           const terminalX = currentX + poleIdx * DIN_MODULE_WIDTH + DIN_MODULE_WIDTH / 2;
@@ -997,8 +1001,10 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
       let currentX = RAIL_START_X;
 
       for (const comp of rail.components || []) {
-        const compW = (comp.poles || 1) * DIN_MODULE_WIDTH;
-        if (comp.id === compId) {
+        const compW = comp.type === "spacer"
+          ? (Number(comp.poles) || 1) * (DIN_MODULE_WIDTH + 2) - 2
+          : (Number(comp.poles) || 1) * DIN_MODULE_WIDTH;
+        if (comp.id === compId || comp.circuit_id === compId) {
           // Bornes SAK possuem 14px de largura com centro em x + 7
           if (comp.type === "borne") {
             const x = currentX + 7;
