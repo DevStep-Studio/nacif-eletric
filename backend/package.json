@@ -1,0 +1,37 @@
+{
+  "name": "nacif-electric-backend",
+  "version": "1.0.0",
+  "description": "Backend próprio da plataforma Nacif Electric (Fastify + Prisma + MySQL)",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:studio": "prisma studio"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@fastify/jwt": "^10.0.0",
+    "@fastify/multipart": "^9.3.0",
+    "@fastify/sensible": "^6.0.3",
+    "@fastify/static": "^8.3.0",
+    "@prisma/client": "^6.19.0",
+    "bcryptjs": "^3.0.3",
+    "cuid": "^3.0.0",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.6.1",
+    "fastify-plugin": "^6.0.0",
+    "openai": "^6.42.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "prisma": "^6.19.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,317 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  super_admin
+  admin
+  user
+}
+
+enum UserPlan {
+  gratuito
+  profissional
+  engenharia
+}
+
+enum ProjectStatus {
+  Rascunho
+  Em_Andamento
+  Concluido
+  Aprovado
+}
+
+enum BudgetStatus {
+  Rascunho
+  Enviado
+  Aprovado
+  Recusado
+  Em_Revisao
+}
+
+model User {
+  id                String               @id @default(cuid())
+  email             String               @unique
+  passwordHash      String
+  fullName          String               @map("full_name")
+  role              UserRole             @default(user)
+  plan              UserPlan             @default(gratuito)
+  isSuperAdmin      Boolean              @default(false) @map("is_super_admin")
+  status            String               @default("active")
+  profession        String?
+  company           String?
+  crea              String?
+  phone             String?
+  avatarUrl         String?              @db.LongText @map("avatar_url")
+  customPermissions Json?                @map("custom_permissions")
+  isDeleted         Boolean              @default(false) @map("is_deleted")
+  deletedAt         DateTime?            @map("deleted_at")
+  lastAccess        DateTime?            @map("last_access")
+  projects          Project[]
+  budgets           Budget[]
+  issues            Issue[]
+  issueComments     IssueComment[]
+  notifications     Notification[]
+  resetTokens       PasswordResetToken[]
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([role])
+  @@index([isDeleted])
+  @@map("users")
+}
+
+model Project {
+  id               String            @id @default(cuid())
+  name             String
+  clientName       String?           @map("client_name")
+  address          String?           @db.Text
+  projectType      String?           @map("project_type")
+  solarConfig      Json?             @map("solar_config")
+  voltage          Int?
+  supplyType       String?           @map("supply_type")
+  circuits         Json?
+  totalDemandW     Float             @default(0) @map("total_demand_w")
+  panelSize        Int?              @map("panel_size")
+  panelBoards      Json?             @map("panel_boards")
+  panelLayout      Json?             @map("panel_layout")
+  diagramLayout    Json?             @map("diagram_layout")
+  plantDesign      Json?             @map("plant_design")
+  plantPointsCount Int?              @map("plant_points_count")
+  plantRoutesCount Int?              @map("plant_routes_count")
+  plantInfraType   String?           @map("plant_infra_type")
+  status           ProjectStatus     @default(Rascunho)
+  notes            String?           @db.Text
+  materials        Json?
+  manualBudgetItems Json?            @map("manual_budget_items")
+  createdById      String            @map("created_by_id")
+  createdBy        User              @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  revisions        ProjectRevision[]
+  budgets          Budget[]
+  issues           Issue[]
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
+  @@map("projects")
+}
+
+model ProjectRevision {
+  id          String   @id @default(cuid())
+  projectId   String   @map("project_id")
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version     Int
+  action      String
+  actorUserId String   @map("actor_user_id")
+  actorEmail  String   @map("actor_email")
+  snapshot    Json
+  summary     String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@unique([projectId, version])
+  @@map("project_revisions")
+}
+
+model Budget {
+  id                String       @id @default(cuid())
+  name              String
+  status            BudgetStatus @default(Rascunho)
+  margin            Float        @default(30.0)
+  laborCost         Float        @default(0.0) @map("labor_cost")
+  productAdjustment Float        @default(0.0) @map("product_adjustment")
+  discountType      String       @default("percent") @map("discount_type")
+  discountValue     Float        @default(0.0) @map("discount_value")
+  surchargeType     String       @default("percent") @map("surcharge_type")
+  surchargeValue    Float        @default(0.0) @map("surcharge_value")
+  validityDays      Int          @default(15) @map("validity_days")
+  paymentTerms      String?      @map("payment_terms")
+  executionDeadline String?      @map("execution_deadline")
+  materials         Json?
+  services          Json?
+  clientInfo        Json?        @map("client_info")
+  notes             String?      @db.Text
+  version           Int          @default(1)
+  projectId         String?      @map("project_id")
+  project           Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  ownerId           String       @map("owner_id")
+  owner             User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  @@index([ownerId])
+  @@index([projectId])
+  @@index([status])
+  @@index([updatedAt])
+  @@map("budgets")
+}
+
+model Issue {
+  id                String            @id @default(cuid())
+  protocol          String            @unique
+  type              String            @default("erro")
+  title             String
+  module            String
+  description       String            @db.Text
+  stepsToReproduce  String?           @db.Text @map("steps_to_reproduce")
+  expectedResult    String?           @db.Text @map("expected_result")
+  actualResult      String?           @db.Text @map("actual_result")
+  status            String            @default("recebido")
+  priority          String            @default("media")
+  technicalInfo     Json?             @map("technical_info")
+  internalNotes     String?           @db.Text @map("internal_notes")
+  unreadUser        Boolean           @default(false) @map("unread_user")
+  unreadAdmin       Boolean           @default(true) @map("unread_admin")
+  userId            String            @map("user_id")
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId         String?           @map("project_id")
+  project           Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  comments          IssueComment[]
+  attachments       IssueAttachment[]
+  auditLogs         IssueAuditLog[]
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
+  @@index([priority])
+  @@index([module])
+  @@index([type])
+  @@index([createdAt])
+  @@map("issues")
+}
+
+model IssueComment {
+  id          String   @id @default(cuid())
+  issueId     String   @map("issue_id")
+  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  authorId    String   @map("author_id")
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorName  String   @map("author_name")
+  authorEmail String   @map("author_email")
+  authorRole  String   @default("user") @map("author_role")
+  message     String   @db.Text
+  isInternal  Boolean  @default(false) @map("is_internal")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([issueId])
+  @@index([authorId])
+  @@map("issue_comments")
+}
+
+model IssueAttachment {
+  id          String   @id @default(cuid())
+  issueId     String   @map("issue_id")
+  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  name        String
+  size        Int
+  type        String
+  storagePath String   @db.Text @map("storage_path")
+  dataUrl     String?  @db.LongText @map("data_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([issueId])
+  @@map("issue_attachments")
+}
+
+model IssueAuditLog {
+  id        String   @id @default(cuid())
+  issueId   String   @map("issue_id")
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  event     String
+  title     String
+  details   String?  @db.Text
+  actorName String   @map("actor_name")
+  actorRole String   @default("user") @map("actor_role")
+  timestamp DateTime @default(now())
+
+  @@index([issueId])
+  @@map("issue_audit_logs")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String   @map("actor_id")
+  actorName  String   @map("actor_name")
+  actorEmail String   @map("actor_email")
+  actorRole  String   @map("actor_role")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String?  @map("target_id")
+  targetName String?  @map("target_name")
+  details    String   @db.Text
+  metadata   Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @db.Text @map("user_agent")
+  timestamp  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([targetType])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  id                    String   @id @default("global_settings")
+  requireMfaSuperAdmin  Boolean  @default(false) @map("require_mfa_super_admin")
+  sessionTimeoutMinutes Int      @default(60) @map("session_timeout_minutes")
+  maxLoginAttempts      Int      @default(5) @map("max_login_attempts")
+  allowUserRegistration Boolean  @default(true) @map("allow_user_registration")
+  maintenanceMode       Boolean  @default(false) @map("maintenance_mode")
+  systemVersion         String   @default("1.4.0") @map("system_version")
+  updatedBy             String?  @map("updated_by")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String   @db.Text
+  category    String   @default("Sistema")
+  tone        String   @default("info")
+  href        String   @default("/")
+  read        Boolean  @default(false)
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, createdAt])
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
