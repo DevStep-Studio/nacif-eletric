@@ -14,6 +14,7 @@
 import { jsPDF } from "jspdf";
 import { getAzimuthWithCardinal } from "./solarDesignerGeometry.js";
 import { NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
+import { resolveSolarReportImages } from "./solarLayoutImageRenderer.js";
 
 const BRAND_DARK = [14, 23, 38];   // #0e1726
 const BRAND_BLUE = [13, 59, 130];  // #0d3b82
@@ -338,16 +339,23 @@ export function downloadPdfBlob(doc, filename = "relatorio_solar.pdf") {
  * 1. Planta de Implantação
  */
 export function generateSitePlanReport(project = {}, config = {}, sizing = {}) {
-  const { azimuth, dcPowerKw, panelCount, usableArea, roofArea, roofWidth, roofHeight, roofPitch, moduleWp } = normalizeParams(project, config, sizing);
+  const { azimuth, dcPowerKw, panelCount, usableArea, roofArea, roofWidth, roofHeight, roofPitch, moduleWp, inverterKw } = normalizeParams(project, config, sizing);
   const doc = new jsPDF("p", "mm", "a4");
+
+  // Resolve as imagens técnicas oficiais do projeto (layout e strings)
+  const { layoutImage, stringsImage, extraImages } = resolveSolarReportImages({ project, config, sizing });
+
+  // ==========================================
+  // PÁGINA 1: DADOS GERAIS & LAYOUT DO TELHADO
+  // ==========================================
   addHeader(doc, "PLANTA DE IMPLANTAÇÃO SOLAR", project);
 
-  let y = 30;
+  let y = 29;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(10.5);
   doc.setTextColor(...BRAND_DARK);
   doc.text("1. Dados Gerais da Instalação", 14, y);
-  y += 4;
+  y += 3.5;
 
   const dataRows = [
     ["Cliente", project?.client_name || "Cliente Solar", "Endereço", project?.address || "Endereço da Instalação"],
@@ -361,33 +369,227 @@ export function generateSitePlanReport(project = {}, config = {}, sizing = {}) {
 
   y += 4;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(10.5);
   doc.setTextColor(...BRAND_DARK);
   doc.text("2. Layout e Arranjo Físico no Telhado", 14, y);
-  y += 5;
+  y += 3.5;
 
-  doc.setFillColor(245, 248, 252);
-  doc.roundedRect(14, y, 182, 80, 2, 2, "FD");
-  doc.setDrawColor(180, 200, 225);
-  doc.roundedRect(18, y + 4, 174, 72, 2, 2, "D");
+  // Sub-bloco A: Imagem do Layout dos Módulos no Telhado
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...BRAND_BLUE);
+  doc.text("2.1 Layout dos módulos no telhado (Vista Superior)", 14, y);
+  y += 2.5;
+
+  // Imagem do layout dos módulos no telhado
+  const imgWidth = 182;
+  const imgHeight = 82;
+  try {
+    if (layoutImage) {
+      doc.addImage(layoutImage, "PNG", 14, y, imgWidth, imgHeight, undefined, "FAST");
+      doc.setDrawColor(180, 200, 225);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(14, y, imgWidth, imgHeight, 1.5, 1.5, "D");
+    }
+  } catch (err) {
+    console.warn("Falha ao incluir imagem de layout no PDF:", err);
+  }
+  y += imgHeight + 3.5;
+
+  // Box de Especificações Técnicas de Montagem Física
+  doc.setFillColor(248, 250, 253);
+  doc.roundedRect(14, y, 182, 54, 2, 2, "FD");
+  doc.setDrawColor(210, 225, 240);
+  doc.roundedRect(14, y, 182, 54, 2, 2, "D");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(8.5);
   doc.setTextColor(...BRAND_BLUE);
-  doc.text(`Água 01 — ${panelCount} Módulos FV (${moduleWp}Wp) · Arranjo Matricial`, 22, y + 12);
+  doc.text(`Especificações Técnicas de Montagem Física · ${panelCount} Módulos (${moduleWp}Wp)`, 18, y + 7);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(70, 85, 105);
-  doc.text(`• Dimensões do Telhado: ${roofWidth} m × ${roofHeight} m`, 22, y + 20);
-  doc.text(`• Afastamento de segurança periférico (Setback): 0,30 m`, 22, y + 27);
-  doc.text(`• Orientação dos módulos: ${config?.module_orientation === "horizontal" ? "Deitado (Paisagem)" : "Em pé (Retrato)"}`, 22, y + 34);
-  doc.text(`• Obstáculos identificados: ${config?.obstacles?.length || 0} excluídos da área útil`, 22, y + 41);
-  doc.text(`• Estrutura de fixação: Alumínio anodizado sobre telha cerâmica / fibrocimento`, 22, y + 48);
-  doc.text(`• Espaçamento térmico intermódulos: 20 mm com grampos intermediários/finais`, 22, y + 55);
-  doc.text(`• Rosa dos ventos e Azimute calculado: ${azimuth.formatted} com inclinação de ${roofPitch}°`, 22, y + 62);
+  doc.setFontSize(7.5);
+  doc.setTextColor(60, 75, 95);
 
-  addFooter(doc, 1, 1);
+  const col1X = 18;
+  const col2X = 105;
+
+  doc.text(`• Dimensões do Telhado: ${roofWidth} m × ${roofHeight} m (${roofArea.toFixed(1)} m²)`, col1X, y + 14);
+  doc.text(`• Afastamento de segurança (Setback): 0,30 m nas bordas`, col1X, y + 21);
+  doc.text(`• Orientação dos módulos: ${config?.module_orientation === "horizontal" ? "Deitado (Paisagem)" : "Em pé (Retrato)"}`, col1X, y + 28);
+  doc.text(`• Obstáculos identificados: ${config?.obstacles?.length || 0} excluídos da área útil`, col1X, y + 35);
+  doc.text(`• Espaçamento térmico intermódulos: 20 mm c/ grampos`, col1X, y + 42);
+  doc.text(`• Inclinação / Azimute: ${roofPitch}° / ${azimuth.formatted}`, col1X, y + 49);
+
+  doc.text(`• Estrutura de fixação: Perfis de alumínio anodizado 6063-T6`, col2X, y + 14);
+  doc.text(`• Fixadores: Parafusos prisioneiros / ganchos inox 304`, col2X, y + 21);
+  doc.text(`• Carga estática admissível: 2400 Pa (vento) / 5400 Pa (peso)`, col2X, y + 28);
+  doc.text(`• Aterramento da estrutura: Cabo de cobre nu / isolado 6 mm²`, col2X, y + 35);
+  doc.text(`• Grau de proteção dos módulos: IP68 (caixa de junção)`, col2X, y + 42);
+  doc.text(`• Conexões CC: Conectores padrão MC4 c/ travamento de segurança`, col2X, y + 49);
+
+  // =======================================================
+  // PÁGINA 2: ARRANJO ELÉTRICO DE STRINGS / CIRCUITOS CC
+  // =======================================================
+  doc.addPage();
+  addHeader(doc, "PLANTA DE IMPLANTAÇÃO SOLAR — ARRANJO ELÉTRICO", project);
+
+  let y2 = 29;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(...BRAND_DARK);
+  doc.text("2. Layout e Arranjo Físico no Telhado (Continuação)", 14, y2);
+  y2 += 3.5;
+
+  // Sub-bloco B: Imagem do Arranjo de Strings / Circuito Solar
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...BRAND_BLUE);
+  doc.text("2.2 Arranjo de strings / circuito solar", 14, y2);
+  y2 += 2.5;
+
+  // Imagem do arranjo elétrico / strings / circuitos
+  const stringsImgHeight = 84;
+  try {
+    if (stringsImage) {
+      doc.addImage(stringsImage, "PNG", 14, y2, imgWidth, stringsImgHeight, undefined, "FAST");
+      doc.setDrawColor(180, 200, 225);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(14, y2, imgWidth, stringsImgHeight, 1.5, 1.5, "D");
+    }
+  } catch (err) {
+    console.warn("Falha ao incluir imagem de arranjo elétrico no PDF:", err);
+  }
+  y2 += stringsImgHeight + 4;
+
+  // Tabela Técnica de Strings / Circuitos Solares
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(...BRAND_DARK);
+  doc.text("2.3 Quadro de Divisão das Strings e Conexão ao Inversor", 14, y2);
+  y2 += 3;
+
+  // Cálculo e listagem detalhada das strings
+  const stringList = (sizing?.strings && sizing.strings.length > 0)
+    ? sizing.strings
+    : [
+        {
+          stringName: "String 01",
+          modulesCount: Math.ceil(panelCount / 2),
+          powerKw: ((Math.ceil(panelCount / 2) * moduleWp) / 1000).toFixed(2),
+          vmpV: (Math.ceil(panelCount / 2) * 41.5).toFixed(1),
+          vocV: (Math.ceil(panelCount / 2) * 49.8).toFixed(1),
+          impA: "13.25",
+          mppt: "MPPT 1",
+        },
+        {
+          stringName: "String 02",
+          modulesCount: Math.floor(panelCount / 2),
+          powerKw: ((Math.floor(panelCount / 2) * moduleWp) / 1000).toFixed(2),
+          vmpV: (Math.floor(panelCount / 2) * 41.5).toFixed(1),
+          vocV: (Math.floor(panelCount / 2) * 49.8).toFixed(1),
+          impA: "13.25",
+          mppt: "MPPT 2 (ou MPPT 1 Par.)",
+        },
+      ];
+
+  const stringTableRows = stringList.map((str, idx) => [
+    str.stringName || `String 0${idx + 1}`,
+    `${str.modulesCount || str.count || Math.ceil(panelCount / stringList.length)} un`,
+    `${Number(str.powerKw || ((str.modulesCount || 10) * moduleWp / 1000)).toFixed(2)} kWp`,
+    `${str.vmpV || "415.0"} V`,
+    `${str.vocV || "498.0"} V`,
+    `${str.impA || "13.25"} A`,
+    str.mppt || `MPPT ${idx + 1}`,
+  ]);
+
+  // Linha totalizadora CC
+  stringTableRows.push([
+    "Total Gerador CC",
+    `${panelCount} módulos`,
+    `${dcPowerKw.toFixed(2)} kWp`,
+    "—",
+    "—",
+    "—",
+    `${inverterKw} kW Inversor`,
+  ]);
+
+  y2 = drawSimpleTable(
+    doc,
+    y2,
+    ["Circuito / String", "Módulos", "Potência CC", "Tensão Vmp", "Tensão Voc", "Corrente Imp", "Entrada Inversor"],
+    stringTableRows,
+    [32, 22, 26, 25, 25, 24, 28]
+  );
+
+  y2 += 4;
+  // Normas e Requisitos Construtivos
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...BRAND_DARK);
+  doc.text("2.4 Conformidade Normativa e Requisitos de Instalação CC", 14, y2);
+  y2 += 2.5;
+
+  doc.setFillColor(248, 250, 253);
+  doc.roundedRect(14, y2, 182, 38, 2, 2, "FD");
+  doc.setDrawColor(210, 225, 240);
+  doc.roundedRect(14, y2, 182, 38, 2, 2, "D");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(60, 75, 95);
+  doc.text("• ABNT NBR 16690: Instalação de arranjos fotovoltaicos com proteção contra sobrecorrentes e sobretensões transitórias.", 18, y2 + 7);
+  doc.text("• Condutores CC: Cabos flexíveis de cobre estanhado 4/6 mm², classe térmica 90°C (120°C máx), isolação 1,8 kV CC resistente a UV.", 18, y2 + 13);
+  doc.text("• Conectores MC4: Crimpagem profissional com ferramentas calibradas e teste de continuidade prévio ao comissionamento.", 18, y2 + 19);
+  doc.text("• Aterramento e Equipotencialização: Molduras de alumínio e estruturas interligadas ao barramento de equipotencialização (BEP).", 18, y2 + 25);
+  doc.text("• Identificação Permanente: Etiquetas de advertência e sinalização indelével dos circuitos CC e polaridade nos eletrodutos.", 18, y2 + 31);
+
+  // =======================================================
+  // PÁGINA 3+ (OPCIONAL): REGISTROS FOTOGRÁFICOS / EXTRAS
+  // =======================================================
+  if (Array.isArray(extraImages) && extraImages.length > 0) {
+    doc.addPage();
+    addHeader(doc, "PLANTA DE IMPLANTAÇÃO SOLAR — VISTAS COMPLEMENTARES", project);
+
+    let y3 = 29;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...BRAND_DARK);
+    doc.text("3. Vistas Complementares e Registros Técnicos", 14, y3);
+    y3 += 4;
+
+    extraImages.slice(0, 4).forEach((extra, idx) => {
+      if (idx > 0 && idx % 2 === 0) {
+        doc.addPage();
+        addHeader(doc, "PLANTA DE IMPLANTAÇÃO SOLAR — VISTAS COMPLEMENTARES", project);
+        y3 = 29;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(...BRAND_BLUE);
+      doc.text(extra.title || `Vista Complementar 0${idx + 1}`, 14, y3);
+      y3 += 2.5;
+
+      try {
+        doc.addImage(extra.dataUrl, "PNG", 14, y3, 182, 85, undefined, "FAST");
+        doc.setDrawColor(180, 200, 225);
+        doc.roundedRect(14, y3, 182, 85, 1.5, 1.5, "D");
+      } catch (err) {
+        console.warn("Falha ao incluir imagem complementar no PDF:", err);
+      }
+      y3 += 92;
+    });
+  }
+
+  // =======================================================
+  // RENUMERAÇÃO E ATUALIZAÇÃO DO RODAPÉ EM TODAS AS PÁGINAS
+  // =======================================================
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    addFooter(doc, p, totalPages);
+  }
+
   return doc;
 }
 
@@ -804,6 +1006,7 @@ export function generateExecutiveSolarPdf(project = {}, config = {}, sizing = {}
  */
 export function printExecutiveSolarReport(project = {}, config = {}, sizing = {}) {
   const { azimuth, dcPowerKw, panelCount, annualKwh, annualSavings, moduleWp, inverterKw, roofArea, usableArea, roofPitch, breaker, investment, payback } = normalizeParams(project, config, sizing);
+  const { layoutImage, stringsImage } = resolveSolarReportImages({ project, config, sizing });
 
   const html = `
     <!DOCTYPE html>
@@ -903,7 +1106,36 @@ export function printExecutiveSolarReport(project = {}, config = {}, sizing = {}
         </div>
       </div>
 
-      <div class="section-title">2. Arranjo de Strings CC e Inversor</div>
+      <div class="section-title">2. Layout no Telhado e Arranjo de Strings</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+        <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #0f172a;">
+          <div style="background: #1e293b; color: #fff; padding: 5px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+            <span>Layout dos módulos no telhado</span>
+            <span style="font-size: 7.5px; color: #38bdf8;">Vista Superior CAD</span>
+          </div>
+          <div style="padding: 4px; display: flex; align-items: center; justify-content: center; min-height: 140px;">
+            <img src="${layoutImage}" style="max-width: 100%; height: auto; display: block; border-radius: 3px;" alt="Layout dos Módulos no Telhado" />
+          </div>
+          <div style="padding: 3px 6px; background: #f8fafc; font-size: 7.5px; color: #64748b; border-top: 1px solid #e2e8f0;">
+            Disposição real dos módulos fotovoltaicos sobre a água do telhado com cotas e orientação cardeal
+          </div>
+        </div>
+
+        <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #0f172a;">
+          <div style="background: #1e293b; color: #fff; padding: 5px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+            <span>Arranjo de strings / circuito solar</span>
+            <span style="font-size: 7.5px; color: #34d399;">Topologia CC</span>
+          </div>
+          <div style="padding: 4px; display: flex; align-items: center; justify-content: center; min-height: 140px;">
+            <img src="${stringsImage}" style="max-width: 100%; height: auto; display: block; border-radius: 3px;" alt="Arranjo de Strings / Circuito Solar" />
+          </div>
+          <div style="padding: 3px 6px; background: #f8fafc; font-size: 7.5px; color: #64748b; border-top: 1px solid #e2e8f0;">
+            Mapeamento elétrico por cores e fiação em série das strings conectadas às entradas MPPT do inversor
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">3. Arranjo de Strings CC e Inversor</div>
       <table>
         <thead>
           <tr>
@@ -943,7 +1175,7 @@ export function printExecutiveSolarReport(project = {}, config = {}, sizing = {}
         </tbody>
       </table>
 
-      <div class="section-title">3. Integração com o Quadro de Distribuição CA (QD-01)</div>
+      <div class="section-title">4. Integração com o Quadro de Distribuição CA (QD-01)</div>
       <div class="grid-2">
         <div class="box">
           <div class="box-title">Proteção Termomagnética e Cabos</div>
