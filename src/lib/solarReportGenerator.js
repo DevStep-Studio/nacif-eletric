@@ -13,6 +13,7 @@
 
 import { jsPDF } from "jspdf";
 import { getAzimuthWithCardinal } from "./solarDesignerGeometry.js";
+import { NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
 
 const BRAND_DARK = [14, 23, 38];   // #0e1726
 const BRAND_BLUE = [13, 59, 130];  // #0d3b82
@@ -212,25 +213,47 @@ function addHeader(doc, title, project) {
   doc.setFillColor(...BRAND_DARK);
   doc.rect(0, 0, 210, 22, "F");
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.setTextColor(255, 255, 255);
-  doc.text("VOLTAI · ENGENHARIA SOLAR", 14, 10);
+  // Símbolo Oficial Nacif Electric (proporções 504:304 preservadas)
+  try {
+    doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 14, 5.5, 16.5, 10, undefined, "FAST");
+  } catch {
+    // Fallback gracioso
+  }
 
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
+  // Nome oficial da marca
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text("NACIF ELECTRIC", 33.5, 10.8);
+
+  // Slogan institucional em verde-turquesa
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.8);
   doc.setTextColor(0, 216, 184);
-  doc.text("DA PLANTA AO SOL · TUDO EM UM SÓ LUGAR", 14, 16);
+  doc.text("DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR", 33.5, 15.8);
 
+  // Lado direito: Título, Projeto, Localização e Data
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(255, 255, 255);
-  doc.text(title, 210 - 14, 10, { align: "right" });
+  doc.text(title, 210 - 14, 8.5, { align: "right" });
+
+  const projectName = project?.name || "Projeto Solar";
+  const displayProject = projectName.length > 38 ? projectName.slice(0, 35) + "..." : projectName;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(200, 210, 225);
-  doc.text(`Projeto: ${project?.name || "Projeto Solar"} · ${new Date().toLocaleDateString("pt-BR")}`, 210 - 14, 16, { align: "right" });
+  doc.text(`Projeto: ${displayProject}`, 210 - 14, 13.0, { align: "right" });
+
+  const locationText = [project?.city, project?.state].filter(Boolean).join(" / ") || project?.address || "";
+  const dateStr = new Date().toLocaleDateString("pt-BR");
+  const metaText = locationText ? `${locationText} · ${dateStr}` : dateStr;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.0);
+  doc.setTextColor(170, 185, 205);
+  doc.text(metaText, 210 - 14, 17.2, { align: "right" });
 }
 
 function addFooter(doc, pageNum = 1, totalPages = 1) {
@@ -241,7 +264,7 @@ function addFooter(doc, pageNum = 1, totalPages = 1) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(120, 130, 145);
-  doc.text("NACIF Solutions Eletric / VOLTAI Solar · Conforme NBR 16690 e NBR 5410", 14, pageHeight - 7);
+  doc.text("NACIF ELECTRIC · Conforme NBR 16690 e NBR 5410", 14, pageHeight - 7);
   doc.text(`Página ${pageNum} de ${totalPages}`, 196, pageHeight - 7, { align: "right" });
 }
 
@@ -792,11 +815,14 @@ export function printExecutiveSolarReport(project = {}, config = {}, sizing = {}
         @page { size: A4 portrait; margin: 12mm 15mm; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; background: #fff; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
-        .logo-title { font-size: 15px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; }
-        .logo-sub { font-size: 9px; font-weight: 600; color: #00b49b; text-transform: uppercase; }
-        .doc-title { text-align: right; font-size: 12px; font-weight: 800; color: #0f172a; }
-        .doc-meta { font-size: 9px; color: #64748b; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #0e1726; color: #fff; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; }
+        .logo-box { display: flex; align-items: center; gap: 10px; }
+        .logo-img { width: 36px; height: 22px; object-fit: contain; }
+        .logo-title { font-size: 14px; font-weight: 800; color: #ffffff; letter-spacing: -0.2px; line-height: 1.1; }
+        .logo-sub { font-size: 7.5px; font-weight: 700; color: #00d8b8; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; }
+        .doc-title { text-align: right; font-size: 10.5px; font-weight: 800; color: #ffffff; text-transform: uppercase; }
+        .doc-meta { text-align: right; font-size: 8.5px; color: #cbd5e1; margin-top: 1px; }
+        .doc-submeta { text-align: right; font-size: 7.5px; color: #94a3b8; }
         
         .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
         .kpi-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background: #f8fafc; }
@@ -822,13 +848,17 @@ export function printExecutiveSolarReport(project = {}, config = {}, sizing = {}
     </head>
     <body>
       <div class="header">
-        <div>
-          <div class="logo-title">VOLTAI · ENGENHARIA SOLAR</div>
-          <div class="logo-sub">NACIF Solutions Eletric · NBR 16690 / NBR 5410</div>
+        <div class="logo-box">
+          <img src="${NACIF_SYMBOL_BASE64}" class="logo-img" alt="Nacif Electric" />
+          <div>
+            <div class="logo-title">NACIF ELECTRIC</div>
+            <div class="logo-sub">DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR</div>
+          </div>
         </div>
         <div>
           <div class="doc-title">RELATÓRIO TÉCNICO EXECUTIVO</div>
-          <div class="doc-meta">Projeto: ${project?.name || "Projeto Solar"} · ${new Date().toLocaleDateString("pt-BR")}</div>
+          <div class="doc-meta">Projeto: ${project?.name || "Projeto Solar"}</div>
+          <div class="doc-submeta">${[project?.city, project?.state].filter(Boolean).join(" / ") || project?.address ? `${[project?.city, project?.state].filter(Boolean).join(" / ") || project?.address} · ` : ""}${new Date().toLocaleDateString("pt-BR")}</div>
         </div>
       </div>
 
@@ -932,7 +962,7 @@ export function printExecutiveSolarReport(project = {}, config = {}, sizing = {}
       </div>
 
       <div class="footer">
-        <div>VOLTAI Solar · NACIF Solutions Eletric · Engenharia Elétrica Aplicada</div>
+        <div>NACIF ELECTRIC · Engenharia Elétrica Aplicada</div>
         <div>Emissão: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}</div>
       </div>
 
