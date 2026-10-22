@@ -76,7 +76,6 @@ import {
   Minus,
   Scissors,
   Wand2,
-  Printer,
 } from "lucide-react";
 
 // ─── CONSTANTES DE DIMENSIONAMENTO DO PAINEL ───────────────────────────────────
@@ -9756,17 +9755,6 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           </Button>
 
           <Button
-            variant="outline"
-            size="sm"
-            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
-            onClick={handlePrintBoard}
-            title="Imprimir Diagrama do Quadro"
-          >
-            <Printer className="mr-1 h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Imprimir</span>
-          </Button>
-
-          <Button
             size="sm"
             variant="outline"
             className="h-8 rounded-lg border-[#CDEFE8] px-2.5 text-xs font-bold text-[#0f4f49]"
@@ -9996,9 +9984,6 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                   </Button>
                   <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={handleExportSvg} aria-label="Exportar SVG" title="Exportar SVG">
                     <Download className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={handlePrintBoard} aria-label="Imprimir Quadro" title="Imprimir Quadro">
-                    <Printer className="h-4 w-4" />
                   </Button>
                   <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg border-red-200 text-red-500" onClick={handleClearWires} aria-label="Limpar fiação" title="Limpar fiação">
                     <Trash2 className="h-4 w-4" />
