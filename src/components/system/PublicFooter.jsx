@@ -1,10 +1,18 @@
 import { Link } from "react-router-dom";
 import { useBranding } from "@/lib/appPreferences";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 
 export default function PublicFooter({ className = "" }) {
   const { branding } = useBranding();
   const currentYear = new Date().getFullYear();
-  const brandName = [branding.appName, branding.appSuffix].filter(Boolean).join(" ") || "Nacif Electric";
+  const brandName = [branding.appName, branding.appSuffix].filter(Boolean).join(" ") || "NACIF Energy";
+  const isDefaultLogo =
+    !branding.logoDataUrl ||
+    branding.logoDataUrl === "/brand-logo-principal.png" ||
+    branding.logoDataUrl.includes("brand-logo-principal") ||
+    branding.logoDataUrl.includes("Logo-Principal") ||
+    branding.logoDataUrl.includes("nacif");
+  const logoSrc = isDefaultLogo ? brandLogoEnergy : (branding.logoDataUrl || brandLogoEnergy);
 
   return (
     <footer className={`border-t border-[#E2E8F0] bg-white text-[#64748B] text-xs ${className}`}>
@@ -14,12 +22,12 @@ export default function PublicFooter({ className = "" }) {
           <div className="space-y-3 md:col-span-1">
             <Link to="/" className="inline-flex items-center" title={brandName}>
               <img
-                src={branding.logoDataUrl || "/brand-logo-principal.png"}
+                src={logoSrc}
                 alt={brandName}
                 className="h-8 max-w-[170px] object-contain object-left"
                 onError={(e) => {
-                  if (e.currentTarget.src !== "/brand-logo-principal.png") {
-                    e.currentTarget.src = "/brand-logo-principal.png";
+                  if (e.currentTarget.src !== brandLogoEnergy) {
+                    e.currentTarget.src = brandLogoEnergy;
                   }
                 }}
               />

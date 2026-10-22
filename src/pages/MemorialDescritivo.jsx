@@ -10,6 +10,7 @@ import PageHeader from "@/components/PageHeader";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
 import { useBranding } from "@/lib/appPreferences";
 import { buildProjectBudgetMaterials, getProjectLogo } from "@/lib/projectBudgetMaterials";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 
 const formatCurrencyBR = (value = 0) => Number(value || 0).toLocaleString("pt-BR", {
   minimumFractionDigits: 2,
@@ -81,7 +82,7 @@ const detectPdfImageType = (url = "") => {
 };
 
 // ─── Geração do PDF com jsPDF ─────────────────────────────────────────────────
-function generatePDF(project, metrics, { brandName = "NACIF Solutions Eletric", logoUrl = DEFAULT_LOGO_URL } = {}) {
+function generatePDF(project, metrics, { brandName = "NACIF Energy", logoUrl = brandLogoEnergy } = {}) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const circuits = metrics.circuits || [];
   const bom = buildMemorialMaterialRows(project);
@@ -578,8 +579,14 @@ export default function MemorialDescritivo() {
   const [metrics, setMetrics]       = useState(null);
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated]   = useState(false);
-  const brandName = [branding.appName, branding.appSuffix].filter(Boolean).join(" ") || "NACIF Solutions Eletric";
-  const logoUrl = getProjectLogo(project, branding.logoDataUrl || DEFAULT_LOGO_URL);
+  const brandName = [branding.appName, branding.appSuffix].filter(Boolean).join(" ") || "NACIF Energy";
+  const rawProjectLogo = getProjectLogo(project, branding.logoDataUrl || brandLogoEnergy || DEFAULT_LOGO_URL);
+  const isOldLogo = !rawProjectLogo ||
+    rawProjectLogo === "/brand-logo-principal.png" ||
+    rawProjectLogo === "/brand-mark-principal.png" ||
+    rawProjectLogo.includes("brand-logo-principal") ||
+    rawProjectLogo.includes("brand-mark-principal");
+  const logoUrl = isOldLogo ? brandLogoEnergy : rawProjectLogo;
   const areaM2 = project ? resolveProjectAreaM2(project) : 0;
   const projectRegion = project ? resolveProjectRegion(project) : "";
   const projectGps = project ? resolveProjectGps(project) : "";
@@ -681,7 +688,12 @@ export default function MemorialDescritivo() {
           <div className="grid gap-4 rounded-2xl border border-[#BCEEE5] bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.045)] lg:grid-cols-[220px_minmax(0,1fr)]">
             <div className="flex min-h-[112px] items-center justify-center rounded-xl border border-[#CDEFE8] bg-[#F8FFFD] p-4">
               {logoUrl ? (
-                <img src={logoUrl} alt={brandName} className="max-h-20 max-w-full object-contain" />
+                <img
+                  src={logoUrl}
+                  alt={brandName}
+                  onError={(e) => { e.currentTarget.src = brandLogoEnergy; }}
+                  className="max-h-20 max-w-full object-contain"
+                />
               ) : (
                 <ImageIcon className="h-10 w-10 text-primary" />
               )}

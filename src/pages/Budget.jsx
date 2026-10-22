@@ -51,6 +51,8 @@ import {
   buildProjectBudgetMaterials,
   estimateLocalMaterialPrice,
 } from "@/lib/projectBudgetMaterials";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
+import brandMarkEnergy from "@/assets/brand-mark-principal.png";
 
 function BrandLogoUploaderDisplay({ logoUrl }) {
   const [hasError, setHasError] = useState(false);
@@ -69,9 +71,9 @@ function BrandLogoUploaderDisplay({ logoUrl }) {
 
   return (
     <img
-      src={DEFAULT_LOGO_URL}
+      src={brandLogoEnergy}
       className="h-5 max-w-[130px] object-contain"
-      alt="NACIF Solutions Eletric"
+      alt="NACIF Energy"
     />
   );
 }
@@ -103,8 +105,8 @@ function ProjectThumbBadge({ project, size = "md", customLogo = null }) {
         <Sun className={`${iconSize} text-amber-500`} />
       ) : (
         <img
-          src="/brand-mark-principal.png"
-          alt="Projeto Elétrico"
+          src={brandMarkEnergy}
+          alt="NACIF Energy"
           className={`${iconSize} object-contain`}
         />
       )}

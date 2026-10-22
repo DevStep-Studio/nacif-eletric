@@ -20,6 +20,7 @@ import {
 import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import brandMarkEnergy from "@/assets/brand-mark-principal.png";
 
 const PROFILES = [
   { id: "engineer", label: "Engenheiro eletricista", icon: HardHat },
@@ -95,11 +96,11 @@ export default function OnboardingModal({ user, open, onComplete }) {
           {step === 1 && (
             <div className="text-center py-4 space-y-4">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#E8FCF8] p-3 shadow-sm ring-1 ring-[#00d8b8]/30">
-                <img src="/brand-mark-principal.png" alt="Nacif Electric" className="h-10 w-10 object-contain" />
+                <img src={brandMarkEnergy} alt="NACIF Energy" className="h-10 w-10 object-contain" />
               </div>
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-[#101828]">
-                  Bem-vindo ao Nacif Electric ⚡
+                  Bem-vindo ao NACIF Energy ⚡
                 </h2>
                 <p className="text-sm font-medium text-[#667085] max-w-md mx-auto">
                   Vamos configurar seu espaço de trabalho de engenharia elétrica. Leva menos de 1 minuto.

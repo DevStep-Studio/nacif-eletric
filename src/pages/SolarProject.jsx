@@ -63,6 +63,7 @@ import {
   generateTechnicalMemorialReport,
 } from "@/lib/solarReportGenerator";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 import {
   Activity,
   AlertTriangle,
@@ -1538,8 +1539,8 @@ export default function SolarProject() {
           {/* Logo Oficial Nacif Electric + Badge Solar */}
           <div className="flex items-center gap-2 pr-2.5 border-r border-slate-200">
             <img
-              src={DEFAULT_LOGO_URL}
-              alt="Nacif Electric"
+              src={brandLogoEnergy}
+              alt="NACIF Energy"
               className="h-6 max-w-[120px] object-contain"
             />
             <span className="px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-[#E6FAF7] text-[#009b84] border border-[#00d8b8]/40 rounded-md">

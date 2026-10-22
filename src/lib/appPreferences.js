@@ -216,7 +216,12 @@ const setCssColor = (root, name, color) => {
 export function readBranding() {
   const store = storage();
   if (!store) return DEFAULT_BRANDING;
-  return normalizeBranding(safeJson(store.getItem(BRANDING_KEY), DEFAULT_BRANDING));
+  const raw = safeJson(store.getItem(BRANDING_KEY), DEFAULT_BRANDING);
+  const normalized = normalizeBranding(raw);
+  if (raw?.brandingVersion !== WEG_BRANDING_VERSION) {
+    try { store.setItem(BRANDING_KEY, JSON.stringify(normalized)); } catch {}
+  }
+  return normalized;
 }
 
 export function saveBranding(nextBranding) {

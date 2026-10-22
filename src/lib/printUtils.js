@@ -171,7 +171,7 @@ function buildTitleBlock(projectName, logoUrl, paperSize, projectInfo = {}, page
   return `
     <div class="sheet-carimbo" style="height:${cfg.carimboHeightMm}mm;">
       <div class="sheet-carimbo-logo" style="width:${cfg.carimboLogoWidthMm}mm;">
-        <img src="${displayLogo}" alt="NACIF ELETRIC" style="max-height:${cfg.carimboHeightMm - 6}mm;" />
+        <img src="${displayLogo}" alt="NACIF Energy" style="max-height:${cfg.carimboHeightMm - 6}mm;" />
       </div>
       <div class="sheet-carimbo-main">
         <div class="sheet-carimbo-title" style="font-size:${cfg.carimboTitlePt}pt;">${escapeHTML(projectName || "PROJETO ELÉTRICO")}</div>
@@ -186,7 +186,7 @@ function buildTitleBlock(projectName, logoUrl, paperSize, projectInfo = {}, page
           </div>
         </div>
         <div class="sheet-carimbo-norm" style="font-size:${Math.max(5.5, cfg.carimboTextPt - 1.2)}pt;">
-          NACIF Solutions Eletric · Cálculo Paramétrico Elétrico · NBR 5410:2004 / IEC 60617 / ABNT NBR 10068
+          NACIF Energy · Cálculo Paramétrico Elétrico · NBR 5410:2004 / IEC 60617 / ABNT NBR 10068
         </div>
       </div>
       <div class="sheet-carimbo-meta" style="width:${cfg.carimboMetaWidthMm}mm; font-size:${cfg.carimboTextPt}pt;">
