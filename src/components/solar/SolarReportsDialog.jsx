@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,7 @@ import {
   generateTechnicalMemorialReport,
   printExecutiveSolarReport,
 } from "@/lib/solarReportGenerator";
+import { preloadSolarReportImages } from "@/lib/solarLayoutImageRenderer";
 
 const REPORT_CARDS = [
   {
@@ -104,7 +105,13 @@ export default function SolarReportsDialog({
     [project, config, sizing]
   );
 
-  const handlePrint = () => {
+  useEffect(() => {
+    if (open && project) {
+      preloadSolarReportImages({ project, config, sizing });
+    }
+  }, [open, project, config, sizing]);
+
+  const handlePrint = async () => {
     if (!validation.valid) {
       toast({
         title: "Dados do projeto incompletos",
@@ -115,7 +122,7 @@ export default function SolarReportsDialog({
     }
 
     try {
-      printExecutiveSolarReport(project, config, sizing);
+      await printExecutiveSolarReport(project, config, sizing);
       toast({
         title: "Janela de impressão aberta",
         description: "O relatório executivo foi enviado para visualização e impressão.",

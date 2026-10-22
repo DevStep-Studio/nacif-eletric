@@ -15,6 +15,7 @@ import {
   computeMultiAreaLayouts,
   getAzimuthWithCardinal,
   latLngToMeters,
+  metersToLatLng,
 } from "./solarDesignerGeometry.js";
 
 export const STRING_PALETTE = [
@@ -25,6 +26,254 @@ export const STRING_PALETTE = [
   { fill: "#db2777", stroke: "#f472b6", text: "#ffffff", name: "String 05", rgb: [219, 39, 119] },
   { fill: "#2563eb", stroke: "#60a5fa", text: "#ffffff", name: "String 06", rgb: [37, 99, 235] },
 ];
+
+// Cache em memória para os tiles de satélite e imagens de layout já geradas
+const tileMemoryCache = new Map();
+const layoutImageCache = new Map();
+
+/**
+ * Converte latitude e longitude para coordenadas fracionárias de tile (Web Mercator EPSG:3857)
+ */
+function latLngToTileFraction(lat, lng, zoom) {
+  const n = Math.pow(2, zoom);
+  const sinLat = Math.sin((lat * Math.PI) / 180);
+  const clampedSin = Math.min(Math.max(sinLat, -0.9999), 0.9999);
+  const x = n * ((lng + 180) / 360);
+  const y = (n * (1 - Math.log((1 + clampedSin) / (1 - clampedSin)) / (2 * Math.PI))) / 2;
+  return { x, y };
+}
+
+/**
+ * Converte coordenadas inteiras de tile para latitude e longitude do canto superior esquerdo (Noroeste)
+ */
+function tileToLatLng(tx, ty, zoom) {
+  const n = Math.pow(2, zoom);
+  const lng = (tx / n) * 360 - 180;
+  const latRad = Math.atan(Math.sinh(Math.PI * (1 - (2 * ty) / n)));
+  const lat = (latRad * 180) / Math.PI;
+  return { lat, lng };
+}
+
+/**
+ * Calcula o nível de zoom ideal (geralmente entre 18 e 20) para máxima definição da edificação
+ */
+function calculateOptimalSatelliteZoom(scale, centerLat) {
+  const latRad = (centerLat * Math.PI) / 180;
+  const cosLat = Math.max(0.1, Math.cos(latRad));
+  const rawZoom = Math.round(Math.log2(scale * 156543.03392 * cosLat));
+  return Math.min(20, Math.max(16, rawZoom));
+}
+
+/**
+ * Carrega individualmente um tile de satélite com headers CORS habilitados e fallback automático
+ */
+function fetchTileImage(tx, ty, zoom) {
+  const key = `${zoom}_${tx}_${ty}`;
+  if (tileMemoryCache.has(key)) {
+    return Promise.resolve(tileMemoryCache.get(key));
+  }
+
+  return new Promise((resolve) => {
+    if (typeof Image === "undefined") {
+      resolve(null);
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    let settled = false;
+
+    const timeoutId = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(null);
+      }
+    }, 4500);
+
+    img.onload = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      tileMemoryCache.set(key, img);
+      resolve(img);
+    };
+
+    img.onerror = () => {
+      if (settled) return;
+      // Fallback 1: Google Satélite puro (lyrs=s)
+      const img2 = new Image();
+      img2.crossOrigin = "anonymous";
+      img2.onload = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        tileMemoryCache.set(key, img2);
+        resolve(img2);
+      };
+      img2.onerror = () => {
+        // Fallback 2: ESRI World Imagery (ArcGIS MapServer)
+        const img3 = new Image();
+        img3.crossOrigin = "anonymous";
+        img3.onload = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          tileMemoryCache.set(key, img3);
+          resolve(img3);
+        };
+        img3.onerror = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          resolve(null);
+        };
+        img3.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
+      };
+      img2.src = `https://mt0.google.com/vt/lyrs=s&x=${tx}&y=${ty}&z=${zoom}`;
+    };
+
+    // Primário: Google Maps Satélite com ruas e edificações reais (o mesmo do mapa de projeto)
+    img.src = `https://mt1.google.com/vt/lyrs=y&x=${tx}&y=${ty}&z=${zoom}`;
+  });
+}
+
+/**
+ * Busca de forma assíncrona todos os tiles de satélite cobrindo a área da tela
+ */
+async function fetchSatelliteTilesForView({ center, local, scale, padX, padY, usableW, usableH, width, height }) {
+  if (typeof document === "undefined" || !center || !Number.isFinite(center.lat)) {
+    return [];
+  }
+
+  const zoom = calculateOptimalSatelliteZoom(scale, center.lat);
+
+  const originX = padX + (usableW - local.widthM * scale) / 2;
+  const originY = padY + (usableH - local.heightM * scale) / 2;
+
+  const toMeters = (px, py) => ({
+    east: local.minEast + (px - originX) / scale,
+    north: local.maxNorth - (py - originY) / scale,
+  });
+
+  const toLatLng = (px, py) => {
+    const m = toMeters(px, py);
+    return metersToLatLng(center, m.east, m.north);
+  };
+
+  const toPx = (m) => ({
+    x: originX + (m.east - local.minEast) * scale,
+    y: originY + (local.maxNorth - m.north) * scale,
+  });
+
+  const marginPx = 40;
+  const p0 = toLatLng(-marginPx, -marginPx);
+  const p1 = toLatLng(width + marginPx, height + marginPx);
+  const p2 = toLatLng(width + marginPx, -marginPx);
+  const p3 = toLatLng(-marginPx, height + marginPx);
+
+  const tf0 = latLngToTileFraction(p0.lat, p0.lng, zoom);
+  const tf1 = latLngToTileFraction(p1.lat, p1.lng, zoom);
+  const tf2 = latLngToTileFraction(p2.lat, p2.lng, zoom);
+  const tf3 = latLngToTileFraction(p3.lat, p3.lng, zoom);
+
+  const minX = Math.floor(Math.min(tf0.x, tf1.x, tf2.x, tf3.x));
+  const maxX = Math.floor(Math.max(tf0.x, tf1.x, tf2.x, tf3.x));
+  const minY = Math.floor(Math.min(tf0.y, tf1.y, tf2.y, tf3.y));
+  const maxY = Math.floor(Math.max(tf0.y, tf1.y, tf2.y, tf3.y));
+
+  const totalCols = maxX - minX + 1;
+  const totalRows = maxY - minY + 1;
+  if (totalCols * totalRows > 36 || totalCols <= 0 || totalRows <= 0) {
+    return [];
+  }
+
+  const tilePromises = [];
+  for (let ty = minY; ty <= maxY; ty++) {
+    for (let tx = minX; tx <= maxX; tx++) {
+      tilePromises.push(
+        fetchTileImage(tx, ty, zoom).then((img) => {
+          if (!img) return null;
+          const tlGeo = tileToLatLng(tx, ty, zoom);
+          const brGeo = tileToLatLng(tx + 1, ty + 1, zoom);
+          const tlM = latLngToMeters(tlGeo, center);
+          const brM = latLngToMeters(brGeo, center);
+          const pTL = toPx(tlM);
+          const pBR = toPx(brM);
+          return {
+            img,
+            x: Math.floor(pTL.x),
+            y: Math.floor(pTL.y),
+            w: Math.ceil(pBR.x - pTL.x) + 1,
+            h: Math.ceil(pBR.y - pTL.y) + 1,
+          };
+        })
+      );
+    }
+  }
+
+  const results = await Promise.all(tilePromises);
+  return results.filter(Boolean);
+}
+
+/**
+ * Monta síncronamente os tiles de satélite já disponíveis no cache em memória
+ */
+function getCachedSatelliteTilesForView({ center, local, scale, padX, padY, usableW, usableH, width, height, toPx }) {
+  if (!center || !Number.isFinite(center.lat)) return [];
+  const zoom = calculateOptimalSatelliteZoom(scale, center.lat);
+  const originX = padX + (usableW - local.widthM * scale) / 2;
+  const originY = padY + (usableH - local.heightM * scale) / 2;
+
+  const toMeters = (px, py) => ({
+    east: local.minEast + (px - originX) / scale,
+    north: local.maxNorth - (py - originY) / scale,
+  });
+
+  const toLatLng = (px, py) => {
+    const m = toMeters(px, py);
+    return metersToLatLng(center, m.east, m.north);
+  };
+
+  const marginPx = 40;
+  const p0 = toLatLng(-marginPx, -marginPx);
+  const p1 = toLatLng(width + marginPx, height + marginPx);
+  const p2 = toLatLng(width + marginPx, -marginPx);
+  const p3 = toLatLng(-marginPx, height + marginPx);
+
+  const tf0 = latLngToTileFraction(p0.lat, p0.lng, zoom);
+  const tf1 = latLngToTileFraction(p1.lat, p1.lng, zoom);
+  const tf2 = latLngToTileFraction(p2.lat, p2.lng, zoom);
+  const tf3 = latLngToTileFraction(p3.lat, p3.lng, zoom);
+
+  const minX = Math.floor(Math.min(tf0.x, tf1.x, tf2.x, tf3.x));
+  const maxX = Math.floor(Math.max(tf0.x, tf1.x, tf2.x, tf3.x));
+  const minY = Math.floor(Math.min(tf0.y, tf1.y, tf2.y, tf3.y));
+  const maxY = Math.floor(Math.max(tf0.y, tf1.y, tf2.y, tf3.y));
+
+  const list = [];
+  for (let ty = minY; ty <= maxY; ty++) {
+    for (let tx = minX; tx <= maxX; tx++) {
+      const key = `${zoom}_${tx}_${ty}`;
+      const img = tileMemoryCache.get(key);
+      if (img) {
+        const tlGeo = tileToLatLng(tx, ty, zoom);
+        const brGeo = tileToLatLng(tx + 1, ty + 1, zoom);
+        const tlM = latLngToMeters(tlGeo, center);
+        const brM = latLngToMeters(brGeo, center);
+        const pTL = toPx(tlM);
+        const pBR = toPx(brM);
+        list.push({
+          img,
+          x: Math.floor(pTL.x),
+          y: Math.floor(pTL.y),
+          w: Math.ceil(pBR.x - pTL.x) + 1,
+          h: Math.ceil(pBR.y - pTL.y) + 1,
+        });
+      }
+    }
+  }
+  return list;
+}
 
 /**
  * Normaliza e extrai os arranjos de telhado e painéis reais do projeto
@@ -62,6 +311,19 @@ export function extractSolarProjectGeometry(project = {}, config = {}, sizing = 
       );
       areas = [singleArea];
     }
+  }
+
+  // Centro geográfico real de referência da edificação e lote
+  let center = null;
+  const allAreaPoints = areas.flatMap((a) => a.polygon || []);
+  if (allAreaPoints.length > 0) {
+    const sumLat = allAreaPoints.reduce((acc, pt) => acc + (pt.lat || 0), 0);
+    const sumLng = allAreaPoints.reduce((acc, pt) => acc + (pt.lng || 0), 0);
+    center = { lat: sumLat / allAreaPoints.length, lng: sumLng / allAreaPoints.length };
+  } else if (Number.isFinite(Number(c.map_center_lat)) && Number.isFinite(Number(c.map_center_lng))) {
+    center = { lat: Number(c.map_center_lat), lng: Number(c.map_center_lng) };
+  } else {
+    center = DEFAULT_SOLAR_MAP_CENTER;
   }
 
   // Agrupamento de todas as áreas e painéis
@@ -112,19 +374,20 @@ export function extractSolarProjectGeometry(project = {}, config = {}, sizing = 
     azimuth,
     strings,
     moduleStringMap,
+    center,
   };
 }
 
 /**
  * Converte coordenadas geográficas para espaço métrico 2D local
  */
-function projectToLocalMeters(areas, allPanels, fallbackW = 15, fallbackH = 6) {
+function projectToLocalMeters(areas, allPanels, fallbackW = 15, fallbackH = 6, refCenter = null) {
   let minEast = Infinity;
   let maxEast = -Infinity;
   let minNorth = Infinity;
   let maxNorth = -Infinity;
 
-  const center = areas[0]?.polygon?.[0] || DEFAULT_SOLAR_MAP_CENTER;
+  const center = refCenter || areas[0]?.polygon?.[0] || DEFAULT_SOLAR_MAP_CENTER;
   const areaPolygonsMeters = [];
   const panelsMeters = [];
 
@@ -163,6 +426,7 @@ function projectToLocalMeters(areas, allPanels, fallbackW = 15, fallbackH = 6) {
   const heightM = Math.max(1, maxNorth - minNorth);
 
   return {
+    center,
     minEast,
     maxEast,
     minNorth,
@@ -177,7 +441,7 @@ function projectToLocalMeters(areas, allPanels, fallbackW = 15, fallbackH = 6) {
 /**
  * Renderizador de Imagem via HTML5 Canvas (execução no navegador)
  */
-function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 650 }) {
+function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 650, satelliteTiles = null }) {
   if (typeof document === "undefined" || typeof document.createElement !== "function") {
     return null;
   }
@@ -202,21 +466,100 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
     strings,
     moduleStringMap,
     project,
+    center,
   } = geo;
 
-  const local = projectToLocalMeters(areas, allPanels, roofWidth, roofHeight);
+  const local = projectToLocalMeters(areas, allPanels, roofWidth, roofHeight, center);
 
-  // 1. Fundo Técnico Blueprint
-  const bgGrad = ctx.createLinearGradient(0, 0, width, height);
-  bgGrad.addColorStop(0, "#081325");
-  bgGrad.addColorStop(1, "#0f1e36");
-  ctx.fillStyle = bgGrad;
+  // Margens e escala métrica
+  const padX = 110;
+  const padY = 95;
+  const usableW = width - padX * 2;
+  const usableH = height - padY * 2 - 45; // espaço para legenda inferior
+  const scale = Math.min(usableW / local.widthM, usableH / local.heightM);
+
+  const originX = padX + (usableW - local.widthM * scale) / 2;
+  const originY = padY + (usableH - local.heightM * scale) / 2;
+
+  const toPx = (m) => ({
+    x: originX + (m.east - local.minEast) * scale,
+    y: originY + (local.maxNorth - m.north) * scale,
+  });
+
+  // 1. Fundo Base & Camada de Imagem de Satélite dos Prédios
+  ctx.fillStyle = "#0c1829";
   ctx.fillRect(0, 0, width, height);
 
+  // Obtém os tiles: se não foram passados diretamente, busca os que já estiverem em cache
+  let tilesToDraw = satelliteTiles;
+  if (!tilesToDraw || tilesToDraw.length === 0) {
+    tilesToDraw = getCachedSatelliteTilesForView({
+      center,
+      local,
+      scale,
+      padX,
+      padY,
+      usableW,
+      usableH,
+      width,
+      height,
+      toPx,
+    });
+  }
+
+  let hasSatelliteBackground = false;
+  if (Array.isArray(tilesToDraw) && tilesToDraw.length > 0) {
+    tilesToDraw.forEach((t) => {
+      try {
+        ctx.drawImage(t.img, t.x, t.y, t.w, t.h);
+        hasSatelliteBackground = true;
+      } catch (e) {
+        // Ignora erro em tile corrompido
+      }
+    });
+  }
+
+  if (hasSatelliteBackground) {
+    // Tratamento de Satélite para Engenharia Técnica:
+    // Suave camada translúcida escura para contraste e destaque perfeito dos módulos e cotas
+    ctx.fillStyle = "rgba(7, 18, 36, 0.22)";
+    ctx.fillRect(0, 0, width, height);
+
+    // Vinheta periférica elegante
+    const vig = ctx.createRadialGradient(
+      width / 2,
+      height / 2,
+      Math.min(width, height) * 0.35,
+      width / 2,
+      height / 2,
+      Math.max(width, height) * 0.72
+    );
+    vig.addColorStop(0, "rgba(0, 0, 0, 0)");
+    vig.addColorStop(1, "rgba(5, 12, 24, 0.55)");
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    // Fallback arquitetônico quando totalmente sem conexão/offline:
+    // Representa o contexto da edificação e lote urbano com contraste técnico
+    const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+    bgGrad.addColorStop(0, "#0b192c");
+    bgGrad.addColorStop(1, "#12253d");
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Contorno do lote / propriedade ao redor
+    ctx.save();
+    ctx.strokeStyle = "rgba(71, 107, 146, 0.3)";
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([8, 8]);
+    ctx.strokeRect(padX - 45, padY - 35, local.widthM * scale + 90, local.heightM * scale + 70);
+    ctx.restore();
+  }
+
   // Grade métrica técnica sutil
-  ctx.strokeStyle = "rgba(56, 189, 248, 0.07)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.05)";
   ctx.lineWidth = 1;
-  const gridStep = 30;
+  const gridStep = 40;
   for (let x = 0; x < width; x += gridStep) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
   }
@@ -224,28 +567,17 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
   }
 
-  // Margens e escala
-  const padX = 110;
-  const padY = 95;
-  const usableW = width - padX * 2;
-  const usableH = height - padY * 2 - 45; // espaço para legenda inferior
-  const scale = Math.min(usableW / local.widthM, usableH / local.heightM);
-
-  const toPx = (m) => ({
-    x: padX + (usableW - local.widthM * scale) / 2 + (m.east - local.minEast) * scale,
-    y: padY + (usableH - local.heightM * scale) / 2 + (local.maxNorth - m.north) * scale,
-  });
-
-  // 2. Contorno do Telhado / Áreas
+  // 2. Contorno do Telhado da Edificação / Áreas
   local.areaPolygonsMeters.forEach((area) => {
     if (area.polygon.length < 3) return;
     const pts = area.polygon.map(toPx);
 
-    // Sombra do telhado
+    // Sombra projetada do telhado da edificação
     ctx.save();
-    ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.65)";
     ctx.shadowBlur = 14;
-    ctx.fillStyle = "#162740";
+    // Preenchimento translúcido: preserva a visualização da cobertura/telhas reais dos prédios na foto de satélite!
+    ctx.fillStyle = hasSatelliteBackground ? "rgba(14, 34, 62, 0.35)" : "#162740";
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
@@ -253,20 +585,20 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
     ctx.fill();
     ctx.restore();
 
-    // Borda do telhado
+    // Borda ciano técnica nítida do telhado
     ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.closePath();
     ctx.stroke();
 
-    // Setback periférico (linha tracejada amarela)
+    // Setback periférico da edificação (linha tracejada amarela de afastamento 0,30m)
     ctx.save();
     ctx.setLineDash([6, 5]);
-    ctx.strokeStyle = "rgba(245, 158, 11, 0.65)";
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(245, 158, 11, 0.85)";
+    ctx.lineWidth = 1.4;
     ctx.stroke();
     ctx.restore();
   });
@@ -308,10 +640,14 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
         ctx.fillText(`S${(strInfo?.stringIndex || 0) + 1}`, cx, cy);
       }
     } else {
-      // Modo Layout: Silício monocristalino realista com moldura de alumínio
+      // Modo Layout: Silício monocristalino escuro com moldura de alumínio e sombra realista
+      ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+      ctx.shadowBlur = 4;
       ctx.fillStyle = "#10233f";
       ctx.fill();
-      ctx.strokeStyle = "#cbd5e1";
+
+      ctx.shadowColor = "transparent";
+      ctx.strokeStyle = "#e2e8f0";
       ctx.lineWidth = 1.2;
       ctx.stroke();
 
@@ -364,15 +700,13 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
     });
   }
 
-  // 5. Cotas Técnicas Dimensionais (Largura e Altura em metros)
+  // 5. Cotas Técnicas Dimensionais com Badge de Leitura Nítida sobre o Satélite
   ctx.save();
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.75)";
-  ctx.fillStyle = "#cbd5e1";
-  ctx.font = "bold 11px Inter, sans-serif";
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.85)";
+  ctx.lineWidth = 1.2;
 
   // Cota inferior de largura
-  const cotaY = padY + usableH + 18;
+  const cotaY = padY + usableH + 20;
   const cotaX1 = padX;
   const cotaX2 = padX + local.widthM * scale;
   ctx.beginPath();
@@ -380,11 +714,21 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
   ctx.moveTo(cotaX1, cotaY - 5); ctx.lineTo(cotaX1, cotaY + 5);
   ctx.moveTo(cotaX2, cotaY - 5); ctx.lineTo(cotaX2, cotaY + 5);
   ctx.stroke();
+
+  // Badge de fundo escuro para a cota de largura
+  const wText = `${roofWidth.toFixed(2)} m (Largura do Telhado)`;
+  ctx.font = "bold 10px Inter, sans-serif";
+  const wWidth = ctx.measureText(wText).width;
+  ctx.fillStyle = "rgba(14, 23, 38, 0.88)";
+  ctx.fillRect((cotaX1 + cotaX2) / 2 - wWidth / 2 - 6, cotaY - 14, wWidth + 12, 16);
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+  ctx.strokeRect((cotaX1 + cotaX2) / 2 - wWidth / 2 - 6, cotaY - 14, wWidth + 12, 16);
+  ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
-  ctx.fillText(`${roofWidth.toFixed(2)} m (Largura do Telhado)`, (cotaX1 + cotaX2) / 2, cotaY - 4);
+  ctx.fillText(wText, (cotaX1 + cotaX2) / 2, cotaY - 2);
 
   // Cota lateral de altura
-  const cotaX = padX - 18;
+  const cotaX = padX - 22;
   const cotaY1 = padY;
   const cotaY2 = padY + local.heightM * scale;
   ctx.beginPath();
@@ -392,11 +736,19 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
   ctx.moveTo(cotaX - 5, cotaY1); ctx.lineTo(cotaX + 5, cotaY1);
   ctx.moveTo(cotaX - 5, cotaY2); ctx.lineTo(cotaX + 5, cotaY2);
   ctx.stroke();
+
+  const hText = `${roofHeight.toFixed(2)} m (Comprimento)`;
+  const hWidth = ctx.measureText(hText).width;
   ctx.save();
-  ctx.translate(cotaX - 6, (cotaY1 + cotaY2) / 2);
+  ctx.translate(cotaX - 8, (cotaY1 + cotaY2) / 2);
   ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = "rgba(14, 23, 38, 0.88)";
+  ctx.fillRect(-hWidth / 2 - 6, -12, hWidth + 12, 16);
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+  ctx.strokeRect(-hWidth / 2 - 6, -12, hWidth + 12, 16);
+  ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
-  ctx.fillText(`${roofHeight.toFixed(2)} m (Comprimento)`, 0, 0);
+  ctx.fillText(hText, 0, 0);
   ctx.restore();
   ctx.restore();
 
@@ -406,7 +758,7 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
   const compassR = 26;
 
   ctx.save();
-  ctx.fillStyle = "rgba(15, 30, 54, 0.85)";
+  ctx.fillStyle = "rgba(15, 30, 54, 0.9)";
   ctx.strokeStyle = "#38bdf8";
   ctx.lineWidth = 1.2;
   ctx.beginPath();
@@ -444,11 +796,11 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
 
   // 7. Top Banner / Identificação Técnica
   ctx.save();
-  ctx.fillStyle = "rgba(14, 23, 38, 0.9)";
-  ctx.strokeStyle = "#1e293b";
+  ctx.fillStyle = "rgba(14, 23, 38, 0.92)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
   ctx.lineWidth = 1;
-  ctx.fillRect(16, 14, 480, 40);
-  ctx.strokeRect(16, 14, 480, 40);
+  ctx.fillRect(16, 14, 520, 42);
+  ctx.strokeRect(16, 14, 520, 42);
 
   ctx.fillStyle = mode === "electrical" ? "#38bdf8" : "#00d8b8";
   ctx.font = "900 11px Inter, sans-serif";
@@ -465,7 +817,7 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
   ctx.fillText(
     `${project?.name || "Projeto Solar"} · ${totalPanels} Módulos (${moduleWp}Wp) · ${totalDcPowerKw.toFixed(2)} kWp · ${azimuth.formatted}`,
     26,
-    45
+    47
   );
   ctx.restore();
 
@@ -473,7 +825,7 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
   const legendY = height - 38;
   ctx.save();
   ctx.fillStyle = "rgba(14, 23, 38, 0.95)";
-  ctx.strokeStyle = "rgba(56, 189, 248, 0.25)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
   ctx.lineWidth = 1;
   ctx.fillRect(16, legendY, width - 32, 28);
   ctx.strokeRect(16, legendY, width - 32, 28);
@@ -502,17 +854,24 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
   } else {
     // Legenda Física de Implantação
     ctx.fillStyle = "#00d8b8";
-    ctx.fillText("● Módulos Monocristalinos 550Wp", 30, legendY + 14);
+    ctx.fillText(`● Módulos Monocristalinos ${moduleWp}Wp`, 30, legendY + 14);
     ctx.fillStyle = "#38bdf8";
     ctx.fillText("● Borda e Afastamento Setback 0,30m", 250, legendY + 14);
     ctx.fillStyle = "#f59e0b";
     ctx.fillText(`● Inclinação do Telhado: ${roofPitch}°`, 490, legendY + 14);
     ctx.fillStyle = "#cbd5e1";
     ctx.fillText(`● Estrutura: Alumínio Anodizado`, 700, legendY + 14);
+    ctx.fillStyle = "#60a5fa";
+    ctx.fillText(`● Imagem: Vista de Satélite Real`, 910, legendY + 14);
   }
   ctx.restore();
 
-  return canvas.toDataURL("image/png");
+  try {
+    return canvas.toDataURL("image/png");
+  } catch (err) {
+    console.warn("toDataURL failed, returning fallback:", err);
+    return null;
+  }
 }
 
 /**
@@ -662,10 +1021,64 @@ function renderFallbackInNode({ geo, mode = "layout", width = 800, height = 460 
   }
 }
 
+function getLayoutCacheKey(project, config, sizing, mode) {
+  const pid = project?.id || project?.name || "proj";
+  const pCount = sizing?.panelCount || config?.requested_panel_count || 0;
+  const w = config?.roof_width_m || 0;
+  const h = config?.roof_height_m || 0;
+  const rot = config?.roof_rotation_deg || 0;
+  const centerLat = config?.map_center_lat || "";
+  const centerLng = config?.map_center_lng || "";
+  return `${pid}_${mode}_${pCount}_${w}_${h}_${rot}_${centerLat}_${centerLng}`;
+}
+
 /**
- * 1. Gera a imagem oficial do Layout dos Módulos no Telhado
+ * 1. Gera a imagem oficial do Layout dos Módulos no Telhado com Imagem de Satélite dos Prédios (Async)
+ */
+export async function generateRoofLayoutImageAsync({ project = {}, config = {}, sizing = {}, width = 1200, height = 650 } = {}) {
+  const geo = extractSolarProjectGeometry(project, config, sizing);
+  const cacheKey = getLayoutCacheKey(project, config, sizing, "layout");
+
+  const local = projectToLocalMeters(geo.areas, geo.allPanels, geo.roofWidth, geo.roofHeight, geo.center);
+  const padX = 110;
+  const padY = 95;
+  const usableW = width - padX * 2;
+  const usableH = height - padY * 2 - 45;
+  const scale = Math.min(usableW / local.widthM, usableH / local.heightM);
+
+  const satelliteTiles = await fetchSatelliteTilesForView({
+    center: geo.center,
+    local,
+    scale,
+    padX,
+    padY,
+    usableW,
+    usableH,
+    width,
+    height,
+  });
+
+  const browserUrl = renderCanvasInBrowser({ geo, mode: "layout", width, height, satelliteTiles });
+  if (browserUrl) {
+    layoutImageCache.set(cacheKey, browserUrl);
+    return browserUrl;
+  }
+
+  return renderFallbackInNode({ geo, mode: "layout", width: 800, height: 460 });
+}
+
+/**
+ * 1. Gera a imagem oficial do Layout dos Módulos no Telhado (Síncrono com uso do cache de satélite)
  */
 export function generateRoofLayoutImage({ project = {}, config = {}, sizing = {}, width = 1200, height = 650 } = {}) {
+  const cacheKey = getLayoutCacheKey(project, config, sizing, "layout");
+  if (layoutImageCache.has(cacheKey)) {
+    return layoutImageCache.get(cacheKey);
+  }
+
+  // Se não estiver em cache, agenda a busca dos tiles de satélite assincronamente
+  generateRoofLayoutImageAsync({ project, config, sizing, width, height }).catch(() => {});
+
   const geo = extractSolarProjectGeometry(project, config, sizing);
   const browserUrl = renderCanvasInBrowser({ geo, mode: "layout", width, height });
   if (browserUrl) return browserUrl;
@@ -673,9 +1086,51 @@ export function generateRoofLayoutImage({ project = {}, config = {}, sizing = {}
 }
 
 /**
- * 2. Gera a imagem oficial do Arranjo de Strings / Circuitos Solares
+ * 2. Gera a imagem oficial do Arranjo de Strings com Imagem de Satélite dos Prédios (Async)
+ */
+export async function generateStringLayoutImageAsync({ project = {}, config = {}, sizing = {}, width = 1200, height = 650 } = {}) {
+  const geo = extractSolarProjectGeometry(project, config, sizing);
+  const cacheKey = getLayoutCacheKey(project, config, sizing, "electrical");
+
+  const local = projectToLocalMeters(geo.areas, geo.allPanels, geo.roofWidth, geo.roofHeight, geo.center);
+  const padX = 110;
+  const padY = 95;
+  const usableW = width - padX * 2;
+  const usableH = height - padY * 2 - 45;
+  const scale = Math.min(usableW / local.widthM, usableH / local.heightM);
+
+  const satelliteTiles = await fetchSatelliteTilesForView({
+    center: geo.center,
+    local,
+    scale,
+    padX,
+    padY,
+    usableW,
+    usableH,
+    width,
+    height,
+  });
+
+  const browserUrl = renderCanvasInBrowser({ geo, mode: "electrical", width, height, satelliteTiles });
+  if (browserUrl) {
+    layoutImageCache.set(cacheKey, browserUrl);
+    return browserUrl;
+  }
+
+  return renderFallbackInNode({ geo, mode: "electrical", width: 800, height: 460 });
+}
+
+/**
+ * 2. Gera a imagem oficial do Arranjo de Strings / Circuitos Solares (Síncrono com uso do cache)
  */
 export function generateStringLayoutImage({ project = {}, config = {}, sizing = {}, width = 1200, height = 650 } = {}) {
+  const cacheKey = getLayoutCacheKey(project, config, sizing, "electrical");
+  if (layoutImageCache.has(cacheKey)) {
+    return layoutImageCache.get(cacheKey);
+  }
+
+  generateStringLayoutImageAsync({ project, config, sizing, width, height }).catch(() => {});
+
   const geo = extractSolarProjectGeometry(project, config, sizing);
   const browserUrl = renderCanvasInBrowser({ geo, mode: "electrical", width, height });
   if (browserUrl) return browserUrl;
@@ -683,7 +1138,69 @@ export function generateStringLayoutImage({ project = {}, config = {}, sizing = 
 }
 
 /**
- * Resolve todas as imagens obrigatórias e complementares para o relatório solar
+ * Resolve todas as imagens obrigatórias e complementares para o relatório solar (Assíncrono com Satélite)
+ */
+export async function resolveSolarReportImagesAsync({ project = {}, config = {}, sizing = {} } = {}) {
+  const p = project || {};
+  const c = config || {};
+  const s = sizing || {};
+
+  // Imagem 1: Layout dos Módulos no Telhado sobre a Vista de Satélite
+  const candidateLayout = (
+    s.layoutImageDataUrl
+    || c.layout_image_data_url
+    || p.layout_image
+    || c.layout_image
+    || p.site_plan_image
+  );
+
+  let layoutImage;
+  if (typeof candidateLayout === "string" && candidateLayout.startsWith("data:image")) {
+    layoutImage = candidateLayout;
+  } else {
+    layoutImage = await generateRoofLayoutImageAsync({ project: p, config: c, sizing: s });
+  }
+
+  // Imagem 2: Arranjo de Strings e Circuitos
+  const candidateStrings = (
+    s.stringsImageDataUrl
+    || c.strings_image_data_url
+    || p.strings_image
+    || c.strings_image
+    || p.electrical_diagram_image
+  );
+
+  let stringsImage;
+  if (typeof candidateStrings === "string" && candidateStrings.startsWith("data:image")) {
+    stringsImage = candidateStrings;
+  } else {
+    stringsImage = await generateStringLayoutImageAsync({ project: p, config: c, sizing: s });
+  }
+
+  // Imagens Extras Complementares
+  const extraImages = [];
+  const rawExtras = p.extra_images || c.extra_images || p.images || c.images || [];
+  if (Array.isArray(rawExtras)) {
+    rawExtras.forEach((img, i) => {
+      const url = typeof img === "string" ? img : img?.url || img?.dataUrl;
+      if (typeof url === "string" && url.startsWith("data:image") && url !== layoutImage && url !== stringsImage) {
+        extraImages.push({
+          title: img?.title || `Vista Complementar 0${i + 1}`,
+          dataUrl: url,
+        });
+      }
+    });
+  }
+
+  return {
+    layoutImage,
+    stringsImage,
+    extraImages,
+  };
+}
+
+/**
+ * Resolve todas as imagens obrigatórias e complementares para o relatório solar (Síncrono)
  */
 export function resolveSolarReportImages({ project = {}, config = {}, sizing = {} } = {}) {
   const p = project || {};
@@ -734,4 +1251,18 @@ export function resolveSolarReportImages({ project = {}, config = {}, sizing = {
     stringsImage,
     extraImages,
   };
+}
+
+/**
+ * Pré-carrega os tiles de satélite e armazena em cache o layout da edificação
+ */
+export function preloadSolarReportImages({ project = {}, config = {}, sizing = {} } = {}) {
+  if (typeof window === "undefined") return;
+  generateRoofLayoutImageAsync({ project, config, sizing })
+    .then((url) => {
+      if (sizing && typeof sizing === "object" && url) {
+        sizing.layoutImageDataUrl = url;
+      }
+    })
+    .catch(() => {});
 }

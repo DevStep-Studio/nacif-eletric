@@ -14,7 +14,7 @@
 import { jsPDF } from "jspdf";
 import { getAzimuthWithCardinal } from "./solarDesignerGeometry.js";
 import { NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
-import { resolveSolarReportImages } from "./solarLayoutImageRenderer.js";
+import { resolveSolarReportImages, resolveSolarReportImagesAsync } from "./solarLayoutImageRenderer.js";
 
 const BRAND_DARK = [14, 23, 38];   // #0e1726
 const BRAND_BLUE = [13, 59, 130];  // #0d3b82
@@ -338,12 +338,12 @@ export function downloadPdfBlob(doc, filename = "relatorio_solar.pdf") {
 /**
  * 1. Planta de Implantação
  */
-export function generateSitePlanReport(project = {}, config = {}, sizing = {}) {
+export async function generateSitePlanReport(project = {}, config = {}, sizing = {}) {
   const { azimuth, dcPowerKw, panelCount, usableArea, roofArea, roofWidth, roofHeight, roofPitch, moduleWp, inverterKw } = normalizeParams(project, config, sizing);
   const doc = new jsPDF("p", "mm", "a4");
 
-  // Resolve as imagens técnicas oficiais do projeto (layout e strings)
-  const { layoutImage, stringsImage, extraImages } = resolveSolarReportImages({ project, config, sizing });
+  // Resolve as imagens técnicas oficiais do projeto (layout com vista real de satélite dos prédios e strings)
+  const { layoutImage, stringsImage, extraImages } = await resolveSolarReportImagesAsync({ project, config, sizing });
 
   // ==========================================
   // PÁGINA 1: DADOS GERAIS & LAYOUT DO TELHADO
@@ -889,7 +889,7 @@ export function generateCommercialProposalReport(project = {}, config = {}, sizi
 /**
  * 7. Relatório Executivo Completo Consolidado (Todas as seções em um único PDF de 2 páginas)
  */
-export function generateExecutiveSolarPdf(project = {}, config = {}, sizing = {}) {
+export async function generateExecutiveSolarPdf(project = {}, config = {}, sizing = {}) {
   const { azimuth, dcPowerKw, panelCount, usableArea, annualKwh, annualSavings, moduleWp, inverterKw, roofArea, roofPitch, breaker, investment, payback } = normalizeParams(project, config, sizing);
   const doc = new jsPDF("p", "mm", "a4");
 
@@ -1004,9 +1004,9 @@ export function generateExecutiveSolarPdf(project = {}, config = {}, sizing = {}
 /**
  * 8. Impressão Direta do Relatório Executivo Integrado (window.print)
  */
-export function printExecutiveSolarReport(project = {}, config = {}, sizing = {}) {
+export async function printExecutiveSolarReport(project = {}, config = {}, sizing = {}) {
   const { azimuth, dcPowerKw, panelCount, annualKwh, annualSavings, moduleWp, inverterKw, roofArea, usableArea, roofPitch, breaker, investment, payback } = normalizeParams(project, config, sizing);
-  const { layoutImage, stringsImage } = resolveSolarReportImages({ project, config, sizing });
+  const { layoutImage, stringsImage } = await resolveSolarReportImagesAsync({ project, config, sizing });
 
   const html = `
     <!DOCTYPE html>

@@ -62,6 +62,7 @@ import {
   generateSitePlanReport,
   generateTechnicalMemorialReport,
 } from "@/lib/solarReportGenerator";
+import { preloadSolarReportImages } from "@/lib/solarLayoutImageRenderer";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
 import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 import {
@@ -638,6 +639,15 @@ export default function SolarProject() {
     [reportProject, config, visualSizing]
   );
   const isProjectDataComplete = reportValidation.valid;
+
+  // Pré-renderização em background das imagens com satélite dos prédios para os relatórios
+  useEffect(() => {
+    if (!reportProject) return;
+    const timer = setTimeout(() => {
+      preloadSolarReportImages({ project: reportProject, config, sizing: visualSizing });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [reportProject, config, visualSizing]);
 
   // Funções de Gerenciamento do Histórico (Undo / Redo)
   const syncRoofHistoryState = useCallback(() => {
@@ -1266,7 +1276,7 @@ export default function SolarProject() {
     });
   };
 
-  const handleDownloadDirect = (reportType = "executive") => {
+  const handleDownloadDirect = async (reportType = "executive") => {
     if (!reportValidation.valid) {
       toast({
         title: "Preencha os dados do projeto primeiro",
@@ -1280,25 +1290,25 @@ export default function SolarProject() {
 
     try {
       if (reportType === "executive") {
-        const doc = generateExecutiveSolarPdf(reportProject, config, visualSizing);
+        const doc = await generateExecutiveSolarPdf(reportProject, config, visualSizing);
         downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
       } else if (reportType === "site_plan") {
-        const doc = generateSitePlanReport(reportProject, config, visualSizing);
+        const doc = await generateSitePlanReport(reportProject, config, visualSizing);
         downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
       } else if (reportType === "electrical") {
-        const doc = generateElectricalDiagramReport(reportProject, config, visualSizing);
+        const doc = await generateElectricalDiagramReport(reportProject, config, visualSizing);
         downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
       } else if (reportType === "memorial") {
-        const doc = generateTechnicalMemorialReport(reportProject, config, visualSizing);
+        const doc = await generateTechnicalMemorialReport(reportProject, config, visualSizing);
         downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
       } else if (reportType === "bom") {
-        const doc = generateBillOfMaterialsReport(reportProject, config, visualSizing);
+        const doc = await generateBillOfMaterialsReport(reportProject, config, visualSizing);
         downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
       } else if (reportType === "simulation") {
-        const doc = generateGenerationSimulationReport(reportProject, config, visualSizing);
+        const doc = await generateGenerationSimulationReport(reportProject, config, visualSizing);
         downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
       } else if (reportType === "proposal") {
-        const doc = generateCommercialProposalReport(reportProject, config, visualSizing);
+        const doc = await generateCommercialProposalReport(reportProject, config, visualSizing);
         downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
       }
       toast({
