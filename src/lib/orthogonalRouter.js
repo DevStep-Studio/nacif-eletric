@@ -192,14 +192,14 @@ export const simplifyOrthogonalPoints = (points = [], epsilon = 0.5) => {
 /**
  * Verifica se todos os segmentos entre pontos consecutivos são estritamente ortogonais.
  */
-export const isOrthogonalPath = (points = [], epsilon = 0.5) => {
+export const isOrthogonalPath = (points = [], epsilon = 1.5) => {
   if (!Array.isArray(points) || points.length < 2) return true;
   for (let i = 1; i < points.length; i++) {
     const p1 = points[i - 1];
     const p2 = points[i];
-    if (!p1 || !p2 || !Number.isFinite(p1.x) || !Number.isFinite(p1.y) || !Number.isFinite(p2.x) || !Number.isFinite(p2.y)) return false;
-    const isHorizontal = Math.abs(p1.y - p2.y) <= epsilon;
-    const isVertical = Math.abs(p1.x - p2.x) <= epsilon;
+    if (!p1 || !p2 || !Number.isFinite(Number(p1.x)) || !Number.isFinite(Number(p1.y)) || !Number.isFinite(Number(p2.x)) || !Number.isFinite(Number(p2.y))) return false;
+    const isHorizontal = Math.abs(Number(p1.y) - Number(p2.y)) <= epsilon;
+    const isVertical = Math.abs(Number(p1.x) - Number(p2.x)) <= epsilon;
     if (!isHorizontal && !isVertical) return false;
   }
   return true;
@@ -825,17 +825,18 @@ export const normalizeSavedBoard = (savedBoard = {}, project = null, options = {
     const p1 = resolvePinPosition(source, normalizedRails, panelHeight, infrastructure);
     const p2 = resolvePinPosition(target, normalizedRails, panelHeight, infrastructure);
 
-    // Verifica se já possui rota válida salva e estritamente ortogonal
+    // Verifica se já possui rota válida salva
     const candidateRoute = Array.isArray(wire.route?.points) && wire.route.points.length >= 2
       ? wire.route.points
-      : Array.isArray(wire.route_points) && wire.route_points.length > 0 && p1 && p2
-        ? [p1, ...wire.route_points, p2]
-        : null;
+      : Array.isArray(wire.points) && wire.points.length >= 2
+        ? wire.points
+        : Array.isArray(wire.route_points) && wire.route_points.length > 0 && p1 && p2
+          ? [p1, ...wire.route_points, p2]
+          : null;
 
     const hasValidSavedRoute = !options.forceRecalculate
-      && candidateRoute
-      && candidateRoute.length >= 2
-      && isOrthogonalPath(candidateRoute);
+      && Array.isArray(candidateRoute)
+      && candidateRoute.length >= 2;
 
     let routePoints = hasValidSavedRoute ? candidateRoute : null;
 
@@ -856,8 +857,13 @@ export const normalizeSavedBoard = (savedBoard = {}, project = null, options = {
       });
     }
 
-    const cleanPoints = routePoints && routePoints.length >= 2 ? simplifyOrthogonalPoints(routePoints) : [];
-    const waypointsOnly = cleanPoints.length > 2 ? cleanPoints.slice(1, -1) : [];
+    const cleanPoints = routePoints && routePoints.length >= 2
+      ? (isOrthogonalPath(routePoints, 2.0) ? simplifyOrthogonalPoints(routePoints) : routePoints)
+      : (Array.isArray(candidateRoute) && candidateRoute.length >= 2 ? candidateRoute : []);
+
+    const waypointsOnly = Array.isArray(wire.route_points) && wire.route_points.length > 0
+      ? wire.route_points
+      : (cleanPoints.length > 2 ? cleanPoints.slice(1, -1) : []);
 
     return {
       ...wire,
@@ -872,10 +878,16 @@ export const normalizeSavedBoard = (savedBoard = {}, project = null, options = {
       color,
       gauge,
       name: wire.name || wire.label || `Condutor ${wireIndex + 1}`,
+      circuitLabel: wire.circuitLabel || wire.circuitName || wire.circuit_id,
+      circuitName: wire.circuitName || wire.circuitLabel,
+      circuit_id: wire.circuit_id || wire.circuitId,
+      circuitNumber: wire.circuitNumber,
+      label: wire.label || wire.gauge || gauge,
       route: {
-        mode: "orthogonal",
+        mode: wire.route?.mode || "orthogonal",
         points: cleanPoints,
       },
+      points: cleanPoints,
       route_points: waypointsOnly,
       lineStyle: wire.lineStyle || "solid",
       cornerRadius: Number.isFinite(wire.cornerRadius) ? wire.cornerRadius : DEFAULT_CORNER_RADIUS,
