@@ -201,7 +201,10 @@ export default function SolarReportsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white border-slate-200 text-slate-900 p-6 shadow-2xl rounded-2xl">
+      <DialogContent
+        data-component="solar-reports"
+        className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white border-slate-300 text-slate-900 p-6 shadow-2xl rounded-none report-modal"
+      >
         <DialogHeader>
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -217,7 +220,7 @@ export default function SolarReportsDialog({
               type="button"
               onClick={handlePrint}
               disabled={!validation.valid}
-              className="h-9 px-4 bg-[#E6FAF7] hover:bg-[#d5f7f2] text-[#009b84] text-xs font-bold rounded-xl border border-[#00d8b8]/40 shrink-0 disabled:opacity-50"
+              className="h-9 px-4 bg-[#E6FAF7] hover:bg-[#d5f7f2] text-[#009b84] text-xs font-bold rounded-none border border-[#00d8b8]/40 shrink-0 disabled:opacity-50"
             >
               <Printer className="mr-1.5 h-4 w-4 text-[#00d8b8]" /> Imprimir Relatório
             </Button>
@@ -226,7 +229,7 @@ export default function SolarReportsDialog({
 
         {/* ALERTA DE VALIDAÇÃO: Só gera relatório depois de preencher os dados do projeto */}
         {!validation.valid && (
-          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs shadow-sm space-y-2 mt-2">
+          <div className="rounded-none border border-amber-300 bg-amber-50 p-4 text-xs shadow-sm space-y-2 mt-2">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
               <div className="flex-1">
@@ -242,7 +245,7 @@ export default function SolarReportsDialog({
                       onOpenChange(false);
                       onOpenParameters?.(validation.firstMissingStep);
                     }}
-                    className="h-8 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-sm flex items-center gap-1.5"
+                    className="h-8 rounded-none bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-sm flex items-center gap-1.5"
                   >
                     <Sliders className="h-3.5 w-3.5" /> Preencher Dados do Projeto
                   </Button>
@@ -259,21 +262,21 @@ export default function SolarReportsDialog({
             return (
               <div
                 key={report.id}
-                className={`flex flex-col justify-between rounded-xl border p-4 transition ${
+                className={`flex flex-col justify-between rounded-none border p-4 transition ${
                   report.highlight
                     ? "border-[#00d8b8] bg-[#E6FAF7]/50 shadow-sm sm:col-span-2"
                     : "border-slate-200 bg-slate-50/70 hover:border-[#00d8b8]/60 hover:bg-white"
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#E6FAF7] text-[#009b84] border border-[#00d8b8]/30">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-none bg-[#E6FAF7] text-[#009b84] border border-[#00d8b8]/30">
                     <Icon className="h-4 w-4" />
                   </span>
                   <div>
                     <p className="text-sm font-black text-slate-900 flex items-center gap-2">
                       {report.title}
                       {report.highlight && (
-                        <span className="rounded-full bg-[#E6FAF7] text-[#009b84] border border-[#00d8b8]/40 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                        <span className="rounded-none bg-[#E6FAF7] text-[#009b84] border border-[#00d8b8]/40 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
                           Recomendado
                         </span>
                       )}
@@ -289,7 +292,7 @@ export default function SolarReportsDialog({
                     variant="outline"
                     disabled={isDownloading || !validation.valid}
                     onClick={() => handleDownload(report)}
-                    className="h-8 border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800 rounded-lg shadow-sm disabled:opacity-50"
+                    className="h-8 border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800 rounded-none shadow-sm disabled:opacity-50"
                   >
                     {isDownloading ? (
                       <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -309,7 +312,7 @@ export default function SolarReportsDialog({
             type="button"
             variant="ghost"
             onClick={() => onOpenChange(false)}
-            className="text-xs font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-none"
           >
             Fechar
           </Button>
@@ -319,7 +322,7 @@ export default function SolarReportsDialog({
               onClick={handlePrint}
               disabled={!validation.valid}
               variant="outline"
-              className="border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm disabled:opacity-50"
+              className="border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-none shadow-sm disabled:opacity-50"
             >
               <Printer className="mr-1.5 h-4 w-4 text-[#00d8b8]" /> Imprimir
             </Button>
@@ -327,7 +330,7 @@ export default function SolarReportsDialog({
               type="button"
               disabled={downloadingId === "all" || !validation.valid}
               onClick={handleDownloadAll}
-              className="bg-[#00d8b8] text-slate-950 text-xs font-black rounded-xl hover:bg-[#00c4a7] shadow-sm disabled:opacity-50"
+              className="bg-[#00d8b8] text-slate-950 text-xs font-black rounded-none hover:bg-[#00c4a7] shadow-sm disabled:opacity-50"
             >
               {downloadingId === "all" ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

@@ -165,11 +165,11 @@ function generatePDF(project, metrics, { brandName = "NACIF Energy", logoUrl = b
     doc.setFont("helvetica", "normal"); doc.text(v, ML + 46, 124 + i * 9);
   });
 
-  // Caixa NBR Score
+  // Caixa NBR Score (Cantos Quadrados)
   const sc = metrics.nbrScore;
   const scColor = sc >= 90 ? [22, 163, 74] : sc >= 70 ? [202, 138, 4] : [220, 38, 38];
   doc.setFillColor(...scColor);
-  doc.roundedRect(PW - MR - 44, 100, 44, 44, 4, 4, "F");
+  doc.rect(PW - MR - 44, 100, 44, 44, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(28); doc.setFont("helvetica", "bold");
   doc.text(`${sc}`, PW - MR - 22, 124, { align: "center" });

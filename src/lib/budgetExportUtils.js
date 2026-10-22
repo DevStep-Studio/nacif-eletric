@@ -117,11 +117,11 @@ export function downloadBudgetPDF({
 
   drawHeaderBanner(true);
 
-  // Card de Dados do Projeto e Contratante
+  // Card de Dados do Projeto e Contratante (Cantos Quadrados)
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.3);
-  doc.roundedRect(marginX, curY, contentWidth, 20, 2, 2, "FD");
+  doc.rect(marginX, curY, contentWidth, 20, "FD");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
@@ -163,7 +163,7 @@ export function downloadBudgetPDF({
     if (kpi.highlight) {
       doc.setFillColor(0, 216, 184);
       doc.setDrawColor(0, 169, 142);
-      doc.roundedRect(kpiX, curY, kpiWidth, 14, 2, 2, "FD");
+      doc.rect(kpiX, curY, kpiWidth, 14, "FD");
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(6.8);
@@ -176,7 +176,7 @@ export function downloadBudgetPDF({
     } else {
       doc.setFillColor(241, 245, 249);
       doc.setDrawColor(226, 232, 240);
-      doc.roundedRect(kpiX, curY, kpiWidth, 14, 2, 2, "FD");
+      doc.rect(kpiX, curY, kpiWidth, 14, "FD");
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(6.5);
@@ -357,10 +357,10 @@ export function downloadBudgetPDF({
 
   const splitW = (contentWidth - 6) / 2;
 
-  // Lado esquerdo: Condições Comerciais e Normativas
+  // Lado esquerdo: Condições Comerciais e Normativas (Cantos Quadrados)
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(marginX, curY, splitW, 48, 2, 2, "FD");
+  doc.rect(marginX, curY, splitW, 48, "FD");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
@@ -383,11 +383,11 @@ export function downloadBudgetPDF({
     doc.text(cond, marginX + 3.5, curY + 11 + idx * 5.0);
   });
 
-  // Lado direito: Quadro de Totais Detalhado
+  // Lado direito: Quadro de Totais Detalhado (Cantos Quadrados)
   const rightX = marginX + splitW + 6;
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(rightX, curY, splitW, 48, 2, 2, "FD");
+  doc.rect(rightX, curY, splitW, 48, "FD");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
@@ -417,9 +417,9 @@ export function downloadBudgetPDF({
     doc.text(val, rightX + splitW - 3.5, curY + 11 + idx * 5.2, { align: "right" });
   });
 
-  // Linha de Destaque Total Final
+  // Linha de Destaque Total Final (Cantos Quadrados)
   doc.setFillColor(15, 79, 73);
-  doc.roundedRect(rightX + 2, curY + 33, splitW - 4, 12, 1.5, 1.5, "F");
+  doc.rect(rightX + 2, curY + 33, splitW - 4, 12, "F");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);

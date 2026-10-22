@@ -212,32 +212,32 @@ export function buildTechnicalMemorialData(project = {}, config = {}, sizing = {
 
 function addHeader(doc, title, project) {
   doc.setFillColor(...BRAND_DARK);
-  doc.rect(0, 0, 210, 22, "F");
+  doc.rect(0, 0, 210, 24, "F");
 
-  // Símbolo Oficial Nacif Electric (proporções 504:304 preservadas)
+  // Símbolo Oficial Nacif Energy (proporções 504:304 preservadas, escala destacada)
   try {
-    doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 14, 5.5, 16.5, 10, undefined, "FAST");
+    doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 14, 5.4, 22, 13.2, undefined, "FAST");
   } catch {
     // Fallback gracioso
   }
 
-  // Nome oficial da marca
+  // Nome oficial da marca com destaque e tipografia imponente
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12.5);
+  doc.setFontSize(14);
   doc.setTextColor(255, 255, 255);
-  doc.text("NACIF ELECTRIC", 33.5, 10.8);
+  doc.text("NACIF ENERGY", 39.5, 11.5);
 
-  // Slogan institucional em verde-turquesa
+  // Slogan institucional em verde-turquesa perfeitamente alinhado
   doc.setFont("helvetica", "bold");
   doc.setFontSize(6.8);
   doc.setTextColor(0, 216, 184);
-  doc.text("DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR", 33.5, 15.8);
+  doc.text("DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR", 39.5, 16.5);
 
-  // Lado direito: Título, Projeto, Localização e Data
+  // Lado direito: Título, Projeto, Localização e Data (alinhados na margem direita de 196mm)
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(255, 255, 255);
-  doc.text(title, 210 - 14, 8.5, { align: "right" });
+  doc.text(title, 196, 9.0, { align: "right" });
 
   const projectName = project?.name || "Projeto Solar";
   const displayProject = projectName.length > 38 ? projectName.slice(0, 35) + "..." : projectName;
@@ -245,7 +245,7 @@ function addHeader(doc, title, project) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(200, 210, 225);
-  doc.text(`Projeto: ${displayProject}`, 210 - 14, 13.0, { align: "right" });
+  doc.text(`Projeto: ${displayProject}`, 196, 13.5, { align: "right" });
 
   const locationText = [project?.city, project?.state].filter(Boolean).join(" / ") || project?.address || "";
   const dateStr = new Date().toLocaleDateString("pt-BR");
@@ -254,64 +254,83 @@ function addHeader(doc, title, project) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.0);
   doc.setTextColor(170, 185, 205);
-  doc.text(metaText, 210 - 14, 17.2, { align: "right" });
+  doc.text(metaText, 196, 17.5, { align: "right" });
 }
 
 function addFooter(doc, pageNum = 1, totalPages = 1) {
   const pageHeight = doc.internal.pageSize.height || 297;
   doc.setDrawColor(220, 225, 235);
+  doc.setLineWidth(0.3);
   doc.line(14, pageHeight - 12, 196, pageHeight - 12);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(120, 130, 145);
-  doc.text("NACIF ELECTRIC · Conforme NBR 16690 e NBR 5410", 14, pageHeight - 7);
+  doc.text("NACIF ENERGY · Conforme NBR 16690 e NBR 5410", 14, pageHeight - 7);
   doc.text(`Página ${pageNum} de ${totalPages}`, 196, pageHeight - 7, { align: "right" });
 }
 
 function drawSimpleTable(doc, startY, headers, rows, colWidths) {
   let y = startY;
   const rowHeight = 7;
-  const headerHeight = 8;
+  const headerHeight = 7.5;
   const totalWidth = colWidths.reduce((a, b) => a + b, 0);
 
-  // Header
+  // Cabeçalho da tabela com cantos rigorosamente retos e quadrados
   doc.setFillColor(...BRAND_BLUE);
   doc.rect(14, y, totalWidth, headerHeight, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(7.8);
   doc.setTextColor(255, 255, 255);
 
   let curX = 14;
   headers.forEach((h, i) => {
-    doc.text(String(h), curX + 2, y + 5.5);
+    doc.text(String(h), curX + 2.5, y + 5.2);
     curX += colWidths[i];
   });
   y += headerHeight;
 
-  // Rows
+  // Linhas com cantos quadrados e alinhamento simétrico
   rows.forEach((row, rIndex) => {
     if (y > 270) {
       doc.addPage();
-      y = 25;
+      y = 28;
     }
     const isEven = rIndex % 2 === 0;
     doc.setFillColor(isEven ? 248 : 255, isEven ? 250 : 255, isEven ? 252 : 255);
     doc.rect(14, y, totalWidth, rowHeight, "F");
-    doc.setDrawColor(230, 235, 242);
+
+    // Divisórias horizontais sutis
+    doc.setDrawColor(225, 232, 240);
+    doc.setLineWidth(0.2);
     doc.line(14, y + rowHeight, 14 + totalWidth, y + rowHeight);
 
-    doc.setFont("helvetica", "normal");
+    // Divisórias verticais entre colunas para precisão visual
+    let colX = 14;
+    colWidths.forEach((w, cIdx) => {
+      if (cIdx > 0) {
+        doc.line(colX, y, colX, y + rowHeight);
+      }
+      colX += w;
+    });
+
+    const isTotalRow = String(row[0] || "").toLowerCase().includes("total");
+    doc.setFont("helvetica", isTotalRow ? "bold" : "normal");
     doc.setFontSize(7.5);
-    doc.setTextColor(30, 40, 55);
+    doc.setTextColor(isTotalRow ? BRAND_DARK[0] : 30, isTotalRow ? BRAND_DARK[1] : 40, isTotalRow ? BRAND_DARK[2] : 55);
 
     curX = 14;
     row.forEach((cell, cIndex) => {
-      doc.text(String(cell ?? "—"), curX + 2, y + 4.8);
+      doc.text(String(cell ?? "—"), curX + 2.5, y + 4.8);
       curX += colWidths[cIndex];
     });
     y += rowHeight;
   });
+
+  // Borda externa nítida e quadrada delimitando toda a tabela
+  doc.setDrawColor(210, 222, 236);
+  doc.setLineWidth(0.3);
+  doc.rect(14, startY, totalWidth, y - startY, "D");
 
   return y + 4;
 }
@@ -410,18 +429,21 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
       doc.addImage(layoutImage, "PNG", 14, y, imgWidth, imgHeight, undefined, "FAST");
       doc.setDrawColor(180, 200, 225);
       doc.setLineWidth(0.3);
-      doc.roundedRect(14, y, imgWidth, imgHeight, 1.5, 1.5, "D");
+      doc.rect(14, y, imgWidth, imgHeight, "D");
     }
   } catch (err) {
     console.warn("Falha ao incluir imagem de layout no PDF:", err);
   }
   y += imgHeight + 3.5;
 
-  // Box de Especificações Técnicas de Montagem Física
+  // Box de Especificações Técnicas de Montagem Física (Cantos Quadrados e Simétricos)
   doc.setFillColor(248, 250, 253);
-  doc.roundedRect(14, y, 182, 54, 2, 2, "FD");
+  doc.rect(14, y, 182, 54, "FD");
   doc.setDrawColor(210, 225, 240);
-  doc.roundedRect(14, y, 182, 54, 2, 2, "D");
+  doc.setLineWidth(0.3);
+  doc.rect(14, y, 182, 54, "D");
+  doc.setFillColor(...BRAND_TEAL);
+  doc.rect(14, y, 1.5, 54, "F");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
@@ -469,14 +491,14 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
   doc.text("2.2 Arranjo de strings / circuito solar", 14, y2);
   y2 += 2.5;
 
-  // Imagem do arranjo elétrico / strings / circuitos
+  // Imagem do arranjo elétrico / strings / circuitos (Borda Quadrada)
   const stringsImgHeight = 84;
   try {
     if (stringsImage) {
       doc.addImage(stringsImage, "PNG", 14, y2, imgWidth, stringsImgHeight, undefined, "FAST");
       doc.setDrawColor(180, 200, 225);
       doc.setLineWidth(0.3);
-      doc.roundedRect(14, y2, imgWidth, stringsImgHeight, 1.5, 1.5, "D");
+      doc.rect(14, y2, imgWidth, stringsImgHeight, "D");
     }
   } catch (err) {
     console.warn("Falha ao incluir imagem de arranjo elétrico no PDF:", err);
@@ -551,19 +573,25 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
   doc.text("2.4 Conformidade Normativa e Requisitos de Instalação CC", 14, y2);
   y2 += 2.5;
 
+  // Box Normativo com Cantos Quadrados e Alinhamento Preciso
+  const normBoxH = 38;
   doc.setFillColor(248, 250, 253);
-  doc.roundedRect(14, y2, 182, 38, 2, 2, "FD");
+  doc.rect(14, y2, 182, normBoxH, "FD");
   doc.setDrawColor(210, 225, 240);
-  doc.roundedRect(14, y2, 182, 38, 2, 2, "D");
+  doc.setLineWidth(0.3);
+  doc.rect(14, y2, 182, normBoxH, "D");
+  doc.setFillColor(...BRAND_TEAL);
+  doc.rect(14, y2, 1.5, normBoxH, "F");
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  doc.setTextColor(60, 75, 95);
-  doc.text("• ABNT NBR 16690: Instalação de arranjos fotovoltaicos com proteção contra sobrecorrentes e sobretensões transitórias.", 18, y2 + 7);
-  doc.text("• Condutores CC: Cabos flexíveis de cobre estanhado 4/6 mm², classe térmica 90°C (120°C máx), isolação 1,8 kV CC resistente a UV.", 18, y2 + 13);
-  doc.text("• Conectores MC4: Crimpagem profissional com ferramentas calibradas e teste de continuidade prévio ao comissionamento.", 18, y2 + 19);
-  doc.text("• Aterramento e Equipotencialização: Molduras de alumínio e estruturas interligadas ao barramento de equipotencialização (BEP).", 18, y2 + 25);
-  doc.text("• Identificação Permanente: Etiquetas de advertência e sinalização indelével dos circuitos CC e polaridade nos eletrodutos.", 18, y2 + 31);
+  doc.setTextColor(50, 65, 85);
+  const normLeft = 18;
+  doc.text("• ABNT NBR 16690: Instalação de arranjos fotovoltaicos com proteção contra sobrecorrentes e sobretensões transitórias.", normLeft, y2 + 7);
+  doc.text("• Condutores CC: Cabos flexíveis de cobre estanhado 4/6 mm², classe térmica 90°C (120°C máx), isolação 1,8 kV CC resistente a UV.", normLeft, y2 + 13.5);
+  doc.text("• Conectores MC4: Crimpagem profissional com ferramentas calibradas e teste de continuidade prévio ao comissionamento.", normLeft, y2 + 20);
+  doc.text("• Aterramento e Equipotencialização: Molduras de alumínio e estruturas interligadas ao barramento de equipotencialização (BEP).", normLeft, y2 + 26.5);
+  doc.text("• Identificação Permanente: Etiquetas de advertência e sinalização indelével dos circuitos CC e polaridade nos eletrodutos.", normLeft, y2 + 33);
 
   // =======================================================
   // PÁGINA 3+ (OPCIONAL): REGISTROS FOTOGRÁFICOS / EXTRAS
@@ -594,7 +622,8 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
       try {
         doc.addImage(extra.dataUrl, "PNG", 14, y3, 182, 85, undefined, "FAST");
         doc.setDrawColor(180, 200, 225);
-        doc.roundedRect(14, y3, 182, 85, 1.5, 1.5, "D");
+        doc.setLineWidth(0.3);
+        doc.rect(14, y3, 182, 85, "D");
       } catch (err) {
         console.warn("Falha ao incluir imagem complementar no PDF:", err);
       }
@@ -681,7 +710,7 @@ export function generateTechnicalMemorialReport(project = {}, config = {}, sizin
   const sectionTitle = (title) => {
     ensureSpace(14);
     doc.setFillColor(239, 250, 248);
-    doc.roundedRect(14, y - 5, 182, 10, 1.5, 1.5, "F");
+    doc.rect(14, y - 5, 182, 10, "F");
     doc.setFillColor(...BRAND_TEAL);
     doc.rect(14, y - 5, 2, 10, "F");
     doc.setFont("helvetica", "bold");
@@ -919,11 +948,14 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
 
   let y = 28;
 
-  // Box de Indicadores Principais (KPIs)
+  // Box de Indicadores Principais (KPIs - Cantos Quadrados)
   doc.setFillColor(245, 248, 252);
-  doc.roundedRect(14, y, 182, 28, 2, 2, "FD");
+  doc.rect(14, y, 182, 28, "FD");
   doc.setDrawColor(200, 215, 235);
-  doc.roundedRect(14, y, 182, 28, 2, 2, "D");
+  doc.setLineWidth(0.3);
+  doc.rect(14, y, 182, 28, "D");
+  doc.setFillColor(...BRAND_TEAL);
+  doc.rect(14, y, 1.5, 28, "F");
 
   const kpis = [
     { label: "POTÊNCIA INSTALADA", val: `${dcPowerKw.toFixed(2)} kWp`, sub: `${panelCount} Módulos (${moduleWp}Wp)` },
@@ -1039,29 +1071,30 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
         @page { size: A4 portrait; margin: 12mm 15mm; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; background: #fff; }
-        .header { display: flex; justify-content: space-between; align-items: center; background: #0e1726; color: #fff; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; }
-        .logo-box { display: flex; align-items: center; gap: 10px; }
-        .logo-img { width: 36px; height: 22px; object-fit: contain; }
-        .logo-title { font-size: 14px; font-weight: 800; color: #ffffff; letter-spacing: -0.2px; line-height: 1.1; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #0e1726; color: #fff; padding: 12px 16px; border-radius: 0; margin-bottom: 14px; }
+        .logo-box { display: flex; align-items: center; gap: 12px; }
+        .logo-img { width: 50px; height: 30px; object-fit: contain; }
+        .logo-title { font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.2px; line-height: 1.1; }
         .logo-sub { font-size: 7.5px; font-weight: 700; color: #00d8b8; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; }
         .doc-title { text-align: right; font-size: 10.5px; font-weight: 800; color: #ffffff; text-transform: uppercase; }
         .doc-meta { text-align: right; font-size: 8.5px; color: #cbd5e1; margin-top: 1px; }
         .doc-submeta { text-align: right; font-size: 7.5px; color: #94a3b8; }
         
         .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
-        .kpi-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; background: #f8fafc; }
+        .kpi-card { border: 1px solid #cbd5e1; border-radius: 0; padding: 10px; background: #f8fafc; }
         .kpi-label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; }
         .kpi-value { font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 2px; }
         .kpi-sub { font-size: 8.5px; color: #059669; font-weight: 600; }
         
         .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin: 10px 0 6px 0; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px; }
-        th { background: #1e293b; color: #fff; font-weight: 700; text-align: left; padding: 4px 6px; font-size: 9px; }
-        td { padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px; border-radius: 0; }
+        th { background: #1e293b; color: #fff; font-weight: 700; text-align: left; padding: 5px 6px; font-size: 9px; }
+        td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #f1f5f9; }
+        td:last-child { border-right: none; }
         tr:nth-child(even) td { background: #f8fafc; }
         
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; background: #fff; }
+        .box { border: 1px solid #e2e8f0; border-radius: 0; padding: 10px; background: #fff; }
         .box-title { font-size: 10px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
         .info-row { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px dashed #f1f5f9; }
         .info-label { color: #64748b; font-size: 9.5px; }
@@ -1073,9 +1106,9 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
     <body>
       <div class="header">
         <div class="logo-box">
-          <img src="${NACIF_SYMBOL_BASE64}" class="logo-img" alt="Nacif Electric" />
+          <img src="${NACIF_SYMBOL_BASE64}" class="logo-img" alt="Nacif Energy" />
           <div>
-            <div class="logo-title">NACIF ELECTRIC</div>
+            <div class="logo-title">NACIF ENERGY</div>
             <div class="logo-sub">DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR</div>
           </div>
         </div>
@@ -1129,26 +1162,26 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
 
       <div class="section-title">2. Layout no Telhado e Arranjo de Strings</div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-        <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #0f172a;">
+        <div style="border: 1px solid #cbd5e1; border-radius: 0; overflow: hidden; background: #0f172a;">
           <div style="background: #1e293b; color: #fff; padding: 5px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
             <span>Layout dos módulos no telhado</span>
             <span style="font-size: 7.5px; color: #38bdf8;">Vista Superior CAD</span>
           </div>
           <div style="padding: 4px; display: flex; align-items: center; justify-content: center; min-height: 140px;">
-            <img src="${layoutImage}" style="max-width: 100%; height: auto; display: block; border-radius: 3px;" alt="Layout dos Módulos no Telhado" />
+            <img src="${layoutImage}" style="max-width: 100%; height: auto; display: block; border-radius: 0;" alt="Layout dos Módulos no Telhado" />
           </div>
           <div style="padding: 3px 6px; background: #f8fafc; font-size: 7.5px; color: #64748b; border-top: 1px solid #e2e8f0;">
             Disposição real dos módulos fotovoltaicos sobre a água do telhado com cotas e orientação cardeal
           </div>
         </div>
 
-        <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #0f172a;">
+        <div style="border: 1px solid #cbd5e1; border-radius: 0; overflow: hidden; background: #0f172a;">
           <div style="background: #1e293b; color: #fff; padding: 5px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
             <span>Arranjo de strings / circuito solar</span>
             <span style="font-size: 7.5px; color: #34d399;">Topologia CC</span>
           </div>
           <div style="padding: 4px; display: flex; align-items: center; justify-content: center; min-height: 140px;">
-            <img src="${stringsImage}" style="max-width: 100%; height: auto; display: block; border-radius: 3px;" alt="Arranjo de Strings / Circuito Solar" />
+            <img src="${stringsImage}" style="max-width: 100%; height: auto; display: block; border-radius: 0;" alt="Arranjo de Strings / Circuito Solar" />
           </div>
           <div style="padding: 3px 6px; background: #f8fafc; font-size: 7.5px; color: #64748b; border-top: 1px solid #e2e8f0;">
             Mapeamento elétrico por cores e fiação em série das strings conectadas às entradas MPPT do inversor
@@ -1215,7 +1248,7 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
       </div>
 
       <div class="footer">
-        <div>NACIF ELECTRIC · Engenharia Elétrica Aplicada</div>
+        <div>NACIF ENERGY · Engenharia Elétrica Aplicada</div>
         <div>Emissão: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}</div>
       </div>
 

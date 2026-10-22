@@ -382,3 +382,43 @@ label.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10),
     justify-content: center !important;
   }
 }
+
+/* ==========================================================================
+   PADRÃO VISUAL GLOBAL PARA TODAS AS ABAS DE RELATÓRIOS E DOCUMENTOS
+   Diretrizes: Bordas 100% quadradas (border-radius: 0), alinhamento simétrico,
+   identidade visual com cantos retos em tabelas, painéis e resumos normativos.
+   ========================================================================== */
+.report-view,
+.report-container,
+.report-page,
+.report-modal,
+.report-card,
+.report-box,
+.report-table,
+.solar-reports-dialog,
+[data-component="solar-reports"],
+[data-report-section],
+.print-report {
+  border-radius: 0 !important;
+}
+
+/* Força cantos retos em todos os containers, painéis, caixas normativas e tabelas de relatórios */
+.report-view *,
+.report-container *,
+.report-modal *,
+.solar-reports-dialog *,
+[data-component="solar-reports"] *,
+[data-report-section] * {
+  border-radius: 0 !important;
+}
+
+/* Tabelas, painéis de informações, caixas de resumo normativo e containers de fundo cinza */
+.report-table,
+.report-table th,
+.report-table td,
+.report-box,
+.normative-box,
+.info-panel {
+  border-radius: 0 !important;
+}
+

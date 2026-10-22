@@ -100,7 +100,7 @@ function BrandLogo({ branding, compact = false, className = "" }) {
   const brandTitle = [branding?.appName, branding?.appSuffix].filter(Boolean).join(" ") || "NACIF Energy";
 
   return (
-    <div className={`flex items-center justify-center shrink-0 ${compact ? "h-8 w-8" : "h-9 max-w-[160px]"} ${className}`}>
+    <div className={`flex items-center justify-center shrink-0 ${compact ? "h-9 w-9" : "h-10 max-w-[175px]"} ${className}`}>
       <img
         src={logo}
         alt={brandTitle}
