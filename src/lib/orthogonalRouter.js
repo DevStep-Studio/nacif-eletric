@@ -910,7 +910,7 @@ export const normalizeSavedBoard = (savedBoard = {}, project = null, options = {
       meta: {
         ...(rawLayout.meta || {}),
         manualDeviceEdits: true, // Garante que reaberturas futuras não redefinam o layout
-        savedAt: new Date().toISOString(),
+        savedAt: rawLayout.meta?.savedAt || new Date().toISOString(),
         version: "2.0-orthogonal",
       },
     },

@@ -569,9 +569,11 @@ const panelLayoutNeedsCircuitSync = (project, boards, calculatedCircuits = null)
   const primaryBoard = getPrimaryCircuitBoard(boards) || (Array.isArray(boards) ? boards[0] : null);
   const layout = primaryBoard?.layout || project?.panel_layout || {};
   const layoutMeta = getPanelLayoutMeta(layout);
-  if (layoutMeta.manualDeviceEdits) return false;
+  if (layoutMeta.manualDeviceEdits || (Array.isArray(layout?.wires) && layout.wires.length > 0)) return false;
 
   const allBoards = Array.isArray(boards) && boards.length > 0 ? boards : [primaryBoard].filter(Boolean);
+  if (allBoards.some((b) => Array.isArray(b?.layout?.wires) && b.layout.wires.length > 0)) return false;
+
   const hasActiveComponents = allBoards.some((b) =>
     (b?.layout?.rails || []).some((r) => (r.components || []).some((c) => c && c.type !== "spacer"))
   ) || ((layout.rails || []).some((r) => (r.components || []).some((c) => c && c.type !== "spacer")));
@@ -1679,7 +1681,7 @@ export default function PanelGenerator() {
   }, [project, activeBoard?.type]);
 
   const handleClearWiresConfirm = () => {
-    updateWires([]);
+    updateWires([], { immediate: true });
     setSelectedWireId("");
     setSelectedRoutePoint(null);
     setWiringMode(false);
@@ -1696,11 +1698,11 @@ export default function PanelGenerator() {
     const nextWires = autoConnectPreview.wires.length > 0
       ? autoConnectPreview.wires
       : generateAllPanelWires(project, { forceDistribution: activeBoard?.type !== "qgbt" });
-    updateWires(nextWires);
+    updateWires(nextWires, { immediate: true });
     setShowAutoConnectModal(false);
     toast({
       title: "Ligações criadas com sucesso",
-      description: `${nextWires.length} condutores foram conectados e organizados conforme o projeto.`,
+      description: `${nextWires.length} condutores foram conectados e gravados no projeto.`,
     });
   };
 
@@ -1959,7 +1961,19 @@ export default function PanelGenerator() {
       let boards = normalizePanelBoards(projectForPanel);
       let shouldPersistPanelSync = false;
 
-      if (panelLayoutNeedsCircuitSync(projectForPanel, boards, calculatedMetrics.circuits)) {
+      // Recuperação resiliente das ligações salvas persistidas no banco
+      const rawSavedWires = (() => {
+        const bWithWires = (boards || []).find((b) => Array.isArray(b?.layout?.wires) && b.layout.wires.length > 0);
+        if (bWithWires) return bWithWires.layout.wires;
+        if (Array.isArray(p.panel_layout?.wires) && p.panel_layout.wires.length > 0) {
+          return p.panel_layout.wires;
+        }
+        const rawBWithWires = (p.panel_boards || []).find((b) => Array.isArray(b?.layout?.wires) && b.layout.wires.length > 0);
+        if (rawBWithWires) return rawBWithWires.layout.wires;
+        return [];
+      })();
+
+      if (!rawSavedWires.length && panelLayoutNeedsCircuitSync(projectForPanel, boards, calculatedMetrics.circuits)) {
         const syncedLayout = generateDefaultPanelLayout({ ...projectForPanel, circuits: distributionCircuits }, { forceDistribution: true });
         boards = buildPanelBoardsWithLayout({ ...projectForPanel, circuits: distributionCircuits, panel_boards: boards }, syncedLayout);
         projectForPanel = {
@@ -1981,22 +1995,51 @@ export default function PanelGenerator() {
           : preferredDistributionBoard?.id || boards[0]?.id;
       const activeBoard = boards.find((board) => board.id === nextActiveId) || preferredDistributionBoard || boards[0];
       const primaryLayout = getPrimaryCircuitBoard(boards)?.layout || activeBoard?.layout || { rails: [], wires: [], infrastructure: [] };
+
+      const activeRails = activeBoard?.layout?.rails || [];
+      const activeInfra = activeBoard?.layout?.infrastructure || [];
+      const effectiveWires = (Array.isArray(activeBoard?.layout?.wires) && activeBoard.layout.wires.length > 0)
+        ? activeBoard.layout.wires
+        : rawSavedWires;
+      const hydratedWires = effectiveWires.length > 0
+        ? enrichWiresWithComputedRoutes(effectiveWires, activeRails, activeInfra)
+        : [];
+
+      if (activeBoard && activeBoard.layout) {
+        activeBoard.layout.wires = hydratedWires;
+        activeBoard.layout.meta = {
+          ...(activeBoard.layout.meta || {}),
+          manualDeviceEdits: true,
+        };
+      }
+      if (primaryLayout) {
+        primaryLayout.wires = hydratedWires;
+        primaryLayout.meta = {
+          ...(primaryLayout.meta || {}),
+          manualDeviceEdits: true,
+        };
+      }
+
       const normalizedProject = isSolarProject(projectForPanel)
-        ? { ...projectForPanel, panel_boards: boards, panel_layout: activeBoard?.layout || { rails: [], wires: [], infrastructure: [] } }
+        ? { ...projectForPanel, panel_boards: boards, panel_layout: activeBoard?.layout || { rails: activeRails, wires: hydratedWires, infrastructure: activeInfra } }
         : { ...projectForPanel, panel_boards: boards, panel_layout: primaryLayout };
       setProject(normalizedProject);
       setPanelBoards(boards);
       setActiveBoardId(activeBoard?.id || "");
-      setRails(activeBoard?.layout?.rails || []);
-      setWires(activeBoard?.layout?.wires || []);
-      setInfrastructure(activeBoard?.layout?.infrastructure || []);
+      setRails(activeRails);
+      setWires(hydratedWires);
+      setInfrastructure(activeInfra);
 
-      const shouldPersistSolarLayout = isSolarProject(projectForPanel) && (
+      // Prevenção de Sobrescrita: Nunca disparar update que apague ligações existentes no banco
+      const pHadWires = (p.panel_boards || []).some(b => (b?.layout?.wires || []).length > 0) || ((p.panel_layout?.wires || []).length > 0);
+      const isDangerousWipe = pHadWires && hydratedWires.length === 0;
+
+      const shouldPersistSolarLayout = !isDangerousWipe && isSolarProject(projectForPanel) && !pHadWires && (
         JSON.stringify(p.panel_boards || []) !== JSON.stringify(boards)
         || JSON.stringify(p.panel_layout || {}) !== JSON.stringify(activeBoard?.layout || {})
       );
 
-      if (shouldPersistPanelSync || shouldPersistSolarLayout) {
+      if (!isDangerousWipe && (shouldPersistPanelSync || shouldPersistSolarLayout)) {
         const payload = shouldPersistPanelSync
           ? {
               circuits: calculatedMetrics.circuits,
@@ -2006,7 +2049,7 @@ export default function PanelGenerator() {
             }
           : {
               panel_boards: boards,
-              panel_layout: activeBoard?.layout || { rails: [], wires: [], infrastructure: [] },
+              panel_layout: activeBoard?.layout || { rails: activeRails, wires: hydratedWires, infrastructure: activeInfra },
             };
         backend.entities.Project.update(selectedId, payload).catch((error) => console.error("Erro ao normalizar quadro:", error));
       }
@@ -2207,18 +2250,27 @@ export default function PanelGenerator() {
       }
     }
     const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
-    const nextBoards = currentBoards.map((board) => (
-      board.id === activeBoardId ? { ...board, layout: layoutObj } : board
-    ));
+    const targetBoardId = activeBoardId || currentBoards[0]?.id || "";
+    let matched = false;
+    const nextBoards = currentBoards.map((board) => {
+      if (board.id === targetBoardId || (!matched && (currentBoards.length === 1 || !targetBoardId))) {
+        matched = true;
+        return { ...board, layout: layoutObj };
+      }
+      return board;
+    });
+    if (!matched && nextBoards.length > 0) {
+      nextBoards[0] = { ...nextBoards[0], layout: layoutObj };
+    }
     latestPanelBoardsRef.current = nextBoards;
     latestPanelLayoutRef.current = layoutObj;
-    latestActiveBoardIdRef.current = activeBoardId;
+    latestActiveBoardIdRef.current = targetBoardId;
     if (options.immediate) {
       if (autoSaveDebounceTimerRef.current) clearTimeout(autoSaveDebounceTimerRef.current);
       pendingSavePayloadRef.current = null;
-      await persistPanelBoards(nextBoards, activeBoardId);
+      await persistPanelBoards(nextBoards, targetBoardId);
     } else {
-      pendingSavePayloadRef.current = { boards: nextBoards, activeId: activeBoardId };
+      pendingSavePayloadRef.current = { boards: nextBoards, activeId: targetBoardId };
       if (autoSaveDebounceTimerRef.current) clearTimeout(autoSaveDebounceTimerRef.current);
       autoSaveDebounceTimerRef.current = setTimeout(async () => {
         if (pendingSavePayloadRef.current) {
@@ -2244,11 +2296,20 @@ export default function PanelGenerator() {
         version: "2.0-orthogonal",
       },
     };
+    let matched = false;
+    const nextBoards = currentBoards.map((board) => {
+      if (board.id === activeId || (!matched && (currentBoards.length === 1 || !activeId))) {
+        matched = true;
+        return { ...board, layout: layoutObj };
+      }
+      return board;
+    });
+    if (!matched && nextBoards.length > 0) {
+      nextBoards[0] = { ...nextBoards[0], layout: layoutObj };
+    }
     return {
-      activeId,
-      boards: currentBoards.map((board) => (
-        board.id === activeId ? { ...board, layout: layoutObj } : board
-      )),
+      activeId: activeId || nextBoards[0]?.id || "",
+      boards: nextBoards,
     };
   };
 
@@ -2263,30 +2324,39 @@ export default function PanelGenerator() {
     await persistPanelBoards(boards, activeId, { silent: false });
   };
 
+  const flushPendingPanelSave = useCallback(() => {
+    if (autoSaveDebounceTimerRef.current) {
+      clearTimeout(autoSaveDebounceTimerRef.current);
+      autoSaveDebounceTimerRef.current = null;
+    }
+    if (pendingSavePayloadRef.current) {
+      const { boards, activeId } = pendingSavePayloadRef.current;
+      pendingSavePayloadRef.current = null;
+      persistPanelBoards(boards, activeId, { silent: true });
+      return;
+    }
+    const currentBoards = latestPanelBoardsRef.current.length > 0
+      ? latestPanelBoardsRef.current
+      : normalizePanelBoards(project);
+    const activeId = latestActiveBoardIdRef.current || activeBoardId || currentBoards[0]?.id || "";
+    const layoutObj = latestPanelLayoutRef.current || { rails: [], wires: [], infrastructure: [] };
+    let matched = false;
+    const nextBoards = currentBoards.map((board) => {
+      if (board.id === activeId || (!matched && (currentBoards.length === 1 || !activeId))) {
+        matched = true;
+        return { ...board, layout: layoutObj };
+      }
+      return board;
+    });
+    if (!matched && nextBoards.length > 0) {
+      nextBoards[0] = { ...nextBoards[0], layout: layoutObj };
+    }
+    if (nextBoards.length > 0) persistPanelBoards(nextBoards, activeId, { silent: true });
+  }, [project, activeBoardId, selectedId]);
+
   useEffect(() => {
     if (!selectedId) return undefined;
 
-    const flushPendingPanelSave = () => {
-      if (autoSaveDebounceTimerRef.current) {
-        clearTimeout(autoSaveDebounceTimerRef.current);
-        autoSaveDebounceTimerRef.current = null;
-      }
-      if (pendingSavePayloadRef.current) {
-        const { boards, activeId } = pendingSavePayloadRef.current;
-        pendingSavePayloadRef.current = null;
-        persistPanelBoards(boards, activeId, { silent: true });
-        return;
-      }
-      const currentBoards = latestPanelBoardsRef.current.length > 0
-        ? latestPanelBoardsRef.current
-        : normalizePanelBoards(project);
-      const activeId = latestActiveBoardIdRef.current || currentBoards[0]?.id || "";
-      const layoutObj = latestPanelLayoutRef.current || { rails: [], wires: [], infrastructure: [] };
-      const nextBoards = currentBoards.map((board) => (
-        board.id === activeId ? { ...board, layout: layoutObj } : board
-      ));
-      if (nextBoards.length > 0) persistPanelBoards(nextBoards, activeId, { silent: true });
-    };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") flushPendingPanelSave();
     };
@@ -2300,7 +2370,7 @@ export default function PanelGenerator() {
       window.removeEventListener("beforeunload", flushPendingPanelSave);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [selectedId]);
+  }, [selectedId, flushPendingPanelSave]);
 
   useEffect(() => () => {
     if (layoutSaveFeedbackTimerRef.current) clearTimeout(layoutSaveFeedbackTimerRef.current);
@@ -2568,7 +2638,7 @@ export default function PanelGenerator() {
 
   const updateWires = (newWires, options = {}) => {
     setWires(newWires);
-    saveLayoutToDb(rails, newWires, infrastructure, options);
+    return saveLayoutToDb(rails, newWires, infrastructure, { immediate: true, ...options });
   };
 
   const handleSelectBoard = (boardId) => {
@@ -9631,7 +9701,10 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/")}
+            onClick={() => {
+              flushPendingPanelSave();
+              navigate("/");
+            }}
             className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] bg-[#E8FCF8] px-2.5 text-xs font-black text-[#0f4f49] transition hover:bg-[#00d8b8] hover:text-white"
             title="Voltar para a Home"
           >

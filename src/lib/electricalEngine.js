@@ -2210,15 +2210,18 @@ export function mergeSolarLayoutIntoPrincipal(project, layout, { forceRegenerate
   );
   const alreadyMerged = rails.some((rail) => rail.id === "rail_solar_1" || rail.id === "rail_solar_2")
     || hasSolarComponents
-    || layout?.meta?.manualDeviceEdits;
+    || layout?.meta?.manualDeviceEdits
+    || wires.length > 0;
 
   if (alreadyMerged && !forceRegenerate) return { ...layout, rails, wires };
 
   const baseRails = alreadyMerged ? rails.filter((rail) => rail.id !== "rail_solar_1" && rail.id !== "rail_solar_2") : rails;
   const baseWires = alreadyMerged ? wires.filter((wire) => !String(wire?.id || "").startsWith("solar_")) : wires;
   const solar = buildSolarAcCircuitLayout(project, baseWires, { generateWires });
+  const preservedSolarWires = wires.filter((wire) => String(wire?.id || "").startsWith("solar_"));
+  const finalSolarWires = solar.wires.length > 0 ? solar.wires : preservedSolarWires;
 
-  return { ...layout, rails: [...baseRails, ...solar.rails], wires: [...baseWires, ...solar.wires] };
+  return { ...layout, rails: [...baseRails, ...solar.rails], wires: [...baseWires, ...finalSolarWires] };
 }
 
 export function generateAllPanelWires(project, options = {}) {
@@ -2266,7 +2269,12 @@ export function buildPanelBoardsWithLayout(project, panelLayout = generateDefaul
           location: board.location || "Entrada / Distribuição",
           type: board.type || distributionType,
           supply_type: board.supply_type || project?.supply_type || "Monofásico",
-          layout: mergedLayout,
+          layout: {
+            ...mergedLayout,
+            wires: (Array.isArray(board.layout?.wires) && board.layout.wires.length > 0)
+              ? board.layout.wires
+              : mergedLayout.wires || [],
+          },
         }
       : board
   ));
