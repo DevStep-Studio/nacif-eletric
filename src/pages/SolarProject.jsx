@@ -1354,25 +1354,25 @@ export default function SolarProject() {
     try {
       if (reportType === "executive") {
         const doc = await generateExecutiveSolarPdf(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
+        await downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
       } else if (reportType === "site_plan") {
         const doc = await generateSitePlanReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
+        await downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
       } else if (reportType === "electrical") {
         const doc = await generateElectricalDiagramReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
+        await downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
       } else if (reportType === "memorial") {
         const doc = await generateTechnicalMemorialReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
+        await downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
       } else if (reportType === "bom") {
         const doc = await generateBillOfMaterialsReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
+        await downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
       } else if (reportType === "simulation") {
         const doc = await generateGenerationSimulationReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
+        await downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
       } else if (reportType === "proposal") {
         const doc = await generateCommercialProposalReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
+        await downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
       }
       toast({
         title: "Download concluído",

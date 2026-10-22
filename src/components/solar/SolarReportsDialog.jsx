@@ -148,13 +148,14 @@ export default function SolarReportsDialog({
 
     setDownloadingId(report.id);
     try {
-      const doc = report.fn(project, config, sizing);
-      downloadPdfBlob(doc, report.filename);
+      const doc = await report.fn(project, config, sizing);
+      await downloadPdfBlob(doc, report.filename);
       toast({
         title: "Relatório gerado",
         description: `O arquivo ${report.title} foi baixado em PDF com sucesso.`,
       });
     } catch (error) {
+      console.error(`Erro ao gerar PDF (${report.id}):`, error);
       toast({
         title: "Erro ao gerar PDF",
         description: error?.message || "Tente novamente.",
@@ -178,15 +179,16 @@ export default function SolarReportsDialog({
     setDownloadingId("all");
     try {
       for (const report of REPORT_CARDS) {
-        const doc = report.fn(project, config, sizing);
-        downloadPdfBlob(doc, report.filename);
-        await new Promise((r) => setTimeout(r, 200));
+        const doc = await report.fn(project, config, sizing);
+        await downloadPdfBlob(doc, report.filename);
+        await new Promise((r) => setTimeout(r, 250));
       }
       toast({
         title: "Todos os relatórios gerados",
         description: "Os relatórios em PDF foram baixados.",
       });
     } catch (error) {
+      console.error("Erro no download em lote:", error);
       toast({
         title: "Erro no download em lote",
         description: error?.message || "Tente novamente.",

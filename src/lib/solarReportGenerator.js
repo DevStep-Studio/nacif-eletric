@@ -319,20 +319,41 @@ function drawSimpleTable(doc, startY, headers, rows, colWidths) {
 /**
  * Salva com segurança o documento PDF no navegador, garantindo compatibilidade com blob
  */
-export function downloadPdfBlob(doc, filename = "relatorio_solar.pdf") {
-  try {
-    doc.save(filename);
-  } catch {
-    const blob = doc.output("blob");
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+export async function downloadPdfBlob(docOrPromise, filename = "relatorio_solar.pdf") {
+  const doc = await docOrPromise;
+  if (!doc) {
+    throw new Error("Instância do documento PDF não foi gerada.");
   }
+
+  // 1. Tenta o método nativo doc.save() do jsPDF
+  try {
+    if (typeof doc.save === "function") {
+      doc.save(filename);
+      return;
+    }
+  } catch (err) {
+    console.warn("doc.save() falhou, tentando fallback via Blob:", err);
+  }
+
+  // 2. Fallback via doc.output('blob') e link de download temporário
+  try {
+    if (typeof doc.output === "function") {
+      const blob = doc.output("blob");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      return;
+    }
+  } catch (err) {
+    console.warn("doc.output('blob') falhou:", err);
+  }
+
+  throw new Error("Não foi possível salvar o arquivo PDF no navegador.");
 }
 
 /**
