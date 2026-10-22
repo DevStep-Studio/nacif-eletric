@@ -1,12 +1,10 @@
 import React from "react";
 import { useBranding } from "@/lib/appPreferences";
-import { DEFAULT_LOGO_WHITE_URL } from "@/lib/brandingDefaults";
-import authElectricalPanel from "@/assets/auth-electrical-panel.jpg";
+import authNacifEnergy from "@/assets/auth-nacif-energy.jpg";
 
 export default function AuthLayout({ icon: Icon, title, subtitle, footer, children }) {
   const { branding } = useBranding();
   const authLogo = branding?.authLogoDataUrl || branding?.logoDataUrl || "/brand-logo-principal.png";
-  const heroLogo = DEFAULT_LOGO_WHITE_URL;
   const brandName = [branding.appName, branding.appSuffix].filter(Boolean).join(" ") || "NACIF Solutions";
   const currentYear = new Date().getFullYear();
 
@@ -61,26 +59,10 @@ export default function AuthLayout({ icon: Icon, title, subtitle, footer, childr
 
       <aside className="relative hidden min-h-screen overflow-hidden bg-[#061615] lg:block">
         <img
-          src={authElectricalPanel}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover"
+          src={authNacifEnergy}
+          alt="NACIF Solutions Energy"
+          className="absolute inset-0 h-full w-full object-cover object-center"
         />
-        <div className="absolute inset-0 bg-[#031211]/72" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_55%_45%,rgba(0,216,184,0.30),rgba(3,18,17,0.18)_34%,rgba(3,18,17,0.82)_78%)]" />
-        <div className="absolute inset-0 flex items-center justify-center px-16">
-          <div className="flex w-full max-w-[430px] items-center justify-center">
-            {heroLogo ? (
-              <img
-                src={heroLogo}
-                alt={brandName}
-                className="w-full object-contain drop-shadow-[0_22px_42px_rgba(0,0,0,0.45)]"
-              />
-            ) : (
-              Icon && <Icon className="h-16 w-16 text-primary" aria-hidden="true" />
-            )}
-          </div>
-        </div>
       </aside>
     </div>
   );
