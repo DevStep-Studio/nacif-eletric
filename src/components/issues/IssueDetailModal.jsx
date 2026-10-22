@@ -60,7 +60,7 @@ const PRIORITY_CONFIG = {
 
 export default function IssueDetailModal({ open, onOpenChange, issue, onIssueUpdated }) {
   const { user } = useAuth();
-  const isAdmin = Boolean(hasFullSystemAccess(user) || user?.role === "admin" || user?.role === "super_admin" || isSuperAdmin(user) || user?.email === "admin@nacif.com" || user?.email === "grc22.09@hotmail.com");
+  const isAdmin = Boolean(hasFullSystemAccess(user) || user?.role === "admin" || user?.role === "super_admin" || isSuperAdmin(user) || user?.email === "admin@nacif.com" || user?.email === "grc22.09@hotmail.com" || user?.email === "gabrielderezende13@gmail.com");
 
   const [activeIssue, setActiveIssue] = useState(issue);
   const [commentText, setCommentText] = useState("");
