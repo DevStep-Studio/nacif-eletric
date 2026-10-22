@@ -19,7 +19,7 @@ const NOTIFICATIONS_EVENT = "voltai:notifications";
 export const THEME_PRESETS = [
   {
     id: "default",
-    name: "NACIF Solutions",
+    name: "NACIF Energy",
     primaryColor: WEG_BLUE,
     primaryForeground: "#ffffff",
     secondaryColor: WEG_BLUE_SOFT,
@@ -73,8 +73,8 @@ export const THEME_PRESETS = [
 
 export const DEFAULT_BRANDING = {
   brandingVersion: WEG_BRANDING_VERSION,
-  appName: "NACIF Solutions",
-  appSuffix: "Eletric",
+  appName: "NACIF",
+  appSuffix: "Energy",
   primaryColor: THEME_PRESETS[0].primaryColor,
   primaryForeground: THEME_PRESETS[0].primaryForeground,
   secondaryColor: THEME_PRESETS[0].secondaryColor,
@@ -156,6 +156,16 @@ const normalizeBranding = (value) => {
     normalized.compactLogoDataUrl.includes("Logo-Principal")
   ) {
     normalized.compactLogoDataUrl = DEFAULT_COMPACT_LOGO_URL;
+  }
+
+  if (
+    !normalized.authLogoDataUrl ||
+    normalized.authLogoDataUrl === DEFAULT_LOGO_URL ||
+    normalized.authLogoDataUrl.includes("brand-logo-principal") ||
+    normalized.authLogoDataUrl.includes("Logo-Principal") ||
+    normalized.authLogoDataUrl.includes("nacif")
+  ) {
+    normalized.authLogoDataUrl = DEFAULT_LOGO_URL;
   }
 
   return normalized;
