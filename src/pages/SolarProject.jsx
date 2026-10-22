@@ -318,6 +318,7 @@ export default function SolarProject() {
   const [obstacleNudgeStep, setObstacleNudgeStep] = useState(0.5);
   const [searchAddress, setSearchAddress] = useState("");
   const [searchingAddress, setSearchingAddress] = useState(false);
+  const cepDebounceRef = useRef(null);
   const [pendingObstaclePreset, setPendingObstaclePreset] = useState(null);
   const [editingAreaNameId, setEditingAreaNameId] = useState(null);
   const [tempAreaName, setTempAreaName] = useState("");
@@ -1053,27 +1054,89 @@ export default function SolarProject() {
     toast({ title: "Nome atualizado" });
   };
 
-  const handleSearchAddress = async (e) => {
-    e?.preventDefault();
-    if (!searchAddress?.trim()) return;
+  const handleSearchAddress = async (e, overrideQuery) => {
+    e?.preventDefault?.();
+    if (cepDebounceRef.current) {
+      clearTimeout(cepDebounceRef.current);
+    }
+    const query = (typeof overrideQuery === "string" ? overrideQuery : searchAddress)?.trim();
+    if (!query) return;
     setSearchingAddress(true);
     try {
-      const results = await geocodeAddress(searchAddress);
+      const results = await geocodeAddress(query);
       if (results.length > 0) {
         const first = results[0];
-        setConfig((current) => ({
-          ...current,
-          map_center_lat: first.lat,
-          map_center_lng: first.lng,
-          map_zoom: 20,
-        }));
-        setViewportRequest((n) => n + 1);
-        toast({ title: "Endereço localizado", description: first.display_name });
-      } else {
-        toast({ title: "Endereço não encontrado", description: "Tente um termo ou CEP mais específico.", variant: "destructive" });
+        const nextLat = Number(first.lat);
+        const nextLng = Number(first.lng);
+
+        if (Number.isFinite(nextLat) && Number.isFinite(nextLng)) {
+          setConfig((current) => ({
+            ...current,
+            map_center_lat: nextLat,
+            map_center_lng: nextLng,
+            map_zoom: 19,
+          }));
+
+          if (viewMode === "3d") {
+            setViewMode("map");
+          }
+
+          const formattedDisplay = first.road
+            ? [first.road, first.neighborhood, first.city && first.state ? `${first.city} - ${first.state}` : first.city, first.postcode].filter(Boolean).join(", ")
+            : first.display_name;
+          setSearchAddress(formattedDisplay || query);
+
+          setProject((current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              address: first.road
+                ? `${first.road}${first.neighborhood ? ", " + first.neighborhood : ""}`
+                : (first.display_name || current.address),
+              city: first.city || current.city,
+              state: first.state || current.state,
+              zip_code: first.postcode || (query.match(/\d{5}-?\d{3}/)?.[0] || current.zip_code),
+            };
+          });
+
+          setViewportRequest((n) => n + 1);
+          toast({
+            title: "Endereço localizado",
+            description: formattedDisplay || first.display_name,
+          });
+          return;
+        }
       }
+      toast({
+        title: "Endereço ou CEP não encontrado",
+        description: "Não foi possível localizar o endereço ou CEP informado. Tente com outro termo ou número.",
+        variant: "destructive",
+      });
+    } catch (err) {
+      toast({
+        title: "Erro na pesquisa de endereço",
+        description: err.message || "Falha ao consultar CEP ou endereço.",
+        variant: "destructive",
+      });
     } finally {
       setSearchingAddress(false);
+    }
+  };
+
+  const handleSearchInputChange = (e) => {
+    const val = e.target.value;
+    setSearchAddress(val);
+
+    if (cepDebounceRef.current) {
+      clearTimeout(cepDebounceRef.current);
+    }
+
+    // Detecção automática quando o usuário digita ou cola um CEP (8 dígitos)
+    const digitsOnly = val.replace(/\D/g, "");
+    if (digitsOnly.length === 8) {
+      cepDebounceRef.current = setTimeout(() => {
+        handleSearchAddress(null, val);
+      }, 400);
     }
   };
 
@@ -1637,7 +1700,7 @@ export default function SolarProject() {
               <MapPin className="absolute left-2.5 h-3.5 w-3.5 text-[#00d8b8]" />
               <Input
                 value={searchAddress}
-                onChange={(e) => setSearchAddress(e.target.value)}
+                onChange={handleSearchInputChange}
                 placeholder="Buscar endereço ou CEP..."
                 className="h-7 w-48 lg:w-56 xl:w-64 rounded-md border-slate-200 bg-slate-50 pl-8 pr-7 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#00d8b8] focus:bg-white focus:ring-1 focus:ring-[#00d8b8]"
               />
@@ -1645,8 +1708,9 @@ export default function SolarProject() {
                 type="submit"
                 disabled={searchingAddress}
                 className="absolute right-2 text-slate-400 hover:text-slate-700 transition"
+                title="Buscar no mapa"
               >
-                {searchingAddress ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                {searchingAddress ? <Loader2 className="h-3 w-3 animate-spin text-[#00d8b8]" /> : <Search className="h-3 w-3" />}
               </button>
             </form>
 
