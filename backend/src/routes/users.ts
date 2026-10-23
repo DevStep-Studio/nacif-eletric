@@ -6,7 +6,7 @@ import { serializeUser } from "../lib/serializers.js";
 const updateUserSchema = z.object({
   full_name: z.string().trim().min(1).optional(),
   role: z.enum(["admin", "user"]).optional(),
-  plan: z.enum(["gratuito", "profissional", "engenharia"]).optional(),
+  plan: z.enum(["gratuito", "profissional", "engenharia", "estudante", "eletrico", "solar", "completo"]).optional(),
   profession: z.enum(["eletricista", "projetista", "arquiteto"]).optional(),
   profissao: z.enum(["eletricista", "projetista", "arquiteto"]).optional(),
   company: z.string().trim().optional(),

@@ -39,6 +39,7 @@ const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
 
 import { BrandingBoot } from './lib/appPreferences';
 import { hasFullSystemAccess, isSuperAdmin } from './lib/professionalAccess';
+import ModuleAccessGate from './components/subscription/ModuleAccessGate';
 
 // Error & System Pages
 import ServerErrorPage from './pages/system/ServerError';
@@ -213,19 +214,19 @@ const PageLoadingFallback = () => (
           <Route path="/calculator" element={requireFullAccess(<Calculator />)} />
           <Route path="/ai-assistant" element={requireFullAccess(<AIAssistant />)} />
           <Route path="/nbr-library" element={requireFullAccess(<NBRLibrary />)} />
-          <Route path="/panel-generator" element={requireFullAccess(<PanelGenerator />)} />
-          <Route path="/panel" element={requireFullAccess(<PanelGenerator />)} />
+          <Route path="/panel-generator" element={requireFullAccess(<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico"><PanelGenerator /></ModuleAccessGate>)} />
+          <Route path="/panel" element={requireFullAccess(<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico"><PanelGenerator /></ModuleAccessGate>)} />
           <Route path="/budget" element={requireFullAccess(<Budget />)} />
           <Route path="/components-library" element={requireFullAccess(<ComponentsLibrary />)} />
           <Route path="/scanner" element={requireFullAccess(<Scanner />)} />
           <Route path="/phase-balance" element={requireFullAccess(<PhaseBalance />)} />
           <Route path="/diagram" element={requireFullAccess(<Diagram />)} />
           <Route path="/circuit-editor" element={requireFullAccess(<CircuitEditor />)} />
-          <Route path="/unifilar" element={requireFullAccess(<UnifilarDiagram />)} />
+          <Route path="/unifilar" element={requireFullAccess(<ModuleAccessGate moduleKey="unifilar" moduleTitle="Diagrama Unifilar"><UnifilarDiagram /></ModuleAccessGate>)} />
           <Route path="/memorial" element={requireFullAccess(<MemorialDescritivo />)} />
-          <Route path="/planta-ia" element={<PlantaIA />} />
+          <Route path="/planta-ia" element={<ModuleAccessGate moduleKey="plant" moduleTitle="Planta Elétrica"><PlantaIA /></ModuleAccessGate>} />
           <Route path="/materials" element={requireFullAccess(<MaterialsList />)} />
-          <Route path="/solar-project" element={requireFullAccess(<SolarProject />)} />
+          <Route path="/solar-project" element={requireFullAccess(<ModuleAccessGate moduleKey="solar" moduleTitle="Projeto Solar"><SolarProject /></ModuleAccessGate>)} />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/billing" element={<Subscription />} />
           <Route path="/billing/plans" element={<Subscription />} />

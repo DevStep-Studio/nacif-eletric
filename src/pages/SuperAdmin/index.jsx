@@ -24,6 +24,7 @@ import {
   UserPlus,
   Users,
   UserX,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +57,7 @@ import CreateUserModal from "./modals/CreateUserModal";
 import EditUserModal from "./modals/EditUserModal";
 import ResetPasswordModal from "./modals/ResetPasswordModal";
 import RoleModal from "./modals/RoleModal";
+import AdminSubscriptionManager from "@/components/subscription/AdminSubscriptionManager";
 
 const STATUS_BADGES = {
   active: { label: "Ativo", className: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
@@ -390,6 +392,19 @@ export default function SuperAdminPage() {
 
           <button
             type="button"
+            onClick={() => setActiveTab("subscriptions")}
+            className={`pb-3 text-xs font-black transition-all border-b-2 flex items-center gap-2 ${
+              activeTab === "subscriptions"
+                ? "border-[#00d8b8] text-[#0F172A]"
+                : "border-transparent text-[#64748B] hover:text-[#0F172A]"
+            }`}
+          >
+            <CreditCard className="h-4 w-4 text-[#00d8b8]" />
+            Assinaturas & Planos
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab("settings")}
             className={`pb-3 text-xs font-black transition-all border-b-2 flex items-center gap-2 ${
               activeTab === "settings"
@@ -401,6 +416,19 @@ export default function SuperAdminPage() {
             Configurações Administrativas
           </button>
         </div>
+
+        {/* ── ABA: ASSINATURAS E PLANOS ───────────────────────────────── */}
+        {activeTab === "subscriptions" && (
+          <div className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-black text-[#0F172A] mb-1">
+              Controle Comercial e Assinaturas
+            </h2>
+            <p className="text-xs text-[#64748B] mb-6">
+              Gerencie planos de contas ativas, aprove solicitações de estudantes e audite limites.
+            </p>
+            <AdminSubscriptionManager />
+          </div>
+        )}
 
         {/* ── ABA 1: DASHBOARD GERAL ────────────────────────────────────── */}
         {activeTab === "dashboard" && (

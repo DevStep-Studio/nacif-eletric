@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  AlertTriangle,
   BarChart3,
   Copy,
   Edit3,
@@ -21,6 +22,8 @@ import {
   Zap,
 } from "lucide-react";
 import { backend } from "@/api/backendClient";
+import { useAuth } from "@/lib/AuthContext";
+import { getPlanByCode } from "@/lib/subscriptionPlans";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -123,6 +126,7 @@ const getProjectActions = (project) => [
 
 export default function Projects() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -264,6 +268,33 @@ export default function Projects() {
           </Button>
         }
       />
+
+      {(() => {
+        const userPlan = getPlanByCode(user?.plan || "free");
+        const maxProjects = typeof userPlan?.limits?.projects === "number" ? userPlan.limits.projects : null;
+        const isLimitReached = maxProjects !== null && projects.length >= maxProjects;
+
+        if (!isLimitReached) return null;
+
+        return (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50/70 text-amber-900 text-sm">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-amber-950">
+                  Limite de {maxProjects} projetos ativos atingido no plano {userPlan.name}.
+                </p>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Seus {projects.length} projetos existentes continuam 100% seguros, editáveis e exportáveis. Para criar novos projetos, realize upgrade de plano.
+                </p>
+              </div>
+            </div>
+            <Button asChild size="sm" className="bg-[#0f4f49] hover:bg-[#156961] text-white font-bold shrink-0">
+              <Link to="/subscription">Ver planos & Upgrade</Link>
+            </Button>
+          </div>
+        );
+      })()}
 
       <section className="rounded-[12px] border border-[#E4E7EC] bg-white">
         <div className="flex flex-col gap-3 border-b border-[#EAECF0] p-4 lg:flex-row lg:items-center lg:justify-between">

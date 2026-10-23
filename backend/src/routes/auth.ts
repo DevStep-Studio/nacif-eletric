@@ -30,7 +30,7 @@ const updateMeSchema = z.object({
   crea: z.string().trim().optional(),
   phone: z.string().trim().optional(),
   avatar_url: z.string().trim().optional(),
-  plan: z.enum(["gratuito", "profissional", "engenharia"]).optional(),
+  plan: z.enum(["gratuito", "profissional", "engenharia", "estudante", "eletrico", "solar", "completo"]).optional(),
 }).strict();
 
 const resetRequestSchema = z.object({

@@ -26,25 +26,69 @@ const rootDir = path.resolve(__dirname, "..");
 
 console.log("=== INICIANDO AUDITORIA COMERCIAL E OPERACIONAL (NACIF) ===\n");
 
-// 1. Auditoria dos Planos Comerciais e Limites
-console.log("1. Validando catálogo de planos comerciais...");
+// 1. Auditoria dos Novos Planos Comerciais e Limites (Nacif Energy)
+console.log("1. Validando catálogo dos 4 novos planos comerciais...");
 assert(Array.isArray(PLAN_CATALOG), "PLAN_CATALOG deve ser um array");
-assert.equal(PLAN_CATALOG.length, 3, "Devem existir 3 planos definidos (free, professional, engineering)");
+assert.equal(PLAN_CATALOG.length, 4, "Devem existir 4 planos comerciais definidos (estudante, eletrico, solar, completo)");
 
-const freePlan = getPlanByCode("free");
-assert.equal(freePlan.monthlyPrice, 0, "Plano gratuito deve ser R$ 0");
-assert.equal(freePlan.limits[FEATURE_KEYS.PROJECTS], 3, "Plano gratuito deve ter limite de 3 projetos");
+// Plano 1: Nacif Estudante
+const studentPlan = getPlanByCode("estudante");
+assert.equal(studentPlan.code, "estudante", "Código do plano estudante correto");
+assert.equal(studentPlan.monthlyPrice, 99.99, "Plano estudante deve custar R$ 99,99/mês");
+assert.equal(studentPlan.annualPrice, null, "Plano estudante não deve ter valor anual oficialmente configurado");
+assert.equal(studentPlan.limits[FEATURE_KEYS.PROJECTS], 5, "Estudante deve ter limite de 5 projetos ativos");
+assert.equal(studentPlan.limits[FEATURE_KEYS.STORAGE_MB], 1000, "Estudante deve ter 1 GB (1000 MB)");
+assert.equal(studentPlan.limits[FEATURE_KEYS.TEAM_MEMBERS], 1, "Estudante deve permitir 1 membro");
+assert.equal(studentPlan.limits[FEATURE_KEYS.EXPORTS], 20, "Estudante deve permitir 20 exportações mensais");
+assert.equal(studentPlan.limits[FEATURE_KEYS.AI_SCANS], 20, "Estudante deve permitir 20 IAs mensais");
+assert.equal(studentPlan.isAcademic, true, "Plano estudante deve ter flag acadêmica");
 
-const proPlan = getPlanByCode("professional");
-assert.equal(proPlan.monthlyPrice, 49, "Plano profissional deve custar R$ 49/mês");
-assert.equal(proPlan.annualPrice, 470, "Plano profissional anual deve custar R$ 470");
-assert.equal(proPlan.limits[FEATURE_KEYS.PROJECTS], 50, "Plano profissional deve ter limite de 50 projetos");
+// Plano 2: Nacif Elétrico
+const eletricoPlan = getPlanByCode("eletrico");
+assert.equal(eletricoPlan.code, "eletrico", "Código do plano elétrico correto");
+assert.equal(eletricoPlan.monthlyPrice, 149.90, "Plano elétrico mensal deve ser R$ 149,90");
+assert.equal(eletricoPlan.annualPrice, 1259.16, "Plano elétrico anual deve ser R$ 1.259,16 (30% desconto)");
+assert.equal(eletricoPlan.limits[FEATURE_KEYS.PROJECTS], 30, "Elétrico deve ter limite de 30 projetos ativos");
+assert.equal(eletricoPlan.limits[FEATURE_KEYS.STORAGE_MB], 5000, "Elétrico deve ter 5 GB (5000 MB)");
+assert.equal(eletricoPlan.limits[FEATURE_KEYS.TEAM_MEMBERS], 3, "Elétrico deve permitir 3 usuários");
+assert.equal(eletricoPlan.limits[FEATURE_KEYS.EXPORTS], 100, "Elétrico deve permitir 100 exportações");
+assert.equal(eletricoPlan.limits[FEATURE_KEYS.AI_SCANS], 100, "Elétrico deve permitir 100 IAs");
 
-const engPlan = getPlanByCode("engineering");
-assert.equal(engPlan.monthlyPrice, 99, "Plano engenharia deve custar R$ 99/mês");
-assert.equal(engPlan.limits[FEATURE_KEYS.PROJECTS], Number.POSITIVE_INFINITY, "Plano engenharia deve ter projetos ilimitados");
+// Plano 3: Nacif Solar
+const solarPlan = getPlanByCode("solar");
+assert.equal(solarPlan.code, "solar", "Código do plano solar correto");
+assert.equal(solarPlan.monthlyPrice, 149.90, "Plano solar mensal deve ser R$ 149,90");
+assert.equal(solarPlan.annualPrice, 1259.16, "Plano solar anual deve ser R$ 1.259,16 (30% desconto)");
+assert.equal(solarPlan.limits[FEATURE_KEYS.PROJECTS], 30, "Solar deve ter limite de 30 projetos ativos");
+assert.equal(solarPlan.limits[FEATURE_KEYS.STORAGE_MB], 5000, "Solar deve ter 5 GB (5000 MB)");
+assert.equal(solarPlan.limits[FEATURE_KEYS.TEAM_MEMBERS], 3, "Solar deve permitir 3 usuários");
+assert.equal(solarPlan.limits[FEATURE_KEYS.EXPORTS], 100, "Solar deve permitir 100 exportações");
+assert.equal(solarPlan.limits[FEATURE_KEYS.AI_SCANS], 100, "Solar deve permitir 100 IAs");
 
-console.log("  [OK] Planos comerciais e limites validados com sucesso.");
+// Plano 4: Nacif Completo
+const completoPlan = getPlanByCode("completo");
+assert.equal(completoPlan.code, "completo", "Código do plano completo correto");
+assert.equal(completoPlan.monthlyPrice, 210.00, "Plano completo mensal deve ser R$ 210,00");
+assert.equal(completoPlan.annualPrice, 1764.00, "Plano completo anual deve ser R$ 1.764,00 (30% desconto)");
+assert.equal(completoPlan.limits[FEATURE_KEYS.PROJECTS], Number.POSITIVE_INFINITY, "Completo deve ter projetos ilimitados");
+assert.equal(completoPlan.limits[FEATURE_KEYS.STORAGE_MB], 50000, "Completo deve ter 50 GB (50000 MB)");
+assert.equal(completoPlan.limits[FEATURE_KEYS.TEAM_MEMBERS], 15, "Completo deve permitir 15 membros");
+assert.equal(completoPlan.limits[FEATURE_KEYS.EXPORTS], Number.POSITIVE_INFINITY, "Completo deve ter exportações ilimitadas");
+assert.equal(completoPlan.limits[FEATURE_KEYS.AI_SCANS], 500, "Completo deve permitir 500 IAs");
+assert.equal(completoPlan.highlightBadge, "Mais completo", "Completo deve ter badge de destaque 'Mais completo'");
+
+// Compatibilidade com planos legados
+const legacyFree = getPlanByCode("free");
+assert.equal(legacyFree.code, "free", "Plano legado gratuito deve ser resolvido");
+assert.equal(legacyFree.limits[FEATURE_KEYS.PROJECTS], 3, "Plano legado gratuito preserva 3 projetos");
+
+const legacyPro = getPlanByCode("professional");
+assert.equal(legacyPro.code, "professional", "Plano legado profissional resolvido");
+
+const legacyEng = getPlanByCode("engineering");
+assert.equal(legacyEng.code, "engineering", "Plano legado engenharia resolvido");
+
+console.log("  [OK] Os 4 novos planos comerciais e compatibilidade com legados validados com sucesso.");
 
 // 2. Auditoria da Política de Retenção de Dados e Guarda de Projetos
 console.log("\n2. Validando política de retenção de dados e cancelamento...");
@@ -63,9 +107,24 @@ const blockedCheck1 = checkProjectCreationAllowed(freeUser, 3);
 assert.equal(blockedCheck1.allowed, false, "Usuário free com 3 projetos não deve poder criar o 4º");
 assert(blockedCheck1.reason.includes("Limite de 3 projetos"), "Motivo de bloqueio deve ser claro");
 
+const studentUser = { subscription: { plan_code: "estudante" } };
+assert.equal(checkProjectCreationAllowed(studentUser, 4).allowed, true, "Estudante com 4 projetos pode criar o 5º");
+assert.equal(checkProjectCreationAllowed(studentUser, 5).allowed, false, "Estudante com 5 projetos não pode criar o 6º");
+
+const eletricoUser = { subscription: { plan_code: "eletrico" } };
+assert.equal(checkProjectCreationAllowed(eletricoUser, 29).allowed, true, "Elétrico com 29 projetos pode criar o 30º");
+assert.equal(checkProjectCreationAllowed(eletricoUser, 30).allowed, false, "Elétrico com 30 projetos não pode criar o 31º");
+assert.equal(checkProjectCreationAllowed(eletricoUser, 5, "Projeto Solar").allowed, false, "Elétrico não pode criar projeto solar");
+
+const solarUser = { subscription: { plan_code: "solar" } };
+assert.equal(checkProjectCreationAllowed(solarUser, 5, "Instalações Elétricas Prediais").allowed, false, "Solar não pode criar planta predial geral");
+
 const engUser = { subscription: { plan_code: "engineering" } };
 const allowedCheck2 = checkProjectCreationAllowed(engUser, 150);
 assert.equal(allowedCheck2.allowed, true, "Usuário engenharia deve ter criação ilimitada de projetos");
+
+const completoUser = { subscription: { plan_code: "completo" } };
+assert.equal(checkProjectCreationAllowed(completoUser, 500).allowed, true, "Usuário completo deve ter criação ilimitada");
 
 console.log("  [OK] Preservação de dados e controle de limites validados com sucesso.");
 

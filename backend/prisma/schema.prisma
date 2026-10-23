@@ -17,6 +17,10 @@ enum UserPlan {
   gratuito
   profissional
   engenharia
+  estudante
+  eletrico
+  solar
+  completo
 }
 
 enum ProjectStatus {

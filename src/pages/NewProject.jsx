@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Plus, Sun, Zap } from "lucide-react";
+import { AlertCircle, ArrowLeft, Plus, Sun, Zap } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import SolarProjectWizard from "@/components/solar/wizard/SolarProjectWizard";
 
@@ -145,8 +145,18 @@ export default function NewProject() {
       ) : (
         <div className="mx-auto w-full max-w-2xl space-y-4 p-6 rounded-3xl bg-white border border-slate-200 shadow-sm">
           {errorMsg && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-600">
-              {errorMsg}
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs font-bold text-red-700 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+                <span>{errorMsg}</span>
+              </div>
+              {(errorMsg.toLowerCase().includes("upgrade") || errorMsg.toLowerCase().includes("plano")) && (
+                <div className="pt-1">
+                  <Button asChild size="sm" className="h-8 rounded-[6px] bg-[#00d8b8] text-[#0f172a] hover:bg-[#00bda1] font-extrabold text-xs">
+                    <Link to="/subscription">Ver planos disponíveis</Link>
+                  </Button>
+                </div>
+              )}
             </div>
           )}
           <div className="space-y-1.5">

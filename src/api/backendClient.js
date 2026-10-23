@@ -27,6 +27,13 @@ import {
   probeSystemHealth,
   getEnvironmentMetadata,
 } from "../lib/infrastructureHealth.js";
+import {
+  checkProjectCreationAllowed,
+  getPlanByCode,
+  normalizeSubscription,
+  COMMERCIAL_PLANS,
+  PLAN_COMPARISON_ROWS,
+} from "../lib/subscriptionPlans.js";
 
 const rawApiBaseUrl = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.trim() : "");
 const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
@@ -968,6 +975,17 @@ const projectEntity = {
   async create(data) {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
+      const allProjects = readLocalProjects();
+      const activeProjectsCount = allProjects.filter(
+        (p) => (!p.owner_id || p.owner_id === currentUser.id) && p.status !== "Arquivado"
+      ).length;
+
+      // Validação real de limite de projetos e restrição de tipo por plano
+      const creationCheck = checkProjectCreationAllowed(currentUser, activeProjectsCount, data?.project_type);
+      if (!creationCheck.allowed) {
+        throw createError(creationCheck.reason || "Limite de projetos ativos atingido para o plano contratado.", 403);
+      }
+
       const timestamp = nowIso();
       const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
       const name = sanitizeTextInput(String(safeData?.name || "").trim() || "Novo Projeto Elétrico");
@@ -2637,13 +2655,190 @@ const subscriptionEntity = {
   async getStatus() {
     if (isLocalAuthMode) {
       const user = requireLocalUser();
+      const sub = normalizeSubscription(user);
       return {
-        plan: user.plan || "free",
-        status: user.subscription_status || "active",
+        plan: sub.planCode,
+        status: sub.status,
+        cycle: sub.cycle,
+        price: sub.price,
+        startDate: sub.startDate,
+        renewalDate: sub.renewalDate,
         validUntil: user.subscription_valid_until || null,
+        academicStatus: sub.academicStatus,
+        academicInstitution: sub.academicInstitution,
+        academicCourse: sub.academicCourse,
       };
     }
     return request("/api/subscriptions/status");
+  },
+
+  async changePlan({ planCode, cycle = "monthly" }) {
+    const targetPlan = getPlanByCode(planCode);
+    if (!targetPlan) {
+      throw createError(`Plano "${planCode}" não encontrado.`, 404);
+    }
+
+    if (isLocalAuthMode) {
+      const user = requireLocalUser();
+      const previousPlan = user.plan || "free";
+      const now = nowIso();
+      const oneMonthOrYear = new Date();
+      if (cycle === "annual") {
+        oneMonthOrYear.setFullYear(oneMonthOrYear.getFullYear() + 1);
+      } else {
+        oneMonthOrYear.setMonth(oneMonthOrYear.getMonth() + 1);
+      }
+
+      const price = cycle === "annual" && targetPlan.annualPrice !== null ? targetPlan.annualPrice : targetPlan.monthlyPrice;
+
+      const updated = await auth.updateMe({
+        plan: targetPlan.code,
+        subscription_status: "active",
+        subscription_cycle: cycle,
+        subscription_price: price,
+        subscription_start_date: user.subscription_start_date || now,
+        subscription_valid_until: oneMonthOrYear.toISOString(),
+      });
+
+      recordAuditEvent({
+        actor: user,
+        action: "PLAN_CHANGED",
+        targetType: "subscription",
+        targetId: user.id,
+        details: `Plano alterado de "${previousPlan}" para "${targetPlan.name}" (${cycle})`,
+        metadata: { previousPlan, newPlan: targetPlan.code, cycle, price },
+      });
+
+      return updated;
+    }
+
+    return request("/api/subscriptions/change-plan", {
+      method: "POST",
+      body: { planCode, cycle },
+    });
+  },
+
+  async submitAcademicVerification({ institution, course, documentName, documentUrl }) {
+    if (isLocalAuthMode) {
+      const user = requireLocalUser();
+      const now = nowIso();
+      const updated = await auth.updateMe({
+        academic_status: "pending_review",
+        academic_institution: institution,
+        academic_course: course,
+        academic_document_name: documentName,
+        academic_document_url: documentUrl,
+        academic_submitted_at: now,
+      });
+
+      recordAuditEvent({
+        actor: user,
+        action: "ACADEMIC_VERIFICATION_SUBMITTED",
+        targetType: "subscription",
+        targetId: user.id,
+        details: `Comprovante de vínculo acadêmico enviado por ${user.email} (${institution} - ${course})`,
+      });
+
+      return updated;
+    }
+
+    return request("/api/subscriptions/academic-verify", {
+      method: "POST",
+      body: { institution, course, documentName, documentUrl },
+    });
+  },
+
+  async listAllUsers() {
+    if (isLocalAuthMode) {
+      const currentUser = requireLocalUser();
+      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
+        throw createError("Acesso restrito a administradores.", 403);
+      }
+      return cloneLocal(readLocalUsers().filter((u) => !u.is_deleted));
+    }
+    return request("/api/subscriptions/admin/users");
+  },
+
+  async adminUpdateUserPlan(userId, { plan, cycle = "monthly", status = "active" }) {
+    if (isLocalAuthMode) {
+      const currentAdmin = requireLocalUser();
+      if (!isSuperAdmin(currentAdmin) && currentAdmin.role !== "admin") {
+        throw createError("Acesso restrito a administradores.", 403);
+      }
+
+      const users = readLocalUsers();
+      const target = users.find((u) => u.id === userId);
+      if (!target) throw createError("Usuário não encontrado.", 404);
+
+      const targetPlan = getPlanByCode(plan);
+      const updatedUser = {
+        ...target,
+        plan: targetPlan.code,
+        subscription_status: status,
+        subscription_cycle: cycle,
+        updated_date: nowIso(),
+      };
+
+      writeLocalUsers(users.map((u) => (u.id === userId ? updatedUser : u)));
+
+      recordAuditEvent({
+        actor: currentAdmin,
+        action: "ADMIN_PLAN_OVERRIDE",
+        targetType: "user",
+        targetId: userId,
+        details: `Administrador alterou plano do usuário ${target.email} para ${targetPlan.name}`,
+      });
+
+      return publicUser(updatedUser);
+    }
+
+    return request(`/api/subscriptions/admin/users/${userId}/plan`, {
+      method: "PATCH",
+      body: { plan, cycle, status },
+    });
+  },
+
+  async adminDecideAcademic(userId, decision) {
+    if (isLocalAuthMode) {
+      const currentAdmin = requireLocalUser();
+      if (!isSuperAdmin(currentAdmin) && currentAdmin.role !== "admin") {
+        throw createError("Acesso restrito a administradores.", 403);
+      }
+
+      const users = readLocalUsers();
+      const target = users.find((u) => u.id === userId);
+      if (!target) throw createError("Usuário não encontrado.", 404);
+
+      const isApprove = decision === "approve";
+      const validUntil = new Date();
+      validUntil.setMonth(validUntil.getMonth() + 6);
+
+      const updatedUser = {
+        ...target,
+        academic_status: isApprove ? "approved" : "rejected",
+        academic_valid_until: isApprove ? validUntil.toISOString() : null,
+        academic_reviewed_at: nowIso(),
+        academic_reviewed_by: currentAdmin.email,
+        updated_date: nowIso(),
+      };
+
+      writeLocalUsers(users.map((u) => (u.id === userId ? updatedUser : u)));
+
+      recordAuditEvent({
+        actor: currentAdmin,
+        action: isApprove ? "ACADEMIC_VERIFICATION_APPROVED" : "ACADEMIC_VERIFICATION_REJECTED",
+        targetType: "user",
+        targetId: userId,
+        details: `Vínculo acadêmico de ${target.email} ${isApprove ? "APROVADO (6 meses)" : "RECUSADO"}`,
+      });
+
+      return publicUser(updatedUser);
+    }
+
+    return request(`/api/subscriptions/admin/academic/${userId}/decide`, {
+      method: "POST",
+      body: { decision },
+    });
   },
 };
 

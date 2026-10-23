@@ -232,6 +232,54 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
 
   app.post("/api/projects", { preHandler: [app.authenticate] }, async (request) => {
     const data = projectPayloadSchema.parse(request.body);
+
+    // Validação centralizada de limite de projetos e restrição de escopo por plano
+    const userPlan = String(request.authUser.plan || "gratuito").toLowerCase();
+    const activeProjectsCount = await prisma.project.count({
+      where: {
+        createdById: request.authUser.id,
+        status: { not: "Aprovado" },
+      },
+    });
+
+    const planLimits: Record<string, number> = {
+      gratuito: 3,
+      free: 3,
+      estudante: 5,
+      eletrico: 30,
+      profissional: 50,
+      solar: 30,
+      completo: Number.POSITIVE_INFINITY,
+      engenharia: Number.POSITIVE_INFINITY,
+    };
+
+    const limit = planLimits[userPlan] ?? 3;
+    if (activeProjectsCount >= limit) {
+      throw new AppError(
+        `Limite de ${limit} projetos ativos atingido para o seu plano. Faça upgrade para continuar criando novos projetos.`,
+        403,
+      );
+    }
+
+    const projectTypeNormalized = String(data.project_type || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    if (projectTypeNormalized.includes("solar") && userPlan === "eletrico") {
+      throw new AppError(
+        "Projetos solares não estão incluídos no plano Nacif Elétrico. Faça upgrade para o Nacif Solar ou Nacif Completo.",
+        403,
+      );
+    }
+
+    if ((projectTypeNormalized.includes("predial") || projectTypeNormalized.includes("instalac") || projectTypeNormalized.includes("eletric")) && userPlan === "solar") {
+      throw new AppError(
+        "Plantas elétricas prediais gerais não estão incluídas no plano Nacif Solar. Faça upgrade para o Nacif Elétrico ou Nacif Completo.",
+        403,
+      );
+    }
+
     const project = await prisma.project.create({
       data: {
         name: data.name,

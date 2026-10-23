@@ -33,6 +33,7 @@ import {
   useNotifications,
 } from "@/lib/appPreferences";
 import { PROFESSIONS, professionLabel, isSuperAdmin } from "@/lib/professionalAccess";
+import AdminSubscriptionManager from "@/components/subscription/AdminSubscriptionManager";
 
 const profileInitials = (user) => {
   const source = user?.full_name || user?.email || "Admin";
@@ -247,11 +248,25 @@ export default function AdminPanel() {
 
       <Tabs defaultValue="appearance" className="space-y-5">
         <TabsList className="h-auto flex-wrap justify-start rounded-[14px] border border-[#CDEFE8] bg-white p-1">
+          <TabsTrigger value="subscriptions" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Assinaturas & Planos</TabsTrigger>
           <TabsTrigger value="appearance" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Aparência</TabsTrigger>
           <TabsTrigger value="notifications" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Notificações</TabsTrigger>
           <TabsTrigger value="users" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Usuários</TabsTrigger>
           <TabsTrigger value="projects" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Projetos</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="subscriptions" className="space-y-5">
+          <div className="rounded-[22px] border border-[#CDEFE8] bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+            <h2 className="flex items-center gap-2 text-xl font-extrabold text-[#0f1728] mb-1">
+              <CreditCard className="h-5 w-5 text-primary" />
+              Gestão Comercial de Assinaturas & Planos
+            </h2>
+            <p className="text-sm font-medium text-[#5f6877] mb-6">
+              Administração de planos ativos, aprovação de vínculo acadêmico para o plano Estudante e consulta de receita.
+            </p>
+            <AdminSubscriptionManager />
+          </div>
+        </TabsContent>
 
         <TabsContent value="appearance" className="space-y-5">
           <div className="grid gap-5 xl:grid-cols-[1.45fr_0.95fr]">
@@ -695,11 +710,15 @@ export default function AdminPanel() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Select value={u.plan || "gratuito"} onValueChange={(value) => updatePlan(u.id, value)}>
-                  <SelectTrigger className="h-10 w-40 rounded-[10px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-10 w-44 rounded-[10px] text-xs font-bold"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="gratuito">Gratuito</SelectItem>
-                    <SelectItem value="profissional">Profissional</SelectItem>
-                    <SelectItem value="engenharia">Engenharia</SelectItem>
+                    <SelectItem value="estudante">Nacif Estudante</SelectItem>
+                    <SelectItem value="eletrico">Nacif Elétrico</SelectItem>
+                    <SelectItem value="solar">Nacif Solar</SelectItem>
+                    <SelectItem value="completo">Nacif Completo</SelectItem>
+                    <SelectItem value="gratuito">Gratuito (Legado)</SelectItem>
+                    <SelectItem value="profissional">Profissional (Legado)</SelectItem>
+                    <SelectItem value="engenharia">Engenharia (Legado)</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select

@@ -17,6 +17,7 @@ import { registerAiRoutes } from "./routes/ai.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerAnalysisRoutes } from "./routes/analysis.js";
+import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
 import { isAppError } from "./lib/errors.js";
 import { ensureUploadDir } from "./lib/uploads.js";
 
@@ -106,6 +107,7 @@ export const buildApp = async () => {
   await registerAnalysisRoutes(app);
   await registerSettingsRoutes(app);
   await registerCatalogRoutes(app);
+  await registerSubscriptionRoutes(app);
 
   app.setErrorHandler((error, _request, reply) => {
     const typedError = error as { issues?: Array<{ message?: string }> };
