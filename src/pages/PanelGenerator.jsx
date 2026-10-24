@@ -383,8 +383,10 @@ const normalizePanelBoards = (project) => {
   // Migração: quadros "QD Solar CA" (type: solar_ac / solar / nome similar) são
   // incorporados ao quadro principal — suas trilhas viram rail_solar_1/rail_solar_2
   // dentro dele, e o quadro separado deixa de existir na lista.
+  // Quadros do modelo QGBT são filtrados do gerador de quadros elétricos de distribuição.
   const legacySolarBoard = rawBoards.find(isDedicatedSolarBoard);
-  const otherBoards = rawBoards.filter((board) => !isDedicatedSolarBoard(board));
+  const isQgbtBoard = (board) => board?.type === "qgbt" || String(board?.id || "").startsWith("qgbt") || String(board?.name || "").toUpperCase().includes("QGBT");
+  const otherBoards = rawBoards.filter((board) => !isDedicatedSolarBoard(board) && !isQgbtBoard(board));
   const boardsToNormalize = otherBoards.length > 0 ? otherBoards : [{
     id: legacySolarBoard?.id || "board_distribution_1",
     name: "QD-01 Principal",
@@ -396,8 +398,8 @@ const normalizePanelBoards = (project) => {
 
   return boardsToNormalize.map((board, index) => {
     const type = board.type || (index === 0 ? "principal" : "secundario");
-    const isPrincipal = index === 0 && type !== "qgbt";
-    const parsedLayout = parsePanelLayout(board.layout, project, { forceDistribution: type !== "qgbt" });
+    const isPrincipal = index === 0;
+    const parsedLayout = parsePanelLayout(board.layout, project, { forceDistribution: true });
     const supply = board.supply_type || project?.supply_type || "Monofásico";
 
     let layout = parsedLayout;
@@ -422,7 +424,7 @@ const normalizePanelBoards = (project) => {
 
     const rawBoard = {
       id: board.id || `board_${index + 1}`,
-      name: (board.name && !isDedicatedSolarBoard(board)) ? board.name : (index === 0 ? "QD-01 Principal" : `QD-${String(index + 1).padStart(2, "0")}`),
+      name: (board.name && !isDedicatedSolarBoard(board) && !isQgbtBoard(board)) ? board.name : (index === 0 ? "QD-01 Principal" : `QD-${String(index + 1).padStart(2, "0")}`),
       location: board.location || (index === 0 ? "Entrada / Distribuição" : "Distribuição"),
       type: isDedicatedSolarBoard(board) ? "principal" : type,
       supply_type: supply,
@@ -773,153 +775,6 @@ const getBoardGeneralBreaker = (board) => {
     poles: Number(general?.poles) || (board?.supply_type === "Trifásico" ? 3 : board?.supply_type === "Bifásico" ? 2 : 2),
     curve: general?.curve || "C",
     phase: general?.phase || (board?.supply_type === "Trifásico" ? "ABC" : board?.supply_type === "Bifásico" ? "AB" : "A"),
-  };
-};
-
-const fillRailReserve = (components, railId) => {
-  const usedPoles = components.reduce((sum, component) => sum + (Number(component.poles) || 0), 0);
-  if (usedPoles >= ROW_MAX) return components;
-  return [
-    ...components,
-    {
-      id: `spacer_qgbt_${railId}`,
-      type: "spacer",
-      poles: ROW_MAX - usedPoles,
-      label: "RESERVA TÉCNICA",
-    },
-  ];
-};
-
-const splitQgbtRails = (components) => {
-  const rails = [];
-  let current = [];
-  let used = 0;
-
-  components.forEach((component) => {
-    const poles = Number(component.poles) || 1;
-    if (current.length > 0 && used + poles > ROW_MAX) {
-      rails.push(current);
-      current = [];
-      used = 0;
-    }
-    current.push(component);
-    used += poles;
-  });
-
-  if (current.length > 0) rails.push(current);
-
-  return rails.map((railComponents, index) => ({
-    id: `rail_${index + 1}`,
-    name: index === 0 ? "Trilho DIN Superior (QGBT)" : `Trilho DIN QGBT ${index + 1}`,
-    components: fillRailReserve(railComponents, index + 1),
-  }));
-};
-
-const buildQgbtLayout = (project, sourceBoards) => {
-  const supply = project?.supply_type || "Trifásico";
-  const dpsCount = supply === "Trifásico" ? 3 : supply === "Bifásico" ? 2 : 1;
-  const dpsComponents = Array.from({ length: dpsCount }).map((_, index) => ({
-    id: `qgbt_dps_${index}`,
-    type: "dps",
-    label: `DPS F${String.fromCharCode(65 + index)}`,
-    poles: 1,
-    phase: String.fromCharCode(65 + index),
-    status: "ON",
-    dpsStatus: "OK",
-  }));
-
-  const feederComponents = sourceBoards.map((board, index) => {
-    const breaker = getBoardGeneralBreaker(board);
-    const boardName = board.name || `QD-${String(index + 1).padStart(2, "0")}`;
-    return {
-      id: `qgbt_feed_${board.id || index}`,
-      type: "breaker",
-      label: boardName,
-      current: breaker.current,
-      curve: breaker.curve,
-      poles: breaker.poles,
-      phase: breaker.phase,
-      status: "ON",
-      isQgbtFeeder: true,
-      sourceBoardId: board.id,
-      sourceBoardName: boardName,
-    };
-  });
-
-  const rails = splitQgbtRails([...dpsComponents, ...feederComponents]);
-  const wires = [
-    {
-      id: "qgbt_ground_feed",
-      color: "green",
-      gauge: "10mm²",
-      source: "terminal_left_top:0",
-      target: "busbar_ground:0",
-      label: "10 mm²",
-    },
-  ];
-
-  dpsComponents.forEach((dps, index) => {
-    wires.push({
-      id: `qgbt_phase_to_dps_${index}`,
-      color: "red",
-      gauge: "6mm²",
-      source: "terminal_left_top:1",
-      target: `comp:${dps.id}:top:0`,
-      label: "6 mm²",
-    });
-    wires.push({
-      id: `qgbt_dps_ground_${index}`,
-      color: "green",
-      gauge: "6mm²",
-      source: `comp:${dps.id}:bottom:0`,
-      target: `busbar_ground:${index + 2}`,
-      label: "6 mm²",
-    });
-  });
-
-  feederComponents.forEach((feeder, feederIndex) => {
-    const board = sourceBoards[feederIndex];
-    const boardSupply = board?.supply_type || project?.supply_type || "Monofásico";
-    Array.from({ length: feeder.poles }).forEach((_, poleIndex) => {
-      const isMonophaseNeutral = boardSupply === "Monofásico" && poleIndex === feeder.poles - 1;
-      const wireColor = isMonophaseNeutral ? "blue" : phaseWireColor(poleIndex);
-      const gauge = feeder.current >= 63 ? "16mm²" : feeder.current >= 40 ? "10mm²" : "6mm²";
-      const label = feeder.current >= 63 ? "16 mm²" : feeder.current >= 40 ? "10 mm²" : "6 mm²";
-      wires.push({
-        id: `qgbt_feed_in_${feederIndex}_${poleIndex}`,
-        color: wireColor,
-        gauge,
-        source: isMonophaseNeutral ? "busbar_neutral:0" : "terminal_left_top:1",
-        target: `comp:${feeder.id}:top:${poleIndex}`,
-        label,
-      });
-      wires.push({
-        id: `qgbt_feed_out_${feederIndex}_${poleIndex}`,
-        color: wireColor,
-        gauge,
-        source: `comp:${feeder.id}:bottom:${poleIndex}`,
-        target: `load_out:${feeder.id}:${isMonophaseNeutral ? "neutral" : poleIndex}`,
-        label,
-      });
-    });
-  });
-
-  return { rails, wires, infrastructure: Array.isArray(project?.panel_layout?.infrastructure) ? project.panel_layout.infrastructure : [] };
-};
-
-const buildQgbtBoard = (project, boards) => {
-  const sourceBoards = boards.filter((board) => board.type !== "qgbt");
-  const layout = buildQgbtLayout(project, sourceBoards);
-
-  return {
-    id: `qgbt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    name: "QGBT - Quadro Geral",
-    location: "Entrada geral",
-    type: "qgbt",
-    supply_type: project?.supply_type || "Trifásico",
-    source_board_count: sourceBoards.length,
-    feeder_breaker_count: sourceBoards.length,
-    layout,
   };
 };
 
@@ -1662,11 +1517,9 @@ export default function PanelGenerator() {
   const visibleWires = useMemo(() => {
     return (wires || []).filter((w) => !w.deleted && isCableVisible(w) && !w.visual_only && w.source && w.target && !w.id.includes("-ground-") && !w.id.includes("-neutral-"));
   }, [wires]);
-  const qgbtSourceCount = panelBoards.filter((board) => board.type !== "qgbt").length;
-
   const autoConnectPreview = useMemo(() => {
     if (!project) return { phaseCount: 0, neutralCount: 0, groundCount: 0, total: 0, wires: [] };
-    const simulatedWires = generateAllPanelWires(project, { forceDistribution: activeBoard?.type !== "qgbt" });
+    const simulatedWires = generateAllPanelWires(project, { forceDistribution: true });
     const phaseCount = simulatedWires.filter((w) => w.conductorType === "phase" || (!w.color?.includes("green") && !w.color?.includes("blue"))).length;
     const neutralCount = simulatedWires.filter((w) => w.conductorType === "neutral" || w.color?.includes("blue")).length;
     const groundCount = simulatedWires.filter((w) => w.conductorType === "ground" || w.color?.includes("green")).length;
@@ -1677,7 +1530,7 @@ export default function PanelGenerator() {
       total: simulatedWires.length,
       wires: simulatedWires,
     };
-  }, [project, activeBoard?.type]);
+  }, [project]);
 
   const handleClearWiresConfirm = () => {
     updateWires([], { immediate: true });
@@ -1696,7 +1549,7 @@ export default function PanelGenerator() {
   const handleAutoConnectConfirm = () => {
     const nextWires = autoConnectPreview.wires.length > 0
       ? autoConnectPreview.wires
-      : generateAllPanelWires(project, { forceDistribution: activeBoard?.type !== "qgbt" });
+      : generateAllPanelWires(project, { forceDistribution: true });
     updateWires(nextWires, { immediate: true });
     setShowAutoConnectModal(false);
     toast({
@@ -2681,7 +2534,7 @@ export default function PanelGenerator() {
       board.id === activeBoardId ? { ...board, layout: currentLayout } : board
     ));
     const emptyLayout = { rails: [{ id: "rail_1", name: "Trilho DIN 1", components: [] }], wires: [], infrastructure: [] };
-    const nextBoard = createPanelBoard(project, savedBoards.filter((board) => board.type !== "qgbt").length + 1, emptyLayout);
+    const nextBoard = createPanelBoard(project, savedBoards.length + 1, emptyLayout);
     const nextBoards = [...savedBoards, nextBoard];
     setPanelBoards(nextBoards);
     setActiveBoardId(nextBoard.id);
@@ -2694,30 +2547,6 @@ export default function PanelGenerator() {
     setSelectedAnnotationId("");
     setSelectedTextWireId("");
     persistPanelBoards(nextBoards, nextBoard.id);
-  };
-
-  const handleGenerateQgbt = () => {
-    if (!project || panelBoards.length === 0) return;
-    const currentLayout = { rails, wires, infrastructure };
-    const savedBoards = panelBoards.map((board) => (
-      board.id === activeBoardId ? { ...board, layout: currentLayout } : board
-    ));
-    const qgbtBoard = buildQgbtBoard(project, savedBoards);
-    const nextBoards = [
-      qgbtBoard,
-      ...savedBoards.filter((board) => board.type !== "qgbt"),
-    ];
-    setPanelBoards(nextBoards);
-    setActiveBoardId(qgbtBoard.id);
-    setRails(qgbtBoard.layout.rails || []);
-    setWires(qgbtBoard.layout.wires || []);
-    setInfrastructure(qgbtBoard.layout.infrastructure || []);
-    setSelectedComponentId("");
-    setSelectedWireId("");
-    setSelectedInfrastructureId("");
-    setSelectedAnnotationId("");
-    setSelectedTextWireId("");
-    persistPanelBoards(nextBoards, qgbtBoard.id);
   };
 
   const handleDeleteActiveBoard = () => {
@@ -2752,7 +2581,7 @@ export default function PanelGenerator() {
     if (!project || !activeBoard) return;
     const nextSupply = value;
     const nextProject = { ...project, supply_type: nextSupply };
-    const rawLayout = generateDefaultPanelLayout(nextProject, { forceDistribution: activeBoard?.type !== "qgbt" });
+    const rawLayout = generateDefaultPanelLayout(nextProject, { forceDistribution: true });
     const regenerated = isPrincipalBoard
       ? mergeSolarLayoutIntoPrincipal(nextProject, { ...rawLayout, infrastructure }, { forceRegenerate: true })
       : { ...rawLayout, infrastructure };
@@ -5933,7 +5762,7 @@ export default function PanelGenerator() {
 
   const handleResetLayout = () => {
     if (!window.confirm("Deseja realmente redefinir o quadro elétrico? Isso apagará todas as customizações.")) return;
-    const rawLayout = generateDefaultPanelLayout(project, { forceDistribution: activeBoard?.type !== "qgbt" });
+    const rawLayout = generateDefaultPanelLayout(project, { forceDistribution: true });
     const def = isPrincipalBoard ? mergeSolarLayoutIntoPrincipal(project, rawLayout, { forceRegenerate: true }) : rawLayout;
     setRails(def.rails || []);
     setWires(def.wires || []);
@@ -9783,16 +9612,6 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
             </div>
 
             <div className="flex shrink-0 flex-wrap justify-end gap-2">
-              <Button
-                size="sm"
-                className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-extrabold text-white shadow-sm hover:bg-emerald-700"
-                onClick={handleGenerateQgbt}
-                disabled={qgbtSourceCount === 0}
-                title="Gerar quadro geral com o disjuntor principal de cada quadro"
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Gerar QGBT
-              </Button>
               <Button variant="outline" size="sm" className="h-9 rounded-lg px-3 text-xs font-extrabold" onClick={handleAddBoard}>
                 <Plus className="h-3.5 w-3.5" />
                 Novo
@@ -9831,11 +9650,6 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       <span className="min-w-0">
                         <span className="flex min-w-0 items-center gap-2">
                           <span className="truncate text-sm font-extrabold">{board.name}</span>
-                          {board.type === "qgbt" && (
-                            <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-700">
-                              QGBT
-                            </span>
-                          )}
                         </span>
                         <span className="mt-0.5 block truncate text-[10px] font-bold text-slate-500">
                           {railsCount} trilhos · {usedModules} DIN
@@ -12613,22 +12427,6 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                           </Button>
                         </div>
 	                  </div>
-	                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-	                    <div className="mb-3">
-	                      <h4 className="text-xs font-black uppercase tracking-wide text-emerald-800">QGBT - Quadro Geral</h4>
-                      <p className="mt-1 text-[10px] font-semibold leading-normal text-emerald-700">
-                        Gera um quadro geral usando o disjuntor principal de cada quadro cadastrado como saída.
-                      </p>
-                    </div>
-                    <Button
-                      className="h-9 w-full rounded-xl bg-emerald-600 text-xs font-extrabold text-white hover:bg-emerald-700"
-                      onClick={handleGenerateQgbt}
-                      disabled={qgbtSourceCount === 0}
-                    >
-                      <LayoutGrid className="h-3.5 w-3.5" />
-                      Gerar / Atualizar QGBT
-                    </Button>
-                  </div>
                   <Button
                     variant="outline"
                     className="w-full rounded-xl text-xs font-bold text-slate-700 h-9"
