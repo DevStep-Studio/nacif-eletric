@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   roundMoney,
   calcItemSubtotal,
@@ -10,6 +11,10 @@ import {
 import {
   buildProjectBudgetMaterials,
 } from "../src/lib/projectBudgetMaterials.js";
+import {
+  downloadBudgetPDF,
+  downloadBudgetCSV,
+} from "../src/lib/budgetExportUtils.js";
 
 console.log("=================================================");
 console.log("🧪 INICIANDO BATERIA DE TESTES DO MÓDULO DE ORÇAMENTOS");
@@ -294,6 +299,110 @@ assert.ok(BUDGET_STATUS_CONFIG.recusado, "Status recusado configurado");
 assert.ok(BUDGET_STATUS_CONFIG.cancelado, "Status cancelado configurado");
 
 console.log("✅ Formatadores e status validados!");
+
+// ── 7. Exportação de Proposta (downloadBudgetPDF & downloadBudgetCSV) ──────────
+console.log("\n[7/7] Testando Exportação de Proposta (downloadBudgetPDF & downloadBudgetCSV)...");
+
+// Mocking DOM elements for CSV export in Node
+const mockClicks = [];
+globalThis.URL = {
+  createObjectURL: () => "blob:budget-mock-url",
+  revokeObjectURL: () => {},
+};
+globalThis.document = {
+  createElement: () => {
+    const el = {
+      href: "",
+      download: "",
+      click: () => { mockClicks.push(el.download); },
+    };
+    return el;
+  },
+  body: {
+    appendChild: () => {},
+    removeChild: () => {},
+  },
+};
+
+// 7.1 PDF de proposta simples (payload real do orçamento)
+const pdfFilename1 = downloadBudgetPDF({
+  budgetName: "Klovis Casa",
+  project: {
+    name: "Klovis Casa",
+    client_name: "Klovis",
+    address: "Rua Exemplo, 123",
+    voltage: 220,
+    supply_type: "Bifásico",
+  },
+  materials: [
+    { name: "Cabo flexível 2.5mm²", qty: 100, unit: "m", price: 4.5 },
+    { name: "Disjuntor Bipolar 25A", qty: 2, unit: "un", price: 45.0 },
+  ],
+  services: [
+    { name: "Passagem de fiação", qty: 100, unit: "m", price: 5.0 },
+    { name: "Montagem do QDC", qty: 1, unit: "vb", price: 300.0 },
+  ],
+  totals: {
+    baseMaterialTotal: 540.0,
+    materialTotal: 540.0,
+    servicesTotal: 800.0,
+    marginBrl: 402.0,
+    marginPct: 30,
+    discountAmount: 0,
+    surchargeAmount: 0,
+    total: 1742.0,
+  },
+  commercialTerms: {
+    validityDays: 15,
+    executionTime: "10 dias úteis",
+    paymentTerms: "50% entrada e 50% na entrega",
+    notes: "Instalação conforme NBR 5410",
+  },
+});
+
+assert.ok(pdfFilename1.endsWith(".pdf"), "Retorna nome de arquivo PDF válido");
+assert.equal(pdfFilename1, "orcamento_klovis_casa.pdf", "Nome sanitizado sem duplicar prefixo orcamento");
+assert.ok(fs.existsSync(pdfFilename1), "Arquivo PDF deve ter sido gerado no disco pelo jsPDF");
+fs.unlinkSync(pdfFilename1);
+
+// 7.2 PDF multipágina (60 materiais) para validar paginação e quebra de tabela
+const bigMaterialsList = Array.from({ length: 60 }, (_, i) => ({
+  name: `Material Especial de Teste Item ${i + 1}`,
+  qty: i + 1,
+  unit: "un",
+  price: 25.5,
+}));
+const pdfFilename2 = downloadBudgetPDF({
+  budgetName: "Projeto Grande",
+  project: { name: "Projeto Grande" },
+  materials: bigMaterialsList,
+  services: [{ name: "Serviço Geral", qty: 1, unit: "vb", price: 1500.0 }],
+  totals: {
+    materialTotal: 46665.0,
+    servicesTotal: 1500.0,
+    discountAmount: 1000.0,
+    marginBrl: 14149.5,
+    marginPct: 30,
+    total: 61314.5,
+  },
+});
+
+assert.ok(fs.existsSync(pdfFilename2), "PDF multipágina gerado com sucesso sem erro");
+fs.unlinkSync(pdfFilename2);
+
+// 7.3 CSV de orçamento
+downloadBudgetCSV({
+  budgetName: "Klovis Casa",
+  project: { name: "Klovis Casa" },
+  materials: [{ name: "Cabo flexível 2.5mm²", qty: 100, unit: "m", price: 4.5 }],
+  services: [{ name: "Passagem de fiação", qty: 100, unit: "m", price: 5.0 }],
+  totals: { total: 950.0 },
+});
+
+assert.equal(mockClicks.length, 1, "CSV disparou download no navegador");
+assert.equal(mockClicks[0], "orcamento_klovis_casa.csv", "Nome do arquivo CSV correto");
+
+console.log("✅ Exportação de Proposta (PDF e CSV) validada com sucesso!");
 
 console.log("\n=================================================");
 console.log("🎉 TODOS OS TESTES DO MÓDULO DE ORÇAMENTOS PASSARAM COM SUCESSO!");

@@ -26,10 +26,14 @@ const sanitizeFileName = (name = "") =>
 export function downloadBudgetPDF({
   project = {},
   budget = {},
+  budgetName = "",
+  budgetStatus = "",
   materials = [],
   services = [],
   totals = {},
-  brandName = "NACIF Solutions Eletric",
+  commercialTerms = {},
+  brandName = "NACIF Energy",
+  logoUrl = null,
 } = {}) {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -43,7 +47,7 @@ export function downloadBudgetPDF({
   const contentWidth = pageWidth - marginX * 2; // 182mm
   let curY = 14;
 
-  const projectName = budget.project_name || project.name || "Projeto Elétrico";
+  const projectName = budgetName || budget.name || budget.project_name || project.name || "Projeto Elétrico";
   const clientName = budget.client_name || project.client_name || "Não informado";
   const address = budget.client_address || project.address || "Local não informado";
   const supplyInfo = `${project.supply_type || "Padrão"} · ${project.voltage ? `${project.voltage}V` : "220V"}`;
@@ -370,14 +374,21 @@ export function downloadBudgetPDF({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.6);
   doc.setTextColor(71, 85, 105);
+  const validityDays = commercialTerms?.validityDays || budget.validity_days || 15;
+  const executionDeadline = commercialTerms?.executionTime || budget.execution_deadline || "15 dias úteis";
+  const paymentTerms = commercialTerms?.paymentTerms || budget.payment_terms || "50% entrada e 50% na conclusão";
+  const notesText = commercialTerms?.notes || budget.notes;
+
   const conditions = [
-    `• Validade da proposta: ${budget.validity_days || 15} dias corridos.`,
-    `• Prazo de execução: ${budget.execution_deadline || "15 dias úteis"}.`,
-    `• Pagamento: ${budget.payment_terms || "50% entrada e 50% na conclusão"}.`,
+    `• Validade da proposta: ${validityDays} dias corridos.`,
+    `• Prazo de execução: ${executionDeadline}.`,
+    `• Pagamento: ${paymentTerms}.`,
     "• Materiais de primeira linha certificados INMETRO.",
     "• Dimensionamento em estrita conformidade com a NBR 5410:2004.",
     "• Mão de obra técnica qualificada com emissão de ART/TRT.",
-    "• Garantia de 12 meses para serviços elétricos instalados.",
+    notesText
+      ? `• Obs: ${String(notesText).slice(0, 50)}`
+      : "• Garantia de 12 meses para serviços elétricos instalados.",
   ];
   conditions.forEach((cond, idx) => {
     doc.text(cond, marginX + 3.5, curY + 11 + idx * 5.0);
@@ -394,16 +405,17 @@ export function downloadBudgetPDF({
   doc.setTextColor(15, 79, 73);
   doc.text("COMPOSIÇÃO FINANCEIRA DO ORÇAMENTO", rightX + 3.5, curY + 5);
 
-  const discountAmount = Number(totals.discountAmount || 0);
-  const surchargeAmount = Number(totals.surchargeAmount || 0);
-  const marginAmount = Number(totals.marginAmount || 0);
+  const discountAmount = Number(totals.discountAmount || totals.discount_amount || 0);
+  const surchargeAmount = Number(totals.surchargeAmount || totals.surcharge_amount || 0);
+  const marginAmount = Number(totals.marginAmount || totals.marginBrl || totals.margin_amount || 0);
+  const marginPct = Number(totals.marginPct ?? totals.margin ?? 0);
 
   const finRows = [
-    ["Subtotal Materiais:", formatBRL(totals.materialTotal || totals.baseMaterialTotal)],
-    ["Serviços e Mão de Obra:", formatBRL(totals.servicesTotal || totals.laborCost)],
+    ["Subtotal Materiais:", formatBRL(totals.materialTotal || totals.baseMaterialTotal || 0)],
+    ["Serviços e Mão de Obra:", formatBRL(totals.servicesTotal || totals.laborCost || 0)],
     ...(discountAmount > 0 ? [["Desconto Concedido (-):", `- ${formatBRL(discountAmount)}`]] : []),
     ...(surchargeAmount > 0 ? [["Acréscimos / Taxas (+):", `+ ${formatBRL(surchargeAmount)}`]] : []),
-    ...(marginAmount > 0 ? [[`Margem BDI Aplicada (${totals.marginPct ?? totals.margin ?? 0}%):`, formatBRL(marginAmount)]] : []),
+    ...(marginAmount > 0 ? [[`Margem BDI Aplicada (${marginPct}%):`, formatBRL(marginAmount)]] : []),
   ];
 
   finRows.slice(0, 4).forEach(([lbl, val], idx) => {
@@ -413,7 +425,11 @@ export function downloadBudgetPDF({
     doc.text(lbl, rightX + 3.5, curY + 11 + idx * 5.2);
 
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(lbl.includes("Desconto") ? [16, 185, 129] : [15, 23, 42]);
+    if (lbl.includes("Desconto")) {
+      doc.setTextColor(16, 185, 129);
+    } else {
+      doc.setTextColor(15, 23, 42);
+    }
     doc.text(val, rightX + splitW - 3.5, curY + 11 + idx * 5.2, { align: "right" });
   });
 
@@ -466,7 +482,9 @@ export function downloadBudgetPDF({
     drawFooter(i, totalPages);
   }
 
-  const fileName = `orcamento_${sanitizeFileName(projectName)}.pdf`;
+  const sanitized = sanitizeFileName(projectName);
+  const baseName = sanitized.startsWith("orcamento") ? sanitized : `orcamento_${sanitized}`;
+  const fileName = `${baseName}.pdf`;
   doc.save(fileName);
   return fileName;
 }
@@ -477,11 +495,12 @@ export function downloadBudgetPDF({
 export function downloadBudgetCSV({
   project = {},
   budget = {},
+  budgetName = "",
   materials = [],
   services = [],
   totals = {},
 } = {}) {
-  const projectName = budget.project_name || project.name || "Projeto Elétrico";
+  const projectName = budgetName || budget.name || budget.project_name || project.name || "Projeto Elétrico";
   const rows = [
     ["Tipo", "Item", "Descrição", "Categoria", "Quantidade", "Unidade", "Preço Unitário (R$)", "Total (R$)"],
   ];
@@ -539,7 +558,9 @@ export function downloadBudgetCSV({
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `orcamento_${sanitizeFileName(projectName)}.csv`;
+  const sanitized = sanitizeFileName(projectName);
+  const baseName = sanitized.startsWith("orcamento") ? sanitized : `orcamento_${sanitized}`;
+  a.download = `${baseName}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
