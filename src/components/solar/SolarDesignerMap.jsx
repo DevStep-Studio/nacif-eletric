@@ -62,7 +62,16 @@ function ViewportController({ center, zoom, viewportRequest = 0 }) {
   useEffect(() => {
     if (viewportRequest && viewportRequest !== lastRequestRef.current) {
       lastRequestRef.current = viewportRequest;
-      map.flyTo([center.lat, center.lng], zoom || map.getZoom(), { animate: true, duration: 0.8 });
+      const targetLat = Number(center?.lat);
+      const targetLng = Number(center?.lng);
+      if (Number.isFinite(targetLat) && Number.isFinite(targetLng)) {
+        const targetZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : (map.getZoom() || 19);
+        map.flyTo([targetLat, targetLng], targetZoom, {
+          animate: true,
+          duration: 1.4,
+          easeLinearity: 0.25,
+        });
+      }
     }
   }, [center, map, zoom, viewportRequest]);
 

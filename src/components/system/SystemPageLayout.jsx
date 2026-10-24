@@ -3,6 +3,7 @@ import { ArrowLeft, Home } from "lucide-react";
 import { useBranding } from "@/lib/appPreferences";
 import { Button } from "@/components/ui/button";
 import PublicFooter from "./PublicFooter";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 
 export default function SystemPageLayout({
   title,
@@ -19,7 +20,14 @@ export default function SystemPageLayout({
 }) {
   const navigate = useNavigate();
   const { branding } = useBranding();
-  const brandName = [branding.appName, branding.appSuffix].filter(Boolean).join(" ") || "Nacif Electric";
+  const brandName = [branding.appName, branding.appSuffix].filter(Boolean).join(" ") || "NACIF Energy";
+  const isDefaultLogo =
+    !branding.logoDataUrl ||
+    branding.logoDataUrl === "/brand-logo-principal.png" ||
+    branding.logoDataUrl.includes("brand-logo-principal") ||
+    branding.logoDataUrl.includes("Logo-Principal") ||
+    branding.logoDataUrl.includes("nacif");
+  const logoSrc = isDefaultLogo ? brandLogoEnergy : (branding.logoDataUrl || brandLogoEnergy);
 
   const handleBack = () => {
     if (backTo) {
@@ -39,12 +47,12 @@ export default function SystemPageLayout({
           <div className="flex items-center gap-4">
             <Link to="/" className="inline-flex items-center" title={brandName}>
               <img
-                src={branding.logoDataUrl || "/brand-logo-principal.png"}
+                src={logoSrc}
                 alt={brandName}
                 className="h-8 max-w-[170px] object-contain object-left"
                 onError={(e) => {
-                  if (e.currentTarget.src !== "/brand-logo-principal.png") {
-                    e.currentTarget.src = "/brand-logo-principal.png";
+                  if (e.currentTarget.src !== brandLogoEnergy) {
+                    e.currentTarget.src = brandLogoEnergy;
                   }
                 }}
               />

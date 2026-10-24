@@ -80,7 +80,7 @@ const STATUS_BADGES = {
 export default function AvisosErros() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const isAdmin = Boolean(hasFullSystemAccess(user) || user?.role === "admin" || user?.role === "super_admin" || isSuperAdmin(user) || user?.email === "admin@nacif.com" || user?.email === "grc22.09@hotmail.com");
+  const isAdmin = Boolean(hasFullSystemAccess(user) || user?.role === "admin" || user?.role === "super_admin" || isSuperAdmin(user) || user?.email === "admin@nacif.com" || user?.email === "grc22.09@hotmail.com" || user?.email === "gabrielderezende13@gmail.com");
 
   // Estado das abas (Meus Relatos / Painel Admin)
   const [activeTab, setActiveTab] = useState(isAdmin ? "admin" : "user");

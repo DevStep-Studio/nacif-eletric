@@ -9,4 +9,4 @@ export const WEG_BLUE_DEEP = "#0f4f49";
 export const WEG_BLUE_SOFT = "#E8FCF8";
 export const WEG_BLUE_TINT = "#F2FFFC";
 export const WEG_BLUE_BORDER = "#BCEEE5";
-export const WEG_BRANDING_VERSION = "nacif-logo-2026-10-19-v3";
+export const WEG_BRANDING_VERSION = "nacif-energy-2026-10-22-v7";

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import SystemPageLayout from "@/components/system/SystemPageLayout";
 import { Button } from "@/components/ui/button";
+import brandMarkEnergy from "@/assets/brand-mark-principal.png";
 import {
   Compass,
   FileCheck,
@@ -10,7 +11,7 @@ import {
 export default function AboutPage() {
   return (
     <SystemPageLayout
-      title="Sobre a Nacif Electric"
+      title="Sobre a NACIF Energy"
       subtitle="Engenharia elétrica computacional e inteligência para projetos em conformidade com as normas ABNT."
       maxWidth="max-w-4xl"
     >
@@ -18,7 +19,7 @@ export default function AboutPage() {
         {/* Hero Card */}
         <div className="rounded-2xl border border-[#CDEFE8] bg-white p-6 sm:p-8 shadow-sm space-y-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E8FCF8] p-2 border border-[#CDEFE8]">
-            <img src="/brand-mark-principal.png" alt="Nacif Electric" className="h-8 w-8 object-contain" />
+            <img src={brandMarkEnergy} alt="NACIF Energy" className="h-8 w-8 object-contain" />
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight">
             Nossa Missão: Revolucionar o Projeto Elétrico no Brasil

@@ -60,6 +60,8 @@ import { getProjectProgress } from "@/lib/projectProgress";
 import OnboardingModal from "@/components/onboarding/OnboardingModal";
 import ToolsModal from "@/components/navigation/ToolsModal";
 import PublicFooter from "@/components/system/PublicFooter";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
+import brandMarkEnergy from "@/assets/brand-mark-principal.png";
 
 const SIDEBAR_STORAGE_KEY = "nacif:sidebar-collapsed";
 
@@ -72,34 +74,38 @@ const initialsFromUser = (user) => {
 };
 
 function BrandLogo({ branding, compact = false, className = "" }) {
-  const isWideLogo = (url) => {
-    if (!url || typeof url !== "string") return false;
+  const isDefaultOrOldLogo = (url) => {
+    if (!url || typeof url !== "string") return true;
     return (
-      url.includes("brand-logo") ||
+      url === "/brand-logo-principal.png" ||
+      url === "/brand-mark-principal.png" ||
+      url.includes("brand-logo-principal") ||
+      url.includes("brand-mark-principal") ||
       url.includes("Logo-Principal") ||
       url.includes("Logo-black") ||
       url.includes("Logo-white") ||
       url.includes("lg.png") ||
-      url === branding?.logoDataUrl
+      url.includes("nacif-logo") ||
+      url.includes("nacif-electric-symbol")
     );
   };
 
-  const compactLogo =
-    branding?.compactLogoDataUrl && !isWideLogo(branding.compactLogoDataUrl)
-      ? branding.compactLogoDataUrl
-      : "/brand-mark-principal.png";
+  const hasCustomLogo = branding?.logoDataUrl && !isDefaultOrOldLogo(branding.logoDataUrl);
+  const hasCustomCompact = branding?.compactLogoDataUrl && !isDefaultOrOldLogo(branding.compactLogoDataUrl);
 
-  const fullLogo = branding?.logoDataUrl || "/brand-logo-principal.png";
+  const fullLogo = hasCustomLogo ? branding.logoDataUrl : brandLogoEnergy;
+  const compactLogo = hasCustomCompact ? branding.compactLogoDataUrl : brandMarkEnergy;
   const logo = compact ? compactLogo : fullLogo;
+  const fallback = compact ? brandMarkEnergy : brandLogoEnergy;
+  const brandTitle = [branding?.appName, branding?.appSuffix].filter(Boolean).join(" ") || "NACIF Energy";
 
   return (
-    <div className={`flex items-center justify-center shrink-0 ${compact ? "h-8 w-8" : "h-9 max-w-[160px]"} ${className}`}>
+    <div className={`flex items-center justify-center shrink-0 ${compact ? "h-9 w-9" : "h-10 max-w-[175px]"} ${className}`}>
       <img
         src={logo}
-        alt={`${branding?.appName || "Nacif"} ${branding?.appSuffix || "Electric"}`}
+        alt={brandTitle}
         className={`h-full w-full object-contain transition-transform duration-200 group-hover:scale-105 ${compact ? "object-center" : "object-left"}`}
         onError={(e) => {
-          const fallback = compact ? "/brand-mark-principal.png" : "/brand-logo-principal.png";
           if (e.currentTarget.src !== fallback) {
             e.currentTarget.src = fallback;
           }
@@ -270,7 +276,7 @@ export default function Layout() {
       try {
         const data = await backend.entities.Issue.list({ limit: 100 });
         if (!cancelled && Array.isArray(data)) {
-          const isUserAdmin = Boolean(hasFullSystemAccess(activeUser) || activeUser?.role === "admin" || activeUser?.role === "super_admin" || isSuperAdmin(activeUser) || activeUser?.email === "admin@nacif.com" || activeUser?.email === "grc22.09@hotmail.com");
+          const isUserAdmin = Boolean(hasFullSystemAccess(activeUser) || activeUser?.role === "admin" || activeUser?.role === "super_admin" || isSuperAdmin(activeUser) || activeUser?.email === "admin@nacif.com" || activeUser?.email === "grc22.09@hotmail.com" || activeUser?.email === "gabrielderezende13@gmail.com");
           const count = data.filter((i) => (isUserAdmin ? i.unread_admin : i.unread_user)).length;
           setUnreadIssuesCount(count);
         }
@@ -402,7 +408,7 @@ export default function Layout() {
                 ? "h-10 w-10 mx-auto justify-center rounded-xl hover:bg-[#F8FAFC]"
                 : "h-10 items-center gap-3 overflow-hidden"
             }`}
-            title="Nacif Electric - Dashboard"
+            title="NACIF Energy - Dashboard"
           >
             <BrandLogo branding={branding} compact={sidebarCollapsed} />
           </Link>

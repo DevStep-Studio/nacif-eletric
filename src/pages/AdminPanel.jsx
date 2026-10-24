@@ -34,6 +34,7 @@ import {
 } from "@/lib/appPreferences";
 import { PROFESSIONS, professionLabel, isSuperAdmin } from "@/lib/professionalAccess";
 import AdminSubscriptionManager from "@/components/subscription/AdminSubscriptionManager";
+import brandMarkEnergy from "@/assets/brand-mark-principal.png";
 
 const profileInitials = (user) => {
   const source = user?.full_name || user?.email || "Admin";
@@ -48,7 +49,7 @@ function PreviewLogo({ value, label, fallbackIcon: FallbackIcon = Zap }) {
       {value ? (
         <img src={value} alt={label} className="h-full w-full object-contain p-3" />
       ) : (
-        <img src="/brand-mark-principal.png" alt={label} className="h-8 w-8 object-contain" />
+        <img src={brandMarkEnergy} alt={label} className="h-8 w-8 object-contain" />
       )}
     </div>
   );
@@ -425,7 +426,7 @@ export default function AdminPanel() {
                             className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[18px] shadow-[0_14px_28px_rgba(15,23,42,0.08)] p-2.5"
                             style={{ background: brandingForm[item.bgField], color: brandingForm[item.iconField] }}
                           >
-                            <img src="/brand-mark-principal.png" alt="Nacif Mark" className="h-full w-full object-contain" />
+                            <img src={brandMarkEnergy} alt="NACIF Energy" className="h-full w-full object-contain" />
                           </span>
                           <div className="min-w-0">
                             <p className={`${item.size === "large" ? "text-2xl" : "text-xl"} font-extrabold leading-tight text-[#111827]`}>

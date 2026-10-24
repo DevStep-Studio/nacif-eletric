@@ -22,6 +22,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { openHTMLPrint, PAPER_SIZES } from "@/lib/printUtils";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import PageHeader from "@/components/PageHeader";
@@ -556,12 +557,12 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
           <label className="inline-flex h-11 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-[12px] border border-dashed border-[#BCEEE5] bg-white px-3 text-sm font-extrabold text-[#5f6877] transition hover:bg-[#F2FFFC] sm:px-4">
             <Upload className="h-4 w-4" />
             <img
-              src={logoUrl || DEFAULT_LOGO_URL}
+              src={logoUrl || brandLogoEnergy}
               className="h-6 min-w-0 max-w-[140px] object-contain"
-              alt="Logo NACIF Solutions"
+              alt="NACIF Energy"
               onError={(e) => {
-                if (e.currentTarget.src !== DEFAULT_LOGO_URL) {
-                  e.currentTarget.src = DEFAULT_LOGO_URL;
+                if (e.currentTarget.src !== brandLogoEnergy) {
+                  e.currentTarget.src = brandLogoEnergy;
                 }
               }}
             />

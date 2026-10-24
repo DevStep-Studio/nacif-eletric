@@ -62,7 +62,9 @@ import {
   generateSitePlanReport,
   generateTechnicalMemorialReport,
 } from "@/lib/solarReportGenerator";
+import { preloadSolarReportImages } from "@/lib/solarLayoutImageRenderer";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 import {
   Activity,
   AlertTriangle,
@@ -316,6 +318,7 @@ export default function SolarProject() {
   const [obstacleNudgeStep, setObstacleNudgeStep] = useState(0.5);
   const [searchAddress, setSearchAddress] = useState("");
   const [searchingAddress, setSearchingAddress] = useState(false);
+  const cepDebounceRef = useRef(null);
   const [pendingObstaclePreset, setPendingObstaclePreset] = useState(null);
   const [editingAreaNameId, setEditingAreaNameId] = useState(null);
   const [tempAreaName, setTempAreaName] = useState("");
@@ -637,6 +640,15 @@ export default function SolarProject() {
     [reportProject, config, visualSizing]
   );
   const isProjectDataComplete = reportValidation.valid;
+
+  // Pré-renderização em background das imagens com satélite dos prédios para os relatórios
+  useEffect(() => {
+    if (!reportProject) return;
+    const timer = setTimeout(() => {
+      preloadSolarReportImages({ project: reportProject, config, sizing: visualSizing });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [reportProject, config, visualSizing]);
 
   // Funções de Gerenciamento do Histórico (Undo / Redo)
   const syncRoofHistoryState = useCallback(() => {
@@ -1042,27 +1054,89 @@ export default function SolarProject() {
     toast({ title: "Nome atualizado" });
   };
 
-  const handleSearchAddress = async (e) => {
-    e?.preventDefault();
-    if (!searchAddress?.trim()) return;
+  const handleSearchAddress = async (e, overrideQuery) => {
+    e?.preventDefault?.();
+    if (cepDebounceRef.current) {
+      clearTimeout(cepDebounceRef.current);
+    }
+    const query = (typeof overrideQuery === "string" ? overrideQuery : searchAddress)?.trim();
+    if (!query) return;
     setSearchingAddress(true);
     try {
-      const results = await geocodeAddress(searchAddress);
+      const results = await geocodeAddress(query);
       if (results.length > 0) {
         const first = results[0];
-        setConfig((current) => ({
-          ...current,
-          map_center_lat: first.lat,
-          map_center_lng: first.lng,
-          map_zoom: 20,
-        }));
-        setViewportRequest((n) => n + 1);
-        toast({ title: "Endereço localizado", description: first.display_name });
-      } else {
-        toast({ title: "Endereço não encontrado", description: "Tente um termo ou CEP mais específico.", variant: "destructive" });
+        const nextLat = Number(first.lat);
+        const nextLng = Number(first.lng);
+
+        if (Number.isFinite(nextLat) && Number.isFinite(nextLng)) {
+          setConfig((current) => ({
+            ...current,
+            map_center_lat: nextLat,
+            map_center_lng: nextLng,
+            map_zoom: 19,
+          }));
+
+          if (viewMode === "3d") {
+            setViewMode("map");
+          }
+
+          const formattedDisplay = first.road
+            ? [first.road, first.neighborhood, first.city && first.state ? `${first.city} - ${first.state}` : first.city, first.postcode].filter(Boolean).join(", ")
+            : first.display_name;
+          setSearchAddress(formattedDisplay || query);
+
+          setProject((current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              address: first.road
+                ? `${first.road}${first.neighborhood ? ", " + first.neighborhood : ""}`
+                : (first.display_name || current.address),
+              city: first.city || current.city,
+              state: first.state || current.state,
+              zip_code: first.postcode || (query.match(/\d{5}-?\d{3}/)?.[0] || current.zip_code),
+            };
+          });
+
+          setViewportRequest((n) => n + 1);
+          toast({
+            title: "Endereço localizado",
+            description: formattedDisplay || first.display_name,
+          });
+          return;
+        }
       }
+      toast({
+        title: "Endereço ou CEP não encontrado",
+        description: "Não foi possível localizar o endereço ou CEP informado. Tente com outro termo ou número.",
+        variant: "destructive",
+      });
+    } catch (err) {
+      toast({
+        title: "Erro na pesquisa de endereço",
+        description: err.message || "Falha ao consultar CEP ou endereço.",
+        variant: "destructive",
+      });
     } finally {
       setSearchingAddress(false);
+    }
+  };
+
+  const handleSearchInputChange = (e) => {
+    const val = e.target.value;
+    setSearchAddress(val);
+
+    if (cepDebounceRef.current) {
+      clearTimeout(cepDebounceRef.current);
+    }
+
+    // Detecção automática quando o usuário digita ou cola um CEP (8 dígitos)
+    const digitsOnly = val.replace(/\D/g, "");
+    if (digitsOnly.length === 8) {
+      cepDebounceRef.current = setTimeout(() => {
+        handleSearchAddress(null, val);
+      }, 400);
     }
   };
 
@@ -1265,7 +1339,7 @@ export default function SolarProject() {
     });
   };
 
-  const handleDownloadDirect = (reportType = "executive") => {
+  const handleDownloadDirect = async (reportType = "executive") => {
     if (!reportValidation.valid) {
       toast({
         title: "Preencha os dados do projeto primeiro",
@@ -1279,26 +1353,26 @@ export default function SolarProject() {
 
     try {
       if (reportType === "executive") {
-        const doc = generateExecutiveSolarPdf(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
+        const doc = await generateExecutiveSolarPdf(reportProject, config, visualSizing);
+        await downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
       } else if (reportType === "site_plan") {
-        const doc = generateSitePlanReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
+        const doc = await generateSitePlanReport(reportProject, config, visualSizing);
+        await downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
       } else if (reportType === "electrical") {
-        const doc = generateElectricalDiagramReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
+        const doc = await generateElectricalDiagramReport(reportProject, config, visualSizing);
+        await downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
       } else if (reportType === "memorial") {
-        const doc = generateTechnicalMemorialReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
+        const doc = await generateTechnicalMemorialReport(reportProject, config, visualSizing);
+        await downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
       } else if (reportType === "bom") {
-        const doc = generateBillOfMaterialsReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
+        const doc = await generateBillOfMaterialsReport(reportProject, config, visualSizing);
+        await downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
       } else if (reportType === "simulation") {
-        const doc = generateGenerationSimulationReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
+        const doc = await generateGenerationSimulationReport(reportProject, config, visualSizing);
+        await downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
       } else if (reportType === "proposal") {
-        const doc = generateCommercialProposalReport(reportProject, config, visualSizing);
-        downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
+        const doc = await generateCommercialProposalReport(reportProject, config, visualSizing);
+        await downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
       }
       toast({
         title: "Download concluído",
@@ -1538,8 +1612,8 @@ export default function SolarProject() {
           {/* Logo Oficial Nacif Electric + Badge Solar */}
           <div className="flex items-center gap-2 pr-2.5 border-r border-slate-200">
             <img
-              src={DEFAULT_LOGO_URL}
-              alt="Nacif Electric"
+              src={brandLogoEnergy}
+              alt="NACIF Energy"
               className="h-6 max-w-[120px] object-contain"
             />
             <span className="px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-[#E6FAF7] text-[#009b84] border border-[#00d8b8]/40 rounded-md">
@@ -1626,7 +1700,7 @@ export default function SolarProject() {
               <MapPin className="absolute left-2.5 h-3.5 w-3.5 text-[#00d8b8]" />
               <Input
                 value={searchAddress}
-                onChange={(e) => setSearchAddress(e.target.value)}
+                onChange={handleSearchInputChange}
                 placeholder="Buscar endereço ou CEP..."
                 className="h-7 w-48 lg:w-56 xl:w-64 rounded-md border-slate-200 bg-slate-50 pl-8 pr-7 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#00d8b8] focus:bg-white focus:ring-1 focus:ring-[#00d8b8]"
               />
@@ -1634,8 +1708,9 @@ export default function SolarProject() {
                 type="submit"
                 disabled={searchingAddress}
                 className="absolute right-2 text-slate-400 hover:text-slate-700 transition"
+                title="Buscar no mapa"
               >
-                {searchingAddress ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                {searchingAddress ? <Loader2 className="h-3 w-3 animate-spin text-[#00d8b8]" /> : <Search className="h-3 w-3" />}
               </button>
             </form>
 

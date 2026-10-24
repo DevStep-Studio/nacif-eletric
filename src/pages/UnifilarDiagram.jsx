@@ -39,6 +39,7 @@ import { openSVGPrint, PAPER_SIZES } from "@/lib/printUtils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import PageHeader from "@/components/PageHeader";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 import { useToast } from "@/components/ui/use-toast";
 
 // ─── Paleta CAD (para o visualizador legado se usado) ─────────────────────────
@@ -2250,12 +2251,12 @@ export default function UnifilarDiagram() {
             <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-[12px] border border-dashed border-[#BCEEE5] bg-white px-4 text-sm font-extrabold text-[#687386] transition hover:bg-[#F2FFFC]">
               <Upload className="w-4 h-4" />
               <img
-                src={logoUrl || DEFAULT_LOGO_URL}
+                src={logoUrl || brandLogoEnergy}
                 className="h-6 max-w-[140px] object-contain"
-                alt="Logo"
+                alt="NACIF Energy"
                 onError={(e) => {
-                  if (e.currentTarget.src !== DEFAULT_LOGO_URL) {
-                    e.currentTarget.src = DEFAULT_LOGO_URL;
+                  if (e.currentTarget.src !== brandLogoEnergy) {
+                    e.currentTarget.src = brandLogoEnergy;
                   }
                 }}
               />
