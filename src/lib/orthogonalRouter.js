@@ -60,46 +60,102 @@ export const GROUND_BUS = {
   pinStartX: 262,
 };
 
-export const getNeutralBusLayout = (infrastructure = []) => {
-  const item = (infrastructure || []).find((entry) => entry?.id === "neutral-bus") || {};
-  const width = Math.max(180, Math.min(520, Number(item.width) || NEUTRAL_BUS.width));
+export const getThreePhaseOutputLayout = (infrastructure = []) => {
+  const item = (infrastructure || []).find((entry) => entry?.id === "three-phase-output" || entry?.id === "input-bus") || {};
+  const width = Math.max(120, Math.min(450, Number(item.width) || THREE_PHASE_OUTPUT.width));
+  const height = Math.max(28, Math.min(70, Number(item.height) || THREE_PHASE_OUTPUT.height));
   const rawX = Number(item.x);
   const rawY = Number(item.y);
-  const x = Math.max(20, Math.min(PANEL_DESIGN_WIDTH - width - 20, Number.isFinite(rawX) ? rawX : NEUTRAL_BUS.x));
-  const y = Math.max(20, Number.isFinite(rawY) ? rawY : NEUTRAL_BUS.y);
-  const pinGap = Math.max(14, Math.min(32, (width - 40) / Math.max(1, NEUTRAL_BUS.pinCount - 1)));
+  const x = Math.max(20, Math.min(PANEL_DESIGN_WIDTH - width - 20, Number.isFinite(rawX) ? rawX : THREE_PHASE_OUTPUT.x));
+  const y = Math.max(20, Number.isFinite(rawY) ? rawY : THREE_PHASE_OUTPUT.y);
+  const supplyType = item.supplyType || "trifasico"; // "monofasico" | "bifasico" | "trifasico"
+  const isDefaultGeometry = !item.width && !item.pinGap;
+  const pinGap = isDefaultGeometry
+    ? THREE_PHASE_OUTPUT.pinGap
+    : Math.max(20, Math.min(46, Number(item.pinGap) || (width - 44) / 4));
+  const pinStartX = x + 28;
+  const pinY = y + 22;
 
   return {
     x,
     y,
     width,
-    height: NEUTRAL_BUS.height,
+    height,
+    pinStartX,
+    pinY,
+    pinGap,
+    supplyType,
+    label: item.label || "ENTRADA",
+    color: item.color || "#f8fafc",
+    hidden: !!item.hidden,
+  };
+};
+
+export const getNeutralBusLayout = (infrastructure = []) => {
+  const item = (infrastructure || []).find((entry) => entry?.id === "neutral-bus") || {};
+  const width = Math.max(120, Math.min(650, Number(item.width) || NEUTRAL_BUS.width));
+  const height = Math.max(10, Math.min(36, Number(item.height) || NEUTRAL_BUS.height));
+  const pinCount = Math.max(4, Math.min(32, Number(item.pinCount) || NEUTRAL_BUS.pinCount));
+  const rawX = Number(item.x);
+  const rawY = Number(item.y);
+  const x = Math.max(20, Math.min(PANEL_DESIGN_WIDTH - width - 20, Number.isFinite(rawX) ? rawX : NEUTRAL_BUS.x));
+  const y = Math.max(20, Number.isFinite(rawY) ? rawY : NEUTRAL_BUS.y);
+  const isDefaultGeometry = !item.width && !item.pinCount;
+  const pinGap = isDefaultGeometry
+    ? NEUTRAL_BUS.pinGap
+    : Math.max(10, Math.min(40, (width - 40) / Math.max(1, pinCount - 1)));
+
+  return {
+    x,
+    y,
+    width,
+    height,
+    pinCount,
     pinStartX: x + 20,
     pinY: y + (NEUTRAL_BUS.pinY - NEUTRAL_BUS.y),
     pinGap,
+    material: item.material || "brass",
+    holderColor: item.holderColor || "#0284c7",
+    metalColor: item.metalColor || null,
+    hidden: !!item.hidden,
+    label: item.label || "N",
   };
 };
 
 export const getGroundBusLayout = (infrastructure = [], panelH = 820) => {
   const item = (infrastructure || []).find((entry) => entry?.id === "ground-bus") || {};
-  const width = Math.max(260, Math.min(520, Number(item.width) || GROUND_BUS.width));
+  const width = Math.max(140, Math.min(700, Number(item.width) || GROUND_BUS.width));
+  const height = Math.max(10, Math.min(36, Number(item.height) || 15));
+  const pinCount = Math.max(4, Math.min(32, Number(item.pinCount) || GROUND_BUS.pinCount));
   const rawX = Number(item.x ?? item.busX);
   const rawY = Number(item.y);
   const x = Math.max(20, Math.min(PANEL_DESIGN_WIDTH - width - 20, Number.isFinite(rawX) ? rawX : GROUND_BUS.x));
   const y = Math.max(20, Math.min(panelH - 44, Number.isFinite(rawY) ? rawY : (panelH - 68)));
-  const pinGap = Math.max(20, Math.min(38, (width - 60) / Math.max(1, GROUND_BUS.pinCount - 1)));
+  const isDefaultGeometry = !item.width && !item.pinCount;
+  const pinGap = isDefaultGeometry
+    ? GROUND_BUS.pinGap
+    : Math.max(10, Math.min(45, (width - 44) / Math.max(1, pinCount - 1)));
 
   return {
     x,
     y,
     width,
+    height,
+    pinCount,
     pinStartX: x + 22,
     pinY: y + 14,
     pinGap,
+    material: item.material || "brass",
+    holderColor: item.holderColor || "#15803d",
+    metalColor: item.metalColor || null,
+    hidden: !!item.hidden,
+    label: item.label || "BARRAMENTO DE PROTEÇÃO TERRA (PE)",
   };
 };
 
-export const getThreePhaseOutputPin = (terminalIndex = 0) => {
+export const getThreePhaseOutputPin = (terminalIndex = 0, infrastructure = []) => {
+  const hasCustom = (infrastructure || []).some((entry) => entry?.id === "three-phase-output" || entry?.id === "input-bus");
+  const layout = hasCustom ? getThreePhaseOutputLayout(infrastructure) : THREE_PHASE_OUTPUT;
   const index = Number(terminalIndex);
   const terminalSlot = index === 4
     ? 1
@@ -108,8 +164,8 @@ export const getThreePhaseOutputPin = (terminalIndex = 0) => {
       : 0;
   const safeIndex = Math.max(0, Math.min(4, Number.isFinite(terminalSlot) ? terminalSlot : 0));
   return {
-    x: THREE_PHASE_OUTPUT.pinStartX + safeIndex * THREE_PHASE_OUTPUT.pinGap,
-    y: THREE_PHASE_OUTPUT.pinY,
+    x: layout.pinStartX + safeIndex * layout.pinGap,
+    y: layout.pinY,
   };
 };
 
@@ -836,7 +892,8 @@ export const normalizeSavedBoard = (savedBoard = {}, project = null, options = {
 
     const hasValidSavedRoute = !options.forceRecalculate
       && Array.isArray(candidateRoute)
-      && candidateRoute.length >= 2;
+      && candidateRoute.length >= 2
+      && isOrthogonalPath(candidateRoute, 2.0);
 
     let routePoints = hasValidSavedRoute ? candidateRoute : null;
 
@@ -932,15 +989,17 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
   // Bloco de entrada trifásica no topo esquerdo (PE, N, L1, L2, L3)
   if (pin.startsWith("terminal_left_top:")) {
     const idx = parseInt(pin.split(":")[1], 10) || 0;
-    return getThreePhaseOutputPin(idx);
+    return getThreePhaseOutputPin(idx, infrastructure);
   }
 
   // Barramento de neutro superior
   if (pin.startsWith("busbar_neutral:")) {
     const idx = parseInt(pin.split(":")[1], 10) || 0;
     const neutralBus = getNeutralBusLayout(infrastructure);
+    const pinCount = neutralBus.pinCount || NEUTRAL_BUS.pinCount;
+    const pinIndex = Math.abs(idx) % pinCount;
     return {
-      x: neutralBus.pinStartX + (Math.abs(idx) % NEUTRAL_BUS.pinCount) * neutralBus.pinGap,
+      x: neutralBus.pinStartX + pinIndex * neutralBus.pinGap,
       y: neutralBus.pinY,
     };
   }
@@ -949,8 +1008,10 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
   if (pin.startsWith("busbar_ground:")) {
     const idx = parseInt(pin.split(":")[1], 10) || 0;
     const groundBus = getGroundBusLayout(infrastructure, panelHeight);
+    const pinCount = groundBus.pinCount || GROUND_BUS.pinCount;
+    const pinIndex = Math.abs(idx) % pinCount;
     return {
-      x: groundBus.pinStartX + (Math.abs(idx) % GROUND_BUS.pinCount) * groundBus.pinGap,
+      x: groundBus.pinStartX + pinIndex * groundBus.pinGap,
       y: groundBus.pinY,
     };
   }
