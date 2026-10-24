@@ -422,3 +422,23 @@ label.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10),
   border-radius: 0 !important;
 }
 
+/* ==========================================================================
+   OTIMIZAÇÕES DE INTERAÇÃO POR TOQUE PARA TABLETS (iPads e Android Tablets)
+   ========================================================================== */
+@media (hover: none) and (pointer: coarse) {
+  /* Elimina o atraso de 300ms no toque em botões e links */
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  /* Suavização de scroll inercial no iOS e tablets */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+

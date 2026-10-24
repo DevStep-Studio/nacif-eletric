@@ -35,6 +35,7 @@
     "test:din-positioning": "node scripts/din-rail-positioning-smoke.mjs",
     "test:solar-professional": "node scripts/solar-professional-module-smoke.mjs",
     "test:solar-visual": "node scripts/solar-visual-improvements-smoke.mjs",
+    "test:device-restriction": "node scripts/device-restriction-smoke.mjs",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
   },

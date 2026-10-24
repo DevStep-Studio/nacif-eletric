@@ -76,6 +76,7 @@ const ExportDataPage = React.lazy(() => import('./pages/account/ExportData'));
 
 // System Components
 import CookieConsentBanner from './components/system/CookieConsentBanner';
+import DeviceGate from './components/system/DeviceGate';
 
 class AppErrorBoundary extends React.Component {
   constructor(props) {
@@ -256,8 +257,10 @@ function App() {
         <BrandingBoot />
         <Router>
           <AppErrorBoundary>
-            <AuthenticatedApp />
-            <CookieConsentBanner />
+            <DeviceGate>
+              <AuthenticatedApp />
+              <CookieConsentBanner />
+            </DeviceGate>
           </AppErrorBoundary>
         </Router>
         <Toaster />
