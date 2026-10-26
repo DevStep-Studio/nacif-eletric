@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Playfair+Display:ital,wght@1,500;1,600&display=swap');
 
 @layer base {
   :root {
@@ -441,4 +441,12 @@ label.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10),
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* Tipografia editorial itálica para destaques refinados */
+.font-editorial {
+  font-family: 'Instrument Serif', 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+}
+
 

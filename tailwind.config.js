@@ -7,6 +7,7 @@ module.exports = {
   		fontFamily: {
   			inter: ['var(--font-inter)'],
   			mono: ['var(--font-mono)'],
+  			editorial: ['"Instrument Serif"', '"Playfair Display"', 'Georgia', 'serif'],
   		},
   		borderRadius: {
   			lg: 'var(--radius)',
