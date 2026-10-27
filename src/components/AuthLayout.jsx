@@ -1,28 +1,15 @@
 import React from "react";
-import authLogoEnergy from "@/assets/brand-logo-principal.png";
+import authCardHero from "@/assets/auth-card-hero.jpg";
 import { useBranding } from "@/lib/appPreferences";
-import FlutedGlassArtwork from "@/components/login/FlutedGlassArtwork";
 
 /**
  * AuthLayout
  * 
  * Layout unificado para as páginas de autenticação (Login, Cadastro, Recuperação de Senha)
- * reproduzindo fielmente a composição sofisticada e minimalista do tema light da Nacif Energy:
- * - À esquerda (desktop): Painel visual vertical de vidro canelado com proporção 4:5,
- *   bordas arredondadas (24px), logo oficial, ponto luminoso e tipografia editorial.
- * - À direita: Formulário compacto sem card externo, flutuando sobre o fundo claro da página.
- * - Mobile: Prioridade imediata aos campos com banner compacto e respiro otimizado.
- * - Rodapé: Discreto e centralizado com direitos autorais e links legais.
+ * com o card visual conceitual da Nacif Energy à esquerda e o formulário flutuante à direita.
  */
 export default function AuthLayout({ title, subtitle, footer, children }) {
   const { branding } = useBranding();
-  const isDefaultLogo =
-    !branding?.authLogoDataUrl ||
-    branding.authLogoDataUrl === "/brand-logo-principal.png" ||
-    branding.authLogoDataUrl.includes("brand-logo-principal") ||
-    branding.authLogoDataUrl.includes("Logo-Principal") ||
-    branding.authLogoDataUrl.includes("nacif");
-  const authLogo = isDefaultLogo ? authLogoEnergy : (branding.authLogoDataUrl || authLogoEnergy);
   const brandName = [branding?.appName, branding?.appSuffix].filter(Boolean).join(" ") || "NACIF Energy";
   const currentYear = new Date().getFullYear();
 
@@ -34,55 +21,17 @@ export default function AuthLayout({ title, subtitle, footer, children }) {
           
           {/* ─────────────────────────────────────────────────────────────
               PAINEL ESQUERDO (Desktop):
-              Proporção ~4:5, cantos arredondados (24px), arte de vidro canelado 
-              e tipografia refinada com a palavra 'sol' em itálico editorial
+              Card visual com a imagem oficial da Nacif Energy
+              (Casa contemporânea com energia solar e vista panorâmica)
              ───────────────────────────────────────────────────────────── */}
-          <aside className="hidden lg:flex relative flex-col justify-between overflow-hidden rounded-[24px] border border-slate-200/80 bg-[#F8FBFB] shadow-[0_20px_50px_rgba(0,0,0,0.03),0_1px_3px_rgba(0,0,0,0.02)] w-full max-w-[490px] min-h-[640px] xl:min-h-[660px] p-8 xl:p-9 mx-auto auth-panel-enter">
-            
-            {/* Topo: Logo oficial da marca no canto superior esquerdo */}
-            <header className="relative z-10 flex items-center">
-              <img
-                src={authLogo}
-                alt={brandName}
-                className="h-8 max-w-[160px] object-contain object-left transition-transform duration-300 hover:scale-[1.02]"
-                onError={(e) => {
-                  if (e.currentTarget.src !== authLogoEnergy) {
-                    e.currentTarget.src = authLogoEnergy;
-                  }
-                }}
-              />
-            </header>
-
-            {/* Arte abstrata: lâminas de vidro canelado com luz e acentos #00d8b8 */}
-            <div className="absolute inset-x-0 top-0 pt-10 pointer-events-none">
-              <FlutedGlassArtwork />
-            </div>
-
-            {/* Conteúdo inferior do painel: Respiro, contraste e tipografia editorial */}
-            <footer className="relative z-10 pt-8">
-              {/* Linha introdutória com ponto indicador na cor da marca */}
-              <div className="inline-flex items-center gap-2 mb-3">
-                <span className="h-2 w-2 rounded-full bg-[#00d8b8] brand-pulse-glow" />
-                <span className="text-xs font-semibold tracking-wide text-slate-600">
-                  Seu próximo projeto começa aqui
-                </span>
-              </div>
-
-              {/* Título com destaque tipográfico na palavra 'sol' */}
-              <h2 className="text-[31px] xl:text-[34px] font-extrabold leading-[1.18] tracking-tight text-slate-900 mb-3.5">
-                Da planta ao{" "}
-                <span className="font-editorial text-[1.26em] font-normal italic text-slate-950 inline-block px-1 transform -translate-y-0.5">
-                  sol
-                </span>
-                ,<br />
-                tudo em um só lugar.
-              </h2>
-
-              {/* Descrição curta e legível */}
-              <p className="text-[13px] leading-relaxed text-slate-500 font-normal max-w-[390px]">
-                Planeje instalações elétricas, monte quadros e desenvolva projetos solares em uma única plataforma.
-              </p>
-            </footer>
+          <aside className="hidden lg:flex relative overflow-hidden rounded-[24px] border border-slate-200/80 shadow-[0_20px_50px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.02)] w-full max-w-[490px] h-[640px] xl:h-[660px] mx-auto auth-panel-enter bg-slate-900 group">
+            <img
+              src={authCardHero}
+              alt="Nacif Energy — Grandes projetos começam aqui"
+              className="h-full w-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+            />
+            {/* Feixe sutil de iluminação na abertura */}
+            <div className="absolute inset-0 pointer-events-none glass-sweep-motion opacity-0 bg-gradient-to-b from-white/25 via-transparent to-transparent" />
           </aside>
 
           {/* ─────────────────────────────────────────────────────────────
@@ -90,29 +39,14 @@ export default function AuthLayout({ title, subtitle, footer, children }) {
              ───────────────────────────────────────────────────────────── */}
           <section className="w-full max-w-[360px] mx-auto flex flex-col justify-center auth-form-enter">
             
-            {/* Versão compacta para Mobile (< lg): Logo e Banner sutil sem rolagem excessiva */}
+            {/* Versão compacta para Mobile (< lg): Banner com a imagem oficial */}
             <div className="lg:hidden mb-6 flex flex-col items-center text-center auth-mobile-enter">
-              <img
-                src={authLogo}
-                alt={brandName}
-                className="h-8 max-w-[150px] object-contain mb-4"
-                onError={(e) => {
-                  if (e.currentTarget.src !== authLogoEnergy) {
-                    e.currentTarget.src = authLogoEnergy;
-                  }
-                }}
-              />
-              
-              <div className="w-full relative overflow-hidden rounded-[16px] border border-slate-200/80 bg-[#F8FBFB] p-4 text-left shadow-sm">
-                <div className="inline-flex items-center gap-2 mb-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8] brand-pulse-glow" />
-                  <span className="text-[11px] font-semibold text-slate-600">
-                    Seu próximo projeto começa aqui
-                  </span>
-                </div>
-                <p className="text-sm font-extrabold text-slate-900 leading-snug">
-                  Da planta ao <span className="font-editorial italic font-normal text-base">sol</span>, tudo em um só lugar.
-                </p>
+              <div className="w-full relative h-[210px] overflow-hidden rounded-[18px] border border-slate-200/80 shadow-md">
+                <img
+                  src={authCardHero}
+                  alt="Nacif Energy"
+                  className="h-full w-full object-cover object-center"
+                />
               </div>
             </div>
 
