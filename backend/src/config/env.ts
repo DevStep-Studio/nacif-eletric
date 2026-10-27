@@ -13,6 +13,16 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional().default(""),
   OPENAI_MODEL: z.string().default("gpt-5.5"),
   UPLOAD_DIR: z.string().default("./uploads"),
+  STRIPE_SECRET_KEY: z.string().default(""),
+  STRIPE_WEBHOOK_SECRET: z.string().default(""),
+  STRIPE_PUBLISHABLE_KEY: z.string().default(""),
+  STRIPE_PRICE_ESTUDANTE_MONTHLY: z.string().default("price_test_estudante_monthly"),
+  STRIPE_PRICE_ELETRICO_MONTHLY: z.string().default("price_test_eletrico_monthly"),
+  STRIPE_PRICE_ELETRICO_ANNUAL: z.string().default("price_test_eletrico_annual"),
+  STRIPE_PRICE_SOLAR_MONTHLY: z.string().default("price_test_solar_monthly"),
+  STRIPE_PRICE_SOLAR_ANNUAL: z.string().default("price_test_solar_annual"),
+  STRIPE_PRICE_COMPLETO_MONTHLY: z.string().default("price_test_completo_monthly"),
+  STRIPE_PRICE_COMPLETO_ANNUAL: z.string().default("price_test_completo_annual"),
 });
 
 export const env = envSchema.parse(process.env);

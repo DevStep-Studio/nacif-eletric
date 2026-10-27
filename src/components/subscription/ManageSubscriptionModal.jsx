@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { CreditCard, Calendar, CheckCircle2, AlertTriangle, GraduationCap, ArrowUpRight, ShieldCheck } from "lucide-react";
+import { CreditCard, Calendar, CheckCircle2, AlertTriangle, GraduationCap, ArrowUpRight, ShieldCheck, ExternalLink, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatPlanPrice } from "@/lib/subscriptionPlans";
+import { createPortalSession } from "@/lib/stripeConfig";
 
 export default function ManageSubscriptionModal({
   isOpen,
@@ -14,8 +16,23 @@ export default function ManageSubscriptionModal({
 }) {
   if (!subscription) return null;
 
-  const plan = subscription.plan;
+  const plan = subscription?.plan;
   const isStudent = plan?.isAcademic;
+  const [portalLoading, setPortalLoading] = useState(false);
+
+  const handleOpenPortal = async () => {
+    try {
+      setPortalLoading(true);
+      const data = await createPortalSession();
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.warn("Portal da Stripe indisponível:", err);
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   const formatIsoDate = (iso) => {
     if (!iso) return "Não informada";
@@ -139,6 +156,25 @@ export default function ManageSubscriptionModal({
           </div>
 
           <div className="flex flex-col gap-2 pt-2">
+            <Button
+              type="button"
+              disabled={portalLoading}
+              onClick={handleOpenPortal}
+              className="h-10 rounded-[8px] border border-[#D0D5DD] bg-white font-extrabold text-[#344054] hover:bg-[#F9FAFB] shadow-xs"
+            >
+              {portalLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-[#00d8b8]" />
+                  Conectando ao Stripe...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-1.5">
+                  <ExternalLink className="h-4 w-4 text-[#667085]" />
+                  Acessar Portal do Cliente Stripe
+                </span>
+              )}
+            </Button>
+
             {onChangePlanClick && (
               <Button
                 type="button"
