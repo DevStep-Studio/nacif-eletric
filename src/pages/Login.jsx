@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import { backend, isLocalAuthMode } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -73,11 +74,16 @@ export default function Login() {
         </div>
       )}
 
-      {/* Formulário com campos limpos e foco na cor primária #00d8b8 */}
+      {/* Formulário com campos limpos e animação staggered com foco na cor primária #00d8b8 */}
       <form onSubmit={handleSubmit} className="space-y-4">
         
         {/* Campo E-mail */}
-        <div className="space-y-1.5 text-left">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+          className="space-y-1.5 text-left"
+        >
           <Label htmlFor="email" className="text-xs font-semibold text-slate-700">
             E-mail
           </Label>
@@ -98,10 +104,15 @@ export default function Login() {
               required
             />
           </div>
-        </div>
+        </motion.div>
 
         {/* Campo Senha */}
-        <div className="space-y-1.5 text-left">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
+          className="space-y-1.5 text-left"
+        >
           <div className="flex items-center justify-between">
             <Label htmlFor="password" className="text-xs font-semibold text-slate-700">
               Senha
@@ -142,10 +153,15 @@ export default function Login() {
               )}
             </button>
           </div>
-        </div>
+        </motion.div>
 
         {/* Opção Lembrar de mim */}
-        <div className="flex items-center gap-2 pt-0.5">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
+          className="flex items-center gap-2 pt-0.5"
+        >
           <Checkbox
             id="remember"
             checked={rememberMe}
@@ -158,10 +174,17 @@ export default function Login() {
           >
             Lembrar de mim
           </label>
-        </div>
+        </motion.div>
 
-        {/* Botão Principal com a cor #00d8b8 e texto escuro de alto contraste */}
-        <div className="pt-2">
+        {/* Botão Principal com a cor #00d8b8 e animação de feedback ao toque */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.32, ease: [0.16, 1, 0.3, 1] }}
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.985 }}
+          className="pt-2"
+        >
           <Button
             type="submit"
             disabled={loading}
@@ -176,7 +199,7 @@ export default function Login() {
               "Entrar"
             )}
           </Button>
-        </div>
+        </motion.div>
       </form>
     </AuthLayout>
   );

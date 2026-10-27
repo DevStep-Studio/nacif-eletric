@@ -610,7 +610,7 @@ export default function Home() {
           {/* 4 KPI Metric Cards (Grid 4 colunas) */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {/* Card 1: Demanda Total com Diferenciação de Carga Instalada */}
-            <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3 hover:border-[#CBD5E1] transition flex flex-col justify-between">
+            <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3 hover:border-[#CBD5E1] crud-card-hover crud-card-enter transition flex flex-col justify-between">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -667,7 +667,10 @@ export default function Home() {
             </div>
 
             {/* Card 2: Total de Circuitos */}
-            <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3 hover:border-[#CBD5E1] transition flex flex-col justify-between">
+            <div 
+              style={{ animationDelay: "60ms" }}
+              className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3 hover:border-[#CBD5E1] crud-card-hover crud-card-enter transition flex flex-col justify-between"
+            >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -723,7 +726,10 @@ export default function Home() {
             </div>
 
             {/* Card 3: Projetos Ativos */}
-            <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3 hover:border-[#CBD5E1] transition flex flex-col justify-between">
+            <div 
+              style={{ animationDelay: "120ms" }}
+              className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3 hover:border-[#CBD5E1] crud-card-hover crud-card-enter transition flex flex-col justify-between"
+            >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -773,7 +779,10 @@ export default function Home() {
             </div>
 
             {/* Card 4: Orçamento Consolidado */}
-            <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3 hover:border-[#CBD5E1] transition flex flex-col justify-between">
+            <div 
+              style={{ animationDelay: "180ms" }}
+              className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3 hover:border-[#CBD5E1] crud-card-hover crud-card-enter transition flex flex-col justify-between"
+            >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1115,8 +1124,8 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Tabela de Dados */}
-          <div className="overflow-x-auto">
+          {/* Tabela de Dados com Transição Suave entre Abas */}
+          <div key={activeTableTab} className="overflow-x-auto crud-tab-enter">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-[#F1F5F9] text-[11px] font-black uppercase tracking-wider text-[#94A3B8]">

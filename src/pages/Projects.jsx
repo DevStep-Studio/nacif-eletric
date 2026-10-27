@@ -402,7 +402,7 @@ export default function Projects() {
         ) : filteredProjects.length === 0 ? (
           <FilteredEmpty query={query} />
         ) : viewMode === "cards" ? (
-          <div className="grid gap-3 p-4 lg:grid-cols-2 xl:grid-cols-3 crud-tab-enter">
+          <div key={`cards-${statusFilter}`} className="grid gap-3 p-4 lg:grid-cols-2 xl:grid-cols-3 crud-tab-enter">
             {filteredProjects.map((project, idx) => (
               <div 
                 key={project.id} 
@@ -421,7 +421,7 @@ export default function Projects() {
             ))}
           </div>
         ) : (
-          <div className="crud-tab-enter">
+          <div key={`table-${statusFilter}`} className="crud-tab-enter">
             <ProjectTable
               projects={filteredProjects}
               selectedIds={selectedIds}

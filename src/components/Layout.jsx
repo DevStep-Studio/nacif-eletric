@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Outlet, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
   AlertTriangle,
   Bell,
@@ -1193,10 +1194,16 @@ export default function Layout() {
           </div>
         )}
 
-        {/* Viewport da Página */}
-        <div key={`${location.pathname}${location.search}`} className="app-page-enter flex-1 min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8">
+        {/* Viewport da Página com Transição Suave de Abertura / Movimentação */}
+        <motion.div
+          key={`${location.pathname}${location.search}`}
+          initial={{ opacity: 0, y: 14, scale: 0.996 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="app-page-enter flex-1 min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8"
+        >
           <Outlet />
-        </div>
+        </motion.div>
 
         {/* Public Institutional & Legal Footer */}
         <PublicFooter className="mt-auto" />
