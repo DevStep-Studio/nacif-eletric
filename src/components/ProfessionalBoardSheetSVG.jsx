@@ -154,15 +154,58 @@ function Header({ data, sheet }) {
 
 function TitleBlock({ data, sheet, x = 438, y = 720, w = 705, h = 86 }) {
   const { colors } = data;
-  const metaW = Math.min(180, w * 0.26);
+  const metaW = 180;
+  const logoW = 150;
+  const infoW = w - metaW - logoW;
 
   return (
     <g>
+      {/* Moldura Externa do Carimbo */}
       <rect x={x} y={y} width={w} height={h} fill="#ffffff" stroke={colors.ink} strokeWidth="0.8" />
-      <rect x={x} y={y} width={w - metaW} height="24" fill={colors.soft} stroke={colors.faint} strokeWidth="0.6" />
-      <Text x={x + 12} y={y + 16} size={8.5} weight={900} color={colors.ink}>
-        {clipText(sheet?.title || data.title, 56)}
+
+      {/* 1. SEÇÃO DE INFORMAÇÕES DO PROJETO (Esquerda) */}
+      <rect x={x} y={y} width={infoW} height="24" fill={colors.soft} stroke={colors.faint} strokeWidth="0.6" />
+      <Text x={x + 10} y={y + 16} size={8} weight={900} color={colors.ink}>
+        {clipText(sheet?.title || data.title, 48)}
       </Text>
+
+      {data.titleRows.map(([label, value], index) => {
+        const rowY = y + 28 + index * 10.5;
+        return (
+          <g key={label}>
+            <Text x={x + 10} y={rowY} size={5.9} weight={900} color={colors.muted}>
+              {label}
+            </Text>
+            <Text x={x + 92} y={rowY} size={6.4} weight={700} color={colors.ink}>
+              {clipText(value, 38)}
+            </Text>
+          </g>
+        );
+      })}
+
+      {/* 2. SEÇÃO PROJETISTA / LOGOTIPO OFICIAL NACIF ENERGY (Centro) */}
+      <rect x={x + infoW} y={y} width={logoW} height={h} fill="#ffffff" stroke={colors.ink} strokeWidth="0.6" />
+      <rect x={x + infoW} y={y} width={logoW} height="18" fill={colors.soft} stroke={colors.faint} strokeWidth="0.5" />
+      <Text x={x + infoW + logoW / 2} y={y + 12.5} size={6.5} weight={900} color={colors.muted} anchor="middle">
+        PROJETISTA / ENGENHARIA
+      </Text>
+      <image
+        href={brandLogoEnergy}
+        xlinkHref={brandLogoEnergy}
+        x={x + infoW + 10}
+        y={y + 22}
+        width={logoW - 20}
+        height="44"
+        preserveAspectRatio="xMidYMid meet"
+      />
+      <Text x={x + infoW + logoW / 2} y={y + 74} size={5.5} weight={800} color="#00a98e" anchor="middle">
+        NACIF ENERGY
+      </Text>
+      <Text x={x + infoW + logoW / 2} y={y + 81} size={4.8} weight={600} color={colors.muted} anchor="middle">
+        Soluções em Energia & Projetos
+      </Text>
+
+      {/* 3. SEÇÃO METADADOS E FOLHA (Direita) */}
       <rect x={x + w - metaW} y={y} width={metaW} height={h} fill="#ffffff" stroke={colors.ink} strokeWidth="0.6" />
       <line x1={x + w - metaW} y1={y + 28} x2={x + w} y2={y + 28} stroke={colors.faint} strokeWidth="0.6" />
       <line x1={x + w - metaW} y1={y + 56} x2={x + w} y2={y + 56} stroke={colors.faint} strokeWidth="0.6" />
@@ -184,20 +227,6 @@ function TitleBlock({ data, sheet, x = 438, y = 720, w = 705, h = 86 }) {
       <Text x={x + w - 12} y={y + 75} size={9} weight={900} color={colors.ink} anchor="end">
         {data.date}
       </Text>
-
-      {data.titleRows.map(([label, value], index) => {
-        const rowY = y + 28 + index * 10.5;
-        return (
-          <g key={label}>
-            <Text x={x + 12} y={rowY} size={5.9} weight={900} color={colors.muted}>
-              {label}
-            </Text>
-            <Text x={x + 98} y={rowY} size={6.4} weight={700} color={colors.ink}>
-              {clipText(value, 60)}
-            </Text>
-          </g>
-        );
-      })}
     </g>
   );
 }
@@ -491,8 +520,8 @@ function CombinedPanelDiagram({ data, sheet }) {
         );
       })}
 
-      <Text x={center} y={y + h - 14} size={8.5} weight={800} color={colors.ink} anchor="middle">
-        MEMÓRIA DE CÁLCULO - {clipText(data.projectName.toUpperCase(), 34)}
+      <Text x={center} y={y + h - 12} size={7.5} weight={700} color={colors.muted} anchor="middle">
+        {clipText(data.panelName.toUpperCase(), 34)} · {data.system.label} · NBR 5410
       </Text>
     </g>
   );
@@ -1180,7 +1209,7 @@ export default function ProfessionalBoardSheetSVG({ project, metrics, sheetIndex
         <DedicatedLoadTableSheet data={panelData} sheet={activeSheet} />
       )}
 
-      <Text x="44" y="796" size={6.6} weight={700} color={colors.muted}>
+      <Text x="28" y="830" size={5.5} weight={600} color="#64748b">
         Documento gerado automaticamente conforme NBR 5410:2004 / IEC 60617. Revisar, validar e assinar por profissional habilitado antes da execução.
       </Text>
     </svg>
