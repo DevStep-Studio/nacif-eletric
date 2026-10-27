@@ -3,6 +3,7 @@ import {
   clipText,
   formatNumber,
 } from "@/lib/professionalPanelBoardLibrary";
+import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 
 const phaseColor = (colors, phase) => ({
   A: colors.phaseA,
@@ -132,10 +133,15 @@ function Header({ data, sheet }) {
       <Text x="848" y="64" size={7.8} weight={700} color={colors.muted} anchor="end">
         {data.system.label} · {data.project?.voltage || 220}V · {data.circuits.length} circuito(s) total
       </Text>
-      <rect x="882" y="36" width="90" height="30" rx="4" fill={colors.blueDark} />
-      <Text x="927" y="56" size={12} weight={900} color="#ffffff" anchor="middle">
-        VOLT AI
-      </Text>
+      <image
+        href={brandLogoEnergy}
+        xlinkHref={brandLogoEnergy}
+        x="875"
+        y="28"
+        width="145"
+        height="50"
+        preserveAspectRatio="xMidYMid meet"
+      />
       <Text x="1148" y="44" size={8.5} weight={900} color={colors.ink} anchor="end">
         {sheet?.sheetCode || data.drawingCode}
       </Text>

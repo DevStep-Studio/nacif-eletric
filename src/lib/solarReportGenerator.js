@@ -1,5 +1,5 @@
 /**
- * Gerador de Relatórios Profissionais Fotovoltaicos — VOLTAI / NACIF
+ * Gerador de Relatórios Profissionais Fotovoltaicos — NACIF ENERGY
  *
  * Gera relatórios técnicos e executivos em PDF de alta qualidade com jsPDF:
  * 1. Planta de Implantação

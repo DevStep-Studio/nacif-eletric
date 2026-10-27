@@ -130,7 +130,7 @@ export function drawTitleBlock(doc, project = {}, title = "PROJETO EXECUTIVO") {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
   doc.setTextColor(0, 100, 166);
-  text(doc, "NACIF SOLUTIONS ELETRIC", x + 5, cy + 21);
+  text(doc, "NACIF ENERGY", x + 5, cy + 21);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139);
@@ -577,7 +577,7 @@ export function downloadProfessionalElectricalSheet(project, metricsArg) {
   doc.setProperties({
     title: `${project.name || "Projeto"} - Projeto Executivo Eletrico`,
     subject: "Prancha executiva de diagrama e memoria de calculo",
-    creator: "Volt AI",
+    creator: "Nacif Energy",
   });
 
   drawSheetFrame(doc);

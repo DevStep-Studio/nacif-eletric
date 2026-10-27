@@ -1,5 +1,5 @@
 /**
- * Serviços de IA e Integrações Externas para o Módulo Solar — VOLTAI / NACIF
+ * Serviços de IA e Integrações Externas para o Módulo Solar — NACIF ENERGY
  *
  * Provê abstração unificada para:
  * 1. Leitura de Conta de Energia (PDF Textual, OCR/Vision LLM, Extrator Inteligente)

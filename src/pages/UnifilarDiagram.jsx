@@ -609,7 +609,7 @@ function UnifilarSVG({ project, metrics }) {
     const rows = [
       { h: 23, label: "00", value: new Date().toLocaleDateString("pt-BR"), extra: "EMISSÃO INICIAL" },
       { h: 42, label: "CLIENTE:", value: client },
-      { h: 48, label: "PROJETISTA:", value: "VOLT AI / ENGENHARIA" },
+      { h: 48, label: "PROJETISTA:", value: "NACIF ENERGY / ENGENHARIA", isProjetista: true },
       { h: 44, label: "NOME DO PROJETO:", value: project?.name || "PROJETO ELÉTRICO" },
       { h: 46, label: "DISCIPLINA / SUB-DISCIPLINA:", value: "SISTEMA DE INSTALAÇÕES ELÉTRICAS" },
       { h: 54, label: "TÍTULO DO DESENHO:", value: "DIAGRAMA E MEMÓRIA DE CÁLCULO DO QUADRO" },
@@ -641,7 +641,19 @@ function UnifilarSVG({ project, metrics }) {
             <g key={index}>
               <rect x={x} y={rowY} width={w} height={row.h} fill="white" stroke="#000" strokeWidth="0.35" />
               <text x={x + 6} y={rowY + 9} fill="#000" fontSize="6" fontWeight="700">{row.label}</text>
-              <text x={x + 6} y={rowY + 25} fill="#000" fontSize={row.label === "TÍTULO DO DESENHO:" ? "9" : "8"}>{String(row.value).slice(0, 42)}</text>
+              {row.isProjetista ? (
+                <image
+                  href={logoUrl || brandLogoEnergy}
+                  xlinkHref={logoUrl || brandLogoEnergy}
+                  x={x + 6}
+                  y={rowY + 13}
+                  width={130}
+                  height={30}
+                  preserveAspectRatio="xMidYMid meet"
+                />
+              ) : (
+                <text x={x + 6} y={rowY + 25} fill="#000" fontSize={row.label === "TÍTULO DO DESENHO:" ? "9" : "8"}>{String(row.value).slice(0, 42)}</text>
+              )}
               {row.extra && <text x={x + w - 8} y={rowY + 9} fill="#000" fontSize="6" textAnchor="end">{row.extra}</text>}
             </g>
           );
@@ -2076,7 +2088,7 @@ export default function UnifilarDiagram() {
       doc.setProperties({
         title: `${project?.name || "Projeto"} - Diagrama Interativo`,
         subject: "Diagrama vetorial interativo unifilar conforme NBR 5410",
-        creator: "Volt AI",
+        creator: "Nacif Energy",
       });
 
       const clone = svg.cloneNode(true);
@@ -2166,7 +2178,7 @@ export default function UnifilarDiagram() {
       doc.setProperties({
         title: `${project?.name || "Projeto"} - ${diagramModel === "qgbt" ? "Prancha QGBT" : "Prancha A0 Unifilar"}`,
         subject: diagramModel === "qgbt" ? "Diagrama QGBT com alimentadores dos quadros" : "Diagrama unifilar e memória do quadro",
-        creator: "Volt AI",
+        creator: "Nacif Energy",
       });
 
       for (let i = 0; i < svgs.length; i++) {
