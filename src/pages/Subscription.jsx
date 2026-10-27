@@ -13,6 +13,7 @@ import {
   Calendar,
   XCircle,
   HelpCircle,
+  Loader2,
 } from "lucide-react";
 import { backend } from "@/api/backendClient";
 import { useAuth } from "@/lib/AuthContext";
@@ -36,6 +37,12 @@ import {
 import AcademicVerificationModal from "@/components/subscription/AcademicVerificationModal";
 import PlanChangeModal from "@/components/subscription/PlanChangeModal";
 import ManageSubscriptionModal from "@/components/subscription/ManageSubscriptionModal";
+import {
+  STRIPE_TEST_PRICE_IDS,
+  getPlanPriceId,
+  createCheckoutSession,
+  createPortalSession,
+} from "@/lib/stripeConfig";
 
 const featureDescriptions = {
   [FEATURE_KEYS.PROJECTS]: "Quantidade de projetos ativos no workspace.",
@@ -137,6 +144,81 @@ export default function Subscription() {
     setBillingMessage("Comprovante acadêmico enviado com sucesso. Aguardando aprovação administrativa.");
     loadData();
     setTimeout(() => setBillingMessage(""), 5000);
+  };
+
+  const [subscribingPriceId, setSubscribingPriceId] = useState(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+
+  // Monitora retorno do checkout do Stripe via parâmetros na URL
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const checkoutStatus = params.get("checkout");
+    if (checkoutStatus === "success") {
+      setBillingMessage("🎉 Pagamento confirmado com sucesso! Sua assinatura foi atualizada.");
+      window.history.replaceState({}, document.title, window.location.pathname);
+      loadData();
+      setTimeout(() => setBillingMessage(""), 8000);
+    } else if (checkoutStatus === "cancelled") {
+      setBillingMessage("O processo de checkout foi cancelado. Nenhuma cobrança foi efetuada.");
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setTimeout(() => setBillingMessage(""), 5000);
+    }
+  }, []);
+
+  /**
+   * Função handleSubscription:
+   * Disparada pelos botões "Contratar com documento" e "Fazer upgrade"
+   * Faz o POST para /create-checkout-session e redireciona via window.location.href
+   */
+  const handleSubscription = async (priceId) => {
+    if (!priceId) {
+      setBillingMessage("Identificador de preço (priceId) não configurado para este plano.");
+      return;
+    }
+
+    try {
+      setSubscribingPriceId(priceId);
+      setBillingMessage("Redirecionando com segurança para a Stripe...");
+
+      const data = await createCheckoutSession({
+        priceId,
+        userId: activeUser?.id,
+      });
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("URL de checkout não retornada pelo servidor.");
+      }
+    } catch (err) {
+      console.error("[handleSubscription] Erro:", err);
+      setBillingMessage(`Erro ao iniciar sessão na Stripe: ${err.message || "Tente novamente mais tarde."}`);
+      setTimeout(() => setBillingMessage(""), 6000);
+    } finally {
+      setSubscribingPriceId(null);
+    }
+  };
+
+  /**
+   * Função handleCustomerPortal:
+   * Dispara o POST para /create-portal-session para abrir o Customer Portal da Stripe
+   */
+  const handleCustomerPortal = async () => {
+    try {
+      setPortalLoading(true);
+      const data = await createPortalSession({ userId: activeUser?.id });
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        setIsManageModalOpen(true);
+      }
+    } catch (err) {
+      console.warn("[handleCustomerPortal] Portal da Stripe indisponível, abrindo modal local:", err);
+      setIsManageModalOpen(true);
+    } finally {
+      setPortalLoading(false);
+    }
   };
 
   return (
@@ -264,10 +346,18 @@ export default function Subscription() {
 
           <Button
             type="button"
-            onClick={() => setIsManageModalOpen(true)}
+            disabled={portalLoading}
+            onClick={handleCustomerPortal}
             className="mt-4 h-10 w-full rounded-[8px] border border-[#D0D5DD] bg-white font-extrabold text-[#344054] hover:bg-[#F9FAFB]"
           >
-            Gerenciar assinatura
+            {portalLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-[#00d8b8]" />
+                Abrindo Portal Stripe...
+              </span>
+            ) : (
+              "Gerenciar assinatura"
+            )}
           </Button>
         </article>
 
@@ -379,6 +469,10 @@ export default function Subscription() {
             const isCompleto = plan.code === "completo";
             const annualSavings = calculateAnnualSavings(plan);
 
+            // Regra de Negócio: Estudante APENAS mensal. Elétrico, Solar e Completo apontam para o priceId anual quando cycle === "annual".
+            const targetPriceId = getPlanPriceId(plan.code, cycle);
+            const isSubscribingThis = subscribingPriceId === targetPriceId;
+
             return (
               <article
                 key={plan.code}
@@ -421,7 +515,7 @@ export default function Subscription() {
                           <span className="text-xs font-semibold text-[#667085]">/mês</span>
                         </div>
                         <p className="mt-0.5 text-[11px] font-bold text-emerald-700">
-                          R$ {plan.annualPrice?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} cobrado anualmente (-30%)
+                          R$ {plan.annualPrice?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} cobrado anualmente (-30% OFF)
                         </p>
                       </div>
                     ) : (
@@ -477,8 +571,8 @@ export default function Subscription() {
                 <div className="mt-6 pt-3">
                   <Button
                     type="button"
-                    disabled={isCurrent}
-                    onClick={() => handlePlanSelect(plan)}
+                    disabled={isCurrent || subscribingPriceId !== null}
+                    onClick={() => handleSubscription(targetPriceId)}
                     className={`h-10 w-full rounded-[8px] font-extrabold text-xs transition-all ${
                       isCurrent
                         ? "bg-[#EAECF0] text-[#667085] hover:bg-[#EAECF0] cursor-default"
@@ -487,11 +581,18 @@ export default function Subscription() {
                         : "bg-[#0f172a] text-white hover:bg-[#1e293b]"
                     }`}
                   >
-                    {isCurrent
-                      ? "Plano atual"
-                      : plan.isAcademic
-                      ? "Contratar com documento"
-                      : "Fazer upgrade"}
+                    {isSubscribingThis ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Redirecionando...
+                      </span>
+                    ) : isCurrent ? (
+                      "Plano atual"
+                    ) : plan.isAcademic ? (
+                      "Contratar com documento"
+                    ) : (
+                      "Fazer upgrade"
+                    )}
                   </Button>
                 </div>
               </article>
