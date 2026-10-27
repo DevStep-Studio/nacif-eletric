@@ -176,7 +176,9 @@ const AuthenticatedApp = () => {
 
       {/* Institutional & Support Public Routes */}
       <Route path="/termos" element={<TermsOfServicePage />} />
+      <Route path="/terms" element={<TermsOfServicePage />} />
       <Route path="/privacidade" element={<PrivacyPolicyPage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/cookies" element={<CookiePolicyPage />} />
       <Route path="/seguranca" element={<SecurityPolicyPage />} />
       <Route path="/privacidade/direitos" element={<LgpdRightsPage />} />

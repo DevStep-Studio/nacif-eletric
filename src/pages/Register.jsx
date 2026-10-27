@@ -329,11 +329,11 @@ export default function Register() {
           />
           <Label htmlFor="accept-terms" className="text-xs font-normal text-slate-500 leading-relaxed cursor-pointer select-none">
             Li e concordo com os{" "}
-            <Link to="/termos" target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-900 hover:text-[#00a98e] underline underline-offset-4 transition-colors">
+            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-900 hover:text-[#00a98e] underline underline-offset-4 transition-colors">
               Termos de Uso
             </Link>{" "}
             e a{" "}
-            <Link to="/privacidade" target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-900 hover:text-[#00a98e] underline underline-offset-4 transition-colors">
+            <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-900 hover:text-[#00a98e] underline underline-offset-4 transition-colors">
               Política de Privacidade
             </Link>
             .

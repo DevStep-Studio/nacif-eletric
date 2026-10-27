@@ -349,7 +349,7 @@ export default function Layout() {
   const isImmersiveSolarRoute = location.pathname.startsWith("/solar-project");
   if (isImmersiveSolarRoute) {
     return (
-      <main className="min-h-screen font-inter bg-[#070c14] text-white">
+      <main className="min-h-screen font-inter bg-[#F8FAFC] text-slate-900">
         <Outlet />
       </main>
     );

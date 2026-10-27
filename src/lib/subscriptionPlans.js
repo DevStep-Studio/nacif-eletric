@@ -1,3 +1,5 @@
+import { hasFullSystemAccess, isSuperAdmin } from "./professionalAccess.js";
+
 export const FEATURE_KEYS = {
   PROJECTS: "projects",
   STORAGE_MB: "storageMb",
@@ -281,8 +283,8 @@ export const LEGACY_PLANS = [
       plant: "full",
       panel: "full",
       unifilar: "full",
-      solar: "none",
-      solar_3d: "none",
+      solar: "full",
+      solar_3d: "full",
       team: true,
       calculator: "full",
       nbr_library: "full",
@@ -703,8 +705,13 @@ export function isAcademicValid(user = {}) {
  * Camada centralizada de autorização por módulo e recurso baseada no plano contratado.
  */
 export function canAccessModule(user = {}, moduleKey = "") {
-  // Super admin e administradores de sistema possuem acesso irrestrito
-  if (user?.role === "super_admin" || user?.is_super_admin === true) {
+  // Super admin e administradores possuem acesso irrestrito
+  if (
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.is_super_admin === true ||
+    isSuperAdmin(user)
+  ) {
     return {
       allowed: true,
       level: "full",
@@ -743,7 +750,12 @@ export function canAccessModule(user = {}, moduleKey = "") {
 
   // Módulo Solar
   if (normalizedModule === "solar" || normalizedModule === "solar_project" || normalizedModule === "solar_3d") {
-    if (plan.code === "solar" || plan.code === "completo" || plan.code === "engineering") {
+    if (
+      plan.code === "solar" ||
+      plan.code === "completo" ||
+      plan.code === "engineering" ||
+      plan.code === "professional"
+    ) {
       return { allowed: true, level: "full", isAcademic: false, message: null, requiredPlans: [] };
     }
 
@@ -789,6 +801,21 @@ export function canAccessModule(user = {}, moduleKey = "") {
  * NUNCA bloqueia projetos já existentes.
  */
 export function checkProjectCreationAllowed(user = {}, currentProjectCount = 0, projectType = "") {
+  if (
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.is_super_admin === true ||
+    isSuperAdmin(user)
+  ) {
+    return {
+      allowed: true,
+      currentCount: Number(currentProjectCount),
+      limit: Number.POSITIVE_INFINITY,
+      planCode: "completo",
+      reason: null,
+    };
+  }
+
   const { plan } = normalizeSubscription(user);
   const limit = getLimit(plan, FEATURE_KEYS.PROJECTS);
   const normalizedType = String(projectType || "")
