@@ -77,6 +77,7 @@ const ExportDataPage = React.lazy(() => import('./pages/account/ExportData'));
 // System Components
 import CookieConsentBanner from './components/system/CookieConsentBanner';
 import DeviceGate from './components/system/DeviceGate';
+import BrandLoadingScreen from './components/system/BrandLoadingScreen';
 
 class AppErrorBoundary extends React.Component {
   constructor(props) {
@@ -135,12 +136,14 @@ const AuthenticatedApp = () => {
   const superAdminAccess = isSuperAdmin(user);
   const requireSuperAdmin = (element) => superAdminAccess ? element : <Navigate to="/403" replace />;
 
-  // Show loading spinner while checking app public settings or auth
+  // Show branded loading screen while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary/25 border-t-primary rounded-full animate-spin"></div>
-      </div>
+      <BrandLoadingScreen
+        fullScreen
+        message="Iniciando ambiente Nacif Energy..."
+        subtitle="Verificando credenciais e configurações de segurança"
+      />
     );
   }
 
@@ -154,16 +157,16 @@ const AuthenticatedApp = () => {
     }
   }
 
-const PageLoadingFallback = () => (
-  <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 space-y-4">
-    <div className="w-10 h-10 border-4 border-[#005B94]/20 border-t-[#005B94] rounded-full animate-spin"></div>
-    <span className="text-xs font-medium text-slate-500 animate-pulse">Carregando módulo Nacif...</span>
-  </div>
-);
-
   // Render the main app
   return (
-    <React.Suspense fallback={<PageLoadingFallback />}>
+    <React.Suspense
+      fallback={
+        <BrandLoadingScreen
+          message="Carregando módulo Nacif Energy..."
+          subtitle="Preparando interface e recursos técnicos"
+        />
+      }
+    >
       <Routes>
         {/* Auth Public Routes */}
         <Route path="/login" element={<Login />} />

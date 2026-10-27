@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import PageHeader from "@/components/PageHeader";
+import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import {
   THEME_PRESETS,
   fileToDataUrl,
@@ -203,9 +204,10 @@ export default function AdminPanel() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
-      </div>
+      <BrandLoadingScreen
+        message="Carregando painel administrativo..."
+        subtitle="Carregando usuários, métricas e configurações globais"
+      />
     );
   }
 

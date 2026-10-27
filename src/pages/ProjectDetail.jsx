@@ -27,6 +27,7 @@ import EditProjectModal from "@/components/EditProjectModal";
 import PageHeader from "@/components/PageHeader";
 import NextStepCard from "@/components/navigation/NextStepCard";
 import ProjectProgress from "@/components/navigation/ProjectProgress";
+import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import { autoBalancePhases, buildProjectElectricalSyncPayload, calcCircuit, calcProjectMetrics } from "@/lib/electricalEngine";
 
 const formatNumber = (value, suffix = "") =>
@@ -369,9 +370,10 @@ export default function ProjectDetail() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
-      </div>
+      <BrandLoadingScreen
+        message="Carregando detalhes do projeto..."
+        subtitle="Sincronizando circuitos, diagramas e dados elétricos"
+      />
     );
   }
 
