@@ -402,30 +402,37 @@ export default function Projects() {
         ) : filteredProjects.length === 0 ? (
           <FilteredEmpty query={query} />
         ) : viewMode === "cards" ? (
-          <div className="grid gap-3 p-4 lg:grid-cols-2 xl:grid-cols-3">
-            {filteredProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                selected={selectedIds.includes(project.id)}
-                onSelect={() => toggleSelected(project.id)}
-                onEdit={handleEdit}
-                onDuplicate={handleDuplicate}
-                onDelete={() => handleDelete(project.id)}
-              />
+          <div className="grid gap-3 p-4 lg:grid-cols-2 xl:grid-cols-3 crud-tab-enter">
+            {filteredProjects.map((project, idx) => (
+              <div 
+                key={project.id} 
+                className="crud-card-enter"
+                style={{ animationDelay: `${Math.min(idx * 30, 300)}ms` }}
+              >
+                <ProjectCard
+                  project={project}
+                  selected={selectedIds.includes(project.id)}
+                  onSelect={() => toggleSelected(project.id)}
+                  onEdit={handleEdit}
+                  onDuplicate={handleDuplicate}
+                  onDelete={() => handleDelete(project.id)}
+                />
+              </div>
             ))}
           </div>
         ) : (
-          <ProjectTable
-            projects={filteredProjects}
-            selectedIds={selectedIds}
-            allSelected={allFilteredSelected}
-            onToggleAll={toggleAllFiltered}
-            onToggleSelected={toggleSelected}
-            onEdit={handleEdit}
-            onDuplicate={handleDuplicate}
-            onDelete={handleDelete}
-          />
+          <div className="crud-tab-enter">
+            <ProjectTable
+              projects={filteredProjects}
+              selectedIds={selectedIds}
+              allSelected={allFilteredSelected}
+              onToggleAll={toggleAllFiltered}
+              onToggleSelected={toggleSelected}
+              onEdit={handleEdit}
+              onDuplicate={handleDuplicate}
+              onDelete={handleDelete}
+            />
+          </div>
         )}
       </section>
 
@@ -597,7 +604,7 @@ function ProjectCard({ project, selected, onSelect, onEdit, onDuplicate, onDelet
   return (
     <article
       onClick={() => navigate(`/projects/${project.id}`)}
-      className={`relative overflow-hidden rounded-[12px] border p-4 transition cursor-pointer hover:shadow-md ${tone.card}`}
+      className={`relative overflow-hidden rounded-[12px] border p-4 cursor-pointer crud-card-hover ${tone.card}`}
     >
       <span className={`absolute inset-y-3 left-0 w-1 rounded-r-full ${tone.rail}`} />
       <div className="flex items-start justify-between gap-3">

@@ -48,7 +48,7 @@ export default function NewProject() {
   };
 
   return (
-    <div className="w-full max-w-none space-y-6 pb-20">
+    <div className="w-full max-w-none space-y-6 pb-20 crud-tab-enter">
       <PageHeader
         icon={Plus}
         title="Novo Projeto"

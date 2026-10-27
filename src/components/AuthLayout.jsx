@@ -37,14 +37,14 @@ export default function AuthLayout({ title, subtitle, footer, children }) {
               Proporção ~4:5, cantos arredondados (24px), arte de vidro canelado 
               e tipografia refinada com a palavra 'sol' em itálico editorial
              ───────────────────────────────────────────────────────────── */}
-          <aside className="hidden lg:flex relative flex-col justify-between overflow-hidden rounded-[24px] border border-slate-200/80 bg-[#F8FBFB] shadow-[0_20px_50px_rgba(0,0,0,0.03),0_1px_3px_rgba(0,0,0,0.02)] w-full max-w-[490px] min-h-[640px] xl:min-h-[660px] p-8 xl:p-9 mx-auto">
+          <aside className="hidden lg:flex relative flex-col justify-between overflow-hidden rounded-[24px] border border-slate-200/80 bg-[#F8FBFB] shadow-[0_20px_50px_rgba(0,0,0,0.03),0_1px_3px_rgba(0,0,0,0.02)] w-full max-w-[490px] min-h-[640px] xl:min-h-[660px] p-8 xl:p-9 mx-auto auth-panel-enter">
             
             {/* Topo: Logo oficial da marca no canto superior esquerdo */}
             <header className="relative z-10 flex items-center">
               <img
                 src={authLogo}
                 alt={brandName}
-                className="h-8 max-w-[160px] object-contain object-left"
+                className="h-8 max-w-[160px] object-contain object-left transition-transform duration-300 hover:scale-[1.02]"
                 onError={(e) => {
                   if (e.currentTarget.src !== authLogoEnergy) {
                     e.currentTarget.src = authLogoEnergy;
@@ -62,7 +62,7 @@ export default function AuthLayout({ title, subtitle, footer, children }) {
             <footer className="relative z-10 pt-8">
               {/* Linha introdutória com ponto indicador na cor da marca */}
               <div className="inline-flex items-center gap-2 mb-3">
-                <span className="h-2 w-2 rounded-full bg-[#00d8b8] shadow-[0_0_8px_rgba(0,216,184,0.9)]" />
+                <span className="h-2 w-2 rounded-full bg-[#00d8b8] brand-pulse-glow" />
                 <span className="text-xs font-semibold tracking-wide text-slate-600">
                   Seu próximo projeto começa aqui
                 </span>
@@ -88,10 +88,10 @@ export default function AuthLayout({ title, subtitle, footer, children }) {
           {/* ─────────────────────────────────────────────────────────────
               COLUNA DIREITA: Formulário Compacto sem Card Externo
              ───────────────────────────────────────────────────────────── */}
-          <section className="w-full max-w-[360px] mx-auto flex flex-col justify-center">
+          <section className="w-full max-w-[360px] mx-auto flex flex-col justify-center auth-form-enter">
             
             {/* Versão compacta para Mobile (< lg): Logo e Banner sutil sem rolagem excessiva */}
-            <div className="lg:hidden mb-6 flex flex-col items-center text-center">
+            <div className="lg:hidden mb-6 flex flex-col items-center text-center auth-mobile-enter">
               <img
                 src={authLogo}
                 alt={brandName}
@@ -105,7 +105,7 @@ export default function AuthLayout({ title, subtitle, footer, children }) {
               
               <div className="w-full relative overflow-hidden rounded-[16px] border border-slate-200/80 bg-[#F8FBFB] p-4 text-left shadow-sm">
                 <div className="inline-flex items-center gap-2 mb-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8] brand-pulse-glow" />
                   <span className="text-[11px] font-semibold text-slate-600">
                     Seu próximo projeto começa aqui
                   </span>

@@ -1,5 +1,12 @@
 # Diretrizes do Projeto Nacif Eletric
 
+## Regra de Execução Direta e Autônoma (Autonomous Execution)
+
+> **IMPORTANTE**: O usuário NÃO deseja ser perguntado se pode prosseguir ou se precisa de confirmação antes de implementar.
+> 1. Execute o código e as alterações solicitadas imediatamente de ponta a ponta.
+> 2. Não crie pausas conversacionais de "podemos prosseguir?" ou "posso implementar?".
+> 3. Entregue a tarefa pronta, validada e commitada.
+
 ## Regra de Auto-Commit Obrigatório (Automated Git Commits)
 
 > **IMPORTANTE**: Sempre que você (agente) concluir qualquer ajuste, correção de bug, nova funcionalidade, refatoração ou alteração no código solicitado pelo usuário:

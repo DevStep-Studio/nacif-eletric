@@ -115,42 +115,163 @@ label.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10),
   outline-offset: 2px !important;
 }
 
-@keyframes appPageIn {
-  from {
+/* ==========================================================================
+   ANIMAÇÕES DE ABERTURA E TRANSIÇÃO (AUTH E CRUD)
+   ========================================================================== */
+@keyframes authPanelIn {
+  0% {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(22px) scale(0.975);
   }
-  to {
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes authFormIn {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes glassSweep {
+  0% {
+    opacity: 0;
+    transform: translateY(-80%) rotate(4deg);
+  }
+  35% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(150%) rotate(4deg);
+  }
+}
+
+@keyframes brandPulse {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(0, 216, 184, 0.8), 0 0 12px rgba(0, 216, 184, 0.25);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(0, 216, 184, 1), 0 0 22px rgba(0, 216, 184, 0.45);
+    transform: scale(1.15);
+  }
+}
+
+@keyframes appPageIn {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.995);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes appItemIn {
-  from {
+  0% {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(10px);
   }
-  to {
+  100% {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
+@keyframes crudCardIn {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tabFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Classes utilitárias de movimentação */
+.auth-panel-enter {
+  animation: authPanelIn 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.auth-form-enter {
+  animation: authFormIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+}
+
+.auth-mobile-enter {
+  animation: authFormIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.glass-sweep-motion {
+  animation: glassSweep 1.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+}
+
+.brand-pulse-glow {
+  animation: brandPulse 2.6s ease-in-out infinite;
+}
+
 .app-page-enter {
-  animation: appPageIn 180ms ease-out both;
+  animation: appPageIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .app-page-enter > * > * {
-  animation: appItemIn 180ms ease-out both;
+  animation: appItemIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.crud-card-enter {
+  animation: crudCardIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.crud-tab-enter {
+  animation: tabFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.crud-card-hover {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+
+.crud-card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.06), 0 4px 10px -2px rgba(0, 0, 0, 0.02);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .app-page-enter,
-  .app-page-enter > * > * {
-    animation: none;
+  .app-page-enter > * > *,
+  .auth-panel-enter,
+  .auth-form-enter,
+  .auth-mobile-enter,
+  .glass-sweep-motion,
+  .brand-pulse-glow,
+  .crud-card-enter,
+  .crud-tab-enter,
+  .crud-card-hover {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
   }
 }
+
 
 .solar-designer-map.leaflet-container {
   background: #0f172a;

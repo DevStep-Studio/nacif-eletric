@@ -154,6 +154,15 @@ export default function FlutedGlassArtwork() {
         ))}
       </svg>
 
+      {/* Efeito de abertura: feixe sutil de luz percorrendo as lâminas */}
+      <div 
+        className="absolute inset-x-0 -top-24 h-48 pointer-events-none glass-sweep-motion opacity-0"
+        style={{
+          background: "linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.7) 40%, rgba(0, 216, 184, 0.4) 65%, transparent 100%)",
+          filter: "blur(8px)",
+        }}
+      />
+
       {/* Degradê inferior de transição suave para reservar área tranquila aos textos */}
       <div 
         className="absolute inset-x-0 bottom-0 h-32"
