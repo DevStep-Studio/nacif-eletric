@@ -235,6 +235,7 @@ export function saveBranding(nextBranding) {
 
 export function applyBranding(brandingInput = readBranding()) {
   if (typeof document === "undefined") return;
+  document.title = "Nacif Energy";
   const branding = normalizeBranding(brandingInput);
   const root = document.documentElement;
 
