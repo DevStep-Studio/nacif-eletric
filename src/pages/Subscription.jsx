@@ -78,6 +78,41 @@ const formatIsoDate = (iso) => {
   }
 };
 
+const PLAN_HIGHLIGHTS = {
+  estudante: [
+    "Até 5 projetos ativos (1 GB)",
+    "Editor de plantas e quadros acadêmico",
+    "Calculadora elétrica NBR 5410",
+    "20 exportações e scans IA/mês",
+  ],
+  eletrico: [
+    "Até 30 projetos ativos (5 GB)",
+    "Editor completo de plantas NBR 5410",
+    "Quadros DIN e diagramas unifilares",
+    "3 usuários inclusos na equipe",
+  ],
+  solar: [
+    "Até 30 projetos ativos (5 GB)",
+    "Dimensionamento fotovoltaico e strings",
+    "Layout solar 2D/3D no mapa",
+    "Memorial solar e 3 usuários inclusos",
+  ],
+  completo: [
+    "Projetos e exportações ilimitados",
+    "Todas as ferramentas Elétrico + Solar",
+    "50 GB de armazenamento (15 membros)",
+    "500 operações de IA por mês",
+    "Suporte técnico prioritário",
+  ],
+};
+
+const PLAN_SUBTITLES = {
+  estudante: "Uso acadêmico para formação técnica",
+  eletrico: "Projetos elétricos prediais e NBR 5410",
+  solar: "Dimensionamento e usinas fotovoltaicas",
+  completo: "Acesso total elétrico e solar unificado",
+};
+
 export default function Subscription() {
   const { user } = useAuth();
   const [activeUser, setActiveUser] = useState(user);
@@ -422,25 +457,25 @@ export default function Subscription() {
         </article>
       </section>
 
-      {/* 3.3 Comparação de Planos (4 Cards) */}
-      <section className="rounded-[12px] border border-[#E4E7EC] bg-white p-5 sm:p-6 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* 3.3 Comparação de Planos (4 Cards Minimalistas) */}
+      <section className="rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-slate-100">
           <div>
-            <h2 className="text-xl font-extrabold text-[#101828]">Comparar planos</h2>
-            <p className="mt-0.5 text-xs font-medium text-[#667085]">
-              Escolha a estrutura comercial ideal para sua demanda técnica e profissional.
+            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Planos & Assinaturas</h2>
+            <p className="mt-1 text-xs sm:text-sm text-slate-500">
+              Escolha a estrutura ideal para a sua rotina técnica. Altere ou cancele a qualquer momento.
             </p>
           </div>
 
           {/* Seletor Mensal / Anual */}
-          <div className="flex items-center gap-2 rounded-[10px] border border-[#D0D5DD] bg-[#F9FAFB] p-1">
+          <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 p-1 self-start sm:self-auto">
             <button
               type="button"
               onClick={() => setCycle("monthly")}
-              className={`h-8 rounded-[6px] px-4 text-xs font-extrabold transition-all ${
+              className={`h-8 rounded-full px-4 text-xs font-bold transition-all ${
                 cycle === "monthly"
-                  ? "bg-[#00d8b8] text-[#0f172a] shadow-sm"
-                  : "text-[#667085] hover:text-[#101828]"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Mensal
@@ -448,152 +483,154 @@ export default function Subscription() {
             <button
               type="button"
               onClick={() => setCycle("annual")}
-              className={`flex items-center gap-1.5 h-8 rounded-[6px] px-4 text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-1.5 h-8 rounded-full px-4 text-xs font-bold transition-all ${
                 cycle === "annual"
-                  ? "bg-[#00d8b8] text-[#0f172a] shadow-sm"
-                  : "text-[#667085] hover:text-[#101828]"
+                  ? "bg-[#00d8b8] text-slate-950 font-extrabold shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
               <span>Anual</span>
-              <span className="rounded-full bg-[#0f172a] px-1.5 py-0.2 text-[10px] text-[#00d8b8]">
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${cycle === "annual" ? "bg-slate-950 text-[#00d8b8]" : "bg-emerald-100 text-emerald-800"}`}>
                 -30% OFF
               </span>
             </button>
           </div>
         </div>
 
-        {/* Grid dos 4 Cards */}
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {/* Grid dos 4 Cards Minimalistas */}
+        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {PLAN_CATALOG.map((plan) => {
             const isCurrent = plan.code === subscription.planCode;
             const isCompleto = plan.code === "completo";
             const annualSavings = calculateAnnualSavings(plan);
-
-            // Regra de Negócio: Estudante APENAS mensal. Elétrico, Solar e Completo apontam para o priceId anual quando cycle === "annual".
             const targetPriceId = getPlanPriceId(plan.code, cycle);
             const isSubscribingThis = subscribingPriceId === targetPriceId;
+
+            const highlights = PLAN_HIGHLIGHTS[plan.code] || plan.features.slice(0, 4);
+            const subtitle = PLAN_SUBTITLES[plan.code] || plan.description;
 
             return (
               <article
                 key={plan.code}
-                className={`relative flex flex-col justify-between rounded-[14px] border p-5 transition-all ${
-                  isCurrent
-                    ? "border-[#00d8b8] bg-[#F7FBFE] shadow-sm ring-1 ring-[#00d8b8]"
-                    : isCompleto
-                    ? "border-[#BCEEE5] bg-white shadow-sm ring-1 ring-[#BCEEE5]"
-                    : "border-[#E4E7EC] bg-white hover:border-[#D0D5DD]"
+                className={`relative flex flex-col justify-between rounded-2xl border p-5 sm:p-6 transition-all duration-200 ${
+                  isCompleto
+                    ? "border-[#00d8b8] bg-gradient-to-b from-white via-white to-[#F0FDFA]/40 shadow-[0_12px_32px_-10px_rgba(0,216,184,0.18)] ring-1 ring-[#00d8b8]"
+                    : isCurrent
+                    ? "border-teal-300 bg-[#F7FBFE] shadow-xs"
+                    : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
                 }`}
               >
                 <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 className="text-lg font-extrabold text-[#101828]">{plan.name}</h3>
-                      <p className="mt-1 text-xs font-semibold text-[#667085] leading-relaxed">
-                        {plan.targetAudience}
-                      </p>
-                    </div>
-                    {plan.highlightBadge && (
-                      <Badge className="shrink-0 rounded-[6px] border border-[#BCEEE5] bg-[#E8FCF8] text-[10px] font-extrabold text-[#0f4f49] hover:bg-[#E8FCF8]">
-                        {plan.highlightBadge}
-                      </Badge>
+                  {/* Top badges */}
+                  <div className="flex items-center justify-between gap-2 min-h-[26px]">
+                    {isCurrent ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 border border-teal-200 px-2.5 py-0.5 text-[11px] font-bold text-[#0f4f49]">
+                        <CheckCircle2 className="h-3 w-3 text-[#009b84]" />
+                        Seu plano atual
+                      </span>
+                    ) : isCompleto ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#E8FCF8] border border-[#BCEEE5] px-2.5 py-0.5 text-[11px] font-extrabold text-[#0f4f49]">
+                        <Sparkles className="h-3 w-3 text-[#009b84]" />
+                        Mais Completo
+                      </span>
+                    ) : (
+                      <span />
                     )}
                   </div>
 
-                  {/* 3.4 Texto Comercial do Card */}
-                  <div className="mt-3 rounded-[8px] bg-[#F9FAFB] p-2.5 text-xs font-medium italic text-[#475467] border border-[#EAECF0]">
-                    "{plan.commercialTagline}"
+                  {/* Nome e subtítulo */}
+                  <div className="mt-3">
+                    <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">{plan.name}</h3>
+                    <p className="mt-1 text-xs text-slate-500 leading-relaxed min-h-[32px]">
+                      {subtitle}
+                    </p>
                   </div>
 
-                  {/* Preço e Ciclo */}
-                  <div className="mt-4">
+                  {/* Preço */}
+                  <div className="mt-4 pb-5 border-b border-slate-100">
                     {cycle === "annual" && plan.hasAnnualOption ? (
                       <div>
                         <div className="flex items-baseline gap-1">
-                          <span className="text-2xl font-extrabold text-[#101828]">
+                          <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
                             R$ {annualSavings.monthlyEquiv.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                           </span>
-                          <span className="text-xs font-semibold text-[#667085]">/mês</span>
+                          <span className="text-xs font-semibold text-slate-500">/mês</span>
                         </div>
-                        <p className="mt-0.5 text-[11px] font-bold text-emerald-700">
-                          R$ {plan.annualPrice?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} cobrado anualmente (-30% OFF)
+                        <p className="mt-1 text-[11px] font-bold text-emerald-700">
+                          R$ {plan.annualPrice?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} /ano (-30% OFF)
                         </p>
                       </div>
                     ) : (
                       <div>
                         <div className="flex items-baseline gap-1">
-                          <span className="text-2xl font-extrabold text-[#101828]">
+                          <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
                             R$ {plan.monthlyPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                           </span>
-                          <span className="text-xs font-semibold text-[#667085]">/mês</span>
+                          <span className="text-xs font-semibold text-slate-500">/mês</span>
                         </div>
                         {cycle === "annual" && !plan.hasAnnualOption && (
-                          <p className="mt-0.5 text-[11px] font-medium text-amber-700">
-                            Apenas contratação mensal disponível
+                          <p className="mt-1 text-[11px] font-medium text-amber-700">
+                            Apenas faturamento mensal
                           </p>
                         )}
                       </div>
                     )}
                   </div>
 
-                  {/* Lista de Recursos Principais */}
-                  <div className="mt-5 space-y-2 border-t border-[#EAECF0] pt-4">
-                    <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#667085]">
-                      Recursos incluídos:
+                  {/* Botão de Ação */}
+                  <div className="mt-5">
+                    <Button
+                      type="button"
+                      disabled={isCurrent || subscribingPriceId !== null}
+                      onClick={() => handleSubscription(targetPriceId)}
+                      className={`h-11 w-full rounded-xl font-bold text-xs transition-all ${
+                        isCurrent
+                          ? "bg-slate-100 text-slate-400 hover:bg-slate-100 cursor-default border border-slate-200"
+                          : isCompleto
+                          ? "bg-[#00d8b8] text-slate-950 font-extrabold hover:bg-[#00bda1] shadow-xs hover:shadow"
+                          : "bg-slate-900 text-white hover:bg-slate-800"
+                      }`}
+                    >
+                      {isSubscribingThis ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Redirecionando...
+                        </span>
+                      ) : isCurrent ? (
+                        "Plano em uso"
+                      ) : plan.isAcademic ? (
+                        "Contratar com documento"
+                      ) : (
+                        "Fazer upgrade"
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Lista de Recursos Principais (Minimalista) */}
+                  <div className="mt-6 space-y-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Incluso neste plano:
                     </p>
-                    <ul className="space-y-2">
-                      {plan.features.map((feature) => (
-                        <li key={feature} className="flex items-start gap-2 text-xs font-medium leading-5 text-[#344054]">
-                          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00d8b8]" />
-                          <span>{feature}</span>
+                    <ul className="space-y-2.5">
+                      {highlights.map((feature) => (
+                        <li key={feature} className="flex items-start gap-2.5 text-xs text-slate-700">
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#00d8b8]" />
+                          <span className="leading-snug">{feature}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
-
-                  {/* Limitações importantes */}
-                  {plan.limitations?.length > 0 && (
-                    <div className="mt-4 border-t border-[#EAECF0] pt-3">
-                      <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#667085]">
-                        Avisos e Limitações:
-                      </p>
-                      <ul className="mt-1.5 space-y-1">
-                        {plan.limitations.map((lim) => (
-                          <li key={lim} className="flex items-start gap-1.5 text-[11px] font-medium leading-4 text-[#667085]">
-                            <Info className="mt-0.5 h-3 w-3 shrink-0 text-[#98A2B3]" />
-                            <span>{lim}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </div>
 
-                <div className="mt-6 pt-3">
-                  <Button
-                    type="button"
-                    disabled={isCurrent || subscribingPriceId !== null}
-                    onClick={() => handleSubscription(targetPriceId)}
-                    className={`h-10 w-full rounded-[8px] font-extrabold text-xs transition-all ${
-                      isCurrent
-                        ? "bg-[#EAECF0] text-[#667085] hover:bg-[#EAECF0] cursor-default"
-                        : isCompleto
-                        ? "bg-[#00d8b8] text-[#0f172a] hover:bg-[#00bda1] shadow-sm"
-                        : "bg-[#0f172a] text-white hover:bg-[#1e293b]"
-                    }`}
+                {/* Link para comparação completa no rodapé do card */}
+                <div className="mt-6 pt-3 border-t border-slate-100">
+                  <a
+                    href="#tabela-comparativa"
+                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 flex items-center gap-1 transition-colors"
                   >
-                    {isSubscribingThis ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Redirecionando...
-                      </span>
-                    ) : isCurrent ? (
-                      "Plano atual"
-                    ) : plan.isAcademic ? (
-                      "Contratar com documento"
-                    ) : (
-                      "Fazer upgrade"
-                    )}
-                  </Button>
+                    <span>Ver limites e detalhes</span>
+                    <span>→</span>
+                  </a>
                 </div>
               </article>
             );
@@ -602,7 +639,7 @@ export default function Subscription() {
       </section>
 
       {/* 4. Nova Tabela Comparativa de Limites e Recursos */}
-      <section className="overflow-hidden rounded-[12px] border border-[#E4E7EC] bg-white shadow-sm">
+      <section id="tabela-comparativa" className="scroll-mt-8 overflow-hidden rounded-[12px] border border-[#E4E7EC] bg-white shadow-sm">
         <div className="border-b border-[#EAECF0] px-5 py-4">
           <h2 className="text-lg font-extrabold text-[#101828]">Tabela de limites</h2>
           <p className="mt-0.5 text-xs font-medium text-[#667085]">
