@@ -33,6 +33,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import PageHeader from "@/components/PageHeader";
 import ProjectProgress from "@/components/navigation/ProjectProgress";
 import EditProjectModal from "@/components/EditProjectModal";
+import ProjectStatusBadge, { formatProjectStatusLabel } from "@/components/ProjectStatusBadge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -319,7 +320,7 @@ export default function Projects() {
               >
                 {statusOptions.map((status) => (
                   <option key={status} value={status}>
-                    {status === "all" ? "Todos os status" : status}
+                    {status === "all" ? "Todos os status" : formatProjectStatusLabel(status)}
                   </option>
                 ))}
               </select>
@@ -663,26 +664,7 @@ function InfoPill({ label, value }) {
 }
 
 function StatusBadge({ status }) {
-  const norm = normalizeText(status);
-  let badgeStyle = "border-slate-200 bg-slate-100 text-slate-700";
-  if (norm.includes("concluid") || norm.includes("aprovad")) {
-    badgeStyle = "border-emerald-200 bg-emerald-50 text-emerald-800";
-  } else if (norm.includes("andamento")) {
-    badgeStyle = "border-[#BCEEE5] bg-[#E8FCF8] text-[#007a68]";
-  } else if (norm.includes("arquivad")) {
-    badgeStyle = "border-slate-200 bg-slate-50 text-slate-500";
-  } else if (norm.includes("solar")) {
-    badgeStyle = "border-amber-200 bg-amber-50 text-amber-800";
-  } else if (norm.includes("espera") || norm.includes("pendent")) {
-    badgeStyle = "border-amber-200 bg-amber-50 text-amber-800";
-  }
-
-  const normalized = status || "Rascunho";
-  return (
-    <Badge className={`h-7 rounded-lg border px-2.5 text-xs font-bold ${badgeStyle}`}>
-      {normalized}
-    </Badge>
-  );
+  return <ProjectStatusBadge status={status} />;
 }
 
 function ProjectActions({ project, onEdit, onDuplicate, onDelete, align = "end" }) {

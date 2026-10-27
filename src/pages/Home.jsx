@@ -39,6 +39,7 @@ import { calcProjectMetrics } from "@/lib/electricalEngine";
 import { buildProjectBudgetMaterials } from "@/lib/projectBudgetMaterials";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import ProjectStatusBadge from "@/components/ProjectStatusBadge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1258,26 +1259,7 @@ export default function Home() {
                           {proj.city || "Não informada"}
                         </td>
                         <td className="py-3.5 px-3">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black border ${
-                              statusText === "Concluído"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : statusText === "Em andamento"
-                                ? "bg-cyan-50 text-cyan-700 border-cyan-200"
-                                : "bg-slate-50 text-slate-700 border-slate-200"
-                            }`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                statusText === "Concluído"
-                                  ? "bg-emerald-500"
-                                  : statusText === "Em andamento"
-                                  ? "bg-cyan-500"
-                                  : "bg-slate-400"
-                              }`}
-                            />
-                            <span>{statusText}</span>
-                          </span>
+                          <ProjectStatusBadge status={proj.status || statusText} size="sm" />
                         </td>
                         <td className="py-3.5 px-3 text-right">
                           <DropdownMenu>

@@ -28,6 +28,7 @@ import PageHeader from "@/components/PageHeader";
 import NextStepCard from "@/components/navigation/NextStepCard";
 import ProjectProgress from "@/components/navigation/ProjectProgress";
 import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
+import ProjectStatusBadge from "@/components/ProjectStatusBadge";
 import { autoBalancePhases, buildProjectElectricalSyncPayload, calcCircuit, calcProjectMetrics } from "@/lib/electricalEngine";
 
 const formatNumber = (value, suffix = "") =>
@@ -455,9 +456,7 @@ export default function ProjectDetail() {
             <span className="inline-flex h-10 items-center rounded-[11px] bg-white px-3 text-xs font-extrabold text-[#344054] ring-1 ring-[#D6E8F3]">
               {circuits.length} circuito{circuits.length === 1 ? "" : "s"}
             </span>
-            <Badge variant="outline" className={`h-10 rounded-[11px] px-3 text-xs font-extrabold ${statusTone}`}>
-              {project.status || "Rascunho"}
-            </Badge>
+            <ProjectStatusBadge status={project.status} size="lg" className="h-10 px-3.5" />
           </div>
         </div>
       </section>
