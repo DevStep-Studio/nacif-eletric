@@ -1,6 +1,6 @@
 {
-  "name": "NACIF Solutions Eletric",
-  "short_name": "NACIF",
+  "name": "NACIF Energy",
+  "short_name": "NACIF Energy",
   "description": "Geração automática de projetos elétricos, quadros, memoriais, materiais e orçamento conforme NBR 5410.",
   "start_url": "/",
   "display": "standalone",

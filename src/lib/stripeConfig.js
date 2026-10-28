@@ -68,7 +68,14 @@ export function getPlanPriceId(planCode, cycle = "monthly") {
 /**
  * Comunica com o backend para gerar uma nova Checkout Session da Stripe
  */
-export async function createCheckoutSession({ priceId, userId }) {
+export async function createCheckoutSession({
+  priceId,
+  userId,
+  userEmail,
+  userName,
+  email,
+  name,
+}) {
   if (!priceId) {
     throw new Error("Identificador de preço (priceId) é obrigatório.");
   }
@@ -95,6 +102,8 @@ export async function createCheckoutSession({ priceId, userId }) {
     body: JSON.stringify({
       priceId,
       userId,
+      userEmail: userEmail || email,
+      userName: userName || name,
     }),
   });
 
@@ -109,7 +118,13 @@ export async function createCheckoutSession({ priceId, userId }) {
 /**
  * Comunica com o backend para gerar uma nova Customer Portal Session da Stripe
  */
-export async function createPortalSession({ userId } = {}) {
+export async function createPortalSession({
+  userId,
+  userEmail,
+  userName,
+  email,
+  name,
+} = {}) {
   const rawApiBaseUrl =
     (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "";
   const baseUrl = rawApiBaseUrl.replace(/\/+$/, "");
@@ -130,6 +145,8 @@ export async function createPortalSession({ userId } = {}) {
     },
     body: JSON.stringify({
       userId,
+      userEmail: userEmail || email,
+      userName: userName || name,
     }),
   });
 
@@ -140,3 +157,39 @@ export async function createPortalSession({ userId } = {}) {
 
   return await response.json();
 }
+
+/**
+ * Comunica com o backend para validar a Checkout Session da Stripe e sincronizar o plano
+ */
+export async function verifyCheckoutSession({ sessionId }) {
+  if (!sessionId) return null;
+
+  const rawApiBaseUrl =
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "";
+  const baseUrl = rawApiBaseUrl.replace(/\/+$/, "");
+
+  const token =
+    (typeof window !== "undefined" &&
+      (window.localStorage.getItem("voltai_access_token") ||
+        window.localStorage.getItem("voltai_token"))) ||
+    "";
+
+  const endpoint = baseUrl ? `${baseUrl}/verify-checkout-session` : "/verify-checkout-session";
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ sessionId }),
+    });
+
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+

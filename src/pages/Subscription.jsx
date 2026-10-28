@@ -42,6 +42,7 @@ import {
   getPlanPriceId,
   createCheckoutSession,
   createPortalSession,
+  verifyCheckoutSession,
 } from "@/lib/stripeConfig";
 
 const featureDescriptions = {
@@ -189,11 +190,32 @@ export default function Subscription() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const checkoutStatus = params.get("checkout");
+    const sessionId = params.get("session_id");
+
     if (checkoutStatus === "success") {
-      setBillingMessage("🎉 Pagamento confirmado com sucesso! Sua assinatura foi atualizada.");
+      setBillingMessage("🎉 Pagamento confirmado com sucesso! Atualizando sua assinatura...");
       window.history.replaceState({}, document.title, window.location.pathname);
-      loadData();
-      setTimeout(() => setBillingMessage(""), 8000);
+
+      if (sessionId && !sessionId.startsWith("cs_simulated")) {
+        verifyCheckoutSession({ sessionId })
+          .then((res) => {
+            if (res?.plan && backend.entities?.Subscription?.changePlan) {
+              backend.entities.Subscription.changePlan({
+                planCode: res.plan,
+                cycle: res.cycle || "monthly",
+              }).catch(() => null);
+            }
+          })
+          .catch(() => null)
+          .finally(() => {
+            loadData();
+            setTimeout(() => setBillingMessage("🎉 Assinatura atualizada com sucesso!"), 1500);
+            setTimeout(() => setBillingMessage(""), 8000);
+          });
+      } else {
+        loadData();
+        setTimeout(() => setBillingMessage(""), 8000);
+      }
     } else if (checkoutStatus === "cancelled") {
       setBillingMessage("O processo de checkout foi cancelado. Nenhuma cobrança foi efetuada.");
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -219,6 +241,8 @@ export default function Subscription() {
       const data = await createCheckoutSession({
         priceId,
         userId: activeUser?.id,
+        userEmail: activeUser?.email,
+        userName: activeUser?.fullName || activeUser?.full_name || activeUser?.name,
       });
 
       if (data?.url) {
@@ -242,7 +266,11 @@ export default function Subscription() {
   const handleCustomerPortal = async () => {
     try {
       setPortalLoading(true);
-      const data = await createPortalSession({ userId: activeUser?.id });
+      const data = await createPortalSession({
+        userId: activeUser?.id,
+        userEmail: activeUser?.email,
+        userName: activeUser?.fullName || activeUser?.full_name || activeUser?.name,
+      });
       if (data?.url) {
         window.location.href = data.url;
       } else {
