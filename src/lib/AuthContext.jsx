@@ -29,9 +29,26 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
+    const handleUserUpdated = async () => {
+      if (backend.auth.getToken?.()) {
+        try {
+          const currentUser = await backend.auth.me();
+          if (currentUser) {
+            setUser(currentUser);
+          }
+        } catch {
+          // mantém estado atual em caso de falha transitória
+        }
+      }
+    };
+
     if (typeof window !== "undefined") {
       window.addEventListener("storage", handleStorage);
-      return () => window.removeEventListener("storage", handleStorage);
+      window.addEventListener("voltai:user-updated", handleUserUpdated);
+      return () => {
+        window.removeEventListener("storage", handleStorage);
+        window.removeEventListener("voltai:user-updated", handleUserUpdated);
+      };
     }
   }, []);
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { CreditCard, Calendar, CheckCircle2, AlertTriangle, GraduationCap, ArrowUpRight, ShieldCheck, ExternalLink, Loader2 } from "lucide-react";
+import { CreditCard, GraduationCap, ShieldCheck, ExternalLink, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,19 +11,27 @@ export default function ManageSubscriptionModal({
   isOpen,
   onClose,
   subscription,
+  user,
   onChangePlanClick,
   onVerifyStudentClick,
 }) {
+  const [portalLoading, setPortalLoading] = useState(false);
+
   if (!subscription) return null;
 
   const plan = subscription?.plan;
   const isStudent = plan?.isAcademic;
-  const [portalLoading, setPortalLoading] = useState(false);
 
   const handleOpenPortal = async () => {
     try {
       setPortalLoading(true);
-      const data = await createPortalSession();
+      const data = await createPortalSession({
+        userId: user?.id,
+        userEmail: user?.email,
+        userName: user?.fullName || user?.full_name || user?.name,
+        stripeCustomerId: subscription?.stripeCustomerId,
+        allowDirectFallback: true,
+      });
       if (data?.url) {
         window.location.href = data.url;
       }

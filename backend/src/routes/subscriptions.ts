@@ -7,9 +7,12 @@ import { serializeUser } from "../lib/serializers.js";
 import { env } from "../config/env.js";
 import {
   stripe,
+  isStripeConfigured,
   getOrCreateStripeCustomer,
   resolvePlanFromPriceId,
-  STRIPE_PRICES,
+  resolveRealStripePriceId,
+  buildStripePaymentLinkUrl,
+  buildStripePortalFallbackUrl,
 } from "../lib/stripe.js";
 
 const changePlanSchema = z.object({
@@ -39,7 +42,9 @@ const adminDecideAcademicSchema = z.object({
 });
 
 const createCheckoutSessionSchema = z.object({
-  priceId: z.string().min(1, "O priceId é obrigatório."),
+  priceId: z.string().optional(),
+  planCode: z.string().optional(),
+  cycle: z.enum(["monthly", "annual"]).optional().default("monthly"),
   userId: z.string().optional(),
   userEmail: z.string().optional(),
   email: z.string().optional(),
@@ -54,11 +59,47 @@ const createPortalSessionSchema = z.object({
   email: z.string().optional(),
   userName: z.string().optional(),
   name: z.string().optional(),
+  stripeCustomerId: z.string().optional(),
 });
 
 const verifySessionSchema = z.object({
   sessionId: z.string().min(1, "sessionId é obrigatório."),
 });
+
+const syncStripeSchema = z.object({
+  userId: z.string().optional(),
+  userEmail: z.string().optional(),
+  email: z.string().optional(),
+  stripeCustomerId: z.string().optional(),
+});
+
+/**
+ * Resolve a URL base do frontend a partir do cabeçalho Origin/Referer confiável ou env.FRONTEND_URL
+ */
+function resolveFrontendOrigin(request: FastifyRequest): string {
+  const candidates = [request.headers.origin, request.headers.referer].filter(Boolean) as string[];
+
+  for (const raw of candidates) {
+    try {
+      const parsed = new URL(raw);
+      const host = parsed.hostname.toLowerCase();
+      if (
+        host === "nacifenergy.com.br" ||
+        host.endsWith(".nacifenergy.com.br") ||
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        host.endsWith(".vercel.app") ||
+        host.endsWith(".pages.dev")
+      ) {
+        return `${parsed.protocol}//${parsed.host}`;
+      }
+    } catch {
+      // ignora URL malformada
+    }
+  }
+
+  return env.FRONTEND_URL.replace(/\/+$/, "");
+}
 
 /**
  * Extrai dados do usuário a partir dos cabeçalhos de autenticação (JWT ou token local)
@@ -109,9 +150,58 @@ function extractUserFromAuthHeader(request: FastifyRequest): {
   return null;
 }
 
+type ResolvedCheckoutUser = {
+  id: string;
+  email: string;
+  fullName: string;
+  plan: string;
+  status: string;
+  customPermissions?: any;
+  _ephemeral?: boolean;
+};
+
+let dbOfflineCooldownUntil = 0;
+
+async function withFastDb<T>(fn: () => Promise<T>, timeoutMs = 1200): Promise<T> {
+  if (Date.now() < dbOfflineCooldownUntil) {
+    throw Object.assign(new Error("DB_COOLDOWN_OFFLINE"), { code: "DB_COOLDOWN" });
+  }
+
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const result = await Promise.race([
+      fn(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(Object.assign(new Error("DB_CONNECT_TIMEOUT"), { code: "DB_TIMEOUT" })),
+          timeoutMs,
+        );
+      }),
+    ]);
+    dbOfflineCooldownUntil = 0;
+    return result;
+  } catch (err: any) {
+    const msg = String(err?.message || "");
+    if (
+      err?.code === "DB_TIMEOUT" ||
+      err?.code === "P1001" ||
+      err?.code === "P1002" ||
+      err?.code === "P1003" ||
+      msg.includes("Can't reach database") ||
+      msg.includes("Access denied") ||
+      msg.includes("Unknown database")
+    ) {
+      dbOfflineCooldownUntil = Date.now() + 60_000;
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /**
- * Localiza o usuário no banco MySQL ou o cria/atualiza automaticamente (Upsert)
- * para garantir que o fluxo de checkout da Stripe nunca falhe em ambiente local/híbrido.
+ * Localiza o usuário no banco MySQL ou retorna perfil efêmero resiliente caso o MySQL
+ * não esteja provisionado no servidor de produção, garantindo que a API da Stripe nunca falhe.
  */
 async function resolveOrCreateUser(
   request: FastifyRequest,
@@ -122,16 +212,14 @@ async function resolveOrCreateUser(
     userName?: string;
     name?: string;
     fullName?: string;
-  } = {}
-) {
+    stripeCustomerId?: string;
+  } = {},
+): Promise<ResolvedCheckoutUser> {
   const tokenUser = extractUserFromAuthHeader(request);
   const authUser = (request as any).authUser;
 
-  // 1. Identifica o ID do usuário (prioridade: authUser > bodyData > token)
-  const resolvedUserId =
-    authUser?.id || bodyData.userId || tokenUser?.id || undefined;
+  const resolvedUserId = authUser?.id || bodyData.userId || tokenUser?.id || undefined;
 
-  // 2. Identifica candidato de email
   const candidateEmail =
     bodyData.userEmail ||
     bodyData.email ||
@@ -139,29 +227,8 @@ async function resolveOrCreateUser(
     tokenUser?.email ||
     (resolvedUserId && resolvedUserId.includes("@") ? resolvedUserId : undefined);
 
-  // 3. Tenta buscar usuário existente pelo ID no Prisma
-  let user = resolvedUserId
-    ? await prisma.user.findUnique({
-        where: { id: resolvedUserId },
-      })
-    : null;
-
-  // 4. Se não achou por ID, tenta buscar por email se disponível
-  if (!user && candidateEmail) {
-    user = await prisma.user.findUnique({
-      where: { email: candidateEmail.toLowerCase().trim() },
-    });
-  }
-
-  // 5. Se o usuário já existe no MySQL local, retorna imediatamente
-  if (user) {
-    return user;
-  }
-
-  // 6. Caso não exista no MySQL local (banco novo ou IDs desalinhados),
-  // realiza a criação automática na hora via prisma.user.upsert / create
-  const fallbackId = resolvedUserId || `user_dev_${Date.now().toString(36)}`;
-  const cleanId = fallbackId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "dev";
+  const fallbackId = resolvedUserId || `user_nacif_${Date.now().toString(36)}`;
+  const cleanId = fallbackId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "user";
   const finalEmail = candidateEmail
     ? candidateEmail.toLowerCase().trim()
     : `user_${cleanId}@nacifenergy.local`;
@@ -172,49 +239,110 @@ async function resolveOrCreateUser(
     bodyData.fullName ||
     authUser?.name ||
     tokenUser?.name ||
-    (candidateEmail ? candidateEmail.split("@")[0] : `Usuário ${cleanId}`);
+    (candidateEmail ? candidateEmail.split("@")[0] : `Cliente Nacif`);
 
   try {
-    user = await prisma.user.upsert({
-      where: { id: fallbackId },
-      update: {
-        status: "active",
-      },
-      create: {
-        id: fallbackId,
-        email: finalEmail,
-        fullName: finalName,
-        passwordHash: "$2a$10$abcdefDevPlaceholderHashForLocalEnvironment1234567890",
-        role: "user",
-        plan: "gratuito",
-        status: "active",
-      },
-    });
-  } catch (err: any) {
-    // Caso ocorra conflito único de email com outro ID já existente
-    const existingByEmail = await prisma.user.findUnique({
-      where: { email: finalEmail },
-    });
+    return await withFastDb(async () => {
+      let user = resolvedUserId
+        ? await prisma.user.findUnique({
+            where: { id: resolvedUserId },
+          })
+        : null;
 
-    if (existingByEmail) {
-      return existingByEmail;
+      if (!user && candidateEmail) {
+        user = await prisma.user.findUnique({
+          where: { email: candidateEmail.toLowerCase().trim() },
+        });
+      }
+
+      if (user) {
+        return user;
+      }
+
+      try {
+        user = await prisma.user.upsert({
+          where: { id: fallbackId },
+          update: {
+            status: "active",
+          },
+          create: {
+            id: fallbackId,
+            email: finalEmail,
+            fullName: finalName,
+            passwordHash: "$2a$10$abcdefDevPlaceholderHashForLocalEnvironment1234567890",
+            role: "user",
+            plan: "gratuito",
+            status: "active",
+            customPermissions: bodyData.stripeCustomerId
+              ? { stripeCustomerId: bodyData.stripeCustomerId }
+              : undefined,
+          },
+        });
+        return user;
+      } catch {
+        const existingByEmail = await prisma.user.findUnique({
+          where: { email: finalEmail },
+        });
+        if (existingByEmail) {
+          return existingByEmail;
+        }
+
+        user = await prisma.user.create({
+          data: {
+            id: fallbackId,
+            email: `${cleanId}_${Date.now()}@nacifenergy.local`,
+            fullName: finalName,
+            passwordHash: "$2a$10$abcdefDevPlaceholderHashForLocalEnvironment1234567890",
+            role: "user",
+            plan: "gratuito",
+            status: "active",
+          },
+        });
+        return user;
+      }
+    });
+  } catch (dbErr: any) {
+    if (dbErr?.code !== "DB_COOLDOWN") {
+      request.log.warn(
+        `[Stripe] Banco MySQL indisponível (${dbErr?.code || "DB_OFFLINE"}). Prosseguindo em modo direto com a API da Stripe para ${finalEmail}.`,
+      );
     }
-
-    // Cria com email único contendo timestamp
-    user = await prisma.user.create({
-      data: {
-        id: fallbackId,
-        email: `${cleanId}_${Date.now()}@nacifenergy.local`,
-        fullName: finalName,
-        passwordHash: "$2a$10$abcdefDevPlaceholderHashForLocalEnvironment1234567890",
-        role: "user",
-        plan: "gratuito",
-        status: "active",
-      },
-    });
+    return {
+      id: fallbackId,
+      email: finalEmail,
+      fullName: finalName,
+      plan: "gratuito",
+      status: "active",
+      customPermissions: bodyData.stripeCustomerId
+        ? { stripeCustomerId: bodyData.stripeCustomerId }
+        : {},
+      _ephemeral: true,
+    };
   }
+}
 
-  return user;
+async function safeFindUser(opts: { userId?: string | null; email?: string | null; customerId?: string | null }) {
+  try {
+    return await withFastDb(async () => {
+      if (opts.userId) {
+        const byId = await prisma.user.findUnique({ where: { id: opts.userId } });
+        if (byId) return byId;
+      }
+      if (opts.email) {
+        const byEmail = await prisma.user.findUnique({
+          where: { email: opts.email.toLowerCase().trim() },
+        });
+        if (byEmail) return byEmail;
+      }
+      if (opts.customerId) {
+        const users = await prisma.user.findMany();
+        return users.find((u) => (u.customPermissions as any)?.stripeCustomerId === opts.customerId) || null;
+      }
+      return null;
+    });
+  } catch {
+    return null;
+  }
 }
 
 export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
@@ -222,68 +350,95 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
   // 1. STRIPE CHECKOUT: POST /create-checkout-session
   // =========================================================================
   const handleCreateCheckoutSession = async (request: FastifyRequest, reply: FastifyReply) => {
-    const { priceId, ...userData } = createCheckoutSessionSchema.parse(request.body);
-
-    // Resolve ou cria o usuário automaticamente no banco local se não existir
-    const user = await resolveOrCreateUser(request, userData);
+    const parsed = createCheckoutSessionSchema.parse(request.body || {});
+    const { priceId, planCode, cycle, ...userData } = parsed;
 
     // Validação da Regra de Negócio:
-    // Nacif Estudante: APENAS faturamento mensal (R$ 99,99/mês). Toggle anual proibido.
-    const planInfo = resolvePlanFromPriceId(priceId);
-    if (planInfo?.plan === "estudante" && planInfo.cycle === "annual") {
-      throw new AppError("O plano Nacif Estudante está disponível exclusivamente na contratação mensal.", 400);
+    // Nacif Estudante: APENAS faturamento mensal (R$ 99,99/mês).
+    const effectiveCycle = planCode === "estudante" ? "monthly" : cycle || "monthly";
+    const resolvedPriceId = resolveRealStripePriceId(priceId, planCode, effectiveCycle);
+    const planInfo = resolvePlanFromPriceId(resolvedPriceId, planCode, effectiveCycle);
+    const targetPlanCode = planInfo?.plan || planCode || "completo";
+    const targetCycle = targetPlanCode === "estudante" ? "monthly" : planInfo?.cycle || effectiveCycle;
+
+    if (!resolvedPriceId) {
+      throw new AppError("Identificador de preço (priceId) ou plano válido é obrigatório.", 400);
     }
 
-    // Configura as URLs de redirecionamento de volta ao painel
-    const successUrl = `${env.FRONTEND_URL}/subscription?session_id={CHECKOUT_SESSION_ID}&checkout=success`;
-    const cancelUrl = `${env.FRONTEND_URL}/subscription?checkout=cancelled`;
+    const user = await resolveOrCreateUser(request, userData);
+    const frontendOrigin = resolveFrontendOrigin(request);
 
-    // Modo de Desenvolvimento sem chaves reais configuradas
-    if (!env.STRIPE_SECRET_KEY || env.STRIPE_SECRET_KEY === "sk_test_placeholder") {
-      app.log.warn("[Stripe] Chave STRIPE_SECRET_KEY não definida. Retornando URL simulada de checkout.");
-      return reply.send({
-        url: `${env.FRONTEND_URL}/subscription?session_id=cs_simulated_${Date.now()}&checkout=success&priceId=${priceId}`,
-        sessionId: `cs_simulated_${Date.now()}`,
-        simulated: true,
+    // Caso a chave secreta não esteja presente no servidor, redireciona com segurança via Stripe Payment Link oficial
+    if (!isStripeConfigured) {
+      const fallbackLink = buildStripePaymentLinkUrl(targetPlanCode, targetCycle, {
+        id: user.id,
+        email: user.email,
       });
+
+      if (fallbackLink) {
+        app.log.warn(
+          `[Stripe] STRIPE_SECRET_KEY ausente no ambiente; redirecionando para Payment Link oficial da Stripe (${targetPlanCode}/${targetCycle}).`,
+        );
+        return reply.send({
+          url: fallbackLink,
+          isDirectPaymentLink: true,
+          provider: "stripe_payment_link",
+        });
+      }
+
+      throw new AppError(
+        "Chave STRIPE_SECRET_KEY não configurada no servidor de produção.",
+        503,
+      );
     }
+
+    const successUrl = `${frontendOrigin}/subscription?session_id={CHECKOUT_SESSION_ID}&checkout=success&plan=${encodeURIComponent(targetPlanCode)}&cycle=${encodeURIComponent(targetCycle)}`;
+    const cancelUrl = `${frontendOrigin}/subscription?checkout=cancelled`;
 
     // Obtém ou cria o Customer ID da Stripe para este usuário
     const customerId = await getOrCreateStripeCustomer(user);
 
-    // Salva o customerId no banco local se ainda não estava gravado
-    if ((user.customPermissions as any)?.stripeCustomerId !== customerId) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          customPermissions: {
-            ...((user.customPermissions as any) || {}),
-            stripeCustomerId: customerId,
+    // Salva o customerId no banco local se MySQL estiver ativo
+    if (!user._ephemeral && (user.customPermissions as any)?.stripeCustomerId !== customerId) {
+      await prisma.user
+        .update({
+          where: { id: user.id },
+          data: {
+            customPermissions: {
+              ...((user.customPermissions as any) || {}),
+              stripeCustomerId: customerId,
+            },
           },
-        },
-      }).catch(() => null);
+        })
+        .catch(() => null);
     }
 
-    // Cria a sessão de Checkout no Stripe Billing
+    // Cria a sessão de Checkout oficial no Stripe Billing
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
       mode: "subscription",
       customer: customerId,
       client_reference_id: user.id,
+      locale: "pt-BR",
       line_items: [
         {
-          price: priceId,
+          price: resolvedPriceId,
           quantity: 1,
         },
       ],
       metadata: {
         userId: user.id,
-        priceId: priceId,
+        userEmail: user.email,
+        planCode: targetPlanCode,
+        cycle: targetCycle,
+        priceId: resolvedPriceId,
       },
       subscription_data: {
         metadata: {
           userId: user.id,
-          priceId: priceId,
+          userEmail: user.email,
+          planCode: targetPlanCode,
+          cycle: targetCycle,
+          priceId: resolvedPriceId,
         },
       },
       success_url: successUrl,
@@ -295,6 +450,9 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     return reply.send({
       url: session.url,
       sessionId: session.id,
+      provider: "stripe",
+      plan: targetPlanCode,
+      cycle: targetCycle,
     });
   };
 
@@ -305,7 +463,7 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
       .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
       .header(
         "Access-Control-Allow-Headers",
-        "Content-Type, Authorization, stripe-signature, x-requested-with, Accept, Origin"
+        "Content-Type, Authorization, stripe-signature, x-requested-with, Accept, Origin",
       )
       .status(204)
       .send();
@@ -315,13 +473,12 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     return reply.send({
       ok: true,
       service: "Nacif Energy - Stripe Billing API",
+      stripeConfigured: isStripeConfigured,
       endpoint: name,
       method: "POST",
-      instructions: "Envie uma requisição HTTP POST com Content-Type: application/json.",
     });
   };
 
-  // Registra o endpoint de checkout na raiz e nas rotas prefixadas (POST, GET, OPTIONS)
   app.post("/create-checkout-session", handleCreateCheckoutSession);
   app.get("/create-checkout-session", handleStatusPing("/create-checkout-session"));
   app.options("/create-checkout-session", handlePreflight);
@@ -341,14 +498,13 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     const body = (request.body as any) || {};
     const parsed = createPortalSessionSchema.parse(body);
 
-    // Resolve ou cria o usuário no banco local
     const user = await resolveOrCreateUser(request, parsed);
+    const frontendOrigin = resolveFrontendOrigin(request);
 
-    // Modo simulado se chave não configurada
-    if (!env.STRIPE_SECRET_KEY || env.STRIPE_SECRET_KEY === "sk_test_placeholder") {
+    if (!isStripeConfigured) {
       return reply.send({
-        url: `${env.FRONTEND_URL}/subscription?portal_mock=true`,
-        simulated: true,
+        url: buildStripePortalFallbackUrl(user.email),
+        isDirectPortalLink: true,
       });
     }
 
@@ -356,11 +512,13 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
 
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${env.FRONTEND_URL}/subscription`,
+      return_url: `${frontendOrigin}/subscription?portal_return=true`,
+      locale: "pt-BR",
     });
 
     return reply.send({
       url: portalSession.url,
+      customerId,
     });
   };
 
@@ -378,16 +536,14 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
 
   // =========================================================================
   // 3. STRIPE CHECKOUT VERIFICATION: POST /verify-checkout-session
-  // Sincroniza o plano caso o webhook não consiga alcançar o localhost
   // =========================================================================
   const handleVerifyCheckoutSession = async (request: FastifyRequest, reply: FastifyReply) => {
     const { sessionId } = verifySessionSchema.parse(request.body);
 
-    if (!env.STRIPE_SECRET_KEY || env.STRIPE_SECRET_KEY === "sk_test_placeholder") {
+    if (!isStripeConfigured || sessionId === "{CHECKOUT_SESSION_ID}") {
       return reply.send({
-        success: true,
-        plan: "completo",
-        simulated: true,
+        success: false,
+        stripeConfigured: isStripeConfigured,
       });
     }
 
@@ -396,56 +552,89 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
         expand: ["subscription", "line_items"],
       });
 
+      const isPaid = session.payment_status === "paid" || session.status === "complete";
       const userId = session.client_reference_id || session.metadata?.userId;
       const priceId =
-        session.metadata?.priceId ||
-        session.line_items?.data?.[0]?.price?.id;
+        session.metadata?.priceId || session.line_items?.data?.[0]?.price?.id || null;
       const customerId =
-        typeof session.customer === "string" ? session.customer : session.customer?.id;
+        typeof session.customer === "string" ? session.customer : session.customer?.id || null;
+
+      const subObj =
+        session.subscription && typeof session.subscription === "object"
+          ? (session.subscription as Stripe.Subscription)
+          : null;
       const subscriptionId =
-        typeof session.subscription === "string"
-          ? session.subscription
-          : (session.subscription as any)?.id;
+        typeof session.subscription === "string" ? session.subscription : subObj?.id || null;
 
-      let targetUser = null;
-      if (userId) {
-        targetUser = await prisma.user.findUnique({ where: { id: userId } });
-      }
-      if (!targetUser && session.customer_details?.email) {
-        targetUser = await prisma.user.findUnique({
-          where: { email: session.customer_details.email },
-        });
-      }
+      const recurringInterval =
+        subObj?.items?.data?.[0]?.price?.recurring?.interval ||
+        session.line_items?.data?.[0]?.price?.recurring?.interval;
+      const inferredCycle =
+        recurringInterval === "year"
+          ? "annual"
+          : recurringInterval === "month"
+            ? "monthly"
+            : session.metadata?.cycle || "monthly";
 
-      const planInfo = priceId ? resolvePlanFromPriceId(priceId) : null;
+      const planInfo = resolvePlanFromPriceId(
+        priceId,
+        session.metadata?.planCode || session.metadata?.plan,
+        inferredCycle,
+      );
       const newPlan = planInfo?.plan || "completo";
+      const newCycle = newPlan === "estudante" ? "monthly" : planInfo?.cycle || "monthly";
 
-      if (targetUser) {
-        await prisma.user.update({
-          where: { id: targetUser.id },
-          data: {
-            plan: newPlan,
-            status: "active",
-            customPermissions: {
-              ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
-                ? targetUser.customPermissions
-                : {}),
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: subscriptionId,
-              stripePriceId: priceId,
-              subscriptionStatus: "active",
-              subscriptionCycle: planInfo?.cycle || "monthly",
-              lastSyncAt: new Date().toISOString(),
-            },
-          },
+      const periodStartUnix = (subObj as any)?.current_period_start || session.created;
+      const periodEndUnix = (subObj as any)?.current_period_end || null;
+      const startDate = periodStartUnix ? new Date(periodStartUnix * 1000).toISOString() : new Date().toISOString();
+      const renewalDate = periodEndUnix ? new Date(periodEndUnix * 1000).toISOString() : null;
+      const autoRenew = subObj ? !subObj.cancel_at_period_end : true;
+
+      if (isPaid) {
+        const targetUser = await safeFindUser({
+          userId,
+          email: session.customer_details?.email || session.metadata?.userEmail,
+          customerId,
         });
-        app.log.info(`[Verify Session] Usuário ${targetUser.id} sincronizado com sucesso para o plano ${newPlan}`);
+
+        if (targetUser) {
+          await prisma.user
+            .update({
+              where: { id: targetUser.id },
+              data: {
+                plan: newPlan,
+                status: "active",
+                customPermissions: {
+                  ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
+                    ? targetUser.customPermissions
+                    : {}),
+                  stripeCustomerId: customerId,
+                  stripeSubscriptionId: subscriptionId,
+                  stripePriceId: priceId,
+                  subscriptionStatus: "active",
+                  subscriptionCycle: newCycle,
+                  subscriptionStartDate: startDate,
+                  subscriptionRenewalDate: renewalDate,
+                  autoRenew,
+                  lastSyncAt: new Date().toISOString(),
+                },
+              },
+            })
+            .catch(() => null);
+        }
       }
 
       return reply.send({
-        success: true,
+        success: isPaid,
+        paid: isPaid,
         plan: newPlan,
-        cycle: planInfo?.cycle || "monthly",
+        cycle: newCycle,
+        status: isPaid ? "active" : session.status,
+        startDate,
+        renewalDate,
+        autoRenew,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscriptionId,
         sessionId: session.id,
       });
     } catch (err: any) {
@@ -469,7 +658,172 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
   app.options("/api/subscriptions/verify-checkout-session", handlePreflight);
 
   // =========================================================================
-  // 3. STRIPE WEBHOOK: POST /webhook (utiliza Raw Body preservado)
+  // 4. STRIPE LIVE SUBSCRIPTION SYNC: POST /api/subscriptions/sync-stripe
+  // Sincroniza diretamente da API da Stripe o plano ativo, datas e renovação
+  // =========================================================================
+  const handleSyncStripeSubscription = async (request: FastifyRequest, reply: FastifyReply) => {
+    const parsed = syncStripeSchema.parse(request.body || {});
+    const tokenUser = extractUserFromAuthHeader(request);
+    const email = (parsed.userEmail || parsed.email || tokenUser?.email || "").toLowerCase().trim();
+    const userId = parsed.userId || tokenUser?.id;
+
+    if (!isStripeConfigured) {
+      return reply.send({
+        synced: false,
+        stripeConfigured: false,
+      });
+    }
+
+    if (!email && !parsed.stripeCustomerId) {
+      return reply.send({
+        synced: false,
+        reason: "missing_email_or_customer",
+      });
+    }
+
+    try {
+      const customerIds: string[] = [];
+
+      if (parsed.stripeCustomerId) {
+        customerIds.push(parsed.stripeCustomerId);
+      }
+
+      if (email && !email.endsWith("@nacifenergy.local")) {
+        const customers = await stripe.customers.list({ email, limit: 5 });
+        for (const c of customers.data) {
+          if (!customerIds.includes(c.id)) {
+            customerIds.push(c.id);
+          }
+        }
+      }
+
+      if (customerIds.length === 0) {
+        return reply.send({
+          synced: true,
+          hasActiveSubscription: false,
+        });
+      }
+
+      let matchedSub: Stripe.Subscription | null = null;
+      let matchedCustomerId: string | null = null;
+
+      for (const cid of customerIds) {
+        const subs = await stripe.subscriptions.list({
+          customer: cid,
+          status: "all",
+          limit: 10,
+        });
+
+        const active = subs.data.find((s) =>
+          ["active", "trialing", "past_due"].includes(s.status),
+        );
+        if (active) {
+          matchedSub = active;
+          matchedCustomerId = cid;
+          break;
+        }
+        if (!matchedSub && subs.data.length > 0) {
+          matchedSub = subs.data[0];
+          matchedCustomerId = cid;
+        }
+      }
+
+      if (!matchedSub) {
+        return reply.send({
+          synced: true,
+          hasActiveSubscription: false,
+          stripeCustomerId: customerIds[0],
+        });
+      }
+
+      const item = matchedSub.items?.data?.[0];
+      const priceId = item?.price?.id || matchedSub.metadata?.priceId || null;
+      const interval = item?.price?.recurring?.interval;
+      const inferredCycle =
+        interval === "year" ? "annual" : interval === "month" ? "monthly" : matchedSub.metadata?.cycle || "monthly";
+
+      const planInfo = resolvePlanFromPriceId(
+        priceId,
+        matchedSub.metadata?.planCode || matchedSub.metadata?.plan,
+        inferredCycle,
+      );
+
+      const isActive = ["active", "trialing", "past_due"].includes(matchedSub.status);
+      const resolvedPlan = isActive ? planInfo?.plan || "completo" : "gratuito";
+      const resolvedCycle = resolvedPlan === "estudante" ? "monthly" : planInfo?.cycle || "monthly";
+
+      const periodStartUnix = (matchedSub as any).current_period_start || matchedSub.start_date || matchedSub.created;
+      const periodEndUnix = (matchedSub as any).current_period_end || null;
+      const startDate = periodStartUnix ? new Date(periodStartUnix * 1000).toISOString() : null;
+      const renewalDate = periodEndUnix ? new Date(periodEndUnix * 1000).toISOString() : null;
+      const autoRenew = !matchedSub.cancel_at_period_end && matchedSub.status !== "canceled";
+      const unitAmount = item?.price?.unit_amount ? item.price.unit_amount / 100 : null;
+
+      const targetUser = await safeFindUser({
+        userId,
+        email,
+        customerId: matchedCustomerId,
+      });
+
+      if (targetUser) {
+        await prisma.user
+          .update({
+            where: { id: targetUser.id },
+            data: {
+              plan: resolvedPlan,
+              status: "active",
+              customPermissions: {
+                ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
+                  ? targetUser.customPermissions
+                  : {}),
+                stripeCustomerId: matchedCustomerId,
+                stripeSubscriptionId: matchedSub.id,
+                stripePriceId: priceId,
+                subscriptionStatus: matchedSub.status === "canceled" ? "cancelled" : matchedSub.status,
+                subscriptionCycle: resolvedCycle,
+                subscriptionStartDate: startDate,
+                subscriptionRenewalDate: renewalDate,
+                autoRenew,
+                lastSyncAt: new Date().toISOString(),
+              },
+            },
+          })
+          .catch(() => null);
+      }
+
+      return reply.send({
+        synced: true,
+        hasActiveSubscription: isActive,
+        plan: resolvedPlan,
+        cycle: resolvedCycle,
+        status: matchedSub.status === "canceled" ? "cancelled" : matchedSub.status,
+        startDate,
+        renewalDate,
+        autoRenew,
+        price: unitAmount,
+        stripeCustomerId: matchedCustomerId,
+        stripeSubscriptionId: matchedSub.id,
+        stripePriceId: priceId,
+      });
+    } catch (err: any) {
+      app.log.error(`[Sync Stripe] Falha ao sincronizar assinatura de ${email}: ${err.message}`);
+      return reply.status(200).send({
+        synced: false,
+        error: err.message,
+      });
+    }
+  };
+
+  app.post("/sync-stripe-subscription", handleSyncStripeSubscription);
+  app.options("/sync-stripe-subscription", handlePreflight);
+  app.post("/api/sync-stripe-subscription", handleSyncStripeSubscription);
+  app.options("/api/sync-stripe-subscription", handlePreflight);
+  app.post("/api/subscriptions/sync-stripe", handleSyncStripeSubscription);
+  app.get("/api/subscriptions/sync-stripe", handleStatusPing("/api/subscriptions/sync-stripe"));
+  app.options("/api/subscriptions/sync-stripe", handlePreflight);
+
+  // =========================================================================
+  // 5. STRIPE WEBHOOK: POST /webhook (utiliza Raw Body preservado)
   // =========================================================================
   const handleStripeWebhook = async (request: FastifyRequest, reply: FastifyReply) => {
     const sig = request.headers["stripe-signature"] as string;
@@ -477,8 +831,7 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
 
     let event: Stripe.Event;
 
-    // Se o webhook secret estiver configurado, valida a assinatura criptográfica
-    if (env.STRIPE_WEBHOOK_SECRET && env.STRIPE_SECRET_KEY) {
+    if (env.STRIPE_WEBHOOK_SECRET && isStripeConfigured && sig) {
       try {
         event = stripe.webhooks.constructEvent(rawBody, sig, env.STRIPE_WEBHOOK_SECRET);
       } catch (err: any) {
@@ -486,7 +839,6 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
         return reply.status(400).send({ error: `Webhook Error: ${err.message}` });
       }
     } else {
-      // Em modo de testes/dev sem webhook secret, processa o payload direto
       event = (typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody) as Stripe.Event;
     }
 
@@ -494,9 +846,6 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
 
     try {
       switch (event.type) {
-        // ---------------------------------------------------------------------
-        // Evento 1: checkout.session.completed
-        // ---------------------------------------------------------------------
         case "checkout.session.completed": {
           const session = event.data.object as Stripe.Checkout.Session;
           const userId = session.client_reference_id || session.metadata?.userId;
@@ -505,37 +854,41 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
           const subscriptionId =
             typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
 
-          let targetUser = null;
-          if (userId) {
-            targetUser = await prisma.user.findUnique({ where: { id: userId } });
-          }
-          if (!targetUser && session.customer_details?.email) {
-            targetUser = await prisma.user.findUnique({ where: { email: session.customer_details.email } });
-          }
+          const targetUser = await safeFindUser({
+            userId,
+            email: session.customer_details?.email || session.metadata?.userEmail,
+            customerId,
+          });
 
           if (targetUser) {
-            const planInfo = priceId ? resolvePlanFromPriceId(priceId) : null;
+            const planInfo = resolvePlanFromPriceId(
+              priceId,
+              session.metadata?.planCode || session.metadata?.plan,
+              session.metadata?.cycle,
+            );
             const newPlan = planInfo?.plan || "completo";
 
-            await prisma.user.update({
-              where: { id: targetUser.id },
-              data: {
-                plan: newPlan,
-                status: "active",
-                customPermissions: {
-                  ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
-                    ? targetUser.customPermissions
-                    : {}),
-                  stripeCustomerId: customerId,
-                  stripeSubscriptionId: subscriptionId,
-                  stripePriceId: priceId,
-                  subscriptionStatus: "active",
-                  subscriptionCycle: planInfo?.cycle || "monthly",
-                  lastEvent: "checkout.session.completed",
-                  updatedAt: new Date().toISOString(),
+            await prisma.user
+              .update({
+                where: { id: targetUser.id },
+                data: {
+                  plan: newPlan,
+                  status: "active",
+                  customPermissions: {
+                    ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
+                      ? targetUser.customPermissions
+                      : {}),
+                    stripeCustomerId: customerId,
+                    stripeSubscriptionId: subscriptionId,
+                    stripePriceId: priceId,
+                    subscriptionStatus: "active",
+                    subscriptionCycle: planInfo?.cycle || "monthly",
+                    lastEvent: "checkout.session.completed",
+                    updatedAt: new Date().toISOString(),
+                  },
                 },
-              },
-            });
+              })
+              .catch(() => null);
 
             await prisma.notification
               .create({
@@ -549,82 +902,117 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
                 },
               })
               .catch(() => null);
-
-            app.log.info(`[Stripe Webhook] Usuário ${targetUser.id} atualizado para o plano ${newPlan}`);
           }
           break;
         }
 
-        // ---------------------------------------------------------------------
-        // Evento 2: invoice.paid
-        // ---------------------------------------------------------------------
+        case "customer.subscription.created":
+        case "customer.subscription.updated": {
+          const sub = event.data.object as Stripe.Subscription;
+          const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+          const userId = sub.metadata?.userId;
+          const item = sub.items?.data?.[0];
+          const priceId = item?.price?.id || sub.metadata?.priceId;
+          const interval = item?.price?.recurring?.interval;
+          const cycle = interval === "year" ? "annual" : "monthly";
+
+          const targetUser = await safeFindUser({
+            userId,
+            email: sub.metadata?.userEmail,
+            customerId,
+          });
+
+          if (targetUser) {
+            const planInfo = resolvePlanFromPriceId(priceId, sub.metadata?.planCode, cycle);
+            const isActive = ["active", "trialing", "past_due"].includes(sub.status);
+            const nextPlan = isActive ? planInfo?.plan || targetUser.plan : "gratuito";
+
+            await prisma.user
+              .update({
+                where: { id: targetUser.id },
+                data: {
+                  plan: nextPlan,
+                  customPermissions: {
+                    ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
+                      ? targetUser.customPermissions
+                      : {}),
+                    stripeCustomerId: customerId,
+                    stripeSubscriptionId: sub.id,
+                    stripePriceId: priceId,
+                    subscriptionStatus: sub.status,
+                    subscriptionCycle: planInfo?.cycle || cycle,
+                    autoRenew: !sub.cancel_at_period_end,
+                    lastEvent: event.type,
+                    updatedAt: new Date().toISOString(),
+                  },
+                },
+              })
+              .catch(() => null);
+          }
+          break;
+        }
+
         case "invoice.paid": {
           const invoice = event.data.object as Stripe.Invoice;
           const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
           const customerEmail = invoice.customer_email;
           const subscriptionId =
-            typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+            typeof (invoice as any).subscription === "string"
+              ? (invoice as any).subscription
+              : (invoice as any).subscription?.id;
 
-          let targetUser = null;
-          if (customerEmail) {
-            targetUser = await prisma.user.findUnique({ where: { email: customerEmail } });
-          }
-          if (!targetUser && customerId) {
-            const users = await prisma.user.findMany();
-            targetUser = users.find((u) => (u.customPermissions as any)?.stripeCustomerId === customerId) || null;
-          }
+          const targetUser = await safeFindUser({
+            email: customerEmail,
+            customerId,
+          });
 
           if (targetUser) {
-            await prisma.user.update({
-              where: { id: targetUser.id },
-              data: {
-                status: "active",
-                customPermissions: {
-                  ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
-                    ? targetUser.customPermissions
-                    : {}),
-                  stripeCustomerId: customerId,
-                  stripeSubscriptionId: subscriptionId,
-                  subscriptionStatus: "active",
-                  lastInvoicePaidAt: new Date().toISOString(),
+            await prisma.user
+              .update({
+                where: { id: targetUser.id },
+                data: {
+                  status: "active",
+                  customPermissions: {
+                    ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
+                      ? targetUser.customPermissions
+                      : {}),
+                    stripeCustomerId: customerId,
+                    stripeSubscriptionId: subscriptionId,
+                    subscriptionStatus: "active",
+                    lastInvoicePaidAt: new Date().toISOString(),
+                  },
                 },
-              },
-            });
-            app.log.info(`[Stripe Webhook] Fatura paga para usuário ${targetUser.id}`);
+              })
+              .catch(() => null);
           }
           break;
         }
 
-        // ---------------------------------------------------------------------
-        // Evento 3: invoice.payment_failed
-        // ---------------------------------------------------------------------
         case "invoice.payment_failed": {
           const invoice = event.data.object as Stripe.Invoice;
           const customerEmail = invoice.customer_email;
           const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
 
-          let targetUser = null;
-          if (customerEmail) {
-            targetUser = await prisma.user.findUnique({ where: { email: customerEmail } });
-          }
-          if (!targetUser && customerId) {
-            const users = await prisma.user.findMany();
-            targetUser = users.find((u) => (u.customPermissions as any)?.stripeCustomerId === customerId) || null;
-          }
+          const targetUser = await safeFindUser({
+            email: customerEmail,
+            customerId,
+          });
 
           if (targetUser) {
-            await prisma.user.update({
-              where: { id: targetUser.id },
-              data: {
-                customPermissions: {
-                  ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
-                    ? targetUser.customPermissions
-                    : {}),
-                  subscriptionStatus: "past_due",
-                  lastPaymentFailure: new Date().toISOString(),
+            await prisma.user
+              .update({
+                where: { id: targetUser.id },
+                data: {
+                  customPermissions: {
+                    ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
+                      ? targetUser.customPermissions
+                      : {}),
+                    subscriptionStatus: "past_due",
+                    lastPaymentFailure: new Date().toISOString(),
+                  },
                 },
-              },
-            });
+              })
+              .catch(() => null);
 
             await prisma.notification
               .create({
@@ -639,45 +1027,39 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
                 },
               })
               .catch(() => null);
-
-            app.log.warn(`[Stripe Webhook] Falha de pagamento de fatura para usuário ${targetUser.id}`);
           }
           break;
         }
 
-        // ---------------------------------------------------------------------
-        // Evento 4: customer.subscription.deleted
-        // ---------------------------------------------------------------------
         case "customer.subscription.deleted": {
           const subscription = event.data.object as Stripe.Subscription;
           const customerId =
             typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
           const userId = subscription.metadata?.userId;
 
-          let targetUser = null;
-          if (userId) {
-            targetUser = await prisma.user.findUnique({ where: { id: userId } });
-          }
-          if (!targetUser && customerId) {
-            const users = await prisma.user.findMany();
-            targetUser = users.find((u) => (u.customPermissions as any)?.stripeCustomerId === customerId) || null;
-          }
+          const targetUser = await safeFindUser({
+            userId,
+            email: subscription.metadata?.userEmail,
+            customerId,
+          });
 
           if (targetUser) {
-            // Rebaixa o plano para o gratuito e atualiza status
-            await prisma.user.update({
-              where: { id: targetUser.id },
-              data: {
-                plan: "gratuito",
-                customPermissions: {
-                  ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
-                    ? targetUser.customPermissions
-                    : {}),
-                  subscriptionStatus: "canceled",
-                  canceledAt: new Date().toISOString(),
+            await prisma.user
+              .update({
+                where: { id: targetUser.id },
+                data: {
+                  plan: "gratuito",
+                  customPermissions: {
+                    ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
+                      ? targetUser.customPermissions
+                      : {}),
+                    subscriptionStatus: "canceled",
+                    autoRenew: false,
+                    canceledAt: new Date().toISOString(),
+                  },
                 },
-              },
-            });
+              })
+              .catch(() => null);
 
             await prisma.notification
               .create({
@@ -692,8 +1074,6 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
                 },
               })
               .catch(() => null);
-
-            app.log.info(`[Stripe Webhook] Assinatura cancelada para usuário ${targetUser.id}. Retornado para gratuito.`);
           }
           break;
         }
@@ -714,53 +1094,61 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
   app.post("/api/subscriptions/webhook", handleStripeWebhook);
 
   // =========================================================================
-  // ROTAS EXISTENTES DE GERENCIAMENTO DE ASSINATURA
+  // ROTAS DE GERENCIAMENTO DE ASSINATURA
   // =========================================================================
-  // Obter status da assinatura do usuário atual
   app.get("/api/subscriptions/status", { preHandler: [app.authenticate] }, async (request) => {
-    let user = await prisma.user.findUnique({
-      where: { id: request.authUser.id },
+    const user = await resolveOrCreateUser(request, {
+      userId: request.authUser.id,
+      email: request.authUser.email,
     });
-
-    if (!user) {
-      user = await resolveOrCreateUser(request, {
-        userId: request.authUser.id,
-        email: request.authUser.email,
-      });
-    }
 
     const permissions = (user.customPermissions as any) || {};
 
     return {
       plan: user.plan,
       status: permissions.subscriptionStatus || "active",
-      validUntil: null,
+      cycle: permissions.subscriptionCycle || "monthly",
+      startDate: permissions.subscriptionStartDate || null,
+      renewalDate: permissions.subscriptionRenewalDate || null,
+      validUntil: permissions.subscriptionRenewalDate || null,
+      autoRenew: permissions.autoRenew ?? true,
       academicStatus: "approved",
       stripeCustomerId: permissions.stripeCustomerId || null,
       stripeSubscriptionId: permissions.stripeSubscriptionId || null,
     };
   });
 
-  // Mudar de plano manualmente (Upgrade / Downgrade interno)
   app.post("/api/subscriptions/change-plan", { preHandler: [app.authenticate] }, async (request) => {
-    const { planCode } = changePlanSchema.parse(request.body);
+    const { planCode, cycle } = changePlanSchema.parse(request.body);
 
     const user = await resolveOrCreateUser(request, {
       userId: request.authUser.id,
       email: request.authUser.email,
     });
 
+    if (user._ephemeral) {
+      return {
+        ...user,
+        plan: planCode,
+        subscription_cycle: cycle,
+      };
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: {
         plan: planCode,
+        customPermissions: {
+          ...((user.customPermissions as any) || {}),
+          subscriptionCycle: cycle,
+          subscriptionStatus: "active",
+        },
       },
     });
 
     return serializeUser(updatedUser);
   });
 
-  // Cancelar assinatura manualmente
   app.post("/api/subscriptions/cancel", { preHandler: [app.authenticate] }, async (request) => {
     cancelSubscriptionSchema.parse(request.body);
 
@@ -768,6 +1156,10 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
       userId: request.authUser.id,
       email: request.authUser.email,
     });
+
+    if (user._ephemeral) {
+      return { ...user, plan: "gratuito" };
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
@@ -779,7 +1171,6 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     return serializeUser(updatedUser);
   });
 
-  // Enviar comprovação de matrícula estudantil
   app.post("/api/subscriptions/academic-verify", { preHandler: [app.authenticate] }, async (request) => {
     academicVerifySchema.parse(request.body);
 
@@ -789,7 +1180,6 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     };
   });
 
-  // Admin: Listar todos os usuários com dados de assinatura
   app.get("/api/subscriptions/admin/users", { preHandler: [app.requireAdmin] }, async () => {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },
@@ -798,7 +1188,6 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     return users.map(serializeUser);
   });
 
-  // Admin: Atualizar plano de qualquer usuário
   app.patch("/api/subscriptions/admin/users/:id/plan", { preHandler: [app.requireAdmin] }, async (request) => {
     const params = z.object({ id: z.string().min(1) }).parse(request.params);
     const data = adminUpdatePlanSchema.parse(request.body);
@@ -813,7 +1202,6 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     return serializeUser(user);
   });
 
-  // Admin: Decidir aprovação ou rejeição de estudante
   app.post("/api/subscriptions/admin/academic/:id/decide", { preHandler: [app.requireAdmin] }, async (request) => {
     const params = z.object({ id: z.string().min(1) }).parse(request.params);
     const data = adminDecideAcademicSchema.parse(request.body);

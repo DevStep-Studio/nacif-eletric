@@ -545,11 +545,17 @@ export function normalizeSubscription(user = {}) {
     cycle,
     status: user?.subscription?.status || user?.subscription_status || user?.billing_status || "active",
     provider: user?.subscription?.provider || user?.billing_provider || "manual",
-    price: user?.subscription?.price || (cycle === "annual" ? plan.annualPrice : plan.monthlyPrice),
+    price: user?.subscription?.price || user?.subscription_price || (cycle === "annual" ? plan.annualPrice : plan.monthlyPrice),
     startDate: user?.subscription?.start_date || user?.subscription_start_date || null,
     renewalDate: user?.subscription?.renewal_date || user?.renewal_date || user?.subscription_valid_until || null,
-    autoRenew: user?.subscription?.auto_renew ?? true,
-    billingConfigured: Boolean(user?.billing_provider && user.billing_provider !== "manual"),
+    autoRenew: user?.subscription?.auto_renew ?? user?.subscription_auto_renew ?? true,
+    stripeCustomerId: user?.stripe_customer_id || user?.subscription?.stripe_customer_id || null,
+    stripeSubscriptionId: user?.stripe_subscription_id || user?.subscription?.stripe_subscription_id || null,
+    billingConfigured: Boolean(
+      (user?.billing_provider && user.billing_provider !== "manual") ||
+      user?.stripe_customer_id ||
+      user?.stripe_subscription_id
+    ),
     academicStatus: user?.academic_status || "not_submitted",
     academicInstitution: user?.academic_institution || "",
     academicCourse: user?.academic_course || "",

@@ -73,7 +73,7 @@ async function main() {
         after_completion: {
           type: "redirect",
           redirect: {
-            url: `https://nacifenergy.com.br/subscription?checkout=success&plan=${item.plan}&cycle=${item.cycle}`,
+            url: `https://nacifenergy.com.br/subscription?checkout=success&plan=${item.plan}&cycle=${item.cycle}&session_id={CHECKOUT_SESSION_ID}`,
           },
         },
         metadata: {

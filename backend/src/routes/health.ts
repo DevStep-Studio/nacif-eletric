@@ -1,8 +1,14 @@
 import type { FastifyInstance } from "fastify";
+import { isStripeConfigured } from "../lib/stripe.js";
 
 export const registerHealthRoutes = async (app: FastifyInstance) => {
-  app.get("/health", async () => ({
+  const healthHandler = async () => ({
     ok: true,
-    service: "volta-ia-backend",
-  }));
+    service: "nacif-electric-backend",
+    stripeConfigured: isStripeConfigured,
+    timestamp: new Date().toISOString(),
+  });
+
+  app.get("/health", healthHandler);
+  app.get("/api/health", healthHandler);
 };

@@ -782,6 +782,24 @@ const auth = {
         "photo_url",
         "theme",
         "preferences",
+        "plan",
+        "subscription_status",
+        "subscription_cycle",
+        "subscription_price",
+        "subscription_start_date",
+        "subscription_valid_until",
+        "subscription_auto_renew",
+        "subscription_cancelled_at",
+        "subscription_cancel_reason",
+        "billing_provider",
+        "stripe_customer_id",
+        "stripe_subscription_id",
+        "academic_status",
+        "academic_institution",
+        "academic_course",
+        "academic_document_name",
+        "academic_document_url",
+        "academic_submitted_at",
       ];
 
       allowedKeys.forEach((key) => {
@@ -2706,11 +2724,16 @@ const subscriptionEntity = {
       const updated = await auth.updateMe({
         plan: targetPlan.code,
         subscription_status: "active",
-        subscription_cycle: cycle,
+        subscription_cycle: targetPlan.code === "estudante" ? "monthly" : cycle,
         subscription_price: price,
         subscription_start_date: user.subscription_start_date || now,
         subscription_valid_until: oneMonthOrYear.toISOString(),
+        subscription_auto_renew: true,
       });
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("voltai:user-updated"));
+      }
 
       recordAuditEvent({
         actor: user,
@@ -2728,6 +2751,59 @@ const subscriptionEntity = {
       method: "POST",
       body: { planCode, cycle },
     });
+  },
+
+  async syncFromStripe(stripeData = {}) {
+    if (!stripeData) return null;
+    const targetPlan = stripeData.plan ? getPlanByCode(stripeData.plan) : null;
+    if (!targetPlan) return null;
+
+    if (isLocalAuthMode) {
+      const user = getLocalUserFromToken();
+      if (!user) return null;
+
+      const resolvedCycle = targetPlan.code === "estudante" ? "monthly" : (stripeData.cycle || "monthly");
+      const resolvedPrice =
+        stripeData.price ||
+        (resolvedCycle === "annual" && targetPlan.annualPrice !== null
+          ? targetPlan.annualPrice
+          : targetPlan.monthlyPrice);
+
+      const patch = {
+        plan: targetPlan.code,
+        billing_provider: "stripe",
+        subscription_status: stripeData.status || "active",
+        subscription_cycle: resolvedCycle,
+        subscription_price: resolvedPrice,
+        subscription_auto_renew: stripeData.autoRenew ?? true,
+      };
+
+      if (stripeData.startDate) {
+        patch.subscription_start_date = stripeData.startDate;
+      } else if (!user.subscription_start_date) {
+        patch.subscription_start_date = nowIso();
+      }
+
+      if (stripeData.renewalDate) {
+        patch.subscription_valid_until = stripeData.renewalDate;
+      }
+
+      if (stripeData.stripeCustomerId) {
+        patch.stripe_customer_id = stripeData.stripeCustomerId;
+      }
+
+      if (stripeData.stripeSubscriptionId) {
+        patch.stripe_subscription_id = stripeData.stripeSubscriptionId;
+      }
+
+      const updated = await auth.updateMe(patch);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("voltai:user-updated"));
+      }
+      return updated;
+    }
+
+    return null;
   },
 
   async submitAcademicVerification({ institution, course, documentName, documentUrl }) {
@@ -3031,6 +3107,7 @@ export const backend = {
     Analysis: analysisEntity,
     Database: databaseEntity,
     System: systemEntity,
+    Subscription: subscriptionEntity,
   },
   integrations,
 };

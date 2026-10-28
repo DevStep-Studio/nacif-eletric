@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle,
   CheckCircle2,
   CreditCard,
   FolderOpen,
-  Info,
   ShieldCheck,
   GraduationCap,
   Sparkles,
   Settings,
-  Calendar,
-  XCircle,
-  HelpCircle,
   Loader2,
 } from "lucide-react";
 import { backend } from "@/api/backendClient";
@@ -28,7 +23,6 @@ import {
   PLAN_CATALOG,
   PLAN_COMPARISON_ROWS,
   buildUsageFromProjects,
-  formatLimitValue,
   getUsageRows,
   normalizeSubscription,
   formatPlanPrice,
@@ -38,11 +32,11 @@ import AcademicVerificationModal from "@/components/subscription/AcademicVerific
 import PlanChangeModal from "@/components/subscription/PlanChangeModal";
 import ManageSubscriptionModal from "@/components/subscription/ManageSubscriptionModal";
 import {
-  STRIPE_TEST_PRICE_IDS,
   getPlanPriceId,
   createCheckoutSession,
   createPortalSession,
   verifyCheckoutSession,
+  syncStripeSubscription,
 } from "@/lib/stripeConfig";
 
 const featureDescriptions = {
@@ -185,59 +179,119 @@ export default function Subscription() {
   const [subscribingPriceId, setSubscribingPriceId] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
-  // Monitora retorno do checkout do Stripe via parâmetros na URL
+  // Sincroniza em segundo plano o estado real da assinatura da conta na Stripe
+  useEffect(() => {
+    if (!activeUser?.email) return;
+    let cancelled = false;
+
+    syncStripeSubscription({
+      userId: activeUser.id,
+      userEmail: activeUser.email,
+      stripeCustomerId: activeUser.stripe_customer_id,
+    })
+      .then(async (syncRes) => {
+        if (cancelled || !syncRes?.synced) return;
+        if (syncRes.hasActiveSubscription && syncRes.plan) {
+          if (backend.subscriptions?.syncFromStripe) {
+            const updated = await backend.subscriptions.syncFromStripe(syncRes);
+            if (!cancelled && updated) {
+              setActiveUser(updated);
+            }
+          }
+        } else if (
+          !syncRes.hasActiveSubscription &&
+          syncRes.status === "cancelled" &&
+          activeUser.billing_provider === "stripe"
+        ) {
+          if (backend.subscriptions?.syncFromStripe) {
+            const updated = await backend.subscriptions.syncFromStripe({
+              ...syncRes,
+              plan: "free",
+              status: "cancelled",
+              autoRenew: false,
+            });
+            if (!cancelled && updated) {
+              setActiveUser(updated);
+            }
+          }
+        }
+      })
+      .catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUser?.id, activeUser?.email]);
+
+  // Monitora retorno do checkout ou Customer Portal do Stripe via parâmetros na URL
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const checkoutStatus = params.get("checkout");
+    const portalReturn = params.get("portal_return");
     const sessionId = params.get("session_id");
     const returnPlan = params.get("plan");
     const returnCycle = params.get("cycle") || "monthly";
 
     if (checkoutStatus === "success") {
-      setBillingMessage("🎉 Pagamento confirmado com sucesso! Atualizando sua assinatura...");
+      setBillingMessage("🎉 Pagamento confirmado com sucesso! Sincronizando sua assinatura com a Stripe...");
       window.history.replaceState({}, document.title, window.location.pathname);
 
-      // Se retornou de um Link de Pagamento Direto com o plano definido na URL
-      if (returnPlan && backend.entities?.Subscription?.changePlan) {
-        backend.entities.Subscription.changePlan({
-          planCode: returnPlan,
-          cycle: returnCycle,
-        }).catch(() => null);
-      }
+      const finalizeCheckoutSync = async () => {
+        let syncedViaApi = false;
 
-      if (sessionId && !sessionId.startsWith("cs_simulated")) {
-        verifyCheckoutSession({ sessionId })
-          .then((res) => {
-            if (res?.plan && backend.entities?.Subscription?.changePlan) {
-              backend.entities.Subscription.changePlan({
-                planCode: res.plan,
-                cycle: res.cycle || "monthly",
-              }).catch(() => null);
-            }
-          })
-          .catch(() => null)
-          .finally(() => {
-            loadData();
-            setTimeout(() => setBillingMessage("🎉 Assinatura atualizada com sucesso!"), 1500);
-            setTimeout(() => setBillingMessage(""), 8000);
-          });
-      } else {
-        loadData();
-        setTimeout(() => setBillingMessage("🎉 Assinatura atualizada com sucesso!"), 1500);
+        if (
+          sessionId &&
+          sessionId !== "{CHECKOUT_SESSION_ID}" &&
+          !sessionId.startsWith("cs_simulated")
+        ) {
+          const verified = await verifyCheckoutSession({ sessionId }).catch(() => null);
+          if (verified?.plan && backend.subscriptions?.syncFromStripe) {
+            await backend.subscriptions.syncFromStripe(verified).catch(() => null);
+            syncedViaApi = true;
+          } else if (verified?.plan && backend.subscriptions?.changePlan) {
+            await backend.subscriptions
+              .changePlan({
+                planCode: verified.plan,
+                cycle: verified.cycle || returnCycle,
+              })
+              .catch(() => null);
+            syncedViaApi = true;
+          }
+        }
+
+        if (!syncedViaApi && returnPlan && backend.subscriptions?.changePlan) {
+          await backend.subscriptions
+            .changePlan({
+              planCode: returnPlan,
+              cycle: returnPlan === "estudante" ? "monthly" : returnCycle,
+            })
+            .catch(() => null);
+        }
+
+        await loadData();
+        setBillingMessage("🎉 Assinatura Nacif ativada e sincronizada com a Stripe com sucesso!");
         setTimeout(() => setBillingMessage(""), 8000);
-      }
+      };
+
+      finalizeCheckoutSync();
     } else if (checkoutStatus === "cancelled") {
       setBillingMessage("O processo de checkout foi cancelado. Nenhuma cobrança foi efetuada.");
       window.history.replaceState({}, document.title, window.location.pathname);
       setTimeout(() => setBillingMessage(""), 5000);
+    } else if (portalReturn === "true") {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setBillingMessage("Sincronizando dados atualizados do Portal da Stripe...");
+      loadData().finally(() => {
+        setTimeout(() => setBillingMessage(""), 4000);
+      });
     }
   }, []);
 
   /**
    * Função handleSubscription:
    * Disparada pelos botões "Contratar com documento" e "Fazer upgrade"
-   * Faz o POST para /create-checkout-session e redireciona via window.location.href
+   * Comunica com a API da Stripe e redireciona o cliente para o Checkout seguro
    */
   const handleSubscription = async (priceId, planCode) => {
     if (!priceId && !planCode) {
@@ -245,14 +299,16 @@ export default function Subscription() {
       return;
     }
 
+    const effectiveCycle = planCode === "estudante" ? "monthly" : cycle;
+
     try {
-      setSubscribingPriceId(priceId || planCode);
+      setSubscribingPriceId(planCode || priceId);
       setBillingMessage("Redirecionando com segurança para a Stripe...");
 
       const data = await createCheckoutSession({
         priceId,
         planCode,
-        cycle,
+        cycle: effectiveCycle,
         userId: activeUser?.id,
         userEmail: activeUser?.email,
         userName: activeUser?.fullName || activeUser?.full_name || activeUser?.name,
@@ -274,7 +330,7 @@ export default function Subscription() {
 
   /**
    * Função handleCustomerPortal:
-   * Dispara o POST para /create-portal-session para abrir o Customer Portal da Stripe
+   * Abre o Customer Portal da Stripe ou o modal de gerenciamento da assinatura
    */
   const handleCustomerPortal = async () => {
     try {
@@ -283,6 +339,8 @@ export default function Subscription() {
         userId: activeUser?.id,
         userEmail: activeUser?.email,
         userName: activeUser?.fullName || activeUser?.full_name || activeUser?.name,
+        stripeCustomerId: subscription.stripeCustomerId,
+        allowDirectFallback: false,
       });
       if (data?.url) {
         window.location.href = data.url;
@@ -290,7 +348,7 @@ export default function Subscription() {
         setIsManageModalOpen(true);
       }
     } catch (err) {
-      console.warn("[handleCustomerPortal] Portal da Stripe indisponível, abrindo modal local:", err);
+      console.warn("[handleCustomerPortal] Abrindo modal de assinatura:", err);
       setIsManageModalOpen(true);
     } finally {
       setPortalLoading(false);
@@ -384,7 +442,9 @@ export default function Subscription() {
 
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[#667085]">Renovação automática:</span>
-              <span className="font-semibold text-emerald-700">Ativa</span>
+              <span className={`font-semibold ${subscription.autoRenew ? "text-emerald-700" : "text-amber-700"}`}>
+                {subscription.autoRenew ? "Ativa" : "Encerra no fim do período"}
+              </span>
             </div>
           </div>
 
@@ -499,7 +559,7 @@ export default function Subscription() {
       </section>
 
       {/* 3.3 Comparação de Planos (4 Cards Minimalistas) */}
-      <section className="rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
+      <section id="compare-plans" className="scroll-mt-8 rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-slate-100">
           <div>
             <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Planos & Assinaturas</h2>
@@ -545,7 +605,7 @@ export default function Subscription() {
             const isCompleto = plan.code === "completo";
             const annualSavings = calculateAnnualSavings(plan);
             const targetPriceId = getPlanPriceId(plan.code, cycle);
-            const isSubscribingThis = subscribingPriceId === targetPriceId;
+            const isSubscribingThis = subscribingPriceId === plan.code || subscribingPriceId === targetPriceId;
 
             const highlights = PLAN_HIGHLIGHTS[plan.code] || plan.features.slice(0, 4);
             const subtitle = PLAN_SUBTITLES[plan.code] || plan.description;
@@ -811,6 +871,7 @@ export default function Subscription() {
         isOpen={isManageModalOpen}
         onClose={() => setIsManageModalOpen(false)}
         subscription={subscription}
+        user={activeUser}
         onChangePlanClick={() => {
           const el = document.querySelector("#compare-plans");
           if (el) el.scrollIntoView({ behavior: "smooth" });
