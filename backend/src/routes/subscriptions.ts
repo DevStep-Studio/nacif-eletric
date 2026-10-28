@@ -298,10 +298,41 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     });
   };
 
-  // Registra o endpoint na raiz e nas rotas prefixadas
+  // Handlers utilitários para compatibilidade total com proxies, Cloudflare e preflight
+  const handlePreflight = async (_req: FastifyRequest, reply: FastifyReply) => {
+    return reply
+      .header("Access-Control-Allow-Origin", "*")
+      .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
+      .header(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization, stripe-signature, x-requested-with, Accept, Origin"
+      )
+      .status(204)
+      .send();
+  };
+
+  const handleStatusPing = (name: string) => async (_req: FastifyRequest, reply: FastifyReply) => {
+    return reply.send({
+      ok: true,
+      service: "Nacif Energy - Stripe Billing API",
+      endpoint: name,
+      method: "POST",
+      instructions: "Envie uma requisição HTTP POST com Content-Type: application/json.",
+    });
+  };
+
+  // Registra o endpoint de checkout na raiz e nas rotas prefixadas (POST, GET, OPTIONS)
   app.post("/create-checkout-session", handleCreateCheckoutSession);
+  app.get("/create-checkout-session", handleStatusPing("/create-checkout-session"));
+  app.options("/create-checkout-session", handlePreflight);
+
   app.post("/api/create-checkout-session", handleCreateCheckoutSession);
+  app.get("/api/create-checkout-session", handleStatusPing("/api/create-checkout-session"));
+  app.options("/api/create-checkout-session", handlePreflight);
+
   app.post("/api/subscriptions/create-checkout-session", handleCreateCheckoutSession);
+  app.get("/api/subscriptions/create-checkout-session", handleStatusPing("/api/subscriptions/create-checkout-session"));
+  app.options("/api/subscriptions/create-checkout-session", handlePreflight);
 
   // =========================================================================
   // 2. STRIPE CUSTOMER PORTAL: POST /create-portal-session
@@ -334,8 +365,16 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
   };
 
   app.post("/create-portal-session", handleCreatePortalSession);
+  app.get("/create-portal-session", handleStatusPing("/create-portal-session"));
+  app.options("/create-portal-session", handlePreflight);
+
   app.post("/api/create-portal-session", handleCreatePortalSession);
+  app.get("/api/create-portal-session", handleStatusPing("/api/create-portal-session"));
+  app.options("/api/create-portal-session", handlePreflight);
+
   app.post("/api/subscriptions/create-portal-session", handleCreatePortalSession);
+  app.get("/api/subscriptions/create-portal-session", handleStatusPing("/api/subscriptions/create-portal-session"));
+  app.options("/api/subscriptions/create-portal-session", handlePreflight);
 
   // =========================================================================
   // 3. STRIPE CHECKOUT VERIFICATION: POST /verify-checkout-session
@@ -418,8 +457,16 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
   };
 
   app.post("/verify-checkout-session", handleVerifyCheckoutSession);
+  app.get("/verify-checkout-session", handleStatusPing("/verify-checkout-session"));
+  app.options("/verify-checkout-session", handlePreflight);
+
   app.post("/api/verify-checkout-session", handleVerifyCheckoutSession);
+  app.get("/api/verify-checkout-session", handleStatusPing("/api/verify-checkout-session"));
+  app.options("/api/verify-checkout-session", handlePreflight);
+
   app.post("/api/subscriptions/verify-checkout-session", handleVerifyCheckoutSession);
+  app.get("/api/subscriptions/verify-checkout-session", handleStatusPing("/api/subscriptions/verify-checkout-session"));
+  app.options("/api/subscriptions/verify-checkout-session", handlePreflight);
 
   // =========================================================================
   // 3. STRIPE WEBHOOK: POST /webhook (utiliza Raw Body preservado)

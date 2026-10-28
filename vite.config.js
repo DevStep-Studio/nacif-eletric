@@ -11,6 +11,27 @@ export default defineConfig({
       'html2canvas': path.resolve(__dirname, './node_modules/html2canvas/dist/html2canvas.js'),
     },
   },
+  server: {
+    port: 5173,
+    proxy: {
+      '/create-checkout-session': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/create-portal-session': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/verify-checkout-session': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [react()],
   build: {
     rollupOptions: {

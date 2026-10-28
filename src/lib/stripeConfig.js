@@ -68,6 +68,38 @@ export function getPlanPriceId(planCode, cycle = "monthly") {
 /**
  * Comunica com o backend para gerar uma nova Checkout Session da Stripe
  */
+/**
+ * Obtém a URL base da API da Stripe com resolução inteligente:
+ * 1. import.meta.env.VITE_API_BASE_URL (se definido)
+ * 2. localStorage override ('nacif_api_base_url')
+ * 3. Fallback para http://localhost:3001 quando em desenvolvimento local
+ */
+export function getStripeApiBaseUrl() {
+  const envUrl =
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "";
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    const customUrl =
+      window.localStorage.getItem("nacif_api_base_url") ||
+      window.localStorage.getItem("voltai_api_base_url");
+    if (customUrl && customUrl.trim()) {
+      return customUrl.trim().replace(/\/+$/, "");
+    }
+
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return "http://localhost:3001";
+    }
+  }
+
+  return "";
+}
+
+/**
+ * Comunica com o backend para gerar uma nova Checkout Session da Stripe
+ */
 export async function createCheckoutSession({
   priceId,
   userId,
@@ -80,9 +112,7 @@ export async function createCheckoutSession({
     throw new Error("Identificador de preço (priceId) é obrigatório.");
   }
 
-  const rawApiBaseUrl =
-    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "";
-  const baseUrl = rawApiBaseUrl.replace(/\/+$/, "");
+  const baseUrl = getStripeApiBaseUrl();
 
   const token =
     (typeof window !== "undefined" &&
@@ -90,29 +120,70 @@ export async function createCheckoutSession({
         window.localStorage.getItem("voltai_token"))) ||
     "";
 
-  // Tenta o endpoint raiz /create-checkout-session ou prefixado
-  const endpoint = baseUrl ? `${baseUrl}/create-checkout-session` : "/create-checkout-session";
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({
-      priceId,
-      userId,
-      userEmail: userEmail || email,
-      userName: userName || name,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || errorData.error || `Erro HTTP ${response.status}`);
+  // Monta lista de endpoints candidatos em ordem de prioridade
+  const candidateEndpoints = [];
+  if (baseUrl) {
+    candidateEndpoints.push(`${baseUrl}/create-checkout-session`);
+    candidateEndpoints.push(`${baseUrl}/api/create-checkout-session`);
+    candidateEndpoints.push(`${baseUrl}/api/subscriptions/create-checkout-session`);
   }
 
-  return await response.json();
+  if (
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+  ) {
+    if (!candidateEndpoints.includes("http://localhost:3001/create-checkout-session")) {
+      candidateEndpoints.push("http://localhost:3001/create-checkout-session");
+      candidateEndpoints.push("http://localhost:3001/api/create-checkout-session");
+    }
+  }
+
+  candidateEndpoints.push("/api/create-checkout-session");
+  candidateEndpoints.push("/create-checkout-session");
+
+  let lastError = null;
+
+  for (const endpoint of candidateEndpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          priceId,
+          userId,
+          userEmail: userEmail || email,
+          userName: userName || name,
+        }),
+      });
+
+      // Se o endpoint retornar 405 (Method Not Allowed em servidor estático) ou 404, tenta o próximo
+      if (response.status === 405 || response.status === 404) {
+        lastError = new Error(
+          `O servidor em ${endpoint} respondeu com status ${response.status} (Método POST não suportado em rota estática).`
+        );
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || `Erro HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw (
+    lastError ||
+    new Error(
+      "Falha ao comunicar com o servidor da Stripe. Verifique se o backend está ativo na porta 3001 ou se VITE_API_BASE_URL está configurada."
+    )
+  );
 }
 
 /**
@@ -125,9 +196,7 @@ export async function createPortalSession({
   email,
   name,
 } = {}) {
-  const rawApiBaseUrl =
-    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "";
-  const baseUrl = rawApiBaseUrl.replace(/\/+$/, "");
+  const baseUrl = getStripeApiBaseUrl();
 
   const token =
     (typeof window !== "undefined" &&
@@ -135,27 +204,65 @@ export async function createPortalSession({
         window.localStorage.getItem("voltai_token"))) ||
     "";
 
-  const endpoint = baseUrl ? `${baseUrl}/create-portal-session` : "/create-portal-session";
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({
-      userId,
-      userEmail: userEmail || email,
-      userName: userName || name,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || errorData.error || `Erro HTTP ${response.status}`);
+  const candidateEndpoints = [];
+  if (baseUrl) {
+    candidateEndpoints.push(`${baseUrl}/create-portal-session`);
+    candidateEndpoints.push(`${baseUrl}/api/create-portal-session`);
   }
 
-  return await response.json();
+  if (
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+  ) {
+    if (!candidateEndpoints.includes("http://localhost:3001/create-portal-session")) {
+      candidateEndpoints.push("http://localhost:3001/create-portal-session");
+    }
+  }
+
+  candidateEndpoints.push("/api/create-portal-session");
+  candidateEndpoints.push("/create-portal-session");
+
+  let lastError = null;
+
+  for (const endpoint of candidateEndpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          userId,
+          userEmail: userEmail || email,
+          userName: userName || name,
+        }),
+      });
+
+      if (response.status === 405 || response.status === 404) {
+        lastError = new Error(
+          `O servidor em ${endpoint} respondeu com status ${response.status} (Método POST não suportado em rota estática).`
+        );
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || `Erro HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw (
+    lastError ||
+    new Error(
+      "Falha ao comunicar com o servidor do Customer Portal da Stripe."
+    )
+  );
 }
 
 /**
@@ -164,9 +271,7 @@ export async function createPortalSession({
 export async function verifyCheckoutSession({ sessionId }) {
   if (!sessionId) return null;
 
-  const rawApiBaseUrl =
-    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "";
-  const baseUrl = rawApiBaseUrl.replace(/\/+$/, "");
+  const baseUrl = getStripeApiBaseUrl();
 
   const token =
     (typeof window !== "undefined" &&
@@ -174,22 +279,43 @@ export async function verifyCheckoutSession({ sessionId }) {
         window.localStorage.getItem("voltai_token"))) ||
     "";
 
-  const endpoint = baseUrl ? `${baseUrl}/verify-checkout-session` : "/verify-checkout-session";
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ sessionId }),
-    });
-
-    if (!response.ok) return null;
-    return await response.json();
-  } catch {
-    return null;
+  const candidateEndpoints = [];
+  if (baseUrl) {
+    candidateEndpoints.push(`${baseUrl}/verify-checkout-session`);
+    candidateEndpoints.push(`${baseUrl}/api/verify-checkout-session`);
   }
+
+  if (
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+  ) {
+    if (!candidateEndpoints.includes("http://localhost:3001/verify-checkout-session")) {
+      candidateEndpoints.push("http://localhost:3001/verify-checkout-session");
+    }
+  }
+
+  candidateEndpoints.push("/api/verify-checkout-session");
+  candidateEndpoints.push("/verify-checkout-session");
+
+  for (const endpoint of candidateEndpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ sessionId }),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch {
+      // continua tentando próximo
+    }
+  }
+
+  return null;
 }
 

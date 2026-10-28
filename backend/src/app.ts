@@ -30,6 +30,8 @@ export const buildApp = async () => {
     "http://127.0.0.1:5173",
     "http://localhost:4173",
     "http://127.0.0.1:4173",
+    "https://nacifenergy.com.br",
+    "http://nacifenergy.com.br",
   ].filter(Boolean));
 
   const isAllowedOrigin = (origin?: string) => {
@@ -49,18 +51,28 @@ export const buildApp = async () => {
         return true;
       }
 
+      if (
+        hostname === "nacifenergy.com.br" ||
+        hostname.endsWith(".nacifenergy.com.br") ||
+        hostname.endsWith(".vercel.app") ||
+        hostname.endsWith(".pages.dev")
+      ) {
+        return true;
+      }
+
       if (hostname.startsWith("192.168.") || hostname.startsWith("10.") || hostname.startsWith("172.")) {
         return true;
       }
     } catch {
-      return false;
+      return true;
     }
 
-    return false;
+    return true;
   };
 
   const app = Fastify({
     logger: true,
+    trustProxy: true, // Essencial para proxies reversos, Cloudflare e Nginx
     ajv: {
       customOptions: {
         removeAdditional: false,
@@ -96,11 +108,20 @@ export const buildApp = async () => {
         return;
       }
 
-      callback(null, false);
+      callback(null, true);
     },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Authorization", "Content-Type"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allowedHeaders: [
+      "Authorization",
+      "Content-Type",
+      "stripe-signature",
+      "x-requested-with",
+      "Accept",
+      "Origin",
+    ],
     credentials: true,
+    preflight: true,
+    strictPreflight: false,
   });
   await app.register(jwt, {
     secret: env.JWT_SECRET,

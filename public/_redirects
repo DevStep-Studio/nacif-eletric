@@ -1,2 +1,8 @@
+# Rotas de API e Stripe (não reescreve para index.html para evitar 405 em POST)
+/create-checkout-session   /create-checkout-session   200!
+/create-portal-session     /create-portal-session     200!
+/verify-checkout-session   /verify-checkout-session   200!
+/api/*                     /api/:splat                200!
+
 # Netlify & Cloudflare Pages SPA Routing Fallback
-/*    /index.html   200
+/*                         /index.html                200

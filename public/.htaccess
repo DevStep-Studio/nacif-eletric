@@ -11,8 +11,15 @@
   RewriteCond %{HTTPS} off
   RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
+  # 1.1 PROXY REVERSO PARA BACKEND API (Se mod_proxy estiver habilitado)
+  <IfModule mod_proxy.c>
+    RewriteRule ^(create-checkout-session|create-portal-session|verify-checkout-session|api/.*|webhook)$ http://127.0.0.1:3001/$1 [P,L]
+  </IfModule>
+
   # 2. ROTEAMENTO SPA (SINGLE PAGE APPLICATION FALLBACK)
   # Evita erro 404 ao recarregar páginas internas (/projects, /planta-ia, etc.)
+  # Não reescreve rotas de API / Stripe para evitar erro 405 Method Not Allowed em requisições POST
+  RewriteCond %{REQUEST_URI} !^/(create-checkout-session|create-portal-session|verify-checkout-session|api/|webhook) [NC]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^ index.html [L]
