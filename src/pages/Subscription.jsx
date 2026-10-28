@@ -191,10 +191,20 @@ export default function Subscription() {
     const params = new URLSearchParams(window.location.search);
     const checkoutStatus = params.get("checkout");
     const sessionId = params.get("session_id");
+    const returnPlan = params.get("plan");
+    const returnCycle = params.get("cycle") || "monthly";
 
     if (checkoutStatus === "success") {
       setBillingMessage("🎉 Pagamento confirmado com sucesso! Atualizando sua assinatura...");
       window.history.replaceState({}, document.title, window.location.pathname);
+
+      // Se retornou de um Link de Pagamento Direto com o plano definido na URL
+      if (returnPlan && backend.entities?.Subscription?.changePlan) {
+        backend.entities.Subscription.changePlan({
+          planCode: returnPlan,
+          cycle: returnCycle,
+        }).catch(() => null);
+      }
 
       if (sessionId && !sessionId.startsWith("cs_simulated")) {
         verifyCheckoutSession({ sessionId })
@@ -214,6 +224,7 @@ export default function Subscription() {
           });
       } else {
         loadData();
+        setTimeout(() => setBillingMessage("🎉 Assinatura atualizada com sucesso!"), 1500);
         setTimeout(() => setBillingMessage(""), 8000);
       }
     } else if (checkoutStatus === "cancelled") {
