@@ -228,18 +228,20 @@ export default function Subscription() {
    * Disparada pelos botões "Contratar com documento" e "Fazer upgrade"
    * Faz o POST para /create-checkout-session e redireciona via window.location.href
    */
-  const handleSubscription = async (priceId) => {
-    if (!priceId) {
+  const handleSubscription = async (priceId, planCode) => {
+    if (!priceId && !planCode) {
       setBillingMessage("Identificador de preço (priceId) não configurado para este plano.");
       return;
     }
 
     try {
-      setSubscribingPriceId(priceId);
+      setSubscribingPriceId(priceId || planCode);
       setBillingMessage("Redirecionando com segurança para a Stripe...");
 
       const data = await createCheckoutSession({
         priceId,
+        planCode,
+        cycle,
         userId: activeUser?.id,
         userEmail: activeUser?.email,
         userName: activeUser?.fullName || activeUser?.full_name || activeUser?.name,
@@ -610,7 +612,7 @@ export default function Subscription() {
                     <Button
                       type="button"
                       disabled={isCurrent || subscribingPriceId !== null}
-                      onClick={() => handleSubscription(targetPriceId)}
+                      onClick={() => handleSubscription(targetPriceId, plan.code)}
                       className={`h-11 w-full rounded-xl font-bold text-xs transition-all ${
                         isCurrent
                           ? "bg-slate-100 text-slate-400 hover:bg-slate-100 cursor-default border border-slate-200"

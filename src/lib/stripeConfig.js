@@ -42,6 +42,47 @@ export const STRIPE_TEST_PRICE_IDS = {
 };
 
 /**
+ * Links Diretos de Pagamento da Stripe (Stripe Payment Links)
+ * Permite processar pagamentos na produção mesmo sem manter um servidor backend ativo 24h
+ */
+export const STRIPE_PAYMENT_LINKS = {
+  estudante: {
+    monthly:
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_STRIPE_LINK_ESTUDANTE_MONTHLY) || "",
+  },
+  eletrico: {
+    monthly:
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_STRIPE_LINK_ELETRICO_MONTHLY) || "",
+    annual:
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_STRIPE_LINK_ELETRICO_ANNUAL) || "",
+  },
+  solar: {
+    monthly:
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_STRIPE_LINK_SOLAR_MONTHLY) || "",
+    annual:
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_STRIPE_LINK_SOLAR_ANNUAL) || "",
+  },
+  completo: {
+    monthly:
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_STRIPE_LINK_COMPLETO_MONTHLY) || "",
+    annual:
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_STRIPE_LINK_COMPLETO_ANNUAL) || "",
+  },
+};
+
+/**
+ * Obtém o link direto de pagamento da Stripe caso configurado
+ */
+export function getPlanPaymentLink(planCode, cycle = "monthly") {
+  if (!planCode) return null;
+  const planLinks = STRIPE_PAYMENT_LINKS[planCode];
+  if (!planLinks) return null;
+  if (planCode === "estudante") return planLinks.monthly || null;
+  if (cycle === "annual" && planLinks.annual) return planLinks.annual || null;
+  return planLinks.monthly || null;
+}
+
+/**
  * Obtém o priceId correto da Stripe com base no plano e no toggle selecionado.
  *
  * @param {string} planCode - Código do plano ('estudante', 'eletrico', 'solar', 'completo')
@@ -102,17 +143,34 @@ export function getStripeApiBaseUrl() {
  */
 export async function createCheckoutSession({
   priceId,
+  planCode,
+  cycle = "monthly",
   userId,
   userEmail,
   userName,
   email,
   name,
 }) {
-  if (!priceId) {
-    throw new Error("Identificador de preço (priceId) é obrigatório.");
+  const directPaymentLink = getPlanPaymentLink(planCode, cycle);
+  const baseUrl = getStripeApiBaseUrl();
+
+  // Se estiver em produção web sem backend configurado, utiliza o link direto de pagamento do Stripe se disponível
+  if (
+    !baseUrl &&
+    directPaymentLink &&
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1"
+  ) {
+    return {
+      url: directPaymentLink,
+      isDirectPaymentLink: true,
+    };
   }
 
-  const baseUrl = getStripeApiBaseUrl();
+  if (!priceId && !directPaymentLink) {
+    throw new Error("Identificador de preço (priceId) é obrigatório.");
+  }
 
   const token =
     (typeof window !== "undefined" &&
@@ -153,6 +211,8 @@ export async function createCheckoutSession({
         },
         body: JSON.stringify({
           priceId,
+          planCode,
+          cycle,
           userId,
           userEmail: userEmail || email,
           userName: userName || name,
@@ -178,10 +238,18 @@ export async function createCheckoutSession({
     }
   }
 
+  // Se todos os endpoints falharem, mas existir um link de pagamento direto para o plano:
+  if (directPaymentLink) {
+    return {
+      url: directPaymentLink,
+      isDirectPaymentLink: true,
+    };
+  }
+
   throw (
     lastError ||
     new Error(
-      "Falha ao comunicar com o servidor da Stripe. Verifique se o backend está ativo na porta 3001 ou se VITE_API_BASE_URL está configurada."
+      "Falha ao comunicar com o servidor da Stripe. Em produção, configure VITE_API_BASE_URL apontando para a API do backend ou configure os links diretos de pagamento VITE_STRIPE_LINK_*."
     )
   );
 }
