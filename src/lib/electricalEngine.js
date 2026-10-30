@@ -2060,7 +2060,7 @@ export function isDedicatedSolarBoard(board = {}) {
   const type = String(board?.type || "").toLowerCase();
   const id = String(board?.id || "").toLowerCase();
   const name = String(board?.name || "").trim();
-  return (
+  if (
     type === "solar_ac"
     || type === "solar"
     || type === "solar_board"
@@ -2068,7 +2068,12 @@ export function isDedicatedSolarBoard(board = {}) {
     || id === "solar_board"
     || id.includes("solar_board")
     || id.includes("solar_ac")
-    || /^(qd[-\s]*)?solar(\s*ca)?$/i.test(name)
+  ) {
+    return true;
+  }
+  if (board?.customName) return false;
+  return (
+    /^(qd[-\s]*)?solar(\s*ca)?$/i.test(name)
     || /qd\s*solar|solar\s*ca/i.test(name)
   );
 }
@@ -2266,7 +2271,7 @@ export function buildPanelBoardsWithLayout(project, panelLayout = generateDefaul
           ...board,
           id: board.id || "board_distribution_1",
           name: board.name || "QD-01 Principal",
-          location: board.location || "Entrada / Distribuição",
+          location: board.customLocation ? String(board.location ?? "") : (board.location || "Entrada / Distribuição"),
           type: board.type || distributionType,
           supply_type: board.supply_type || project?.supply_type || "Monofásico",
           layout: {

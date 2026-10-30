@@ -111,4 +111,23 @@ assert.equal(remapped[0].source, "busbar_neutral:5", "remapeia índice antigo pa
   assert.ok(findRail(rebuilt[0].layout, "rail_solar_1"), "proteção CA do inversor está dentro do quadro principal");
 }
 
+// ── Nomes e setores customizados pelo usuário são preservados integralmente ───
+{
+  const renamedBoard = {
+    id: "board_1",
+    type: "principal",
+    name: "QD Solar Principal Casa",
+    location: "",
+    customName: true,
+    customLocation: true,
+    supply_type: "Monofásico",
+    layout: generateDefaultPanelLayout(solarProject, { forceDistribution: true }),
+  };
+  assert.equal(isDedicatedSolarBoard(renamedBoard), false, "quadro principal renomeado manualmente com 'Solar' não vira solar_ac legado");
+  assert.equal(getPrimaryPanelBoard([renamedBoard])?.id, "board_1", "quadro principal renomeado permanece reconhecido como principal");
+  const rebuiltRenamed = buildPanelBoardsWithLayout({ ...solarProject, panel_boards: [renamedBoard] });
+  assert.equal(rebuiltRenamed[0].name, "QD Solar Principal Casa", "nome customizado do quadro é preservado");
+  assert.equal(rebuiltRenamed[0].location, "", "setor limpo manualmente pelo usuário não volta para o padrão");
+}
+
 console.log("solar-board-merge-smoke: OK");

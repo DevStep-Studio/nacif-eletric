@@ -380,15 +380,55 @@ const parsePanelLayout = (layout, project = null, options = {}) => {
 // reutilizada aqui e pelo assistente de cadastro solar — evita duas implementações
 // divergentes do mesmo trilho.
 
-const createPanelBoard = (project, index = 1, layout = null) => {
+const cleanDisplayText = (value = "") => String(value ?? "").replace(/\s+/g, " ").trim();
+
+const getDefaultBoardName = (index = 0) => (
+  index === 0 ? "QD-01 Principal" : `QD-${String(index + 1).padStart(2, "0")}`
+);
+
+const getDefaultBoardLocation = (index = 0) => (
+  index === 0 ? "Entrada / Distribuição" : "Distribuição"
+);
+
+const getNextUniqueBoardMeta = (existingBoards = []) => {
+  const usedIds = new Set((existingBoards || []).map((board) => String(board?.id || "")));
+  const usedNames = new Set(
+    (existingBoards || []).map((board) => cleanDisplayText(board?.name || "").toLowerCase())
+  );
+  let number = Math.max(1, (existingBoards || []).length + 1);
+  while (
+    usedIds.has(`board_${number}`)
+    || usedNames.has(getDefaultBoardName(number - 1).toLowerCase())
+  ) {
+    number += 1;
+  }
+  const uniqueSuffix = Date.now().toString(36);
+  const id = number === 1 && !usedIds.has("board_1") ? "board_1" : `board_${number}_${uniqueSuffix}`;
+  return {
+    number,
+    id,
+    name: getDefaultBoardName(number - 1),
+    location: getDefaultBoardLocation(number - 1),
+  };
+};
+
+const createPanelBoard = (project, index = 1, layout = null, existingBoards = []) => {
   const type = index === 1 ? "principal" : "secundario";
   const parsedLayout = parsePanelLayout(layout, project, { forceDistribution: true });
   const supply = project?.supply_type || "Monofásico";
+  const hasExisting = Array.isArray(existingBoards) && existingBoards.length > 0;
+  const meta = hasExisting
+    ? getNextUniqueBoardMeta(existingBoards)
+    : {
+        id: `board_${index}`,
+        name: getDefaultBoardName(Math.max(0, index - 1)),
+        location: getDefaultBoardLocation(Math.max(0, index - 1)),
+      };
 
   const rawBoard = {
-    id: `board_${index}`,
-    name: index === 1 ? "QD-01 Principal" : `QD-${String(index).padStart(2, "0")}`,
-    location: index === 1 ? "Entrada / Distribuição" : "Distribuição",
+    id: meta.id,
+    name: meta.name,
+    location: meta.location,
     type,
     supply_type: supply,
     layout: index === 1 ? mergeSolarLayoutIntoPrincipal(project, parsedLayout) : parsedLayout,
@@ -406,10 +446,21 @@ const normalizePanelBoards = (project) => {
   // Migração: quadros "QD Solar CA" (type: solar_ac / solar / nome similar) são
   // incorporados ao quadro principal — suas trilhas viram rail_solar_1/rail_solar_2
   // dentro dele, e o quadro separado deixa de existir na lista.
-  // Quadros do modelo QGBT são filtrados do gerador de quadros elétricos de distribuição.
-  const legacySolarBoard = rawBoards.find(isDedicatedSolarBoard);
-  const isQgbtBoard = (board) => board?.type === "qgbt" || String(board?.id || "").startsWith("qgbt") || String(board?.name || "").toUpperCase().includes("QGBT");
-  const otherBoards = rawBoards.filter((board) => !isDedicatedSolarBoard(board) && !isQgbtBoard(board));
+  // Quadros do modelo QGBT são filtrados do gerador de quadros elétricos de distribuição,
+  // preservando nomes customizados definidos manualmente pelo usuário.
+  const isLegacySolarBoard = (board) => (
+    !board?.customName
+    && board?.type !== "principal"
+    && board?.type !== "secundario"
+    && isDedicatedSolarBoard(board)
+  );
+  const legacySolarBoard = rawBoards.find(isLegacySolarBoard);
+  const isQgbtBoard = (board) => (
+    board?.type === "qgbt"
+    || String(board?.id || "").startsWith("qgbt")
+    || (!board?.customName && board?.type !== "principal" && board?.type !== "secundario" && String(board?.name || "").toUpperCase().includes("QGBT"))
+  );
+  const otherBoards = rawBoards.filter((board) => !isLegacySolarBoard(board) && !isQgbtBoard(board));
   const boardsToNormalize = otherBoards.length > 0 ? otherBoards : [{
     id: legacySolarBoard?.id || "board_distribution_1",
     name: "QD-01 Principal",
@@ -445,11 +496,22 @@ const normalizePanelBoards = (project) => {
       }
     }
 
+    const rawBoardName = typeof board.name === "string" ? cleanDisplayText(board.name) : "";
+    const resolvedName = (rawBoardName && !isLegacySolarBoard(board) && !isQgbtBoard(board))
+      ? rawBoardName
+      : getDefaultBoardName(index);
+    const hasExplicitLocation = Boolean(board.customLocation) || typeof board.location === "string";
+    const resolvedLocation = hasExplicitLocation
+      ? cleanDisplayText(board.location || "")
+      : getDefaultBoardLocation(index);
+
     const rawBoard = {
       id: board.id || `board_${index + 1}`,
-      name: (board.name && !isDedicatedSolarBoard(board) && !isQgbtBoard(board)) ? board.name : (index === 0 ? "QD-01 Principal" : `QD-${String(index + 1).padStart(2, "0")}`),
-      location: board.location || (index === 0 ? "Entrada / Distribuição" : "Distribuição"),
-      type: isDedicatedSolarBoard(board) ? "principal" : type,
+      name: resolvedName,
+      location: resolvedLocation,
+      customName: Boolean(board.customName),
+      customLocation: Boolean(board.customLocation),
+      type: isLegacySolarBoard(board) ? "principal" : type,
       supply_type: supply,
       layout,
     };
@@ -458,7 +520,12 @@ const normalizePanelBoards = (project) => {
   });
 };
 
-const getPrimaryCircuitBoard = (boards = []) => getPrimaryPanelBoard(boards);
+const getPrimaryCircuitBoard = (boards = []) => (
+  (boards || []).find((board) => board?.type === "principal")
+  || getPrimaryPanelBoard(boards)
+  || (boards || [])[0]
+  || null
+);
 
 const getDistributionBreakers = (layout = {}) => (
   (layout?.rails || [])
@@ -691,8 +758,6 @@ const supplyTypeFromBreaker = (component = {}) => {
   if (component.phase === "AB" || Number(component.poles) === 2) return "Bifásico";
   return "Monofásico";
 };
-
-const cleanDisplayText = (value = "") => String(value ?? "").replace(/\s+/g, " ").trim();
 
 const isTechnicalDisplayText = (value = "") => {
   const text = cleanDisplayText(value);
@@ -1460,6 +1525,9 @@ export default function PanelGenerator() {
   const [metrics, setMetrics] = useState(null);
   const [panelBoards, setPanelBoards] = useState([]);
   const [activeBoardId, setActiveBoardId] = useState("");
+  const [projectNameInput, setProjectNameInput] = useState("");
+  const [boardNameInput, setBoardNameInput] = useState("");
+  const [boardLocationInput, setBoardLocationInput] = useState("");
   const [savingLayout, setSavingLayout] = useState(false);
   const [savedLayout, setSavedLayout] = useState(false);
   const [scale, setScale] = useState(null);
@@ -1469,9 +1537,15 @@ export default function PanelGenerator() {
   const [legendDrag, setLegendDrag] = useState(null);
   const layoutSaveFeedbackTimerRef = useRef(null);
   const autoSaveDebounceTimerRef = useRef(null);
-  const boardNameDebounceTimerRef = useRef(null);
-  const projectNameDebounceTimerRef = useRef(null);
+  const nameSaveDebounceTimerRef = useRef(null);
+  const hasDirtyNameSaveRef = useRef(false);
+  const editingNameFieldRef = useRef(null);
   const pendingSavePayloadRef = useRef(null);
+  const latestSelectedIdRef = useRef(selectedId);
+  const latestProjectRef = useRef(null);
+  const latestProjectNameRef = useRef("");
+  const latestBoardNameRef = useRef("");
+  const latestBoardLocationRef = useRef("");
   const latestPanelBoardsRef = useRef([]);
   const latestActiveBoardIdRef = useRef("");
   const latestPanelLayoutRef = useRef({ rails: [], wires: [], infrastructure: [] });
@@ -1535,6 +1609,10 @@ export default function PanelGenerator() {
   const containerRef = useRef(null);
   const panelViewportRef = useRef(null);
   const activeBoard = panelBoards.find((board) => board.id === activeBoardId) || panelBoards[0];
+  const activeBoardIndex = Math.max(0, panelBoards.findIndex((board) => board.id === activeBoard?.id));
+  const activeProjectDisplayName = cleanDisplayText(projectNameInput) || cleanDisplayText(project?.name || "") || "Projeto Elétrico";
+  const activeBoardDisplayName = cleanDisplayText(boardNameInput) || cleanDisplayText(activeBoard?.name || "") || getDefaultBoardName(activeBoardIndex);
+  const activeBoardDisplayLocation = cleanDisplayText(boardLocationInput);
   const activeSupplyType = activeBoard?.supply_type || project?.supply_type || "Monofásico";
   const isPrincipalBoard = activeBoard === getPrimaryCircuitBoard(panelBoards);
 
@@ -1756,6 +1834,14 @@ export default function PanelGenerator() {
   }, []);
 
   useEffect(() => {
+    latestSelectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  useEffect(() => {
+    latestProjectRef.current = project;
+  }, [project]);
+
+  useEffect(() => {
     latestPanelBoardsRef.current = panelBoards;
     latestActiveBoardIdRef.current = activeBoardId;
   }, [activeBoardId, panelBoards]);
@@ -1763,6 +1849,27 @@ export default function PanelGenerator() {
   useEffect(() => {
     latestPanelLayoutRef.current = { rails, wires, infrastructure };
   }, [infrastructure, rails, wires]);
+
+  const syncNamingDrafts = useCallback((targetProject, targetBoard, boardIdx = 0) => {
+    const nextProjName = typeof targetProject?.name === "string"
+      ? targetProject.name
+      : "";
+    const nextBrdName = typeof targetBoard?.name === "string" && targetBoard.name
+      ? targetBoard.name
+      : (targetBoard ? getDefaultBoardName(boardIdx) : "");
+    const nextBrdLoc = targetBoard
+      ? (targetBoard.customLocation || typeof targetBoard.location === "string"
+          ? String(targetBoard.location ?? "")
+          : getDefaultBoardLocation(boardIdx))
+      : "";
+
+    latestProjectNameRef.current = nextProjName;
+    latestBoardNameRef.current = nextBrdName;
+    latestBoardLocationRef.current = nextBrdLoc;
+    setProjectNameInput(nextProjName);
+    setBoardNameInput(nextBrdName);
+    setBoardLocationInput(nextBrdLoc);
+  }, []);
 
   // Sincronizar selectedId quando os parâmetros de busca na URL mudam
   useEffect(() => {
@@ -1806,6 +1913,7 @@ export default function PanelGenerator() {
 
   const handleSelectProject = (newId) => {
     flushPendingPanelSave();
+    editingNameFieldRef.current = null;
     setSelectedId(newId || "");
     if (newId) {
       try {
@@ -1820,9 +1928,13 @@ export default function PanelGenerator() {
   // Carregar projeto selecionado e decodificar layout do banco local
   useEffect(() => {
     if (!selectedId) {
+      latestProjectRef.current = null;
       latestPanelBoardsRef.current = [];
       latestActiveBoardIdRef.current = "";
       latestPanelLayoutRef.current = null;
+      hasDirtyNameSaveRef.current = false;
+      editingNameFieldRef.current = null;
+      syncNamingDrafts(null, null, 0);
       setProject(null);
       setMetrics(null);
       setPanelBoards([]);
@@ -1834,6 +1946,7 @@ export default function PanelGenerator() {
     }
 
     let cancelled = false;
+    const isSameProjectReload = latestProjectRef.current?.id === selectedId;
     backend.entities.Project.get(selectedId).then(p => {
       if (cancelled || !p) return;
       const calculatedMetrics = calcProjectMetrics(p);
@@ -1868,28 +1981,29 @@ export default function PanelGenerator() {
       setMetrics(calculatedMetrics);
 
       const preferredDistributionBoard = getPrimaryCircuitBoard(boards) || boards[0];
-      const hasValidActiveBoard = boards.some((board) => board.id === activeBoardId);
+      const hasValidActiveBoard = isSameProjectReload && boards.some((board) => board.id === activeBoardId);
       const nextActiveId = shouldPersistPanelSync && preferredDistributionBoard
         ? preferredDistributionBoard.id
         : hasValidActiveBoard
           ? activeBoardId
           : preferredDistributionBoard?.id || boards[0]?.id;
-      const activeBoard = boards.find((board) => board.id === nextActiveId) || preferredDistributionBoard || boards[0];
-      const primaryLayout = getPrimaryCircuitBoard(boards)?.layout || activeBoard?.layout || { rails: [], wires: [], infrastructure: [] };
+      const loadedActiveBoard = boards.find((board) => board.id === nextActiveId) || preferredDistributionBoard || boards[0];
+      const loadedActiveIdx = Math.max(0, boards.findIndex((board) => board.id === loadedActiveBoard?.id));
+      const primaryLayout = getPrimaryCircuitBoard(boards)?.layout || loadedActiveBoard?.layout || { rails: [], wires: [], infrastructure: [] };
 
-      const activeRails = activeBoard?.layout?.rails || [];
-      const activeInfra = activeBoard?.layout?.infrastructure || [];
-      const effectiveWires = (Array.isArray(activeBoard?.layout?.wires) && activeBoard.layout.wires.length > 0)
-        ? activeBoard.layout.wires
+      const activeRails = loadedActiveBoard?.layout?.rails || [];
+      const activeInfra = loadedActiveBoard?.layout?.infrastructure || [];
+      const effectiveWires = (Array.isArray(loadedActiveBoard?.layout?.wires) && loadedActiveBoard.layout.wires.length > 0)
+        ? loadedActiveBoard.layout.wires
         : rawSavedWires;
       const hydratedWires = effectiveWires.length > 0
         ? enrichWiresWithComputedRoutes(effectiveWires, activeRails, activeInfra)
         : [];
 
-      if (activeBoard && activeBoard.layout) {
-        activeBoard.layout.wires = hydratedWires;
-        activeBoard.layout.meta = {
-          ...(activeBoard.layout.meta || {}),
+      if (loadedActiveBoard && loadedActiveBoard.layout) {
+        loadedActiveBoard.layout.wires = hydratedWires;
+        loadedActiveBoard.layout.meta = {
+          ...(loadedActiveBoard.layout.meta || {}),
           manualDeviceEdits: true,
         };
       }
@@ -1902,15 +2016,19 @@ export default function PanelGenerator() {
       }
 
       const normalizedProject = isSolarProject(projectForPanel)
-        ? { ...projectForPanel, panel_boards: boards, panel_layout: activeBoard?.layout || { rails: activeRails, wires: hydratedWires, infrastructure: activeInfra } }
+        ? { ...projectForPanel, panel_boards: boards, panel_layout: loadedActiveBoard?.layout || { rails: activeRails, wires: hydratedWires, infrastructure: activeInfra } }
         : { ...projectForPanel, panel_boards: boards, panel_layout: primaryLayout };
-      const activeLayoutObj = activeBoard?.layout || { rails: activeRails, wires: hydratedWires, infrastructure: activeInfra };
+      const activeLayoutObj = loadedActiveBoard?.layout || { rails: activeRails, wires: hydratedWires, infrastructure: activeInfra };
+      latestProjectRef.current = normalizedProject;
       latestPanelBoardsRef.current = boards;
-      latestActiveBoardIdRef.current = activeBoard?.id || "";
+      latestActiveBoardIdRef.current = loadedActiveBoard?.id || "";
       latestPanelLayoutRef.current = activeLayoutObj;
+      hasDirtyNameSaveRef.current = false;
+      editingNameFieldRef.current = null;
+      syncNamingDrafts(normalizedProject, loadedActiveBoard, loadedActiveIdx);
       setProject(normalizedProject);
       setPanelBoards(boards);
-      setActiveBoardId(activeBoard?.id || "");
+      setActiveBoardId(loadedActiveBoard?.id || "");
       setRails(activeRails);
       setWires(hydratedWires);
       setInfrastructure(activeInfra);
@@ -1921,7 +2039,7 @@ export default function PanelGenerator() {
 
       const shouldPersistSolarLayout = !isDangerousWipe && isSolarProject(projectForPanel) && !pHadWires && (
         JSON.stringify(p.panel_boards || []) !== JSON.stringify(boards)
-        || JSON.stringify(p.panel_layout || {}) !== JSON.stringify(activeBoard?.layout || {})
+        || JSON.stringify(p.panel_layout || {}) !== JSON.stringify(loadedActiveBoard?.layout || {})
       );
 
       if (!isDangerousWipe && (shouldPersistPanelSync || shouldPersistSolarLayout)) {
@@ -1934,16 +2052,20 @@ export default function PanelGenerator() {
             }
           : {
               panel_boards: boards,
-              panel_layout: activeBoard?.layout || { rails: activeRails, wires: hydratedWires, infrastructure: activeInfra },
+              panel_layout: loadedActiveBoard?.layout || { rails: activeRails, wires: hydratedWires, infrastructure: activeInfra },
             };
         backend.entities.Project.update(selectedId, payload).catch((error) => console.error("Erro ao normalizar quadro:", error));
       }
     }).catch((err) => {
       console.error("Erro ao carregar projeto selecionado:", err);
       if (!cancelled) {
+        latestProjectRef.current = null;
         latestPanelBoardsRef.current = [];
         latestActiveBoardIdRef.current = "";
         latestPanelLayoutRef.current = null;
+        hasDirtyNameSaveRef.current = false;
+        editingNameFieldRef.current = null;
+        syncNamingDrafts(null, null, 0);
         setProject(null);
         setMetrics(null);
         setPanelBoards([]);
@@ -1957,7 +2079,7 @@ export default function PanelGenerator() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId]);
+  }, [selectedId, syncNamingDrafts]);
 
   useEffect(() => {
     if (rails.length === 0 || rails.some((rail) => rail.id === newCompRail)) return;
@@ -1970,12 +2092,25 @@ export default function PanelGenerator() {
     layoutSaveFeedbackTimerRef.current = setTimeout(() => setSavedLayout(false), 1400);
   };
 
-  const persistPanelBoards = async (nextBoards, activeId = activeBoardId, { silent = true, circuits = null, diagram_layout = undefined, projectUpdates = {} } = {}) => {
-    if (!selectedId) return false;
+  const persistPanelBoards = async (
+    nextBoards,
+    activeId = activeBoardId,
+    {
+      silent = true,
+      circuits = null,
+      diagram_layout = undefined,
+      projectUpdates = {},
+      syncState = true,
+      projectId = selectedId,
+    } = {}
+  ) => {
+    const targetProjectId = projectId || latestSelectedIdRef.current;
+    if (!targetProjectId) return false;
     if (!silent) setSavingLayout(true);
-    const activeBoard = nextBoards.find((board) => board.id === activeId) || nextBoards[0];
-    const activeLayout = activeBoard?.layout || { rails: [], wires: [], infrastructure: [] };
-    const nextCircuits = circuits !== null ? circuits : project?.circuits;
+    const targetBoard = nextBoards.find((board) => board.id === activeId) || nextBoards[0];
+    const activeLayout = targetBoard?.layout || { rails: [], wires: [], infrastructure: [] };
+    const currentProj = latestProjectRef.current || project;
+    const nextCircuits = circuits !== null ? circuits : currentProj?.circuits;
     const updates = {
       panel_boards: nextBoards,
       panel_layout: activeLayout,
@@ -1983,10 +2118,24 @@ export default function PanelGenerator() {
       ...(diagram_layout !== undefined ? { diagram_layout } : {}),
       ...projectUpdates,
     };
-    setPanelBoards(nextBoards);
-    setProject((current) => current ? { ...current, ...updates } : current);
+    if (latestSelectedIdRef.current === targetProjectId) {
+      latestPanelBoardsRef.current = nextBoards;
+      if (latestProjectRef.current && latestProjectRef.current.id === targetProjectId) {
+        latestProjectRef.current = { ...latestProjectRef.current, ...updates };
+      }
+    }
+    if (syncState && latestSelectedIdRef.current === targetProjectId) {
+      setPanelBoards(nextBoards);
+      setProject((current) => (current && current.id === targetProjectId ? { ...current, ...updates } : current));
+    }
+    if (updates.name) {
+      const displayListName = cleanDisplayText(updates.name) || "Projeto Elétrico";
+      setProjects((currentList) =>
+        currentList.map((p) => (p.id === targetProjectId ? { ...p, name: displayListName } : p))
+      );
+    }
     try {
-      await backend.entities.Project.update(selectedId, updates);
+      await backend.entities.Project.update(targetProjectId, updates);
       if (!silent) markPanelLayoutSaved();
       return true;
     } catch (err) {
@@ -2137,11 +2286,13 @@ export default function PanelGenerator() {
         layoutRedoRef.current = [];
       }
     }
-    const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
-    const targetBoardId = activeBoardId || currentBoards[0]?.id || "";
+    const baseBoards = latestPanelBoardsRef.current.length > 0
+      ? latestPanelBoardsRef.current
+      : (panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project));
+    const targetBoardId = latestActiveBoardIdRef.current || activeBoardId || baseBoards[0]?.id || "";
     let matched = false;
-    const nextBoards = currentBoards.map((board) => {
-      if (board.id === targetBoardId || (!matched && (currentBoards.length === 1 || !targetBoardId))) {
+    const nextBoards = baseBoards.map((board) => {
+      if (board.id === targetBoardId || (!matched && (baseBoards.length === 1 || !targetBoardId))) {
         matched = true;
         return { ...board, layout: layoutObj };
       }
@@ -2170,9 +2321,49 @@ export default function PanelGenerator() {
     }
   };
 
+  const resolveCurrentNamingState = useCallback(({ applyFallbacks = true } = {}) => {
+    const cleanedProjName = cleanDisplayText(latestProjectNameRef.current);
+    const fallbackProjName = cleanDisplayText(latestProjectRef.current?.name || "") || "Projeto Elétrico";
+    const resolvedProjectName = cleanedProjName || (applyFallbacks ? fallbackProjName : "");
+
+    const sourceBoards = latestPanelBoardsRef.current.length > 0
+      ? latestPanelBoardsRef.current
+      : normalizePanelBoards(latestProjectRef.current);
+    const currentActiveId = latestActiveBoardIdRef.current || sourceBoards[0]?.id || "";
+    const activeIdx = Math.max(0, sourceBoards.findIndex((b) => b.id === currentActiveId));
+
+    const cleanedBrdName = cleanDisplayText(latestBoardNameRef.current);
+    const resolvedBoardName = cleanedBrdName || (applyFallbacks ? getDefaultBoardName(activeIdx) : "");
+    const resolvedBoardLocation = cleanDisplayText(latestBoardLocationRef.current);
+
+    const resolvedBoards = sourceBoards.map((board, idx) => {
+      if (board.id === currentActiveId) {
+        return {
+          ...board,
+          name: resolvedBoardName || cleanDisplayText(board.name || "") || getDefaultBoardName(idx),
+          location: resolvedBoardLocation,
+          customName: Boolean(board.customName || cleanedBrdName),
+          customLocation: Boolean(board.customLocation),
+        };
+      }
+      return {
+        ...board,
+        name: cleanDisplayText(board.name || "") || getDefaultBoardName(idx),
+      };
+    });
+
+    return {
+      resolvedProjectName,
+      resolvedBoardName: resolvedBoardName || getDefaultBoardName(activeIdx),
+      resolvedBoardLocation,
+      resolvedBoards,
+      currentActiveId,
+    };
+  }, []);
+
   const panelBoardsWithCurrentLayout = () => {
-    const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
-    const activeId = activeBoardId || currentBoards[0]?.id || "";
+    const { resolvedBoards: currentBoards, currentActiveId } = resolveCurrentNamingState({ applyFallbacks: true });
+    const activeId = currentActiveId || activeBoardId || currentBoards[0]?.id || "";
     const enrichedWires = enrichWiresWithComputedRoutes(wires, rails, infrastructure);
     const layoutObj = {
       rails,
@@ -2206,51 +2397,83 @@ export default function PanelGenerator() {
       clearTimeout(autoSaveDebounceTimerRef.current);
       autoSaveDebounceTimerRef.current = null;
     }
-    if (boardNameDebounceTimerRef.current) {
-      clearTimeout(boardNameDebounceTimerRef.current);
-      boardNameDebounceTimerRef.current = null;
+    if (nameSaveDebounceTimerRef.current) {
+      clearTimeout(nameSaveDebounceTimerRef.current);
+      nameSaveDebounceTimerRef.current = null;
     }
-    if (projectNameDebounceTimerRef.current) {
-      clearTimeout(projectNameDebounceTimerRef.current);
-      projectNameDebounceTimerRef.current = null;
-    }
+    hasDirtyNameSaveRef.current = false;
     pendingSavePayloadRef.current = null;
+
+    const { resolvedProjectName, resolvedBoardName, resolvedBoardLocation } = resolveCurrentNamingState({ applyFallbacks: true });
+    latestProjectNameRef.current = resolvedProjectName;
+    latestBoardNameRef.current = resolvedBoardName;
+    latestBoardLocationRef.current = resolvedBoardLocation;
+    setProjectNameInput(resolvedProjectName);
+    setBoardNameInput(resolvedBoardName);
+    setBoardLocationInput(resolvedBoardLocation);
+
     const { boards, activeId } = panelBoardsWithCurrentLayout();
     if (!boards.length) return;
     latestPanelBoardsRef.current = boards;
     latestActiveBoardIdRef.current = activeId;
-    const projectUpdates = project?.name ? { name: String(project.name).trim() } : {};
+    const projectUpdates = resolvedProjectName ? { name: resolvedProjectName } : {};
     await persistPanelBoards(boards, activeId, { silent: false, projectUpdates });
   };
 
   const flushPendingPanelSave = useCallback(() => {
+    const hadAutoSaveTimer = Boolean(autoSaveDebounceTimerRef.current);
+    const hadNameTimer = Boolean(nameSaveDebounceTimerRef.current);
+    const hadPendingPayload = Boolean(pendingSavePayloadRef.current);
+    const hadDirtyNames = Boolean(hasDirtyNameSaveRef.current);
+
     if (autoSaveDebounceTimerRef.current) {
       clearTimeout(autoSaveDebounceTimerRef.current);
       autoSaveDebounceTimerRef.current = null;
     }
-    if (boardNameDebounceTimerRef.current) {
-      clearTimeout(boardNameDebounceTimerRef.current);
-      boardNameDebounceTimerRef.current = null;
+    if (nameSaveDebounceTimerRef.current) {
+      clearTimeout(nameSaveDebounceTimerRef.current);
+      nameSaveDebounceTimerRef.current = null;
     }
-    if (projectNameDebounceTimerRef.current) {
-      clearTimeout(projectNameDebounceTimerRef.current);
-      projectNameDebounceTimerRef.current = null;
-    }
-    const projectUpdates = project?.name ? { name: String(project.name).trim() } : {};
-    if (pendingSavePayloadRef.current) {
-      const { boards, activeId } = pendingSavePayloadRef.current;
-      pendingSavePayloadRef.current = null;
-      persistPanelBoards(boards, activeId, { silent: true, projectUpdates });
+
+    if (!hadAutoSaveTimer && !hadNameTimer && !hadPendingPayload && !hadDirtyNames) {
       return;
     }
-    const currentBoards = latestPanelBoardsRef.current.length > 0
-      ? latestPanelBoardsRef.current
-      : (panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project));
-    const activeId = latestActiveBoardIdRef.current || activeBoardId || currentBoards[0]?.id || "";
+
+    const targetProjectId = latestSelectedIdRef.current;
+    if (!targetProjectId) return;
+
+    hasDirtyNameSaveRef.current = false;
+    const { resolvedProjectName, resolvedBoards, currentActiveId } = resolveCurrentNamingState({ applyFallbacks: true });
+    const projectUpdates = resolvedProjectName ? { name: resolvedProjectName } : {};
+
+    if (pendingSavePayloadRef.current) {
+      const { boards: payloadBoards, activeId: payloadActiveId } = pendingSavePayloadRef.current;
+      pendingSavePayloadRef.current = null;
+      const mergedBoards = payloadBoards.map((board, idx) => {
+        const matchingResolved = resolvedBoards.find((b) => b.id === board.id);
+        return matchingResolved
+          ? {
+              ...board,
+              name: matchingResolved.name || getDefaultBoardName(idx),
+              location: matchingResolved.location,
+              customName: matchingResolved.customName,
+              customLocation: matchingResolved.customLocation,
+            }
+          : board;
+      });
+      persistPanelBoards(mergedBoards, payloadActiveId || currentActiveId, {
+        silent: true,
+        syncState: false,
+        projectId: targetProjectId,
+        projectUpdates,
+      });
+      return;
+    }
+
     const layoutObj = latestPanelLayoutRef.current || { rails: [], wires: [], infrastructure: [] };
     let matched = false;
-    const nextBoards = currentBoards.map((board) => {
-      if (board.id === activeId || (!matched && (currentBoards.length === 1 || !activeId))) {
+    const nextBoards = resolvedBoards.map((board) => {
+      if (board.id === currentActiveId || (!matched && (resolvedBoards.length === 1 || !currentActiveId))) {
         matched = true;
         return { ...board, layout: layoutObj };
       }
@@ -2259,8 +2482,15 @@ export default function PanelGenerator() {
     if (!matched && nextBoards.length > 0) {
       nextBoards[0] = { ...nextBoards[0], layout: layoutObj };
     }
-    if (nextBoards.length > 0) persistPanelBoards(nextBoards, activeId, { silent: true, projectUpdates });
-  }, [project, activeBoardId, selectedId, panelBoards]);
+    if (nextBoards.length > 0) {
+      persistPanelBoards(nextBoards, currentActiveId, {
+        silent: true,
+        syncState: false,
+        projectId: targetProjectId,
+        projectUpdates,
+      });
+    }
+  }, [resolveCurrentNamingState]);
 
   useEffect(() => {
     if (!selectedId) return undefined;
@@ -2283,8 +2513,7 @@ export default function PanelGenerator() {
   useEffect(() => () => {
     if (layoutSaveFeedbackTimerRef.current) clearTimeout(layoutSaveFeedbackTimerRef.current);
     if (autoSaveDebounceTimerRef.current) clearTimeout(autoSaveDebounceTimerRef.current);
-    if (boardNameDebounceTimerRef.current) clearTimeout(boardNameDebounceTimerRef.current);
-    if (projectNameDebounceTimerRef.current) clearTimeout(projectNameDebounceTimerRef.current);
+    if (nameSaveDebounceTimerRef.current) clearTimeout(nameSaveDebounceTimerRef.current);
   }, []);
 
   const restoreLayoutSnapshot = (snapshot) => {
@@ -2551,8 +2780,84 @@ export default function PanelGenerator() {
     return saveLayoutToDb(rails, newWires, infrastructure, { immediate: true, ...options });
   };
 
+  const persistNamingStateImmediate = async ({ syncDrafts = false } = {}) => {
+    const targetProjectId = latestSelectedIdRef.current;
+    if (!targetProjectId) return false;
+    if (nameSaveDebounceTimerRef.current) {
+      clearTimeout(nameSaveDebounceTimerRef.current);
+      nameSaveDebounceTimerRef.current = null;
+    }
+    hasDirtyNameSaveRef.current = false;
+
+    const {
+      resolvedProjectName,
+      resolvedBoardName,
+      resolvedBoardLocation,
+      resolvedBoards,
+      currentActiveId,
+    } = resolveCurrentNamingState({ applyFallbacks: true });
+
+    if (syncDrafts) {
+      latestProjectNameRef.current = resolvedProjectName;
+      latestBoardNameRef.current = resolvedBoardName;
+      latestBoardLocationRef.current = resolvedBoardLocation;
+      setProjectNameInput(resolvedProjectName);
+      setBoardNameInput(resolvedBoardName);
+      setBoardLocationInput(resolvedBoardLocation);
+    }
+
+    const activeLayoutObj = latestPanelLayoutRef.current || { rails, wires, infrastructure };
+    const nextBoardsWithLayout = resolvedBoards.map((board) => (
+      board.id === currentActiveId ? { ...board, layout: activeLayoutObj } : board
+    ));
+
+    if (pendingSavePayloadRef.current) {
+      pendingSavePayloadRef.current = {
+        ...pendingSavePayloadRef.current,
+        boards: pendingSavePayloadRef.current.boards.map((board) => {
+          const resolved = nextBoardsWithLayout.find((item) => item.id === board.id);
+          return resolved
+            ? {
+                ...board,
+                name: resolved.name,
+                location: resolved.location,
+                customName: resolved.customName,
+                customLocation: resolved.customLocation,
+              }
+            : board;
+        }),
+      };
+    }
+
+    return persistPanelBoards(nextBoardsWithLayout, currentActiveId, {
+      silent: true,
+      syncState: syncDrafts,
+      projectId: targetProjectId,
+      projectUpdates: resolvedProjectName ? { name: resolvedProjectName } : {},
+    });
+  };
+
+  const scheduleNamingPersistence = () => {
+    hasDirtyNameSaveRef.current = true;
+    if (nameSaveDebounceTimerRef.current) {
+      clearTimeout(nameSaveDebounceTimerRef.current);
+    }
+    nameSaveDebounceTimerRef.current = setTimeout(() => {
+      nameSaveDebounceTimerRef.current = null;
+      persistNamingStateImmediate({ syncDrafts: false });
+    }, 400);
+  };
+
   const handleSelectBoard = (boardId) => {
     if (boardId === activeBoardId) return;
+    if (nameSaveDebounceTimerRef.current) {
+      clearTimeout(nameSaveDebounceTimerRef.current);
+      nameSaveDebounceTimerRef.current = null;
+    }
+    hasDirtyNameSaveRef.current = false;
+    editingNameFieldRef.current = null;
+
+    const { resolvedProjectName, resolvedBoards } = resolveCurrentNamingState({ applyFallbacks: true });
     const enrichedWires = enrichWiresWithComputedRoutes(wires, rails, infrastructure);
     const currentLayout = {
       rails,
@@ -2564,14 +2869,22 @@ export default function PanelGenerator() {
         version: "2.0-orthogonal",
       },
     };
-    const nextBoards = panelBoards.map((board) => (
+    const nextBoards = resolvedBoards.map((board) => (
       board.id === activeBoardId ? { ...board, layout: currentLayout } : board
     ));
-    const nextBoard = nextBoards.find((board) => board.id === boardId);
+    const nextBoardIndex = nextBoards.findIndex((board) => board.id === boardId);
+    const nextBoard = nextBoardIndex >= 0 ? nextBoards[nextBoardIndex] : null;
     if (!nextBoard) return;
+
+    latestProjectNameRef.current = resolvedProjectName;
     latestPanelBoardsRef.current = nextBoards;
     latestActiveBoardIdRef.current = boardId;
     latestPanelLayoutRef.current = nextBoard.layout || { rails: [], wires: [], infrastructure: [] };
+    syncNamingDrafts(
+      latestProjectRef.current ? { ...latestProjectRef.current, name: resolvedProjectName } : project,
+      nextBoard,
+      nextBoardIndex
+    );
     setPanelBoards(nextBoards);
     setActiveBoardId(boardId);
     setRails(nextBoard.layout?.rails || []);
@@ -2582,21 +2895,40 @@ export default function PanelGenerator() {
     setSelectedInfrastructureId("");
     setSelectedAnnotationId("");
     setSelectedTextWireId("");
-    persistPanelBoards(nextBoards, boardId, { silent: true });
+    persistPanelBoards(nextBoards, boardId, {
+      silent: true,
+      projectUpdates: resolvedProjectName ? { name: resolvedProjectName } : {},
+    });
   };
 
   const handleAddBoard = () => {
     if (!project) return;
+    if (nameSaveDebounceTimerRef.current) {
+      clearTimeout(nameSaveDebounceTimerRef.current);
+      nameSaveDebounceTimerRef.current = null;
+    }
+    hasDirtyNameSaveRef.current = false;
+    editingNameFieldRef.current = null;
+
+    const { resolvedProjectName, resolvedBoards } = resolveCurrentNamingState({ applyFallbacks: true });
     const currentLayout = { rails, wires, infrastructure };
-    const savedBoards = panelBoards.map((board) => (
+    const savedBoards = resolvedBoards.map((board) => (
       board.id === activeBoardId ? { ...board, layout: currentLayout } : board
     ));
     const emptyLayout = { rails: [{ id: "rail_1", name: "Trilho DIN 1", components: [] }], wires: [], infrastructure: [] };
-    const nextBoard = createPanelBoard(project, savedBoards.length + 1, emptyLayout);
+    const nextBoard = createPanelBoard(project, savedBoards.length + 1, emptyLayout, savedBoards);
     const nextBoards = [...savedBoards, nextBoard];
+    const nextBoardIndex = nextBoards.length - 1;
+
+    latestProjectNameRef.current = resolvedProjectName;
     latestPanelBoardsRef.current = nextBoards;
     latestActiveBoardIdRef.current = nextBoard.id;
     latestPanelLayoutRef.current = nextBoard.layout || emptyLayout;
+    syncNamingDrafts(
+      latestProjectRef.current ? { ...latestProjectRef.current, name: resolvedProjectName } : project,
+      nextBoard,
+      nextBoardIndex
+    );
     setPanelBoards(nextBoards);
     setActiveBoardId(nextBoard.id);
     setRails(nextBoard.layout.rails || []);
@@ -2607,18 +2939,40 @@ export default function PanelGenerator() {
     setSelectedInfrastructureId("");
     setSelectedAnnotationId("");
     setSelectedTextWireId("");
-    persistPanelBoards(nextBoards, nextBoard.id);
+    persistPanelBoards(nextBoards, nextBoard.id, {
+      silent: true,
+      projectUpdates: resolvedProjectName ? { name: resolvedProjectName } : {},
+    });
   };
 
   const handleDeleteActiveBoard = () => {
     if (panelBoards.length <= 1) return;
-    const activeBoard = panelBoards.find((board) => board.id === activeBoardId);
-    if (!window.confirm(`Excluir o quadro "${activeBoard?.name || "selecionado"}"?`)) return;
-    const nextBoards = panelBoards.filter((board) => board.id !== activeBoardId);
+    const targetBoard = panelBoards.find((board) => board.id === activeBoardId);
+    const targetDisplayName = cleanDisplayText(boardNameInput) || cleanDisplayText(targetBoard?.name || "") || "selecionado";
+    if (!window.confirm(`Excluir o quadro "${targetDisplayName}"?`)) return;
+
+    if (nameSaveDebounceTimerRef.current) {
+      clearTimeout(nameSaveDebounceTimerRef.current);
+      nameSaveDebounceTimerRef.current = null;
+    }
+    hasDirtyNameSaveRef.current = false;
+    editingNameFieldRef.current = null;
+
+    const sourceBoards = latestPanelBoardsRef.current.length > 0 ? latestPanelBoardsRef.current : panelBoards;
+    const nextBoards = sourceBoards.filter((board) => board.id !== activeBoardId);
     const nextBoard = nextBoards[0];
+    if (!nextBoard) return;
+
+    const resolvedProjectName = cleanDisplayText(latestProjectNameRef.current) || cleanDisplayText(project?.name || "") || "Projeto Elétrico";
+    latestProjectNameRef.current = resolvedProjectName;
     latestPanelBoardsRef.current = nextBoards;
     latestActiveBoardIdRef.current = nextBoard.id;
     latestPanelLayoutRef.current = nextBoard.layout || { rails: [], wires: [], infrastructure: [] };
+    syncNamingDrafts(
+      latestProjectRef.current ? { ...latestProjectRef.current, name: resolvedProjectName } : project,
+      nextBoard,
+      0
+    );
     setPanelBoards(nextBoards);
     setActiveBoardId(nextBoard.id);
     setRails(nextBoard.layout?.rails || []);
@@ -2629,87 +2983,105 @@ export default function PanelGenerator() {
     setSelectedInfrastructureId("");
     setSelectedAnnotationId("");
     setSelectedTextWireId("");
-    persistPanelBoards(nextBoards, nextBoard.id);
+    persistPanelBoards(nextBoards, nextBoard.id, {
+      silent: true,
+      projectUpdates: resolvedProjectName ? { name: resolvedProjectName } : {},
+    });
   };
 
-  const handleUpdateActiveBoard = (field, value) => {
-    const currentLayout = {
-      rails,
-      wires: enrichWiresWithComputedRoutes(wires, rails, infrastructure),
-      infrastructure,
-      meta: {
-        manualDeviceEdits: true,
-        savedAt: new Date().toISOString(),
-        version: "2.0-orthogonal",
-      },
-    };
-    const nextBoards = panelBoards.map((board) => (
-      board.id === activeBoardId ? { ...board, layout: currentLayout, [field]: value } : board
+  const handleUpdateProjectName = (rawValue) => {
+    const nextName = String(rawValue ?? "");
+    latestProjectNameRef.current = nextName;
+    setProjectNameInput(nextName);
+    setProject((current) => {
+      const next = current ? { ...current, name: nextName } : current;
+      latestProjectRef.current = next;
+      return next;
+    });
+    const displayListName = cleanDisplayText(nextName) || "Projeto Elétrico";
+    setProjects((currentList) =>
+      currentList.map((p) => (p.id === selectedId ? { ...p, name: displayListName } : p))
+    );
+    scheduleNamingPersistence();
+  };
+
+  const handleCommitProjectName = async () => {
+    editingNameFieldRef.current = null;
+    await persistNamingStateImmediate({ syncDrafts: true });
+  };
+
+  const handleUpdateBoardName = (rawValue) => {
+    const nextName = String(rawValue ?? "");
+    latestBoardNameRef.current = nextName;
+    setBoardNameInput(nextName);
+
+    const sourceBoards = latestPanelBoardsRef.current.length > 0 ? latestPanelBoardsRef.current : panelBoards;
+    const targetBoardId = latestActiveBoardIdRef.current || activeBoardId || sourceBoards[0]?.id || "";
+    const nextBoards = sourceBoards.map((board) => (
+      board.id === targetBoardId
+        ? { ...board, name: nextName, customName: true }
+        : board
     ));
     latestPanelBoardsRef.current = nextBoards;
-    latestActiveBoardIdRef.current = activeBoardId;
     setPanelBoards(nextBoards);
-    setProject((current) => current ? { ...current, panel_boards: nextBoards } : current);
+    setProject((current) => {
+      const next = current ? { ...current, panel_boards: nextBoards } : current;
+      latestProjectRef.current = next;
+      return next;
+    });
 
     if (pendingSavePayloadRef.current) {
       pendingSavePayloadRef.current = {
         ...pendingSavePayloadRef.current,
-        boards: nextBoards,
+        boards: pendingSavePayloadRef.current.boards.map((board) => (
+          board.id === targetBoardId ? { ...board, name: nextName, customName: true } : board
+        )),
       };
     }
 
-    if (boardNameDebounceTimerRef.current) {
-      clearTimeout(boardNameDebounceTimerRef.current);
-    }
-    boardNameDebounceTimerRef.current = setTimeout(async () => {
-      boardNameDebounceTimerRef.current = null;
-      await persistPanelBoards(nextBoards, activeBoardId, { silent: true });
-    }, 350);
+    scheduleNamingPersistence();
   };
 
-  const handleFlushActiveBoard = async () => {
-    if (boardNameDebounceTimerRef.current) {
-      clearTimeout(boardNameDebounceTimerRef.current);
-      boardNameDebounceTimerRef.current = null;
-    }
-    const currentBoards = latestPanelBoardsRef.current.length > 0 ? latestPanelBoardsRef.current : panelBoards;
-    if (currentBoards.length > 0) {
-      await persistPanelBoards(currentBoards, activeBoardId, { silent: true });
-    }
+  const handleCommitBoardName = async () => {
+    editingNameFieldRef.current = null;
+    await persistNamingStateImmediate({ syncDrafts: true });
   };
 
-  const handleUpdateProjectName = (value) => {
-    const nextName = value;
-    setProject((current) => (current ? { ...current, name: nextName } : current));
-    setProjects((currentList) =>
-      currentList.map((p) => (p.id === selectedId ? { ...p, name: nextName } : p))
-    );
+  const handleUpdateBoardLocation = (rawValue) => {
+    const nextLocation = String(rawValue ?? "");
+    latestBoardLocationRef.current = nextLocation;
+    setBoardLocationInput(nextLocation);
 
-    if (projectNameDebounceTimerRef.current) {
-      clearTimeout(projectNameDebounceTimerRef.current);
+    const sourceBoards = latestPanelBoardsRef.current.length > 0 ? latestPanelBoardsRef.current : panelBoards;
+    const targetBoardId = latestActiveBoardIdRef.current || activeBoardId || sourceBoards[0]?.id || "";
+    const nextBoards = sourceBoards.map((board) => (
+      board.id === targetBoardId
+        ? { ...board, location: nextLocation, customLocation: true }
+        : board
+    ));
+    latestPanelBoardsRef.current = nextBoards;
+    setPanelBoards(nextBoards);
+    setProject((current) => {
+      const next = current ? { ...current, panel_boards: nextBoards } : current;
+      latestProjectRef.current = next;
+      return next;
+    });
+
+    if (pendingSavePayloadRef.current) {
+      pendingSavePayloadRef.current = {
+        ...pendingSavePayloadRef.current,
+        boards: pendingSavePayloadRef.current.boards.map((board) => (
+          board.id === targetBoardId ? { ...board, location: nextLocation, customLocation: true } : board
+        )),
+      };
     }
-    projectNameDebounceTimerRef.current = setTimeout(async () => {
-      projectNameDebounceTimerRef.current = null;
-      if (!selectedId) return;
-      try {
-        await backend.entities.Project.update(selectedId, { name: nextName });
-      } catch (err) {
-        console.error("Erro ao salvar nome do projeto:", err);
-      }
-    }, 350);
+
+    scheduleNamingPersistence();
   };
 
-  const handleFlushProjectName = async () => {
-    if (projectNameDebounceTimerRef.current) {
-      clearTimeout(projectNameDebounceTimerRef.current);
-      projectNameDebounceTimerRef.current = null;
-    }
-    if (!selectedId || !project) return;
-    try {
-      await backend.entities.Project.update(selectedId, { name: project.name || "" });
-    } catch (err) {
-      console.error("Erro ao flush nome do projeto:", err);
-    }
+  const handleCommitBoardLocation = async () => {
+    editingNameFieldRef.current = null;
+    await persistNamingStateImmediate({ syncDrafts: true });
   };
 
   const handleUpdateBoardSupply = (value) => {
@@ -2720,7 +3092,8 @@ export default function PanelGenerator() {
     const regenerated = isPrincipalBoard
       ? mergeSolarLayoutIntoPrincipal(nextProject, { ...rawLayout, infrastructure }, { forceRegenerate: true })
       : { ...rawLayout, infrastructure };
-    const nextBoards = panelBoards.map((board) => (
+    const sourceBoards = latestPanelBoardsRef.current.length > 0 ? latestPanelBoardsRef.current : panelBoards;
+    const nextBoards = sourceBoards.map((board) => (
       board.id === activeBoardId
         ? { ...board, supply_type: nextSupply, layout: regenerated }
         : board
@@ -2734,7 +3107,11 @@ export default function PanelGenerator() {
     setInfrastructure(regenerated.infrastructure || []);
     setSelectedComponentId("");
     setSelectedWireId("");
-    setProject((current) => current ? { ...current, panel_boards: nextBoards } : current);
+    setProject((current) => {
+      const next = current ? { ...current, panel_boards: nextBoards } : current;
+      latestProjectRef.current = next;
+      return next;
+    });
     persistPanelBoards(nextBoards, activeBoardId);
   };
 
@@ -5363,7 +5740,9 @@ export default function PanelGenerator() {
     }
 
     const layoutObj = { rails: normalizedRails, wires: nextWires, infrastructure: nextInfrastructure };
-    const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
+    const currentBoards = latestPanelBoardsRef.current.length > 0
+      ? latestPanelBoardsRef.current
+      : (panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project));
     const nextBoards = currentBoards.map((board) => (
       board.id === activeBoardId ? { ...board, layout: layoutObj } : board
     ));
@@ -5795,7 +6174,9 @@ export default function PanelGenerator() {
     }
 
     const layoutObj = { rails: normalizedRails, wires: nextWires, infrastructure: nextInfrastructure };
-    const currentBoards = panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project);
+    const currentBoards = latestPanelBoardsRef.current.length > 0
+      ? latestPanelBoardsRef.current
+      : (panelBoards.length > 0 ? panelBoards : normalizePanelBoards(project));
     const nextBoards = currentBoards.map((board) => (
       board.id === activeBoardId ? { ...board, layout: layoutObj } : board
     ));
@@ -5829,7 +6210,7 @@ export default function PanelGenerator() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `quadro_${activeBoard?.name || project?.name || "eletrico"}.svg`;
+    a.download = `quadro_${activeBoardDisplayName || activeProjectDisplayName || "eletrico"}.svg`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -9782,18 +10163,31 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           <div className="h-5 w-px bg-[#CDEFE8] mx-1" />
 
           <Select value={selectedId} onValueChange={handleSelectProject}>
-            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none">
+            <SelectTrigger
+              className="h-8 min-w-[180px] max-w-[280px] sm:max-w-[360px] md:max-w-[420px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none"
+              title={activeProjectDisplayName}
+            >
               <SelectValue placeholder="Selecionar projeto..." />
             </SelectTrigger>
             <SelectContent>
-              {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {cleanDisplayText(p.name || "") || "Projeto Elétrico"}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
-          {project?.name && (
-            <span className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] px-2 py-0.5 text-[11px] font-bold text-[#0f4f49] md:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
-              <span className="truncate max-w-[140px]">{project.name}</span>
+          {project && (
+            <span
+              className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] px-2.5 py-0.5 text-[11px] font-bold text-[#0f4f49] lg:flex"
+              title={activeBoardDisplayLocation ? `${activeBoardDisplayName} · ${activeBoardDisplayLocation}` : activeBoardDisplayName}
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00d8b8]" />
+              <span className="truncate max-w-[200px]">
+                {activeBoardDisplayName}
+                {activeBoardDisplayLocation ? ` · ${activeBoardDisplayLocation}` : ""}
+              </span>
             </span>
           )}
         </div>
@@ -9871,27 +10265,30 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           <div className="grid gap-0 lg:grid-cols-[360px_minmax(0,1fr)]">
             <div className="border-b border-slate-100 bg-slate-50/60 p-3 lg:border-b-0 lg:border-r">
               <div className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
-                {panelBoards.map((board) => {
+                {panelBoards.map((board, boardIndex) => {
                   const isActive = board.id === activeBoardId;
                   const usedModules = getBoardUsedModules(board);
-                  const railsCount = board.layout?.rails?.length || 0;
+                  const railsCount = isActive ? rails.length : (board.layout?.rails?.length || 0);
+                  const boardTitle = (isActive ? activeBoardDisplayName : cleanDisplayText(board.name || "")) || getDefaultBoardName(boardIndex);
+                  const boardSector = isActive ? activeBoardDisplayLocation : cleanDisplayText(board.location || "");
                   return (
                     <button
                       key={board.id}
                       type="button"
                       onClick={() => handleSelectBoard(board.id)}
+                      title={boardSector ? `${boardTitle} — ${boardSector}` : boardTitle}
                       className={`flex min-w-[210px] items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition lg:min-w-0 ${
                         isActive
                           ? "border-primary bg-white text-primary shadow-sm"
                           : "border-slate-200 bg-white text-slate-700 hover:border-[#BCEEE5] hover:bg-[#F8FBFD]"
                       }`}
                     >
-                      <span className="min-w-0">
+                      <span className="min-w-0 flex-1">
                         <span className="flex min-w-0 items-center gap-2">
-                          <span className="truncate text-sm font-extrabold">{board.name}</span>
+                          <span className="truncate text-sm font-extrabold">{boardTitle}</span>
                         </span>
                         <span className="mt-0.5 block truncate text-[10px] font-bold text-slate-500">
-                          {railsCount} trilhos · {usedModules} DIN
+                          {boardSector ? `${boardSector} · ` : ""}{railsCount} trilhos · {usedModules} DIN
                         </span>
                       </span>
                       {isActive && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />}
@@ -9903,11 +10300,18 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
             <div className="p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
+                <div className="min-w-0">
                   <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Quadro ativo</p>
-                  <h4 className="text-lg font-extrabold text-slate-950">{activeBoard?.name || "Quadro"}</h4>
+                  <h4 className="truncate text-lg font-extrabold text-slate-950" title={activeBoardDisplayName}>
+                    {activeBoardDisplayName}
+                  </h4>
+                  {activeBoardDisplayLocation && (
+                    <p className="truncate text-xs font-semibold text-slate-500" title={activeBoardDisplayLocation}>
+                      {activeBoardDisplayLocation}
+                    </p>
+                  )}
                 </div>
-                <div className="flex gap-2 text-[11px] font-extrabold text-slate-600">
+                <div className="flex shrink-0 gap-2 text-[11px] font-extrabold text-slate-600">
                   <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">{rails.length} trilhos</span>
                   <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">{getBoardUsedModules(activeBoard)} DIN</span>
                   <span className="rounded-md bg-slate-100 px-2 py-1">{visibleWires.length} cabos</span>
@@ -9916,34 +10320,64 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Nome do Projeto</Label>
+                  <Label htmlFor="panel-project-name-input" className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Nome do Projeto</Label>
                   <Input
-                    value={project?.name || ""}
+                    id="panel-project-name-input"
+                    value={projectNameInput}
+                    onFocus={() => { editingNameFieldRef.current = "projectName"; }}
                     onChange={(event) => handleUpdateProjectName(event.target.value)}
-                    onBlur={handleFlushProjectName}
-                    onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                    onBlur={handleCommitProjectName}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "Escape") {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={120}
                     className="h-10 rounded-lg bg-white text-sm font-extrabold"
                     placeholder="Nome do projeto"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Nome do Quadro</Label>
+                  <Label htmlFor="panel-board-name-input" className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Nome do Quadro</Label>
                   <Input
-                    value={activeBoard?.name || ""}
-                    onChange={(event) => handleUpdateActiveBoard("name", event.target.value)}
-                    onBlur={handleFlushActiveBoard}
-                    onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                    id="panel-board-name-input"
+                    value={boardNameInput}
+                    onFocus={() => { editingNameFieldRef.current = "boardName"; }}
+                    onChange={(event) => handleUpdateBoardName(event.target.value)}
+                    onBlur={handleCommitBoardName}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "Escape") {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={80}
                     className="h-10 rounded-lg bg-white text-sm font-extrabold"
                     placeholder="Ex: QD-01 Principal"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Local / Setor</Label>
+                  <Label htmlFor="panel-board-location-input" className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Local / Setor</Label>
                   <Input
-                    value={activeBoard?.location || ""}
-                    onChange={(event) => handleUpdateActiveBoard("location", event.target.value)}
-                    onBlur={handleFlushActiveBoard}
-                    onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                    id="panel-board-location-input"
+                    value={boardLocationInput}
+                    onFocus={() => { editingNameFieldRef.current = "boardLocation"; }}
+                    onChange={(event) => handleUpdateBoardLocation(event.target.value)}
+                    onBlur={handleCommitBoardLocation}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "Escape") {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={80}
                     className="h-10 rounded-lg bg-white text-sm font-bold"
                     placeholder="Ex: Entrada / Distribuição"
                   />
@@ -9974,7 +10408,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       {wiringMode ? "Modo Conexão" : "Modo Navegação"}
                     </Badge>
                     <span className="truncate text-xs font-medium text-slate-500">
-                      {wiringMode ? "Clique em dois bornes para ligar o cabo" : activeBoard?.name || "Quadro ativo"}
+                      {wiringMode ? "Clique em dois bornes para ligar o cabo" : activeBoardDisplayName}
                     </span>
                   </div>
                 </div>
@@ -13124,34 +13558,64 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1 sm:col-span-2">
-                      <Label className="text-[10px] font-bold text-slate-500">Nome do projeto</Label>
+                      <Label htmlFor="settings-project-name-input" className="text-[10px] font-bold text-slate-500">Nome do projeto</Label>
                       <Input
-                        value={project?.name || ""}
+                        id="settings-project-name-input"
+                        value={projectNameInput}
+                        onFocus={() => { editingNameFieldRef.current = "projectName"; }}
                         onChange={(event) => handleUpdateProjectName(event.target.value)}
-                        onBlur={handleFlushProjectName}
-                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                        onBlur={handleCommitProjectName}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === "Escape") {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        autoComplete="off"
+                        spellCheck={false}
+                        maxLength={120}
                         className="h-9 rounded-lg bg-white text-sm font-bold"
                         placeholder="Nome do projeto"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-slate-500">Nome do quadro</Label>
+                      <Label htmlFor="settings-board-name-input" className="text-[10px] font-bold text-slate-500">Nome do quadro</Label>
                       <Input
-                        value={activeBoard?.name || ""}
-                        onChange={(event) => handleUpdateActiveBoard("name", event.target.value)}
-                        onBlur={handleFlushActiveBoard}
-                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                        id="settings-board-name-input"
+                        value={boardNameInput}
+                        onFocus={() => { editingNameFieldRef.current = "boardName"; }}
+                        onChange={(event) => handleUpdateBoardName(event.target.value)}
+                        onBlur={handleCommitBoardName}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === "Escape") {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        autoComplete="off"
+                        spellCheck={false}
+                        maxLength={80}
                         className="h-9 rounded-lg bg-white text-sm font-bold"
                         placeholder="Ex: QD-01 Principal"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-slate-500">Local / setor</Label>
+                      <Label htmlFor="settings-board-location-input" className="text-[10px] font-bold text-slate-500">Local / setor</Label>
                       <Input
-                        value={activeBoard?.location || ""}
-                        onChange={(event) => handleUpdateActiveBoard("location", event.target.value)}
-                        onBlur={handleFlushActiveBoard}
-                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                        id="settings-board-location-input"
+                        value={boardLocationInput}
+                        onFocus={() => { editingNameFieldRef.current = "boardLocation"; }}
+                        onChange={(event) => handleUpdateBoardLocation(event.target.value)}
+                        onBlur={handleCommitBoardLocation}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === "Escape") {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        autoComplete="off"
+                        spellCheck={false}
+                        maxLength={80}
                         className="h-9 rounded-lg bg-white text-sm font-bold"
                         placeholder="Ex: Pavimento térreo"
                       />
