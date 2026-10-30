@@ -1,3 +1,4 @@
+import { authorizePlanExport, stampPdfWithPlanWatermark } from "@/lib/planEnforcement";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
@@ -635,9 +636,17 @@ export default function MemorialDescritivo() {
 
   const handleGenerate = async () => {
     if (!project || !metrics) return;
+    const exportAuth = await authorizePlanExport({
+      projectId: project.id,
+      format: "PDF",
+      label: "Memorial Descritivo",
+    });
+    if (!exportAuth.allowed) return;
+
     setGenerating(true);
     await new Promise(r => setTimeout(r, 400)); // UX — feedback visual
     const doc = generatePDF(project, metrics, { brandName, logoUrl });
+    stampPdfWithPlanWatermark(doc, exportAuth);
     doc.save(`memorial_${project.name?.replace(/\s+/g, "_") || "projeto"}.pdf`);
     setGenerating(false);
     setGenerated(true);

@@ -30,6 +30,13 @@ import {
 } from "../lib/infrastructureHealth.js";
 import {
   checkProjectCreationAllowed,
+  checkFeatureQuotaAllowed,
+  resolveEffectiveSubscription,
+  buildUsageFromProjects,
+  getLimit,
+  formatLimitValue,
+  getCurrentUsagePeriod,
+  FEATURE_KEYS,
   getPlanByCode,
   normalizeSubscription,
   COMMERCIAL_PLANS,
@@ -136,6 +143,20 @@ const publicUser = (user) => {
   return cloneLocal(safeUser);
 };
 
+const applyInternalUserPatch = (userId, patch = {}) => {
+  const users = readLocalUsers();
+  const index = users.findIndex((u) => u.id === userId);
+  if (index < 0) return null;
+  const updated = {
+    ...users[index],
+    ...patch,
+    updated_date: nowIso(),
+  };
+  users[index] = updated;
+  writeLocalUsers(users);
+  return publicUser(updated);
+};
+
 const INITIAL_SUPER_ADMINS = [
   {
     id: "local_admin_default",
@@ -147,7 +168,7 @@ const INITIAL_SUPER_ADMINS = [
     role: "super_admin",
     is_super_admin: true,
     status: "active",
-    plan: "profissional",
+    plan: "completo",
   },
   {
     id: "local_super_admin_grc",
@@ -159,7 +180,7 @@ const INITIAL_SUPER_ADMINS = [
     role: "super_admin",
     is_super_admin: true,
     status: "active",
-    plan: "profissional",
+    plan: "completo",
   },
   {
     id: "local_super_admin_ian",
@@ -171,7 +192,7 @@ const INITIAL_SUPER_ADMINS = [
     role: "super_admin",
     is_super_admin: true,
     status: "active",
-    plan: "profissional",
+    plan: "completo",
   },
   {
     id: "local_super_admin_wellington",
@@ -183,7 +204,7 @@ const INITIAL_SUPER_ADMINS = [
     role: "super_admin",
     is_super_admin: true,
     status: "active",
-    plan: "profissional",
+    plan: "completo",
   },
   {
     id: "local_super_admin_comercial",
@@ -195,7 +216,7 @@ const INITIAL_SUPER_ADMINS = [
     role: "super_admin",
     is_super_admin: true,
     status: "active",
-    plan: "profissional",
+    plan: "completo",
   },
   {
     id: "local_super_admin_gabrielderezende13",
@@ -207,7 +228,7 @@ const INITIAL_SUPER_ADMINS = [
     role: "super_admin",
     is_super_admin: true,
     status: "active",
-    plan: "profissional",
+    plan: "completo",
   },
 ];
 
@@ -348,6 +369,24 @@ const localUploadFile = async (file) => {
   // Validação estrita de segurança do arquivo enviado (tipo, tamanho e extensões perigosas)
   validateUploadedFile(file);
 
+  // Verificação de cota de armazenamento do workspace
+  const user = getLocalUserFromToken();
+  if (user) {
+    const fileSizeMb = (file.size || 0) / (1024 * 1024);
+    const effectiveSub = resolveEffectiveSubscription(user);
+    const storageLimit = getLimit(effectiveSub.plan, FEATURE_KEYS.STORAGE_MB);
+    const currentUsage = buildUsageFromProjects(readLocalProjects(), {}, user);
+    if (storageLimit !== Number.POSITIVE_INFINITY && currentUsage.storageMb + fileSizeMb > storageLimit) {
+      throw createError(
+        `Upload de ${fileSizeMb.toFixed(1)} MB excede o limite de ${formatLimitValue(storageLimit, FEATURE_KEYS.STORAGE_MB)} do plano ${effectiveSub.plan.name}. Faça upgrade para expandir seu armazenamento.`,
+        403
+      );
+    }
+    applyInternalUserPatch(user.id, {
+      storage_used_mb: Number(((user.storage_used_mb || 0) + fileSizeMb).toFixed(2)),
+    });
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve({
@@ -448,7 +487,9 @@ const auth = {
     return request("/api/auth/me");
   },
 
-  async loginViaEmailPassword(email, password) {
+  async loginViaEmailPassword(emailOrPayload, maybePassword) {
+    const email = typeof emailOrPayload === "object" && emailOrPayload !== null ? emailOrPayload.email : emailOrPayload;
+    const password = typeof emailOrPayload === "object" && emailOrPayload !== null ? emailOrPayload.password : maybePassword;
     if (isLocalAuthMode) {
       const normalizedEmail = normalizeEmail(email);
       if (!normalizedEmail) {
@@ -577,6 +618,7 @@ const auth = {
       const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
       // Prevenção contra elevação indevida: novos cadastros NUNCA recebem super_admin automaticamente
       const assignedRole = isSuperAdminEmail ? "super_admin" : "user";
+      const assignedPlan = isSuperAdminEmail ? "completo" : "free";
 
       const resolvedProfession = normalizeProfession(profession) || sanitizeTextInput(profession || "projetista");
       const user = {
@@ -590,7 +632,13 @@ const auth = {
         role: assignedRole,
         is_super_admin: isSuperAdminEmail,
         status: "active",
-        plan: "profissional",
+        plan: assignedPlan,
+        storage_used_mb: 0,
+        monthly_exports_count: 0,
+        monthly_ai_scans_count: 0,
+        usage_period: new Date().toISOString().slice(0, 7),
+        team_members: [],
+        team_members_count: 1,
         terms_accepted: Boolean(terms_accepted ?? true),
         terms_version: sanitizeTextInput(terms_version || "1.2"),
         terms_accepted_at: terms_accepted_at || timestamp,
@@ -794,7 +842,6 @@ const auth = {
         "photo_url",
         "theme",
         "preferences",
-        "plan",
         "subscription_status",
         "subscription_cycle",
         "subscription_price",
@@ -806,7 +853,6 @@ const auth = {
         "billing_provider",
         "stripe_customer_id",
         "stripe_subscription_id",
-        "academic_status",
         "academic_institution",
         "academic_course",
         "academic_document_name",
@@ -828,6 +874,21 @@ const auth = {
           safeData[key] = data[key];
         }
       });
+
+      // Bloqueio rigoroso de auto-escalada de plano pago e aprovação acadêmica via updateMe
+      const isUserAdmin = currentUser.role === "admin" || currentUser.role === "super_admin" || currentUser.is_super_admin;
+      if (data.plan !== undefined) {
+        if (isUserAdmin) {
+          safeData.plan = data.plan;
+        } else if (data.plan === "free" || data.plan === "gratuito") {
+          safeData.plan = "free";
+        }
+      }
+      if (data.academic_status !== undefined) {
+        if (isUserAdmin || data.academic_status === "pending_review" || data.academic_status === "not_submitted") {
+          safeData.academic_status = data.academic_status;
+        }
+      }
 
       if (data.profession || data.profissao) {
         safeData.profession = data.profession || data.profissao;
@@ -1037,6 +1098,32 @@ const projectEntity = {
         throw createError(creationCheck.reason || "Limite de projetos ativos atingido para o plano contratado.", 403);
       }
 
+      // Validação de limite de modelos personalizados (templates)
+      if (data?.is_template || data?.template) {
+        const effectiveSub = resolveEffectiveSubscription(currentUser);
+        const templateLimit = getLimit(effectiveSub.plan, FEATURE_KEYS.CUSTOM_TEMPLATES);
+        const currentTemplates = allProjects.filter(
+          (p) => (!p.owner_id || p.owner_id === currentUser.id) && (p.is_template || p.template)
+        ).length;
+        if (currentTemplates >= templateLimit) {
+          throw createError(
+            `Limite de ${templateLimit} modelos personalizados atingido para o plano ${effectiveSub.plan.name}. Faça upgrade para continuar criando novos modelos.`,
+            403
+          );
+        }
+      }
+
+      // Validação de capacidade de armazenamento
+      const currentUsage = buildUsageFromProjects(allProjects, {}, currentUser);
+      const effectiveSub = resolveEffectiveSubscription(currentUser);
+      const storageLimit = getLimit(effectiveSub.plan, FEATURE_KEYS.STORAGE_MB);
+      if (storageLimit !== Number.POSITIVE_INFINITY && currentUsage.storageMb >= storageLimit) {
+        throw createError(
+          `Capacidade de armazenamento de ${formatLimitValue(storageLimit, FEATURE_KEYS.STORAGE_MB)} atingida para o plano ${effectiveSub.plan.name}. Faça upgrade para expandir seu espaço.`,
+          403
+        );
+      }
+
       const timestamp = nowIso();
       const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
       const name = sanitizeTextInput(String(safeData?.name || "").trim() || "Novo Projeto Elétrico");
@@ -1111,6 +1198,29 @@ const projectEntity = {
         safeData.name = sanitizeTextInput(safeData.name);
       }
 
+      // Validação de alteração de disciplina contra restrições do plano
+      if (safeData.project_type && safeData.project_type !== existing.project_type) {
+        const typeCheck = checkProjectCreationAllowed(currentUser, 0, safeData.project_type);
+        if (!typeCheck.allowed) {
+          throw createError(typeCheck.reason || "Tipo de projeto não suportado pelo plano contratado.", 403);
+        }
+      }
+
+      // Validação de modelos personalizados
+      if (safeData.is_template === true && !existing.is_template) {
+        const effectiveSub = resolveEffectiveSubscription(currentUser);
+        const templateLimit = getLimit(effectiveSub.plan, FEATURE_KEYS.CUSTOM_TEMPLATES);
+        const currentTemplates = nextProjects.filter(
+          (p) => (!p.owner_id || p.owner_id === currentUser.id) && (p.is_template || p.template)
+        ).length;
+        if (currentTemplates >= templateLimit) {
+          throw createError(
+            `Limite de ${templateLimit} modelos personalizados atingido para o plano ${effectiveSub.plan.name}.`,
+            403
+          );
+        }
+      }
+
       const updatedProject = {
         ...existing,
         ...safeData,
@@ -1145,6 +1255,25 @@ const projectEntity = {
       }
       if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && original.owner_id && original.owner_id !== currentUser.id) {
         throw createError("Acesso negado para duplicar este projeto.", 403);
+      }
+
+      // Validação rigorosa de cotas antes da duplicação
+      const activeProjectsCount = projects.filter(
+        (p) => (!p.owner_id || p.owner_id === currentUser.id) && p.status !== "Arquivado"
+      ).length;
+      const creationCheck = checkProjectCreationAllowed(currentUser, activeProjectsCount, original?.project_type);
+      if (!creationCheck.allowed) {
+        throw createError(creationCheck.reason || "Limite de projetos ativos atingido para o plano contratado.", 403);
+      }
+
+      const currentUsage = buildUsageFromProjects(projects, {}, currentUser);
+      const effectiveSub = resolveEffectiveSubscription(currentUser);
+      const storageLimit = getLimit(effectiveSub.plan, FEATURE_KEYS.STORAGE_MB);
+      if (storageLimit !== Number.POSITIVE_INFINITY && currentUsage.storageMb >= storageLimit) {
+        throw createError(
+          `Capacidade de armazenamento de ${formatLimitValue(storageLimit, FEATURE_KEYS.STORAGE_MB)} atingida para o plano ${effectiveSub.plan.name}.`,
+          403
+        );
       }
 
       // Clone profundo real
@@ -2038,6 +2167,19 @@ const integrations = {
 
     async InvokeLLM(payload) {
       if (isLocalAuthMode) {
+        const currentUser = getLocalUserFromToken();
+        if (currentUser) {
+          const currentPeriod = getCurrentUsagePeriod();
+          const currentAiScans = currentUser.usage_period === currentPeriod ? Number(currentUser.monthly_ai_scans_count || 0) : 0;
+          const quotaCheck = checkFeatureQuotaAllowed(currentUser, FEATURE_KEYS.AI_SCANS, currentAiScans, 1);
+          if (!quotaCheck.allowed) {
+            throw createError(quotaCheck.reason || "Limite mensal de operações de inteligência artificial atingido para o seu plano.", 403);
+          }
+          applyInternalUserPatch(currentUser.id, {
+            usage_period: currentPeriod,
+            monthly_ai_scans_count: currentAiScans + 1,
+          });
+        }
         if (API_BASE_URL) {
           try {
             return await request("/api/ai/invoke", {
@@ -2683,6 +2825,143 @@ const budgetEntity = {
 };
 
 const subscriptionEntity = {
+  async consumeExportQuota({ projectId = null, format = "PDF", label = "Exportação Técnica" } = {}) {
+    if (isLocalAuthMode) {
+      const user = requireLocalUser();
+      const currentPeriod = getCurrentUsagePeriod();
+      const currentExports = user.usage_period === currentPeriod ? Number(user.monthly_exports_count || 0) : 0;
+      const quotaCheck = checkFeatureQuotaAllowed(user, FEATURE_KEYS.EXPORTS, currentExports, 1);
+      const effectiveSub = resolveEffectiveSubscription(user);
+
+      if (!quotaCheck.allowed) {
+        return {
+          allowed: false,
+          limit: quotaCheck.limit,
+          currentUsage: currentExports,
+          remaining: 0,
+          planCode: quotaCheck.planCode,
+          reason: quotaCheck.reason,
+        };
+      }
+
+      applyInternalUserPatch(user.id, {
+        usage_period: currentPeriod,
+        monthly_exports_count: currentExports + 1,
+      });
+
+      if (projectId) {
+        const projects = readLocalProjects();
+        const pIdx = projects.findIndex((p) => p.id === projectId);
+        if (pIdx >= 0) {
+          projects[pIdx].exports_count = (projects[pIdx].exports_count || 0) + 1;
+          writeLocalProjects(projects);
+        }
+      }
+
+      recordAuditEvent({
+        actor: user,
+        action: "PLAN_EXPORT_CONSUMED",
+        targetType: "subscription",
+        targetId: user.id,
+        details: `Exportação (${format} - ${label}) realizada. Consumo mensal: ${currentExports + 1}/${quotaCheck.limit === Number.POSITIVE_INFINITY ? "Ilimitado" : quotaCheck.limit}`,
+      });
+
+      return {
+        allowed: true,
+        limit: quotaCheck.limit,
+        currentUsage: currentExports + 1,
+        remaining: quotaCheck.limit === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : Math.max(0, quotaCheck.limit - (currentExports + 1)),
+        planCode: effectiveSub.plan.code,
+        isAcademic: effectiveSub.plan.isAcademic,
+        isFreeRestricted: effectiveSub.plan.code === "free",
+        watermark: effectiveSub.plan.isAcademic
+          ? "Versão Acadêmica — Nacif Estudante — Uso Educacional"
+          : (effectiveSub.plan.code === "free" ? "Versão de Avaliação Gratuita — Nacif Energy" : null),
+      };
+    }
+
+    return request("/api/subscriptions/consume-export", {
+      method: "POST",
+      body: { projectId, format, label },
+    });
+  },
+
+  async getTeamMembers() {
+    if (isLocalAuthMode) {
+      const user = requireLocalUser();
+      const effectiveSub = resolveEffectiveSubscription(user);
+      const limit = getLimit(effectiveSub.plan, FEATURE_KEYS.TEAM_MEMBERS);
+      const members = Array.isArray(user.team_members) ? user.team_members : [];
+      return {
+        members,
+        currentCount: members.length + 1,
+        limit,
+        planCode: effectiveSub.plan.code,
+      };
+    }
+    return request("/api/subscriptions/team-members");
+  },
+
+  async inviteTeamMember({ email, name, role = "membro" }) {
+    if (isLocalAuthMode) {
+      const user = requireLocalUser();
+      const effectiveSub = resolveEffectiveSubscription(user);
+      const limit = getLimit(effectiveSub.plan, FEATURE_KEYS.TEAM_MEMBERS);
+
+      if (effectiveSub.plan.code === "free" || effectiveSub.plan.code === "estudante") {
+        throw createError(
+          `O plano ${effectiveSub.plan.name} é de uso individual e não permite adicionar membros à equipe. Faça upgrade para o Nacif Elétrico, Solar ou Completo.`,
+          403
+        );
+      }
+
+      const members = Array.isArray(user.team_members) ? user.team_members : [];
+      if (members.length + 1 >= limit) {
+        throw createError(
+          `Limite de ${limit} membros de equipe atingido para o plano ${effectiveSub.plan.name}. Faça upgrade para adicionar mais colaboradores.`,
+          403
+        );
+      }
+
+      const newMember = {
+        id: randomId("team_member"),
+        email: normalizeEmail(email),
+        name: sanitizeTextInput(name || email.split("@")[0]),
+        role: role || "membro",
+        joined_at: nowIso(),
+        status: "active",
+      };
+
+      const updatedMembers = [...members, newMember];
+      applyInternalUserPatch(user.id, {
+        team_members: updatedMembers,
+        team_members_count: updatedMembers.length + 1,
+      });
+
+      return newMember;
+    }
+    return request("/api/subscriptions/invite-member", {
+      method: "POST",
+      body: { email, name, role },
+    });
+  },
+
+  async removeTeamMember(memberId) {
+    if (isLocalAuthMode) {
+      const user = requireLocalUser();
+      const members = Array.isArray(user.team_members) ? user.team_members : [];
+      const updatedMembers = members.filter((m) => m.id !== memberId);
+      applyInternalUserPatch(user.id, {
+        team_members: updatedMembers,
+        team_members_count: updatedMembers.length + 1,
+      });
+      return { ok: true };
+    }
+    return request(`/api/subscriptions/remove-member/${memberId}`, {
+      method: "DELETE",
+    });
+  },
+
   async cancel({ reason } = {}) {
     if (isLocalAuthMode) {
       const user = requireLocalUser();
@@ -2742,7 +3021,7 @@ const subscriptionEntity = {
 
       const price = cycle === "annual" && targetPlan.annualPrice !== null ? targetPlan.annualPrice : targetPlan.monthlyPrice;
 
-      const updated = await auth.updateMe({
+      const updated = applyInternalUserPatch(user.id, {
         plan: targetPlan.code,
         subscription_status: "active",
         subscription_cycle: targetPlan.code === "estudante" ? "monthly" : cycle,

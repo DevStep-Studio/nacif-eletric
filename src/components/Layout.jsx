@@ -266,7 +266,7 @@ export default function Layout() {
   const displayName = activeUser?.full_name || (activeUser?.email ? activeUser.email.split("@")[0] : "Minha Conta");
   const displayEmail = activeUser?.email || "";
   const subscription = normalizeSubscription(activeUser);
-  const usage = useMemo(() => buildUsageFromProjects(shellProjects), [shellProjects]);
+  const usage = useMemo(() => buildUsageFromProjects(shellProjects, {}, activeUser), [shellProjects, activeUser]);
 
   const [unreadIssuesCount, setUnreadIssuesCount] = useState(0);
 
@@ -664,11 +664,7 @@ export default function Layout() {
                   <FileSpreadsheet className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/budget") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Orçamento</span>}
                 </div>
-                {!sidebarCollapsed && (
-                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-black ${isItemActive("/budget") ? "bg-[#1E293B] text-[#00d8b8]" : "bg-[#F1F5F9] text-[#64748B]"}`}>
-                    2
-                  </span>
-                )}
+                
               </Link>
 
               <Link

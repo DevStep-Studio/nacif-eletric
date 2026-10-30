@@ -11,6 +11,9 @@ import { PROFESSIONS, normalizeProfession, professionLabel, isAdminUser } from "
 import { getPlanByCode } from "@/lib/subscriptionPlans";
 import {
   CreditCard,
+  Users,
+  UserPlus,
+  Trash2,
   Lock,
   LogOut,
   Palette,
@@ -50,6 +53,51 @@ export default function SettingsPage() {
   });
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsSuccess, setPrefsSuccess] = useState(false);
+
+  // Equipe e Membros
+  const [teamData, setTeamData] = useState({ members: [], currentCount: 1, limit: 1, planCode: "free" });
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamError, setTeamError] = useState("");
+
+  const loadTeam = async () => {
+    try {
+      const data = await backend.subscriptions.getTeamMembers();
+      if (data) setTeamData(data);
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadTeam();
+  }, []);
+
+  const handleInviteMember = async (e) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    setTeamLoading(true);
+    setTeamError("");
+    try {
+      await backend.subscriptions.inviteTeamMember({
+        email: inviteEmail.trim(),
+        name: inviteName.trim(),
+      });
+      setInviteEmail("");
+      setInviteName("");
+      await loadTeam();
+    } catch (err) {
+      setTeamError(err?.message || "Erro ao adicionar membro.");
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
+  const handleRemoveMember = async (memberId) => {
+    try {
+      await backend.subscriptions.removeTeamMember(memberId);
+      await loadTeam();
+    } catch {}
+  };
 
   useEffect(() => {
     backend.auth.me().then((u) => {
@@ -404,6 +452,109 @@ export default function SettingsPage() {
             </Button>
           </div>
         </div>
+      </section>
+
+      {/* Equipe e Membros da Organização */}
+      <section className="mx-auto w-full max-w-5xl rounded-[16px] border border-[#E2E8F0] bg-white p-5 shadow-[0_16px_45px_rgba(15,23,42,0.04)] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-extrabold text-[#0f1728]">
+              <Users className="h-5 w-5 text-primary" />
+              Equipe e Colaboradores
+            </h2>
+            <p className="mt-1 text-sm font-medium text-[#5f6877]">
+              {teamData.limit <= 1
+                ? "O seu plano atual é individual. Faça upgrade para adicionar colaboradores ao workspace."
+                : `Gestão de usuários da organização (${teamData.currentCount}/${teamData.limit === Number.POSITIVE_INFINITY ? "Ilimitado" : teamData.limit} membros).`}
+            </p>
+          </div>
+          <Badge className={`font-bold text-xs px-3 py-1 rounded-full ${teamData.limit <= 1 ? "bg-slate-100 text-slate-700" : "bg-teal-50 text-teal-800 border-teal-200"}`}>
+            {teamData.limit <= 1 ? "Plano Individual (1 usuário)" : `Até ${teamData.limit} usuários inclusos`}
+          </Badge>
+        </div>
+
+        {teamData.limit <= 1 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-5 text-center space-y-3">
+            <p className="text-xs font-semibold text-slate-600 max-w-md mx-auto">
+              A colaboração em equipe está inclusa nos planos <strong>Nacif Elétrico (3)</strong>, <strong>Nacif Solar (3)</strong> e <strong>Nacif Completo (15)</strong>.
+            </p>
+            <Button asChild size="sm" className="h-9 rounded-xl bg-[#00d8b8] text-slate-950 font-extrabold text-xs hover:bg-[#00bda1]">
+              <Link to="/subscription">Ver planos com equipe</Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4 pt-2">
+            {teamError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-700">
+                {teamError}
+              </div>
+            )}
+            <form onSubmit={handleInviteMember} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <Input
+                placeholder="Nome do colaborador"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                className="h-10 text-xs font-medium"
+              />
+              <Input
+                placeholder="E-mail do colaborador"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="h-10 text-xs font-medium"
+                required
+              />
+              <Button
+                type="submit"
+                disabled={teamLoading || teamData.currentCount >= teamData.limit}
+                className="h-10 rounded-xl font-extrabold text-xs bg-slate-900 text-white hover:bg-slate-800 gap-1.5"
+              >
+                <UserPlus className="h-4 w-4" />
+                {teamData.currentCount >= teamData.limit ? "Limite atingido" : "Adicionar membro"}
+              </Button>
+            </form>
+
+            <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white overflow-hidden">
+              <div className="flex items-center justify-between p-3 text-xs bg-slate-50/70 font-bold text-slate-700">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-full bg-[#00d8b8]/20 text-[#009b84] flex items-center justify-center font-black text-xs">
+                    {initialsFromUser(user)}
+                  </div>
+                  <div>
+                    <p className="font-extrabold text-slate-900">{user?.full_name || "Você"} (Proprietário)</p>
+                    <p className="text-[11px] text-slate-500">{user?.email}</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[10px] font-bold">Admin</Badge>
+              </div>
+              {teamData.members.map((m) => (
+                <div key={m.id} className="flex items-center justify-between p-3 text-xs hover:bg-slate-50/50">
+                  <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs">
+                      {(m.name || m.email || "M").slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-extrabold text-slate-900">{m.name || m.email}</p>
+                      <p className="text-[11px] text-slate-500">{m.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] font-bold">Membro</Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveMember(m.id)}
+                      className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                      title="Remover membro"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Assinatura e Uso */}

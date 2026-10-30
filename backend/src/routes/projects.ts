@@ -1,3 +1,4 @@
+import { checkServerProjectCreation, getServerPlan, isServerAdmin } from "../lib/planGovernance.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { Prisma, type ProjectRevision } from "@prisma/client";
@@ -233,51 +234,18 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
   app.post("/api/projects", { preHandler: [app.authenticate] }, async (request) => {
     const data = projectPayloadSchema.parse(request.body);
 
-    // Validação centralizada de limite de projetos e restrição de escopo por plano
-    const userPlan = String(request.authUser.plan || "gratuito").toLowerCase();
-    const activeProjectsCount = await prisma.project.count({
-      where: {
-        createdById: request.authUser.id,
-        status: { not: "Aprovado" },
-      },
+        // Validação centralizada de limite de projetos e restrição de escopo por plano
+    const totalUserProjects = await prisma.project.count({
+      where: { createdById: request.authUser.id },
     });
 
-    const planLimits: Record<string, number> = {
-      gratuito: 3,
-      free: 3,
-      estudante: 5,
-      eletrico: 30,
-      profissional: 50,
-      solar: 30,
-      completo: Number.POSITIVE_INFINITY,
-      engenharia: Number.POSITIVE_INFINITY,
-    };
-
-    const limit = planLimits[userPlan] ?? 3;
-    if (activeProjectsCount >= limit) {
-      throw new AppError(
-        `Limite de ${limit} projetos ativos atingido para o seu plano. Faça upgrade para continuar criando novos projetos.`,
-        403,
-      );
-    }
-
-    const projectTypeNormalized = String(data.project_type || "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-
-    if (projectTypeNormalized.includes("solar") && userPlan === "eletrico") {
-      throw new AppError(
-        "Projetos solares não estão incluídos no plano Nacif Elétrico. Faça upgrade para o Nacif Solar ou Nacif Completo.",
-        403,
-      );
-    }
-
-    if ((projectTypeNormalized.includes("predial") || projectTypeNormalized.includes("instalac") || projectTypeNormalized.includes("eletric")) && userPlan === "solar") {
-      throw new AppError(
-        "Plantas elétricas prediais gerais não estão incluídas no plano Nacif Solar. Faça upgrade para o Nacif Elétrico ou Nacif Completo.",
-        403,
-      );
+    const creationCheck = checkServerProjectCreation(
+      request.authUser,
+      totalUserProjects,
+      data.project_type,
+    );
+    if (!creationCheck.allowed) {
+      throw new AppError(creationCheck.reason || "Limite de projetos atingido para o seu plano.", 403);
     }
 
     const project = await prisma.project.create({
@@ -384,6 +352,61 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
     });
 
     return serializeProject(project);
+  });
+
+  app.post("/api/projects/:id/duplicate", { preHandler: [app.authenticate] }, async (request) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const original = await ensureProjectAccess(id, request.authUser.id, request.authUser.role === "admin");
+
+    const totalUserProjects = await prisma.project.count({
+      where: { createdById: request.authUser.id },
+    });
+    const creationCheck = checkServerProjectCreation(
+      request.authUser,
+      totalUserProjects,
+      original.projectType,
+    );
+    if (!creationCheck.allowed) {
+      throw new AppError(creationCheck.reason || "Limite de projetos atingido para o seu plano.", 403);
+    }
+
+    const duplicated = await prisma.project.create({
+      data: {
+        name: `${original.name} (Cópia)`,
+        clientName: original.clientName,
+        address: original.address,
+        projectType: original.projectType,
+        solarConfig: (original.solarConfig ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
+        voltage: original.voltage,
+        supplyType: original.supplyType,
+        circuits: (original.circuits ?? []) as Prisma.InputJsonValue,
+        totalDemandW: original.totalDemandW,
+        panelSize: original.panelSize,
+        panelBoards: (original.panelBoards ?? []) as Prisma.InputJsonValue,
+        panelLayout: (original.panelLayout ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
+        diagramLayout: (original.diagramLayout ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
+        plantDesign: (original.plantDesign ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
+        plantPointsCount: original.plantPointsCount,
+        plantRoutesCount: original.plantRoutesCount,
+        plantInfraType: original.plantInfraType,
+        status: "Rascunho",
+        notes: original.notes,
+        materials: (original.materials ?? []) as Prisma.InputJsonValue,
+        manualBudgetItems: (original.manualBudgetItems ?? []) as Prisma.InputJsonValue,
+        createdById: request.authUser.id,
+      },
+      include: { createdBy: { select: { email: true } } },
+    });
+
+    await createProjectRevision({
+      project: duplicated,
+      actorUserId: request.authUser.id,
+      actorEmail: request.authUser.email,
+      action: "create",
+      summary: "Projeto duplicado",
+    });
+
+    return serializeProject(duplicated);
   });
 
   app.delete("/api/projects/:id", { preHandler: [app.authenticate] }, async (request) => {

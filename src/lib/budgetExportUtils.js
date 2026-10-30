@@ -1,3 +1,4 @@
+import { stampPdfWithPlanWatermark } from "./planEnforcement.js";
 import { jsPDF } from "jspdf";
 
 const formatBRL = (value = 0) =>
@@ -34,6 +35,7 @@ export function downloadBudgetPDF({
   commercialTerms = {},
   brandName = "NACIF Energy",
   logoUrl = null,
+  exportAuth = null,
 } = {}) {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -484,6 +486,7 @@ export function downloadBudgetPDF({
 
   const sanitized = sanitizeFileName(projectName);
   const baseName = sanitized.startsWith("orcamento") ? sanitized : `orcamento_${sanitized}`;
+  if (exportAuth) { stampPdfWithPlanWatermark(doc, exportAuth); }
   const fileName = `${baseName}.pdf`;
   doc.save(fileName);
   return fileName;

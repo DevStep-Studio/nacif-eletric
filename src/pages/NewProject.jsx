@@ -1,25 +1,40 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, ArrowLeft, Plus, Sun, Zap } from "lucide-react";
+import { AlertCircle, ArrowLeft, Plus, Sun, Zap, Lock } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
+import { checkProjectCreationAllowed, resolveEffectiveSubscription } from "@/lib/subscriptionPlans";
 import PageHeader from "@/components/PageHeader";
 import SolarProjectWizard from "@/components/solar/wizard/SolarProjectWizard";
 
 export default function NewProject() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const effectiveSub = resolveEffectiveSubscription(user);
+  const defaultDiscipline = effectiveSub.plan.code === "solar" ? "Solar" : "Instalações Elétricas";
+
   const [form, setForm] = useState({
     name: "",
     client_name: "",
     address: "",
     city: "",
-    project_type: "Solar",
+    project_type: defaultDiscipline,
     voltage: 220,
     supply_type: "Monofásico",
   });
+  const [projectsCount, setProjectsCount] = useState(0);
+
+  useEffect(() => {
+    backend.entities.Project.list().then((list) => {
+      if (Array.isArray(list)) {
+        setProjectsCount(list.filter((p) => p.status !== "Arquivado").length);
+      }
+    }).catch(() => {});
+  }, []);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 

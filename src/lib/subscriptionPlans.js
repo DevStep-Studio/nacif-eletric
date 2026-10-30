@@ -564,29 +564,162 @@ export function normalizeSubscription(user = {}) {
   };
 }
 
-export function buildUsageFromProjects(projects = [], overrides = {}) {
+export function getCurrentUsagePeriod() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+export function estimateProjectStorageMb(project = {}) {
+  if (!project) return 0;
+  const explicit = Number(project.storage_mb || project.storageMb || project.file_size_mb || project.fileSizeMb || 0);
+  if (explicit > 0) return explicit;
+
+  let estimatedBytes = 150 * 1024;
+  if (Array.isArray(project.circuits)) estimatedBytes += project.circuits.length * 4096;
+  if (Array.isArray(project.panel_boards)) estimatedBytes += project.panel_boards.length * 16384;
+  if (project.plant_design?.points?.length) estimatedBytes += project.plant_design.points.length * 1024;
+  if (project.plant_design?.routes?.length) estimatedBytes += project.plant_design.routes.length * 512;
+  if (project.plant_design?.walls?.length) estimatedBytes += project.plant_design.walls.length * 512;
+  if (project.solar_design?.areas?.length) estimatedBytes += project.solar_design.areas.length * 8192;
+  if (project.plant_design?.imageUrl?.length) estimatedBytes += project.plant_design.imageUrl.length;
+
+  return Math.max(0.2, Number((estimatedBytes / (1024 * 1024)).toFixed(2)));
+}
+
+export function resolveEffectiveSubscription(user = {}) {
+  if (
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.is_super_admin === true ||
+    isSuperAdmin(user)
+  ) {
+    const fullPlan = getPlanByCode("completo");
+    return {
+      plan: fullPlan,
+      planCode: fullPlan.code,
+      status: "active",
+      cycle: "annual",
+      isAdmin: true,
+      isInactive: false,
+    };
+  }
+
+  const normalized = normalizeSubscription(user);
+  const status = String(normalized.status || "active").toLowerCase().trim();
+
+  const isInactive =
+    status === "cancelled" ||
+    status === "canceled" ||
+    status === "suspended" ||
+    status === "unpaid" ||
+    status === "expired" ||
+    status === "inactive";
+
+  if (isInactive) {
+    const freePlan = getPlanByCode("free");
+    return {
+      ...normalized,
+      plan: freePlan,
+      planCode: freePlan.code,
+      status,
+      isInactive: true,
+      originalPlanCode: normalized.planCode,
+    };
+  }
+
+  return {
+    ...normalized,
+    isAdmin: false,
+    isInactive: false,
+  };
+}
+
+export function checkFeatureQuotaAllowed(user = {}, featureKey = "", currentUsage = 0, increment = 1) {
+  if (
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.is_super_admin === true ||
+    isSuperAdmin(user)
+  ) {
+    return {
+      allowed: true,
+      currentUsage: Number(currentUsage),
+      limit: Number.POSITIVE_INFINITY,
+      remaining: Number.POSITIVE_INFINITY,
+      planCode: "completo",
+      reason: null,
+    };
+  }
+
+  const { plan } = resolveEffectiveSubscription(user);
+  const limit = getLimit(plan, featureKey);
+
+  if (limit === Number.POSITIVE_INFINITY) {
+    return {
+      allowed: true,
+      currentUsage: Number(currentUsage),
+      limit,
+      remaining: Number.POSITIVE_INFINITY,
+      planCode: plan.code,
+      reason: null,
+    };
+  }
+
+  const nextUsage = Number(currentUsage) + Number(increment);
+  const allowed = nextUsage <= Number(limit);
+  const remaining = Math.max(0, Number(limit) - Number(currentUsage));
+  const label = USAGE_LABELS[featureKey] || featureKey;
+
+  return {
+    allowed,
+    currentUsage: Number(currentUsage),
+    nextUsage,
+    limit: Number(limit),
+    remaining,
+    planCode: plan.code,
+    reason: allowed
+      ? null
+      : "Limite mensal de " + formatLimitValue(limit, featureKey) + " para " + label + " atingido no plano " + plan.name + ". Faça upgrade para continuar.",
+  };
+}
+
+export function buildUsageFromProjects(projects = [], overrides = {}, maybeUser = null) {
   const safeProjects = Array.isArray(projects) ? projects : [];
   const activeProjects = safeProjects.filter((project) => project?.status !== "Arquivado");
+  const user = maybeUser || overrides?.user || null;
+  const currentPeriod = getCurrentUsagePeriod();
+
+  const projectsExports = activeProjects.reduce(
+    (total, project) => total + Number(project?.exports_count || project?.exportsCount || 0),
+    0,
+  );
+  const userMonthlyExports = user?.usage_period === currentPeriod ? Number(user.monthly_exports_count || 0) : 0;
+  const totalExports = Math.max(projectsExports, userMonthlyExports);
+
+  const projectsAiScans = activeProjects.reduce(
+    (total, project) => total + Number(project?.ai_scans_count || project?.aiScansCount || 0),
+    0,
+  );
+  const userMonthlyAiScans = user?.usage_period === currentPeriod ? Number(user.monthly_ai_scans_count || 0) : 0;
+  const totalAiScans = Math.max(projectsAiScans, userMonthlyAiScans);
+
+  const projectsStorageMb = activeProjects.reduce(
+    (total, project) => total + estimateProjectStorageMb(project),
+    0,
+  );
+  const userDirectStorageMb = Number(user?.storage_used_mb || 0);
+  const totalStorageMb = Number((projectsStorageMb + userDirectStorageMb).toFixed(1));
+
+  const userMembersCount = Number(
+    user?.team_members_count ||
+    (Array.isArray(user?.team_members) ? user.team_members.length + 1 : 1),
+  );
 
   return {
     [FEATURE_KEYS.PROJECTS]: activeProjects.length,
-    [FEATURE_KEYS.STORAGE_MB]: Math.round(
-      activeProjects.reduce(
-        (total, project) =>
-          total +
-          Number(project?.storage_mb || project?.storageMb || project?.file_size_mb || project?.fileSizeMb || 0),
-        0,
-      ),
-    ),
-    [FEATURE_KEYS.TEAM_MEMBERS]: Number(overrides.teamMembers || overrides.members || 1),
-    [FEATURE_KEYS.EXPORTS]: activeProjects.reduce(
-      (total, project) => total + Number(project?.exports_count || project?.exportsCount || 0),
-      0,
-    ),
-    [FEATURE_KEYS.AI_SCANS]: activeProjects.reduce(
-      (total, project) => total + Number(project?.ai_scans_count || project?.aiScansCount || 0),
-      0,
-    ),
+    [FEATURE_KEYS.STORAGE_MB]: totalStorageMb,
+    [FEATURE_KEYS.TEAM_MEMBERS]: Number(overrides.teamMembers || overrides.members || userMembersCount),
+    [FEATURE_KEYS.EXPORTS]: overrides[FEATURE_KEYS.EXPORTS] !== undefined ? Number(overrides[FEATURE_KEYS.EXPORTS]) : totalExports,
+    [FEATURE_KEYS.AI_SCANS]: overrides[FEATURE_KEYS.AI_SCANS] !== undefined ? Number(overrides[FEATURE_KEYS.AI_SCANS]) : totalAiScans,
     [FEATURE_KEYS.CUSTOM_TEMPLATES]: activeProjects.filter((project) => project?.is_template || project?.template).length,
     ...overrides,
   };
@@ -727,20 +860,102 @@ export function canAccessModule(user = {}, moduleKey = "") {
     };
   }
 
-  const { plan } = normalizeSubscription(user);
-  const normalizedModule = String(moduleKey).toLowerCase().trim();
+  const { plan } = resolveEffectiveSubscription(user);
+  const normalizedModule = String(moduleKey || "").toLowerCase().trim();
+
+  // Caso plano Gratuito (free)
+  if (plan.code === "free") {
+    // Módulos solares bloqueados no free
+    if (normalizedModule === "solar" || normalizedModule === "solar_project" || normalizedModule === "solar_3d" || normalizedModule === "solar_wizard") {
+      return {
+        allowed: false,
+        level: "none",
+        isAcademic: false,
+        message: "O dimensionamento solar fotovoltaico está disponível nos planos Nacif Solar e Nacif Completo.",
+        requiredPlans: ["Nacif Solar", "Nacif Completo"],
+      };
+    }
+
+    // Quadros DIN e Diagramas Unifilares avançados bloqueados no free
+    if (normalizedModule === "panel" || normalizedModule === "panel_generator" || normalizedModule === "unifilar" || normalizedModule === "unifilar_diagram") {
+      return {
+        allowed: false,
+        level: "none",
+        isAcademic: false,
+        message: "A montagem de quadros DIN e diagramas unifilares exige o plano Nacif Elétrico ou Nacif Completo.",
+        requiredPlans: ["Nacif Elétrico", "Nacif Completo"],
+      };
+    }
+
+    // Equipe e templates personalizados bloqueados no free
+    if (normalizedModule === "team" || normalizedModule === "team_members") {
+      return {
+        allowed: false,
+        level: "none",
+        isAcademic: false,
+        message: "A gestão de múltiplos membros de equipe está disponível nos planos Nacif Elétrico, Nacif Solar e Nacif Completo.",
+        requiredPlans: ["Nacif Elétrico", "Nacif Completo"],
+      };
+    }
+
+    if (normalizedModule === "custom_templates") {
+      return {
+        allowed: false,
+        level: "none",
+        isAcademic: false,
+        message: "A criação de modelos personalizados exige o plano Nacif Elétrico, Nacif Solar ou Nacif Completo.",
+        requiredPlans: ["Nacif Elétrico", "Nacif Solar", "Nacif Completo"],
+      };
+    }
+
+    // Planta IA, circuitos, memorial, scanner e orçamento: permitidos no plano free para avaliação restrita (até 3 projetos)
+    if (
+      normalizedModule === "plant" ||
+      normalizedModule === "planta_ia" ||
+      normalizedModule === "circuit_editor" ||
+      normalizedModule === "phase_balance" ||
+      normalizedModule === "diagram" ||
+      normalizedModule === "memorial" ||
+      normalizedModule === "scanner" ||
+      normalizedModule === "electrical_tools" ||
+      normalizedModule === "budget" ||
+      normalizedModule === "materials"
+    ) {
+      return {
+        allowed: true,
+        level: "restricted",
+        isFreeRestricted: true,
+        watermark: "Versão de Avaliação Gratuita — Nacif Energy",
+        message: null,
+        requiredPlans: [],
+      };
+    }
+
+    return { allowed: true, level: "full", isAcademic: false, message: null, requiredPlans: [] };
+  }
 
   // Caso plano Estudante
-  if (plan.isAcademic) {
+  if (plan.isAcademic || plan.code === "estudante") {
     const academicCheck = isAcademicValid(user);
     if (!academicCheck.valid && (academicCheck.reason === "expired" || academicCheck.reason === "rejected")) {
       return {
         allowed: false,
         level: "expired",
         isAcademic: true,
-        message: "O vínculo acadêmico desta conta precisa ser regularizado para acessar novos recursos do plano Estudante.",
+        message: "O vínculo acadêmico desta conta precisa ser regularizado para acessar os recursos do plano Estudante.",
         reason: academicCheck.reason,
         requiredPlans: ["Nacif Estudante"],
+      };
+    }
+
+    // Estudante é individual: equipe e templates bloqueados
+    if (normalizedModule === "team" || normalizedModule === "team_members" || normalizedModule === "custom_templates") {
+      return {
+        allowed: false,
+        level: "none",
+        isAcademic: true,
+        message: "O plano Estudante é de uso educacional individual e não inclui gestão de equipe ou templates comerciais.",
+        requiredPlans: ["Nacif Elétrico", "Nacif Solar", "Nacif Completo"],
       };
     }
 
@@ -755,7 +970,7 @@ export function canAccessModule(user = {}, moduleKey = "") {
   }
 
   // Módulo Solar
-  if (normalizedModule === "solar" || normalizedModule === "solar_project" || normalizedModule === "solar_3d") {
+  if (normalizedModule === "solar" || normalizedModule === "solar_project" || normalizedModule === "solar_3d" || normalizedModule === "solar_wizard") {
     if (
       plan.code === "solar" ||
       plan.code === "completo" ||
@@ -774,13 +989,19 @@ export function canAccessModule(user = {}, moduleKey = "") {
     };
   }
 
-  // Módulos Elétricos Prediais (Planta Elétrica, Quadro DIN, Diagrama Unifilar completo)
+  // Módulos Elétricos Prediais (Planta Elétrica, Quadro DIN, Diagrama Unifilar completo, Ferramentas NBR 5410)
   if (
     normalizedModule === "plant" ||
     normalizedModule === "planta_ia" ||
     normalizedModule === "panel" ||
     normalizedModule === "panel_generator" ||
-    normalizedModule === "unifilar"
+    normalizedModule === "unifilar" ||
+    normalizedModule === "unifilar_diagram" ||
+    normalizedModule === "circuit_editor" ||
+    normalizedModule === "phase_balance" ||
+    normalizedModule === "diagram" ||
+    normalizedModule === "memorial" ||
+    normalizedModule === "electrical_tools"
   ) {
     if (plan.code === "eletrico" || plan.code === "completo" || plan.code === "professional" || plan.code === "engineering") {
       return { allowed: true, level: "full", isAcademic: false, message: null, requiredPlans: [] };
@@ -791,13 +1012,13 @@ export function canAccessModule(user = {}, moduleKey = "") {
         allowed: false,
         level: "restricted",
         isAcademic: false,
-        message: "Este recurso está disponível no plano Nacif Elétrico e no Nacif Completo.",
+        message: "Projetos elétricos prediais e quadros DIN estão disponíveis nos planos Nacif Elétrico e Nacif Completo.",
         requiredPlans: ["Nacif Elétrico", "Nacif Completo"],
       };
     }
   }
 
-  // Módulos Comuns (Calculadora, Normas NBR, Suporte)
+  // Módulos Comuns (Calculadora, Normas NBR, Suporte, Orçamento, Materiais, Scanner)
   return { allowed: true, level: "full", isAcademic: false, message: null, requiredPlans: [] };
 }
 
@@ -822,8 +1043,23 @@ export function checkProjectCreationAllowed(user = {}, currentProjectCount = 0, 
     };
   }
 
-  const { plan } = normalizeSubscription(user);
+  const { plan } = resolveEffectiveSubscription(user);
   const limit = getLimit(plan, FEATURE_KEYS.PROJECTS);
+
+  // Verificação de elegibilidade acadêmica no plano Estudante (se expirado/rejeitado)
+  if (plan.isAcademic) {
+    const status = user?.academic_status;
+    if (status === "expired" || status === "rejected") {
+      return {
+        allowed: false,
+        currentCount: Number(currentProjectCount),
+        limit: Number(limit),
+        planCode: plan.code,
+        reason: "Vínculo acadêmico vencido ou rejeitado. Regularize seu comprovante acadêmico para criar novos projetos.",
+      };
+    }
+  }
+
   const normalizedType = String(projectType || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -831,27 +1067,41 @@ export function checkProjectCreationAllowed(user = {}, currentProjectCount = 0, 
     .trim();
 
   // Validação do tipo de projeto contra as restrições do plano
-  if (normalizedType.includes("solar") || normalizedType.includes("fotovolt")) {
-    if (plan.code === "eletrico") {
-      return {
-        allowed: false,
-        currentCount: Number(currentProjectCount),
-        limit: Number(limit),
-        planCode: plan.code,
-        reason: "Projetos solares não estão incluídos no plano Nacif Elétrico. Faça upgrade para o Nacif Solar ou Nacif Completo.",
-      };
-    }
-  }
+  if (normalizedType.length > 0) {
+    const isSolar = normalizedType.includes("solar") || normalizedType.includes("fotovolt");
+    const isPredial = normalizedType.includes("predial") || normalizedType.includes("instalac") || normalizedType.includes("eletric");
 
-  if (normalizedType.includes("predial") || normalizedType.includes("instalac") || normalizedType.includes("eletric")) {
-    if (plan.code === "solar") {
-      return {
-        allowed: false,
-        currentCount: Number(currentProjectCount),
-        limit: Number(limit),
-        planCode: plan.code,
-        reason: "Projetos elétricos prediais completos não estão incluídos no plano Nacif Solar. Faça upgrade para o Nacif Elétrico ou Nacif Completo.",
-      };
+    if (isSolar) {
+      if (plan.code === "eletrico") {
+        return {
+          allowed: false,
+          currentCount: Number(currentProjectCount),
+          limit: Number(limit),
+          planCode: plan.code,
+          reason: "Projetos solares não estão incluídos no plano Nacif Elétrico. Faça upgrade para o Nacif Solar ou Nacif Completo.",
+        };
+      }
+      if (plan.code === "free") {
+        return {
+          allowed: false,
+          currentCount: Number(currentProjectCount),
+          limit: Number(limit),
+          planCode: plan.code,
+          reason: "Projetos solares fotovoltaicos não estão incluídos no plano Gratuito. Faça upgrade para o Nacif Solar ou Nacif Completo.",
+        };
+      }
+    }
+
+    if (isPredial) {
+      if (plan.code === "solar") {
+        return {
+          allowed: false,
+          currentCount: Number(currentProjectCount),
+          limit: Number(limit),
+          planCode: plan.code,
+          reason: "Projetos elétricos prediais completos não estão incluídos no plano Nacif Solar. Faça upgrade para o Nacif Elétrico ou Nacif Completo.",
+        };
+      }
     }
   }
 
@@ -873,7 +1123,7 @@ export function checkProjectCreationAllowed(user = {}, currentProjectCount = 0, 
     planCode: plan.code,
     reason: allowed
       ? null
-      : `Limite de ${limit} projetos ativos atingido para o plano ${plan.name}. Faça upgrade para continuar criando novos projetos.`,
+      : "Limite de " + limit + " projetos ativos atingido para o plano " + plan.name + ". Faça upgrade para continuar criando novos projetos.",
   };
 }
 

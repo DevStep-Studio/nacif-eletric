@@ -145,7 +145,7 @@ export default function Subscription() {
   }, [user]);
 
   const subscription = normalizeSubscription(activeUser);
-  const usage = useMemo(() => buildUsageFromProjects(projects), [projects]);
+  const usage = useMemo(() => buildUsageFromProjects(projects, {}, activeUser), [projects, activeUser]);
   const usageRows = useMemo(() => getUsageRows(subscription.plan, usage), [subscription.plan, usage]);
   const billingProvider = useMemo(() => createBillingProvider(activeUser), [activeUser]);
 
@@ -683,7 +683,13 @@ export default function Subscription() {
                     <Button
                       type="button"
                       disabled={isCurrent || subscribingPriceId !== null}
-                      onClick={() => handleSubscription(targetPriceId, plan.code)}
+                      onClick={() => {
+                        if (plan.isAcademic && (!activeUser?.academic_status || activeUser?.academic_status === "not_submitted" || activeUser?.academic_status === "rejected")) {
+                          setIsAcademicModalOpen(true);
+                          return;
+                        }
+                        handleSubscription(targetPriceId, plan.code);
+                      }}
                       className={`h-11 w-full rounded-xl font-bold text-xs transition-all ${
                         isCurrent
                           ? "bg-slate-100 text-slate-400 hover:bg-slate-100 cursor-default border border-slate-200"

@@ -1,3 +1,5 @@
+import { checkServerModuleAccess } from "../lib/planGovernance.js";
+import { AppError } from "../lib/errors.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { buildAiRequestedPlan, buildProfessionalPlanAnalysis, estimateSolarRoof } from "../lib/analysis.js";
@@ -24,11 +26,15 @@ const roofEstimateSchema = z.object({
 
 export const registerAnalysisRoutes = async (app: FastifyInstance) => {
   app.post("/api/analysis/planta/requested-plan", { preHandler: [app.authenticate] }, async (request) => {
+    const accessCheck = checkServerModuleAccess(request.authUser, "plant");
+    if (!accessCheck.allowed) throw new AppError(accessCheck.message || "Módulo não permitido para o seu plano.", 403);
     const payload = requestedPlanSchema.parse(request.body);
     return buildAiRequestedPlan(payload.requestText, payload.infraType || "embutido");
   });
 
   app.post("/api/analysis/planta/professional-plan", { preHandler: [app.authenticate] }, async (request) => {
+    const accessCheck = checkServerModuleAccess(request.authUser, "plant");
+    if (!accessCheck.allowed) throw new AppError(accessCheck.message || "Módulo não permitido para o seu plano.", 403);
     const payload = professionalPlanSchema.parse(request.body);
     return buildProfessionalPlanAnalysis({
       points: payload.points || [],
@@ -39,6 +45,8 @@ export const registerAnalysisRoutes = async (app: FastifyInstance) => {
   });
 
   app.post("/api/analysis/solar/roof-estimate", { preHandler: [app.authenticate] }, async (request) => {
+    const accessCheck = checkServerModuleAccess(request.authUser, "solar");
+    if (!accessCheck.allowed) throw new AppError(accessCheck.message || "Módulo não permitido para o seu plano.", 403);
     const payload = roofEstimateSchema.parse(request.body);
     return estimateSolarRoof(payload.project || {}, payload.config || {});
   });

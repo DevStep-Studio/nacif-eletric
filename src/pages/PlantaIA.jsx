@@ -1,3 +1,4 @@
+import { authorizePlanExport, stampPdfWithPlanWatermark } from "@/lib/planEnforcement";
 import { Component, useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { backend, readLocalProjects, writeLocalProjects } from "@/api/backendClient";
 import { savePlantToIndexedDB, loadPlantFromIndexedDB } from "@/lib/plantPersistence";
@@ -3262,7 +3263,15 @@ export default function PlantaIA() {
         scannerReport,
       });
       drawTitleBlock(doc, projectForSheet, "PROJETO EXECUTIVO - PLANTA BAIXA");
-      doc.save("projeto_executivo_planta_baixa_A0.pdf");
+      const exportAuth = await authorizePlanExport({
+        projectId: activeProjectId,
+        format: "PDF",
+        label: "Prancha A0 Planta Baixa",
+      });
+      if (exportAuth.allowed) {
+        stampPdfWithPlanWatermark(doc, exportAuth);
+        doc.save("projeto_executivo_planta_baixa_A0.pdf");
+      }
     } finally {
       setExporting(false);
     }

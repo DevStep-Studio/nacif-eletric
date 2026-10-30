@@ -1,3 +1,4 @@
+import { getCurrentUsagePeriod, getServerPlan, isServerAdmin, SERVER_PLAN_MATRIX } from "../lib/planGovernance.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type Stripe from "stripe";
 import { z } from "zod";
@@ -1112,7 +1113,10 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
       renewalDate: permissions.subscriptionRenewalDate || null,
       validUntil: permissions.subscriptionRenewalDate || null,
       autoRenew: permissions.autoRenew ?? true,
-      academicStatus: "approved",
+      academicStatus: permissions.academicStatus || "not_submitted",
+      academicInstitution: permissions.academicInstitution || "",
+      academicCourse: permissions.academicCourse || "",
+      academicDocumentUrl: permissions.academicDocumentUrl || "",
       stripeCustomerId: permissions.stripeCustomerId || null,
       stripeSubscriptionId: permissions.stripeSubscriptionId || null,
     };

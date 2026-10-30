@@ -143,6 +143,16 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       nextPasswordHash = await hashPassword(data.new_password);
     }
 
+    const isAdmin = request.authUser.role === "admin" || (request.authUser.role as string) === "super_admin";
+    let resolvedPlan: typeof data.plan | undefined;
+    if (data.plan) {
+      if (isAdmin) {
+        resolvedPlan = data.plan;
+      } else if (data.plan === "gratuito") {
+        resolvedPlan = "gratuito";
+      }
+    }
+
     const user = await prisma.user.update({
       where: { id: request.authUser.id },
       data: {
@@ -152,7 +162,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         crea: data.crea,
         phone: data.phone,
         avatarUrl: data.avatar_url,
-        plan: data.plan,
+        ...(resolvedPlan ? { plan: resolvedPlan } : {}),
         ...(nextPasswordHash ? { passwordHash: nextPasswordHash } : {}),
       },
     });

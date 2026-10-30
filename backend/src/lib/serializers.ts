@@ -20,6 +20,15 @@ type SafeUser = {
   avatar_url: string;
   created_date: string;
   updated_date: string;
+  subscription_status?: string;
+  subscription_cycle?: string;
+  academic_status?: string;
+  academic_institution?: string;
+  academic_course?: string;
+  monthly_exports_count?: number;
+  monthly_ai_scans_count?: number;
+  usage_period?: string;
+  storage_used_mb?: number;
 };
 
 type SafeProject = {

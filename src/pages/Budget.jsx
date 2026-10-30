@@ -1,3 +1,4 @@
+import { authorizePlanExport } from "@/lib/planEnforcement";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
@@ -643,9 +644,16 @@ export default function BudgetPage() {
     }
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!project) return;
     try {
+      const exportAuth = await authorizePlanExport({
+        projectId: project.id,
+        format: "PDF",
+        label: "Orçamento Executivo",
+      });
+      if (!exportAuth.allowed) return;
+
       downloadBudgetPDF({
         project,
         budgetName,
@@ -660,6 +668,7 @@ export default function BudgetPage() {
           notes,
         },
         logoUrl: logoUrl && logoUrl.startsWith("data:") ? logoUrl : DEFAULT_LOGO_URL,
+        exportAuth,
       });
     } catch (err) {
       console.error("Erro ao gerar PDF do orçamento:", err);
@@ -667,9 +676,16 @@ export default function BudgetPage() {
     }
   };
 
-  const handleDownloadCSV = () => {
+  const handleDownloadCSV = async () => {
     if (!project) return;
     try {
+      const exportAuth = await authorizePlanExport({
+        projectId: project.id,
+        format: "CSV",
+        label: "Orçamento CSV",
+      });
+      if (!exportAuth.allowed) return;
+
       downloadBudgetCSV({
         project,
         budgetName,

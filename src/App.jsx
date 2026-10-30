@@ -217,24 +217,24 @@ const AuthenticatedApp = () => {
           <Route path="/dashboard" element={<Navigate to="/" replace />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/new" element={<NewProject />} />
-          <Route path="/solar-project-wizard" element={<NewProject />} />
+          <Route path="/solar-project-wizard" element={<ModuleAccessGate moduleKey="solar" moduleTitle="Projeto Solar"><NewProject /></ModuleAccessGate>} />
           <Route path="/projects/:projectId" element={<ProjectDetail />} />
           <Route path="/calculator" element={<Calculator />} />
           <Route path="/ai-assistant" element={<AIAssistant />} />
           <Route path="/nbr-library" element={<NBRLibrary />} />
-          <Route path="/panel-generator" element={<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico"><PanelGenerator /></ModuleAccessGate>} />
-          <Route path="/panel" element={<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico"><PanelGenerator /></ModuleAccessGate>} />
+          <Route path="/panel-generator" element={<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico" immersive><PanelGenerator /></ModuleAccessGate>} />
+          <Route path="/panel" element={<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico" immersive><PanelGenerator /></ModuleAccessGate>} />
           <Route path="/budget" element={<Budget />} />
           <Route path="/components-library" element={<ComponentsLibrary />} />
-          <Route path="/scanner" element={<Scanner />} />
-          <Route path="/phase-balance" element={<PhaseBalance />} />
-          <Route path="/diagram" element={<Diagram />} />
-          <Route path="/circuit-editor" element={<CircuitEditor />} />
+          <Route path="/scanner" element={<ModuleAccessGate moduleKey="scanner" moduleTitle="Scanner Técnico"><Scanner /></ModuleAccessGate>} />
+          <Route path="/phase-balance" element={<ModuleAccessGate moduleKey="phase_balance" moduleTitle="Balanceamento de Fases"><PhaseBalance /></ModuleAccessGate>} />
+          <Route path="/diagram" element={<ModuleAccessGate moduleKey="unifilar" moduleTitle="Diagrama Unifilar"><Diagram /></ModuleAccessGate>} />
+          <Route path="/circuit-editor" element={<ModuleAccessGate moduleKey="circuit_editor" moduleTitle="Editor de Circuitos"><CircuitEditor /></ModuleAccessGate>} />
           <Route path="/unifilar" element={<ModuleAccessGate moduleKey="unifilar" moduleTitle="Diagrama Unifilar"><UnifilarDiagram /></ModuleAccessGate>} />
-          <Route path="/memorial" element={<MemorialDescritivo />} />
-          <Route path="/planta-ia" element={<ModuleAccessGate moduleKey="plant" moduleTitle="Planta Elétrica"><PlantaIA /></ModuleAccessGate>} />
+          <Route path="/memorial" element={<ModuleAccessGate moduleKey="memorial" moduleTitle="Memorial Descritivo"><MemorialDescritivo /></ModuleAccessGate>} />
+          <Route path="/planta-ia" element={<ModuleAccessGate moduleKey="plant" moduleTitle="Planta Elétrica" immersive><PlantaIA /></ModuleAccessGate>} />
           <Route path="/materials" element={<MaterialsList />} />
-          <Route path="/solar-project" element={<ModuleAccessGate moduleKey="solar" moduleTitle="Projeto Solar"><SolarProject /></ModuleAccessGate>} />
+          <Route path="/solar-project" element={<ModuleAccessGate moduleKey="solar" moduleTitle="Projeto Solar" immersive><SolarProject /></ModuleAccessGate>} />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/billing" element={<Subscription />} />
           <Route path="/billing/plans" element={<Subscription />} />

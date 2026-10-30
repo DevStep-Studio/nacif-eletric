@@ -1,3 +1,4 @@
+import { authorizePlanExport, stampPdfWithPlanWatermark } from "@/lib/planEnforcement";
 import { useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
 import ProfessionalBoardSheetSVG from "@/components/ProfessionalBoardSheetSVG";
@@ -2100,8 +2101,15 @@ export default function UnifilarDiagram() {
       clone.setAttribute("viewBox", `${bounds.minX - pad} ${bounds.minY - pad} ${exportW} ${exportH}`);
       clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
 
+      const exportAuth = await authorizePlanExport({
+        projectId: project?.id,
+        format: "PDF",
+        label: "Diagrama Unifilar Interativo",
+      });
+      if (!exportAuth.allowed) return;
       const svgContent = new XMLSerializer().serializeToString(clone);
       await doc.addSvgAsImage(svgContent, 10, 10, 400, 277, "interactive-diagram", "FAST");
+      stampPdfWithPlanWatermark(doc, exportAuth);
       doc.save(`diagrama_interativo_${safeFileName(project?.name)}.pdf`);
 
       toast({
@@ -2196,6 +2204,13 @@ export default function UnifilarDiagram() {
         await doc.addSvgAsImage(svgContent, 0, 0, 1189, 841, `board-sheet-${i + 1}`, "FAST");
       }
 
+      const exportAuth = await authorizePlanExport({
+        projectId: project?.id,
+        format: "PDF",
+        label: "Pranchas Diagrama Unifilar",
+      });
+      if (!exportAuth.allowed) return;
+      stampPdfWithPlanWatermark(doc, exportAuth);
       const fileName = diagramModel === "qgbt"
         ? `prancha_qgbt_${safeFileName(project?.name)}.pdf`
         : `pranchas_unifilar_${safeFileName(project?.name)}_${svgs.length}folhas.pdf`;

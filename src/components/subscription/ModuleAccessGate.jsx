@@ -105,6 +105,81 @@ const MODULE_DEFINITIONS = {
     ],
     recommendedPlan: "Nacif Elétrico ou Nacif Completo",
   },
+  electrical_tools: {
+    title: "Ferramentas Elétricas NBR 5410",
+    tagline: "Dimensionamento e balanceamento elétrico predial conforme NBR 5410.",
+    icon: Cpu,
+    accentColor: "#00d8b8",
+    badgeLabel: "NBR 5410",
+    features: [
+      "Balanceamento automático de fases trifásicas",
+      "Editor de circuitos e proteções DIN",
+      "Memorial descritivo da instalação",
+      "Scanner de plantas e quadros por IA",
+    ],
+    recommendedPlan: "Nacif Elétrico ou Nacif Completo",
+  },
+  circuit_editor: {
+    title: "Editor de Circuitos NBR 5410",
+    tagline: "Dimensionamento detalhado de condutores, disjuntores e proteções.",
+    icon: Cpu,
+    accentColor: "#00d8b8",
+    badgeLabel: "Circuitos",
+    features: [
+      "Cálculo de corrente de projeto Ib e capacidade de condução Iz",
+      "Dimensionamento de disjuntores e curvas B/C/D",
+      "Coordenação de proteção contra sobrecargas e curtos-circuitos",
+    ],
+    recommendedPlan: "Nacif Elétrico ou Nacif Completo",
+  },
+  phase_balance: {
+    title: "Balanceamento de Fases",
+    tagline: "Otimização de carregamento trifásico para redução de perdas.",
+    icon: Layers,
+    accentColor: "#00d8b8",
+    badgeLabel: "Fases",
+    features: [
+      "Distribuição equilibrada entre fases A, B e C",
+      "Minimização de corrente no condutor neutro",
+    ],
+    recommendedPlan: "Nacif Elétrico ou Nacif Completo",
+  },
+  memorial: {
+    title: "Memorial Descritivo da Instalação",
+    tagline: "Documentação técnica oficial para emissão de ART/TRT.",
+    icon: FileCode2,
+    accentColor: "#00d8b8",
+    badgeLabel: "Memorial",
+    features: [
+      "Emissão estruturada conforme normas ABNT",
+      "Exportação oficial para apresentação a concessionárias",
+    ],
+    recommendedPlan: "Nacif Elétrico ou Nacif Completo",
+  },
+  scanner: {
+    title: "Scanner Técnico Assistido por IA",
+    tagline: "Reconhecimento automatizado de componentes elétricos e cargas.",
+    icon: Sparkles,
+    accentColor: "#00d8b8",
+    badgeLabel: "Scanner IA",
+    features: [
+      "Leitura assistida de quadros e equipamentos",
+      "Sugestão inteligente de proteções NBR 5410",
+    ],
+    recommendedPlan: "Nacif Elétrico, Solar ou Completo",
+  },
+  team: {
+    title: "Gestão de Equipe Multi-Usuário",
+    tagline: "Colaboração técnica simultânea com controle de membros.",
+    icon: Layers,
+    accentColor: "#00d8b8",
+    badgeLabel: "Equipe",
+    features: [
+      "Múltiplos projetistas no mesmo workspace",
+      "Gestão de permissões de acesso",
+    ],
+    recommendedPlan: "Nacif Elétrico, Solar ou Completo",
+  },
 };
 
 /**
@@ -118,6 +193,7 @@ export default function ModuleAccessGate({
   children,
   fallback = null,
   showAcademicBanner = true,
+  immersive = false,
 }) {
   const { user } = useAuth();
   const subscription = useMemo(() => normalizeSubscription(user), [user]);
@@ -304,17 +380,44 @@ export default function ModuleAccessGate({
   return (
     <>
       {showAcademicBanner && access.isAcademic && (
-        <div className="mb-4 flex items-center justify-between rounded-[8px] border border-blue-200 bg-blue-50/80 px-4 py-2.5 text-xs text-blue-900 shadow-sm">
-          <div className="flex items-center gap-2">
-            <GraduationCap className="h-4 w-4 shrink-0 text-blue-700" />
-            <span className="font-bold">
-              Versão Acadêmica — Nacif Estudante — Uso Educacional
+        immersive ? (
+          <div className="fixed bottom-3 left-4 z-50 pointer-events-none flex items-center gap-2 rounded-full border border-blue-300/40 bg-slate-900/85 backdrop-blur-md px-3.5 py-1.5 text-xs text-blue-200 shadow-lg">
+            <GraduationCap className="h-3.5 w-3.5 text-blue-400" />
+            <span className="font-semibold text-[11px]">Nacif Estudante — Uso Educacional</span>
+          </div>
+        ) : (
+          <div className="mb-4 flex items-center justify-between rounded-[8px] border border-blue-200 bg-blue-50/80 px-4 py-2.5 text-xs text-blue-900 shadow-sm">
+            <div className="flex items-center gap-2">
+              <GraduationCap className="h-4 w-4 shrink-0 text-blue-700" />
+              <span className="font-bold">
+                Versão Acadêmica — Nacif Estudante — Uso Educacional
+              </span>
+            </div>
+            <span className="hidden text-[11px] font-semibold text-blue-700 md:inline">
+              Documentos emitidos com identificação acadêmica
             </span>
           </div>
-          <span className="hidden text-[11px] font-semibold text-blue-700 md:inline">
-            Documentos emitidos com identificação acadêmica
-          </span>
-        </div>
+        )
+      )}
+      {showAcademicBanner && access.isFreeRestricted && (
+        immersive ? (
+          <div className="fixed bottom-3 left-4 z-50 pointer-events-none flex items-center gap-2 rounded-full border border-amber-300/40 bg-slate-900/85 backdrop-blur-md px-3.5 py-1.5 text-xs text-amber-200 shadow-lg">
+            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+            <span className="font-semibold text-[11px]">Avaliação Gratuita — Limite de até 3 projetos</span>
+          </div>
+        ) : (
+          <div className="mb-4 flex items-center justify-between rounded-[8px] border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900 shadow-sm">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 shrink-0 text-amber-600" />
+              <span className="font-bold">
+                Versão de Avaliação Gratuita — Nacif Energy
+              </span>
+            </div>
+            <span className="hidden text-[11px] font-semibold text-amber-700 md:inline">
+              Faça upgrade para exportações e projetos ilimitados
+            </span>
+          </div>
+        )
       )}
       {children}
     </>

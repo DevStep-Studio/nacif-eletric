@@ -1,3 +1,4 @@
+import { authorizePlanExport, stampPdfWithPlanWatermark } from "@/lib/planEnforcement";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
@@ -1475,27 +1476,34 @@ export default function SolarProject() {
     }
 
     try {
+      const exportAuth = await authorizePlanExport({
+        projectId: activeProjectId,
+        format: "PDF",
+        label: `Relatório Solar ${reportType}`,
+      });
+      if (!exportAuth.allowed) return;
+
       if (reportType === "executive") {
         const doc = await generateExecutiveSolarPdf(reportProject, config, visualSizing);
-        await downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
+        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
       } else if (reportType === "site_plan") {
         const doc = await generateSitePlanReport(reportProject, config, visualSizing);
-        await downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
+        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
       } else if (reportType === "electrical") {
         const doc = await generateElectricalDiagramReport(reportProject, config, visualSizing);
-        await downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
+        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
       } else if (reportType === "memorial") {
         const doc = await generateTechnicalMemorialReport(reportProject, config, visualSizing);
-        await downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
+        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
       } else if (reportType === "bom") {
         const doc = await generateBillOfMaterialsReport(reportProject, config, visualSizing);
-        await downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
+        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
       } else if (reportType === "simulation") {
         const doc = await generateGenerationSimulationReport(reportProject, config, visualSizing);
-        await downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
+        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
       } else if (reportType === "proposal") {
         const doc = await generateCommercialProposalReport(reportProject, config, visualSizing);
-        await downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
+        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
       }
       toast({
         title: "Download concluído",
