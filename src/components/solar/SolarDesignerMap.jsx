@@ -1057,10 +1057,10 @@ export default function SolarDesignerMap({
     <div className={`relative overflow-hidden bg-slate-100 select-none ${className} ${isDrawing ? "solar-designer-map--drawing" : ""} ${isPlacingObstacle ? "cursor-crosshair" : ""}`}>
       {/* Banner Superior Contextual de Desenho & Medição (Solid CAD Style) */}
       {isDrawing ? (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[550] pointer-events-none animate-in slide-in-from-top-2">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs text-slate-800 shadow-sm">
-            <span className="flex h-2 w-2 rounded-full bg-[#00d8b8]" />
-            <span className="font-bold text-[#009b84]">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[550] w-max max-w-[calc(100%-2rem)] pointer-events-none animate-in slide-in-from-top-2">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-slate-200/90 bg-white/95 backdrop-blur-md px-3.5 py-1.5 text-xs text-slate-800 shadow-md whitespace-nowrap">
+            <span className="flex h-2 w-2 rounded-full bg-[#00d8b8] shrink-0" />
+            <span className="font-bold text-[#009b84] whitespace-nowrap">
               {drawingPoints.length === 0
                 ? "Demarcando telhado: clique no 1º vértice no mapa"
                 : drawingPoints.length < 3
@@ -1105,8 +1105,8 @@ export default function SolarDesignerMap({
           </div>
         </div>
       ) : isMeasuring && measureDistance !== null ? (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[550] pointer-events-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm">
-          <Ruler className="h-3.5 w-3.5 text-amber-600" />
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[550] w-max max-w-[calc(100%-2rem)] whitespace-nowrap pointer-events-auto flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white/95 backdrop-blur-md px-3.5 py-1.5 text-xs font-bold text-slate-800 shadow-md">
+          <Ruler className="h-3.5 w-3.5 text-amber-600 shrink-0" />
           <span>Distância medida: {Number(measureDistance || 0).toFixed(2)} m</span>
           <button
             type="button"
@@ -1424,29 +1424,29 @@ export default function SolarDesignerMap({
       </MapContainer>
 
       {/* Miniaturas / Seletor de Camadas Compacto (Bottom-Left) */}
-      <div className="absolute bottom-4 left-4 z-[500] flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+      <div className="absolute bottom-4 left-4 z-[500] flex h-9 items-center gap-1 bg-white/95 backdrop-blur-md p-1 rounded-xl border border-slate-200/90 shadow-md whitespace-nowrap">
         <button
           type="button"
           onClick={() => onViewModeChange?.("map")}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition ${
+          className={`flex h-7 shrink-0 items-center gap-1.5 px-2.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
             viewMode === "map"
-              ? "bg-[#00d8b8] text-slate-950 font-black shadow-sm"
+              ? "bg-[#00d8b8] text-slate-950 font-black shadow-xs"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
           }`}
         >
-          <Layers className="h-3.5 w-3.5" />
+          <Layers className="h-3.5 w-3.5 shrink-0" />
           <span>Satélite</span>
         </button>
         <button
           type="button"
           onClick={() => onViewModeChange?.("irradiation")}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition ${
+          className={`flex h-7 shrink-0 items-center gap-1.5 px-2.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
             viewMode === "irradiation"
-              ? "bg-amber-400 text-slate-950 font-black shadow-sm"
+              ? "bg-amber-400 text-slate-950 font-black shadow-xs"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
           }`}
         >
-          <Flame className="h-3.5 w-3.5 text-amber-500" />
+          <Flame className="h-3.5 w-3.5 text-amber-500 shrink-0" />
           <span>Irradiação</span>
         </button>
       </div>
