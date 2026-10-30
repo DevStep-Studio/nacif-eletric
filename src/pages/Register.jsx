@@ -9,7 +9,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
 import { toast } from "@/components/ui/use-toast";
-import { PENDING_REGISTER_PROFESSION_KEY, PROFESSIONS, normalizeProfession } from "@/lib/professionalAccess";
+import { PENDING_REGISTER_PROFESSION_KEY, PROFESSIONS, getDefaultAuthenticatedRoute, normalizeProfession } from "@/lib/professionalAccess";
 
 export default function Register() {
   const [email, setEmail] = useState("");
@@ -51,12 +51,17 @@ export default function Register() {
         terms_version: "1.2",
         terms_accepted_at: new Date().toISOString(),
       });
-      if (isLocalAuthMode) {
+      if (isLocalAuthMode || (result?.access_token && !result?.requires_otp)) {
         if (result?.access_token) {
           backend.auth.setToken(result.access_token);
         }
-        window.localStorage.removeItem(PENDING_REGISTER_PROFESSION_KEY);
-        window.location.href = "/";
+        if (
+          isLocalAuthMode ||
+          normalizeProfession(result?.user?.profession || result?.user?.profissao) === normalizedProfession
+        ) {
+          window.localStorage.removeItem(PENDING_REGISTER_PROFESSION_KEY);
+        }
+        window.location.href = getDefaultAuthenticatedRoute(result?.user);
         return;
       }
       setShowOtp(true);
@@ -76,7 +81,7 @@ export default function Register() {
       if (result?.access_token) {
         backend.auth.setToken(result.access_token);
       }
-      window.location.href = "/";
+      window.location.href = getDefaultAuthenticatedRoute(result?.user);
     } catch (err) {
       setError(err.message || "Código de verificação inválido.");
     } finally {
@@ -255,7 +260,7 @@ export default function Register() {
             ))}
           </select>
           <p className="text-[11px] font-normal text-slate-500">
-            Arquiteto acessa a Planta IA. Projetista e eletricista acessam todos os módulos.
+            Identifica sua área de atuação técnica no painel geral e nos seus projetos.
           </p>
         </div>
 

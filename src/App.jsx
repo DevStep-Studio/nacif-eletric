@@ -38,7 +38,7 @@ const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
 
 import { BrandingBoot } from './lib/appPreferences';
-import { hasFullSystemAccess, isSuperAdmin } from './lib/professionalAccess';
+import { isAdminUser, isSuperAdmin } from './lib/professionalAccess';
 import ModuleAccessGate from './components/subscription/ModuleAccessGate';
 
 // Error & System Pages
@@ -131,8 +131,8 @@ class AppErrorBoundary extends React.Component {
 
 const AuthenticatedApp = () => {
   const { user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
-  const fullAccess = hasFullSystemAccess(user);
-  const requireFullAccess = (element) => fullAccess ? element : <Navigate to="/planta-ia" replace />;
+  const adminAccess = isAdminUser(user);
+  const requireAdmin = (element) => adminAccess ? element : <Navigate to="/403" replace />;
   const superAdminAccess = isSuperAdmin(user);
   const requireSuperAdmin = (element) => superAdminAccess ? element : <Navigate to="/403" replace />;
 
@@ -183,6 +183,7 @@ const AuthenticatedApp = () => {
       <Route path="/seguranca" element={<SecurityPolicyPage />} />
       <Route path="/privacidade/direitos" element={<LgpdRightsPage />} />
       <Route path="/ajuda" element={<HelpCenterPage />} />
+      <Route path="/help" element={<HelpCenterPage />} />
       <Route path="/suporte" element={<HelpCenterPage />} />
       <Route path="/contato" element={<ContactPage />} />
       <Route path="/status" element={<SystemStatusPage />} />
@@ -212,27 +213,28 @@ const AuthenticatedApp = () => {
       {/* Protected App Routes */}
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route element={<Layout />}>
-          <Route path="/" element={fullAccess ? <Home /> : <Navigate to="/planta-ia" replace />} />
-          <Route path="/projects" element={requireFullAccess(<Projects />)} />
-          <Route path="/projects/new" element={requireFullAccess(<NewProject />)} />
-          <Route path="/solar-project-wizard" element={requireFullAccess(<NewProject />)} />
-          <Route path="/projects/:projectId" element={requireFullAccess(<ProjectDetail />)} />
-          <Route path="/calculator" element={requireFullAccess(<Calculator />)} />
-          <Route path="/ai-assistant" element={requireFullAccess(<AIAssistant />)} />
-          <Route path="/nbr-library" element={requireFullAccess(<NBRLibrary />)} />
-          <Route path="/panel-generator" element={requireFullAccess(<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico"><PanelGenerator /></ModuleAccessGate>)} />
-          <Route path="/panel" element={requireFullAccess(<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico"><PanelGenerator /></ModuleAccessGate>)} />
-          <Route path="/budget" element={requireFullAccess(<Budget />)} />
-          <Route path="/components-library" element={requireFullAccess(<ComponentsLibrary />)} />
-          <Route path="/scanner" element={requireFullAccess(<Scanner />)} />
-          <Route path="/phase-balance" element={requireFullAccess(<PhaseBalance />)} />
-          <Route path="/diagram" element={requireFullAccess(<Diagram />)} />
-          <Route path="/circuit-editor" element={requireFullAccess(<CircuitEditor />)} />
-          <Route path="/unifilar" element={requireFullAccess(<ModuleAccessGate moduleKey="unifilar" moduleTitle="Diagrama Unifilar"><UnifilarDiagram /></ModuleAccessGate>)} />
-          <Route path="/memorial" element={requireFullAccess(<MemorialDescritivo />)} />
+          <Route path="/" element={<Home />} />
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/new" element={<NewProject />} />
+          <Route path="/solar-project-wizard" element={<NewProject />} />
+          <Route path="/projects/:projectId" element={<ProjectDetail />} />
+          <Route path="/calculator" element={<Calculator />} />
+          <Route path="/ai-assistant" element={<AIAssistant />} />
+          <Route path="/nbr-library" element={<NBRLibrary />} />
+          <Route path="/panel-generator" element={<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico"><PanelGenerator /></ModuleAccessGate>} />
+          <Route path="/panel" element={<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico"><PanelGenerator /></ModuleAccessGate>} />
+          <Route path="/budget" element={<Budget />} />
+          <Route path="/components-library" element={<ComponentsLibrary />} />
+          <Route path="/scanner" element={<Scanner />} />
+          <Route path="/phase-balance" element={<PhaseBalance />} />
+          <Route path="/diagram" element={<Diagram />} />
+          <Route path="/circuit-editor" element={<CircuitEditor />} />
+          <Route path="/unifilar" element={<ModuleAccessGate moduleKey="unifilar" moduleTitle="Diagrama Unifilar"><UnifilarDiagram /></ModuleAccessGate>} />
+          <Route path="/memorial" element={<MemorialDescritivo />} />
           <Route path="/planta-ia" element={<ModuleAccessGate moduleKey="plant" moduleTitle="Planta Elétrica"><PlantaIA /></ModuleAccessGate>} />
-          <Route path="/materials" element={requireFullAccess(<MaterialsList />)} />
-          <Route path="/solar-project" element={requireFullAccess(<ModuleAccessGate moduleKey="solar" moduleTitle="Projeto Solar"><SolarProject /></ModuleAccessGate>)} />
+          <Route path="/materials" element={<MaterialsList />} />
+          <Route path="/solar-project" element={<ModuleAccessGate moduleKey="solar" moduleTitle="Projeto Solar"><SolarProject /></ModuleAccessGate>} />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/billing" element={<Subscription />} />
           <Route path="/billing/plans" element={<Subscription />} />
@@ -242,7 +244,7 @@ const AuthenticatedApp = () => {
           <Route path="/configuracoes/exportar-dados" element={<ExportDataPage />} />
           <Route path="/avisos-erros" element={<AvisosErros />} />
           <Route path="/avisos-erros/:issueId" element={<AvisosErros />} />
-          <Route path="/admin" element={requireFullAccess(<AdminPanel />)} />
+          <Route path="/admin" element={requireAdmin(<AdminPanel />)} />
           <Route path="/super-admin" element={requireSuperAdmin(<SuperAdminPage />)} />
           <Route path="/super-admin/*" element={requireSuperAdmin(<SuperAdminPage />)} />
         </Route>

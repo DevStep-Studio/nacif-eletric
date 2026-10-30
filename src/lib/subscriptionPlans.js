@@ -1,4 +1,4 @@
-import { hasFullSystemAccess, isSuperAdmin } from "./professionalAccess.js";
+import { isSuperAdmin } from "./professionalAccess.js";
 
 export const FEATURE_KEYS = {
   PROJECTS: "projects",

@@ -1,7 +1,10 @@
 export const PROFESSIONS = [
-  { value: "eletricista", label: "Eletricista" },
+  { value: "engenheiro", label: "Engenheiro" },
   { value: "projetista", label: "Projetista" },
+  { value: "eletricista", label: "Eletricista" },
   { value: "arquiteto", label: "Arquiteto" },
+  { value: "tecnico", label: "Técnico Eletrotécnico" },
+  { value: "estudante", label: "Estudante" },
 ];
 
 export const PENDING_REGISTER_PROFESSION_KEY = "voltai_pending_register_profession";
@@ -14,19 +17,19 @@ const normalizeText = (value = "") => String(value)
 
 export function normalizeProfession(value = "") {
   const text = normalizeText(value);
+  if (!text) return "";
   if (text.includes("arquit")) return "arquiteto";
-  if (text.includes("elet")) return "eletricista";
+  if (text.includes("engenh")) return "engenheiro";
   if (text.includes("proj")) return "projetista";
+  if (text.includes("tecn")) return "tecnico";
+  if (text.includes("estud") || text.includes("acad")) return "estudante";
+  if (text.includes("elet")) return "eletricista";
   return "";
 }
 
 export function professionLabel(value = "") {
   const normalized = normalizeProfession(value);
   return PROFESSIONS.find((item) => item.value === normalized)?.label || "Projetista";
-}
-
-export function isArchitectUser(user) {
-  return user?.role !== "admin" && normalizeProfession(user?.profession || user?.profissao) === "arquiteto";
 }
 
 export const SUPER_ADMIN_EMAILS = [
@@ -52,30 +55,48 @@ export function isSuperAdmin(user) {
   return false;
 }
 
+export function isAdminUser(user) {
+  if (!user) return false;
+  return Boolean(isSuperAdmin(user) || user.role === "admin" || user.role === "super_admin");
+}
+
+export function isArchitectUser(user) {
+  return !isAdminUser(user) && normalizeProfession(user?.profession || user?.profissao) === "arquiteto";
+}
+
 export function canAccessSuperAdmin(user) {
   return isSuperAdmin(user);
 }
 
+/**
+ * Todos os usuários autenticados e ativos (incluindo Arquiteto, Projetista,
+ * Engenheiro, Eletricista, Técnico e Estudante) acessam o Dashboard e a navegação
+ * do sistema. A liberação de recursos avançados é controlada pelo plano contratado
+ * (ModuleAccessGate / subscriptionPlans) e permissões administrativas (RBAC).
+ */
 export function hasFullSystemAccess(user) {
   if (!user) return false;
-  if (isSuperAdmin(user) || user.role === "admin") return true;
-  const profession = normalizeProfession(user.profession || user.profissao);
-  if (!profession) return true;
-  return profession === "projetista" || profession === "eletricista";
+  if (user.status === "suspended" || user.is_deleted) return false;
+  return true;
+}
+
+export function getDefaultAuthenticatedRoute() {
+  return "/";
 }
 
 export function canAccessPath(user, path = "") {
-  if (path === "/super-admin" || path.startsWith("/super-admin/")) {
+  if (!user || user.status === "suspended" || user.is_deleted) return false;
+  const cleanPath = String(path || "").split("?")[0] || "/";
+  if (cleanPath === "/super-admin" || cleanPath.startsWith("/super-admin/")) {
     return canAccessSuperAdmin(user);
   }
-  if (hasFullSystemAccess(user)) return true;
-  if (!isArchitectUser(user)) return true;
-  return path === "/planta-ia" || path.startsWith("/planta-ia?") || path === "/settings";
+  if (cleanPath === "/admin" || cleanPath.startsWith("/admin/")) {
+    return isAdminUser(user);
+  }
+  return true;
 }
 
 export function filterNavItemsForUser(items = [], user) {
-  if (hasFullSystemAccess(user)) return items;
-  if (!isArchitectUser(user)) return items;
-  return items.filter((item) => item.path === "/planta-ia");
+  if (!Array.isArray(items)) return [];
+  return items.filter((item) => canAccessPath(user, item?.path || ""));
 }
-

@@ -9,12 +9,16 @@ import { serializeUser } from "../lib/serializers.js";
 
 const emailSchema = z.string().trim().toLowerCase().email("Informe um email válido.");
 const passwordSchema = z.string().min(6, "A senha deve ter pelo menos 6 caracteres.");
-const professionSchema = z.enum(["eletricista", "projetista", "arquiteto"]);
+const professionSchema = z.enum(["engenheiro", "projetista", "eletricista", "arquiteto", "tecnico", "estudante"]);
 
 const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   profession: professionSchema.optional(),
+  full_name: z.string().trim().optional(),
+  terms_accepted: z.boolean().optional(),
+  terms_version: z.string().trim().optional(),
+  terms_accepted_at: z.string().trim().optional(),
 });
 
 const loginSchema = z.object({
@@ -31,7 +35,16 @@ const updateMeSchema = z.object({
   phone: z.string().trim().optional(),
   avatar_url: z.string().trim().optional(),
   plan: z.enum(["gratuito", "profissional", "engenharia", "estudante", "eletrico", "solar", "completo"]).optional(),
-}).strict();
+  current_password: z.string().optional(),
+  new_password: z.string().optional(),
+  preferences: z.record(z.string(), z.unknown()).optional(),
+  onboarding_completed: z.boolean().optional(),
+  onboarding_profile: z.string().optional(),
+  onboarding_goal: z.string().optional(),
+  onboarding_project_type: z.string().optional(),
+  onboarding_mode: z.string().optional(),
+  guided_mode: z.boolean().optional(),
+});
 
 const resetRequestSchema = z.object({
   email: emailSchema,
@@ -117,6 +130,19 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
   app.patch("/api/auth/me", { preHandler: [app.authenticate] }, async (request) => {
     const data = updateMeSchema.parse(request.body);
     const profession = data.profession ?? data.profissao;
+    let nextPasswordHash: string | undefined;
+
+    if (data.new_password) {
+      if (data.new_password.length < 6) {
+        throw new AppError("A nova senha deve ter pelo menos 6 caracteres.", 400);
+      }
+      const existing = await prisma.user.findUnique({ where: { id: request.authUser.id } });
+      if (!existing || !data.current_password || !(await verifyPassword(data.current_password, existing.passwordHash))) {
+        throw new AppError("Senha atual incorreta para alteração de senha.", 403);
+      }
+      nextPasswordHash = await hashPassword(data.new_password);
+    }
+
     const user = await prisma.user.update({
       where: { id: request.authUser.id },
       data: {
@@ -127,6 +153,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         phone: data.phone,
         avatarUrl: data.avatar_url,
         plan: data.plan,
+        ...(nextPasswordHash ? { passwordHash: nextPasswordHash } : {}),
       },
     });
 

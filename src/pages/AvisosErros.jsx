@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/AuthContext";
-import { hasFullSystemAccess, isSuperAdmin } from "@/lib/professionalAccess";
+import { isAdminUser } from "@/lib/professionalAccess";
 import { backend } from "@/api/backendClient";
 import { ISSUES_CHANGED_EVENT } from "@/lib/issuePersistence";
 import ReportIssueModal from "@/components/issues/ReportIssueModal";
@@ -80,7 +80,7 @@ const STATUS_BADGES = {
 export default function AvisosErros() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const isAdmin = Boolean(hasFullSystemAccess(user) || user?.role === "admin" || user?.role === "super_admin" || isSuperAdmin(user) || user?.email === "admin@nacif.com" || user?.email === "grc22.09@hotmail.com" || user?.email === "gabrielderezende13@gmail.com");
+  const isAdmin = isAdminUser(user);
 
   // Estado das abas (Meus Relatos / Painel Admin)
   const [activeTab, setActiveTab] = useState(isAdmin ? "admin" : "user");

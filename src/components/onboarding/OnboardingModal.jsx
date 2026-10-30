@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -18,18 +18,29 @@ import {
   Zap,
 } from "lucide-react";
 import { backend } from "@/api/backendClient";
+import { normalizeProfession } from "@/lib/professionalAccess";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import brandMarkEnergy from "@/assets/brand-mark-principal.png";
 
 const PROFILES = [
   { id: "engineer", label: "Engenheiro eletricista", icon: HardHat },
-  { id: "technician", label: "Técnico / Eletricista", icon: Wrench },
   { id: "designer", label: "Projetista", icon: Compass },
+  { id: "architect", label: "Arquiteto / Urbanista", icon: Compass },
+  { id: "technician", label: "Técnico / Eletricista", icon: Wrench },
   { id: "company", label: "Empresa de Engenharia / Instalação", icon: Building2 },
   { id: "student", label: "Estudante", icon: GraduationCap },
   { id: "other", label: "Outro", icon: User },
 ];
+
+const mapProfessionToOnboardingProfile = (value) => {
+  const norm = normalizeProfession(value);
+  if (norm === "arquiteto") return "architect";
+  if (norm === "projetista") return "designer";
+  if (norm === "eletricista" || norm === "tecnico") return "technician";
+  if (norm === "estudante") return "student";
+  return "engineer";
+};
 
 const GOALS = [
   { id: "new_project", label: "Criar um projeto elétrico do zero", desc: "Fluxo guiado com planta, circuitos e quadro", icon: Plus, target: "/projects/new" },
@@ -48,11 +59,17 @@ const PROJECT_TYPES = [
 export default function OnboardingModal({ user, open, onComplete }) {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [profile, setProfile] = useState("engineer");
-  const [goal, setGoal] = useState("new_project");
+  const [profile, setProfile] = useState(() => mapProfessionToOnboardingProfile(user?.profession || user?.profissao));
+  const [goal, setGoal] = useState("explore");
   const [projectType, setProjectType] = useState("residential");
   const [mode, setMode] = useState("guided"); // "guided" | "free"
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (user?.profession || user?.profissao) {
+      setProfile(mapProfessionToOnboardingProfile(user.profession || user.profissao));
+    }
+  }, [user?.profession, user?.profissao]);
 
   const handleFinish = async () => {
     setSaving(true);
@@ -69,6 +86,7 @@ export default function OnboardingModal({ user, open, onComplete }) {
         guided_mode: mode === "guided",
       });
 
+      window.dispatchEvent(new Event("voltai:user-updated"));
       onComplete?.();
       navigate(targetUrl);
     } catch (err) {

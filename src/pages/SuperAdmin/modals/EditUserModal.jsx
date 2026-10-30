@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { backend } from "@/api/backendClient";
 import { DEFAULT_ROLES } from "@/lib/rbac";
+import { PROFESSIONS, normalizeProfession } from "@/lib/professionalAccess";
 
 export default function EditUserModal({ open, onOpenChange, user, onUserUpdated }) {
   const [fullName, setFullName] = useState("");
@@ -34,7 +35,7 @@ export default function EditUserModal({ open, onOpenChange, user, onUserUpdated 
       setFullName(user.full_name || "");
       setEmail(user.email || "");
       setRole(user.role || "user");
-      setProfession(user.profession || user.profissao || "projetista");
+      setProfession(normalizeProfession(user.profession || user.profissao) || "projetista");
       setStatus(user.status || "active");
       setErrorMessage("");
       setSuccessMessage("");
@@ -165,10 +166,11 @@ export default function EditUserModal({ open, onOpenChange, user, onUserUpdated 
               onChange={(e) => setProfession(e.target.value)}
               className="h-9 w-full rounded-xl border border-[#CBD5E1] bg-white px-3 text-xs font-medium text-[#0F172A] outline-none"
             >
-              <option value="projetista">Projetista Elétrico</option>
-              <option value="eletricista">Engenheiro / Eletricista</option>
-              <option value="arquiteto">Arquiteto</option>
-              <option value="tecnico">Técnico Eletrotécnico</option>
+              {PROFESSIONS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
             </select>
           </div>
 

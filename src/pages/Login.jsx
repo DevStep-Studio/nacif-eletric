@@ -1,13 +1,14 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { backend, isLocalAuthMode } from "@/api/backendClient";
+import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Lock, Mail, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
+import { getDefaultAuthenticatedRoute } from "@/lib/professionalAccess";
 
 const REMEMBER_EMAIL_KEY = "voltai_remembered_login_email";
 
@@ -30,7 +31,7 @@ export default function Login() {
     setLoading(true);
     try {
       const result = await backend.auth.loginViaEmailPassword(email, password);
-      if (isLocalAuthMode && result?.access_token) {
+      if (result?.access_token) {
         backend.auth.setToken(result.access_token);
       }
       if (typeof window !== "undefined") {
@@ -40,7 +41,7 @@ export default function Login() {
           window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
         }
       }
-      window.location.href = "/";
+      window.location.href = getDefaultAuthenticatedRoute(result?.user);
     } catch (err) {
       setError(err.message || "Email ou senha inválidos.");
     } finally {

@@ -29,7 +29,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { hasFullSystemAccess, isSuperAdmin } from "@/lib/professionalAccess";
+import { isAdminUser, isSuperAdmin } from "@/lib/professionalAccess";
 import { useBranding, useNotifications, formatNotificationTime } from "@/lib/appPreferences";
 import { backend } from "@/api/backendClient";
 import { ISSUES_CHANGED_EVENT } from "@/lib/issuePersistence";
@@ -261,11 +261,10 @@ export default function Layout() {
     return () => window.removeEventListener("keydown", handleShortcut);
   }, []);
 
-  const fullAccess = hasFullSystemAccess(activeUser);
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications(activeUser);
   const initials = initialsFromUser(activeUser);
-  const displayName = activeUser?.full_name || "Gabriel Rezende";
-  const displayEmail = activeUser?.email || "gabriel@nacifelectric.com.br";
+  const displayName = activeUser?.full_name || (activeUser?.email ? activeUser.email.split("@")[0] : "Minha Conta");
+  const displayEmail = activeUser?.email || "";
   const subscription = normalizeSubscription(activeUser);
   const usage = useMemo(() => buildUsageFromProjects(shellProjects), [shellProjects]);
 
@@ -277,7 +276,7 @@ export default function Layout() {
       try {
         const data = await backend.entities.Issue.list({ limit: 100 });
         if (!cancelled && Array.isArray(data)) {
-          const isUserAdmin = Boolean(hasFullSystemAccess(activeUser) || activeUser?.role === "admin" || activeUser?.role === "super_admin" || isSuperAdmin(activeUser) || activeUser?.email === "admin@nacif.com" || activeUser?.email === "grc22.09@hotmail.com" || activeUser?.email === "gabrielderezende13@gmail.com");
+          const isUserAdmin = isAdminUser(activeUser);
           const count = data.filter((i) => (isUserAdmin ? i.unread_admin : i.unread_user)).length;
           setUnreadIssuesCount(count);
         }

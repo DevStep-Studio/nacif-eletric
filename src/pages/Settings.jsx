@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PROFESSIONS, professionLabel, isSuperAdmin } from "@/lib/professionalAccess";
+import { PROFESSIONS, normalizeProfession, professionLabel, isAdminUser } from "@/lib/professionalAccess";
 import { getPlanByCode } from "@/lib/subscriptionPlans";
 import {
   CreditCard,
@@ -56,7 +56,7 @@ export default function SettingsPage() {
       setUser(u);
       setForm({
         full_name: u.full_name || "",
-        profession: u.profession || u.profissao || "",
+        profession: normalizeProfession(u.profession || u.profissao) || "projetista",
         company: u.company || "",
         crea: u.crea || "",
         phone: u.phone || "",
@@ -75,7 +75,7 @@ export default function SettingsPage() {
       setUser(updated);
       setForm({
         full_name: updated.full_name || "",
-        profession: updated.profession || updated.profissao || "",
+        profession: normalizeProfession(updated.profession || updated.profissao) || "projetista",
         company: updated.company || "",
         crea: updated.crea || "",
         phone: updated.phone || "",
@@ -160,7 +160,7 @@ export default function SettingsPage() {
         icon={SettingsIcon}
         title="Configurações"
         subtitle="Conta, perfil profissional, segurança e preferências do sistema."
-        actions={(isSuperAdmin(user) || user?.role === "admin") && (
+        actions={isAdminUser(user) && (
           <Button asChild variant="outline" className="h-11 rounded-[12px] font-extrabold">
             <Link to="/admin">
               <Palette className="h-4 w-4" />

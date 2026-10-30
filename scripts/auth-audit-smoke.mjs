@@ -8,8 +8,10 @@ import {
 } from "../src/lib/rbac.js";
 import {
   isArchitectUser,
+  isAdminUser,
   hasFullSystemAccess,
   canAccessPath,
+  getDefaultAuthenticatedRoute,
 } from "../src/lib/professionalAccess.js";
 
 console.log("=================================================");
@@ -85,11 +87,21 @@ assert.equal(canOperatorManageTarget(adminUser, superAdminUser), false, "Admin N
 assert.equal(canOperatorManageTarget(adminUser, { role: "admin" }), false, "Admin NÃO pode gerenciar outro Admin!");
 assert.equal(canOperatorManageTarget(standardUser, adminUser), false, "Usuário comum não pode gerenciar ninguém");
 
-// Perfil de Arquiteto
+// Perfil de Arquiteto e Roteamento Inicial para o Dashboard
 assert.equal(isArchitectUser(architectUser), true, "Identifica perfil de arquiteto");
-assert.equal(hasFullSystemAccess(architectUser), false, "Arquiteto tem escopo focado em planta");
-assert.equal(canAccessPath(architectUser, "/planta-ia"), true, "Arquiteto acessa planta-ia");
-assert.equal(canAccessPath(architectUser, "/panel-generator"), false, "Arquiteto não acessa gerador de quadros");
+assert.equal(isAdminUser(architectUser), false, "Arquiteto comum não é administrador");
+assert.equal(isAdminUser(standardUser), false, "Usuário comum não é administrador");
+assert.equal(isAdminUser(adminUser), true, "Admin possui flag administrativa");
+assert.equal(isAdminUser(superAdminUser), true, "Super admin possui flag administrativa");
+assert.equal(getDefaultAuthenticatedRoute(architectUser), "/", "Arquiteto vai direto para o Dashboard (/) ao entrar/cadastrar");
+assert.equal(hasFullSystemAccess(architectUser), true, "Arquiteto acessa Dashboard e navegação completa do workspace");
+assert.equal(canAccessPath(architectUser, "/"), true, "Arquiteto acessa Dashboard (/)");
+assert.equal(canAccessPath(architectUser, "/dashboard"), true, "Arquiteto acessa rota /dashboard");
+assert.equal(canAccessPath(architectUser, "/projects"), true, "Arquiteto acessa Meus Projetos");
+assert.equal(canAccessPath(architectUser, "/planta-ia"), true, "Arquiteto acessa Planta IA");
+assert.equal(canAccessPath(architectUser, "/panel-generator"), true, "Arquiteto não fica preso na Planta IA");
+assert.equal(canAccessPath(architectUser, "/admin"), false, "Arquiteto não acessa painel administrativo");
+assert.equal(canAccessPath(architectUser, "/super-admin"), false, "Arquiteto não acessa painel super-admin");
 assert.equal(hasFullSystemAccess(standardUser), true, "Projetista/eletricista tem acesso integral");
 
 console.log("✅ Motor RBAC e hierarquias validados!");
@@ -209,6 +221,27 @@ const updateAttempt = await backend.auth.updateMe({
 assert.equal(updateAttempt.full_name, "Usuario A Silva", "Atualiza campos permitidos");
 assert.equal(updateAttempt.role, "user", "Tentativa de mudar role via updateMe foi BLOQUEADA!");
 assert.equal(updateAttempt.is_super_admin, false, "Tentativa de virar super admin foi BLOQUEADA!");
+
+// Cadastro válido de Arquiteto -> deve autenticar e ir para o Dashboard (/), sem bloqueio em /planta-ia
+backend.auth.logout(false);
+const archReg = await backend.auth.register({
+  email: "testearquiteto@nacifenergy.com.br",
+  password: "senha_arquiteto_123",
+  profession: "arquiteto",
+  terms_accepted: true,
+  terms_version: "1.2",
+});
+assert.ok(archReg.access_token, "Cadastro de arquiteto gera token");
+assert.equal(archReg.user.profession, "arquiteto", "Profissão arquiteto persistida corretamente");
+assert.equal(archReg.user.role, "user", "Arquiteto cadastrado recebe role user");
+assert.equal(getDefaultAuthenticatedRoute(archReg.user), "/", "Conta arquiteto vai para o Dashboard (/)");
+assert.equal(canAccessPath(archReg.user, "/"), true, "Conta arquiteto acessa Dashboard (/)");
+assert.equal(canAccessPath(archReg.user, "/projects"), true, "Conta arquiteto acessa Projetos (/projects)");
+assert.equal(isAdminUser(archReg.user), false, "Conta arquiteto não recebe permissões de admin");
+
+// Restaura sessão do Usuário A para os testes subsequentes
+backend.auth.logout(false);
+await backend.auth.loginViaEmailPassword("usuario_a@engenharia.com", "senha_segura_123");
 
 console.log("✅ Cadastro seguro e prevenção contra escalada de privilégios comprovados!");
 

@@ -7,6 +7,7 @@ import {
 } from "../lib/issuePersistence.js";
 import { recordAuditEvent, readAuditLogs, filterAuditLogs } from "../lib/auditLogger.js";
 import { isSuperAdmin, DEFAULT_ROLES, SUPER_ADMIN_EMAILS, canOperatorManageTarget } from "../lib/rbac.js";
+import { normalizeProfession } from "../lib/professionalAccess.js";
 import {
   hashPassword,
   verifyPassword,
@@ -554,7 +555,7 @@ const auth = {
     return result;
   },
 
-  async register({ email, password, profession }) {
+  async register({ email, password, profession, full_name, terms_accepted, terms_version, terms_accepted_at }) {
     if (isLocalAuthMode) {
       const normalizedEmail = normalizeEmail(email);
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -577,18 +578,22 @@ const auth = {
       // Prevenção contra elevação indevida: novos cadastros NUNCA recebem super_admin automaticamente
       const assignedRole = isSuperAdminEmail ? "super_admin" : "user";
 
+      const resolvedProfession = normalizeProfession(profession) || sanitizeTextInput(profession || "projetista");
       const user = {
         id: randomId("local_user"),
         email: normalizedEmail,
         password: hashedPassword,
         password_changed_at: timestamp,
-        full_name: sanitizeTextInput(normalizedEmail.split("@")[0]),
-        profession: sanitizeTextInput(profession || "projetista"),
-        profissao: sanitizeTextInput(profession || "projetista"),
+        full_name: sanitizeTextInput(full_name || normalizedEmail.split("@")[0]),
+        profession: resolvedProfession,
+        profissao: resolvedProfession,
         role: assignedRole,
         is_super_admin: isSuperAdminEmail,
         status: "active",
         plan: "profissional",
+        terms_accepted: Boolean(terms_accepted ?? true),
+        terms_version: sanitizeTextInput(terms_version || "1.2"),
+        terms_accepted_at: terms_accepted_at || timestamp,
         created_date: timestamp,
         updated_date: timestamp,
         last_access: timestamp,
@@ -610,7 +615,14 @@ const auth = {
 
     const result = await request("/api/auth/register", {
       method: "POST",
-      body: { email, password, profession },
+      body: {
+        email,
+        password,
+        profession: normalizeProfession(profession) || profession,
+        terms_accepted,
+        terms_version,
+        terms_accepted_at,
+      },
     });
 
     if (result?.access_token) {
@@ -800,6 +812,15 @@ const auth = {
         "academic_document_name",
         "academic_document_url",
         "academic_submitted_at",
+        "onboarding_completed",
+        "onboarding_profile",
+        "onboarding_goal",
+        "onboarding_project_type",
+        "onboarding_mode",
+        "guided_mode",
+        "terms_accepted",
+        "terms_version",
+        "terms_accepted_at",
       ];
 
       allowedKeys.forEach((key) => {

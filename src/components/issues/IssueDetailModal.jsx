@@ -20,7 +20,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { hasFullSystemAccess, isSuperAdmin } from "@/lib/professionalAccess";
+import { isAdminUser } from "@/lib/professionalAccess";
 import { backend } from "@/api/backendClient";
 
 const STATUS_CONFIG = {
@@ -60,7 +60,7 @@ const PRIORITY_CONFIG = {
 
 export default function IssueDetailModal({ open, onOpenChange, issue, onIssueUpdated }) {
   const { user } = useAuth();
-  const isAdmin = Boolean(hasFullSystemAccess(user) || user?.role === "admin" || user?.role === "super_admin" || isSuperAdmin(user) || user?.email === "admin@nacif.com" || user?.email === "grc22.09@hotmail.com" || user?.email === "gabrielderezende13@gmail.com");
+  const isAdmin = isAdminUser(user);
 
   const [activeIssue, setActiveIssue] = useState(issue);
   const [commentText, setCommentText] = useState("");
