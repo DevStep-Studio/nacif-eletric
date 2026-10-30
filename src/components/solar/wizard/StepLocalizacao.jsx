@@ -82,14 +82,14 @@ export default function StepLocalizacao({ state, onChange }) {
       const seq = requestSeqRef.current;
 
       setLoadingCep(true);
-      const result = await fetchAddressByCep(digits);
+      try {
+        const result = await fetchAddressByCep(digits, { signal });
 
-      if (seq !== requestSeqRef.current || signal.aborted) {
-        return;
-      }
-      setLoadingCep(false);
+        if (seq !== requestSeqRef.current || signal.aborted) {
+          return;
+        }
 
-      if (result.success && result.data) {
+        if (result.success && result.data) {
         const d = result.data;
         const updatedAddress = d.address || state.address || "";
         const updatedCity = d.city || state.city || "";
@@ -143,11 +143,16 @@ export default function StepLocalizacao({ state, onChange }) {
           // Em caso de falha na geocodificação, preserva a posição atual do mapa
         }
 
-        if (seq === requestSeqRef.current) {
-          onChange(patch);
+          if (seq === requestSeqRef.current) {
+            onChange(patch);
+          }
+        } else if (!result.aborted) {
+          setCepMessage(result.error || "CEP não encontrado. Preencha o endereço manualmente.");
         }
-      } else if (!result.aborted) {
-        setCepMessage(result.error || "CEP não encontrado. Preencha o endereço manualmente.");
+      } finally {
+        if (seq === requestSeqRef.current) {
+          setLoadingCep(false);
+        }
       }
     }
   };

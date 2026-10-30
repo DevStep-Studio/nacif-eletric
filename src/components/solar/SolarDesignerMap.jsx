@@ -55,7 +55,7 @@ function toLeafletPositions(points) {
   return normalizeRoofPolygon(points).map((point) => [point.lat, point.lng]);
 }
 
-function ViewportController({ center, zoom, viewportRequest = 0 }) {
+function ViewportController({ center, zoom, viewportRequest = 0, programmaticMoveUntilRef }) {
   const map = useMap();
   const lastRequestRef = useRef(viewportRequest);
 
@@ -66,14 +66,30 @@ function ViewportController({ center, zoom, viewportRequest = 0 }) {
       const targetLng = Number(center?.lng);
       if (Number.isFinite(targetLat) && Number.isFinite(targetLng)) {
         const targetZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : (map.getZoom() || 19);
-        map.flyTo([targetLat, targetLng], targetZoom, {
-          animate: true,
-          duration: 1.4,
-          easeLinearity: 0.25,
-        });
+        map.stop();
+        const current = map.getCenter();
+        const distDeg = Math.hypot(current.lat - targetLat, current.lng - targetLng);
+
+        // Para saltos maiores (~13 km+, ex.: mudança de cidade/CEP distante), posiciona instantaneamente
+        // evitando zoom-out intermediário lento ou interrupção no meio do voo.
+        if (distDeg > 0.12) {
+          if (programmaticMoveUntilRef) {
+            programmaticMoveUntilRef.current = Date.now() + 250;
+          }
+          map.setView([targetLat, targetLng], targetZoom, { animate: false });
+        } else {
+          if (programmaticMoveUntilRef) {
+            programmaticMoveUntilRef.current = Date.now() + 850;
+          }
+          map.flyTo([targetLat, targetLng], targetZoom, {
+            animate: true,
+            duration: 0.75,
+            easeLinearity: 0.25,
+          });
+        }
       }
     }
-  }, [center, map, zoom, viewportRequest]);
+  }, [center, map, zoom, viewportRequest, programmaticMoveUntilRef]);
 
   useEffect(() => {
     const id = window.setTimeout(() => map.invalidateSize(), 100);
@@ -188,12 +204,15 @@ function AreaBadge({ area, isSelected, onClick, isPlacingObstacle, onMapClick })
   );
 }
 
-function MapViewportEvents({ onViewportChange, onMapClick, isDrawing, onMeasureClick, isMeasuring, onZoomChange }) {
+function MapViewportEvents({ onViewportChange, onMapClick, isDrawing, onMeasureClick, isMeasuring, onZoomChange, programmaticMoveUntilRef }) {
   const map = useMapEvents({
     moveend() {
       const center = map.getCenter();
       const zoom = map.getZoom();
       onZoomChange?.(zoom);
+      if (programmaticMoveUntilRef && Date.now() < programmaticMoveUntilRef.current) {
+        return;
+      }
       onViewportChange?.({
         center: { lat: center.lat, lng: center.lng },
         zoom,
@@ -203,6 +222,9 @@ function MapViewportEvents({ onViewportChange, onMapClick, isDrawing, onMeasureC
       const center = map.getCenter();
       const zoom = map.getZoom();
       onZoomChange?.(zoom);
+      if (programmaticMoveUntilRef && Date.now() < programmaticMoveUntilRef.current) {
+        return;
+      }
       onViewportChange?.({
         center: { lat: center.lat, lng: center.lng },
         zoom,
@@ -916,6 +938,7 @@ export default function SolarDesignerMap({
   const mapCenter = useMemo(() => getMapCenterFromConfig(config), [config]);
   const mapZoom = Math.max(3, Math.min(22, Math.round(Number(config.map_zoom) || DEFAULT_SOLAR_MAP_ZOOM)));
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
+  const programmaticMoveUntilRef = useRef(0);
 
   // Estilo visual dos painéis fotovoltaicos (100% customizável)
   const visualStyleKey = config.panel_visual_style || "realistic";
@@ -1133,7 +1156,12 @@ export default function SolarDesignerMap({
       >
         <TileLayer url={SATELLITE_TILE_URL} attribution={SATELLITE_ATTRIBUTION} maxNativeZoom={19} maxZoom={23} />
         
-        <ViewportController center={mapCenter} zoom={mapZoom} viewportRequest={viewportRequest} />
+        <ViewportController
+          center={mapCenter}
+          zoom={mapZoom}
+          viewportRequest={viewportRequest}
+          programmaticMoveUntilRef={programmaticMoveUntilRef}
+        />
         <MapFitController areas={areas} selectedArea={selectedArea} roofPolygon={selectedRoofPolygon} request={fitRoofRequest} />
         <MapViewportEvents
           onViewportChange={onViewportChange}
@@ -1142,6 +1170,7 @@ export default function SolarDesignerMap({
           isMeasuring={isMeasuring}
           onMeasureClick={handleMeasureClick}
           onZoomChange={setCurrentZoom}
+          programmaticMoveUntilRef={programmaticMoveUntilRef}
         />
         <FloatingMapControls onFitRoof={onFitRoof} hasRoof={hasRoof} onToggle3D={onToggle3D} azimuthInfo={azimuthInfo} />
 

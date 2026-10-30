@@ -16,7 +16,7 @@ import {
   extractStructuredBillData,
   sanitizeAndValidateBillResult,
 } from "./solarBillExtractor";
-import { cleanDigits, maskCep } from "./brFormatters";
+import { geocodeByCepPrecise, searchAddressPrecise } from "./geocodingService";
 
 /**
  * Extrai texto diretamente de um arquivo PDF no navegador usando pdfjs-dist se disponível.
@@ -260,200 +260,18 @@ export async function suggestRoofContour({ mapCenter }) {
 }
 
 /**
- * Consulta CEP no Brasil utilizando BrasilAPI v2 (com coordenadas geográficas diretas)
- * e fallback automático para ViaCEP + Nominatim
+ * Consulta CEP no Brasil com geocodificação multicamada de alta precisão
+ * (ViaCEP / OpenCEP / BrasilAPI + ArcGIS Street/Postal + Photon/Nominatim com validação municipal)
  */
-export async function geocodeCep(rawCep) {
-  if (!rawCep) return [];
-  const digits = cleanDigits(rawCep);
-  if (digits.length !== 8) return [];
-
-  const formattedCep = maskCep(digits);
-
-  // 1. Tentativa Primária: BrasilAPI v2 (Retorna coordenadas de latitude e longitude diretas do CEP)
-  try {
-    const res = await fetch(`https://brasilapi.com.br/api/cep/v2/${digits}`, {
-      headers: { Accept: "application/json" },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const coords = data?.location?.coordinates;
-      const lat = coords?.latitude ? parseFloat(coords.latitude) : null;
-      const lng = coords?.longitude ? parseFloat(coords.longitude) : null;
-
-      const street = data.street || "";
-      const neighborhood = data.neighborhood || "";
-      const city = data.city || "";
-      const state = data.state || "";
-
-      // Se a BrasilAPI retornou coordenadas GPS válidas
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        const parts = [street, neighborhood, `${city} - ${state}`, formattedCep, "Brasil"].filter(Boolean);
-        return [{
-          display_name: parts.join(", "),
-          lat,
-          lng,
-          road: street,
-          neighborhood,
-          city,
-          state,
-          postcode: formattedCep,
-          source: "brasilapi",
-        }];
-      }
-
-      // Se a BrasilAPI retornou os dados de logradouro mas sem GPS, busca a rua exata no Nominatim
-      if (street && city) {
-        const streetQuery = `${street}, ${neighborhood ? neighborhood + ", " : ""}${city} - ${state}, Brasil`;
-        const streetResults = await searchNominatim(streetQuery);
-        if (streetResults.length > 0) {
-          return streetResults.map((r) => ({
-            ...r,
-            road: r.road || street,
-            city: r.city || city,
-            state: r.state || state,
-            postcode: formattedCep,
-          }));
-        }
-      }
-
-      // Se a rua específica não foi encontrada ou o CEP é geral do município
-      if (city) {
-        const cityQuery = `${city} - ${state}, Brasil`;
-        const cityResults = await searchNominatim(cityQuery);
-        if (cityResults.length > 0) {
-          const parts = [street, neighborhood, `${city} - ${state}`, formattedCep].filter(Boolean);
-          return [{
-            ...cityResults[0],
-            display_name: parts.join(", "),
-            road: street,
-            neighborhood,
-            city,
-            state,
-            postcode: formattedCep,
-          }];
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("BrasilAPI CEP lookup failed, tentando ViaCEP:", err);
-  }
-
-  // 2. Tentativa Secundária: ViaCEP (Correios Oficial)
-  try {
-    const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
-    if (res.ok) {
-      const data = await res.json();
-      if (!data.erro) {
-        const street = data.logradouro || "";
-        const neighborhood = data.bairro || "";
-        const city = data.localidade || "";
-        const state = data.uf || "";
-
-        // Geocodifica o endereço completo dos Correios
-        const fullAddress = [street, neighborhood, `${city} - ${state}`, "Brasil"].filter(Boolean).join(", ");
-        const geoResults = await searchNominatim(fullAddress);
-        if (geoResults.length > 0) {
-          return geoResults.map((r) => ({
-            ...r,
-            road: r.road || street,
-            neighborhood: r.neighborhood || neighborhood,
-            city: r.city || city,
-            state: r.state || state,
-            postcode: formattedCep,
-          }));
-        }
-
-        // Se o número/rua específica não constar no OpenStreetMap, busca o bairro/cidade
-        const cityQuery = `${city} - ${state}, Brasil`;
-        const cityResults = await searchNominatim(cityQuery);
-        if (cityResults.length > 0) {
-          const parts = [street, neighborhood, `${city} - ${state}`, formattedCep].filter(Boolean);
-          return [{
-            ...cityResults[0],
-            display_name: parts.join(", "),
-            road: street,
-            neighborhood,
-            city,
-            state,
-            postcode: formattedCep,
-          }];
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("ViaCEP lookup failed:", err);
-  }
-
-  return [];
+export async function geocodeCep(rawCep, options = {}) {
+  const result = await geocodeByCepPrecise(rawCep, options);
+  return result ? [result] : [];
 }
 
 /**
- * Busca direta no OpenStreetMap Nominatim com detalhes de endereço
+ * 4. Geocodificação Universal de Endereço e CEP (com detecção automática de CEP puro, CEP+número e texto livre)
  */
-async function searchNominatim(queryText) {
-  if (!queryText || queryText.trim().length < 2) return [];
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryText)}&limit=5&countrycodes=br&addressdetails=1`;
-    const response = await fetch(url, {
-      headers: { "Accept-Language": "pt-BR,pt;q=0.9" },
-    });
-    if (response.ok) {
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        return data.map((item) => ({
-          display_name: item.display_name,
-          lat: parseFloat(item.lat),
-          lng: parseFloat(item.lon),
-          road: item.address?.road || item.address?.street || "",
-          neighborhood: item.address?.suburb || item.address?.neighbourhood || item.address?.residential || "",
-          city: item.address?.city || item.address?.town || item.address?.municipality || item.address?.village || "",
-          state: item.address?.state || "",
-          postcode: item.address?.postcode || "",
-        })).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return [];
-}
-
-/**
- * 4. Geocodificação Universal de Endereço e CEP (com detecção automática de CEP brasileiro)
- */
-export async function geocodeAddress(query) {
+export async function geocodeAddress(query, options = {}) {
   if (!query || String(query).trim().length < 3) return [];
-  const clean = String(query).trim();
-
-  // 1. Verifica se o termo digitado é um CEP puro de 8 dígitos (com ou sem traço)
-  const digitsOnly = cleanDigits(clean);
-  if (digitsOnly.length === 8) {
-    const cepResults = await geocodeCep(digitsOnly);
-    if (cepResults.length > 0) return cepResults;
-  }
-
-  // 2. Verifica se há um CEP embutido na frase (ex: "Estrada José Miranda, 23810-000")
-  const embeddedCepMatch = clean.match(/\b\d{5}[-.]?\d{3}\b/);
-  if (embeddedCepMatch) {
-    const cepResults = await geocodeCep(embeddedCepMatch[0]);
-    if (cepResults.length > 0) return cepResults;
-  }
-
-  // 3. Se for endereço textual (ex: "Estrada José Miranda de Oliveira", "Praça da Sé"), consulta Nominatim
-  const nominatimResults = await searchNominatim(clean);
-  if (nominatimResults.length > 0) {
-    return nominatimResults;
-  }
-
-  // 4. Se a busca continha número (ex: "Rua X, 150"), tenta sem o número como fallback
-  const strippedNumber = clean.replace(/,\s*\d+.*$/, "").trim();
-  if (strippedNumber && strippedNumber !== clean) {
-    const retryResults = await searchNominatim(strippedNumber);
-    if (retryResults.length > 0) {
-      return retryResults;
-    }
-  }
-
-  return [];
+  return searchAddressPrecise(query, options);
 }

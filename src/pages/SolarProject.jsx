@@ -48,6 +48,8 @@ import {
 } from "@/lib/solarDesignerGeometry";
 import { estimateAnnualGenerationKwh, estimateAnnualSavingsBrl, estimateSimplePaybackYears } from "@/lib/solarSizing";
 import { geocodeAddress } from "@/lib/solarAiServices";
+import { parseBrazilianSearchInput } from "@/lib/geocodingService";
+import { identifyDistributorByLocation } from "@/lib/solarDistributorRates";
 import {
   downloadPdfBlob,
   generateBillOfMaterialsReport,
@@ -313,7 +315,26 @@ export default function SolarProject() {
   const [obstacleNudgeStep, setObstacleNudgeStep] = useState(0.5);
   const [searchAddress, setSearchAddress] = useState("");
   const [searchingAddress, setSearchingAddress] = useState(false);
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const cepDebounceRef = useRef(null);
+  const searchAbortRef = useRef(null);
+  const searchSeqRef = useRef(0);
+  const searchBoxRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      if (cepDebounceRef.current) clearTimeout(cepDebounceRef.current);
+      if (searchAbortRef.current) searchAbortRef.current.abort();
+    };
+  }, []);
   const [pendingObstaclePreset, setPendingObstaclePreset] = useState(null);
   const [editingAreaNameId, setEditingAreaNameId] = useState(null);
   const [tempAreaName, setTempAreaName] = useState("");
@@ -473,11 +494,54 @@ export default function SolarProject() {
         if (normalizedConfig.areas?.length > 0) {
           setSelectedAreaId(normalizedConfig.areas[0].id);
         }
-        setSearchAddress(targetProject?.address || "");
+        const initialAddressDisplay = [
+          targetProject?.address,
+          targetProject?.neighborhood,
+          targetProject?.city && targetProject?.state
+            ? `${targetProject.city} - ${targetProject.state}`
+            : targetProject?.city,
+          targetProject?.zip_code,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        setSearchAddress(initialAddressDisplay || "");
         roofHistoryRef.current = [normalizedConfig.areas];
         roofHistoryIndexRef.current = 0;
         setRoofHistoryState({ canUndo: false, canRedo: false });
         setViewportRequest((n) => n + 1);
+
+        // Auto-correção quando projeto possui CEP/endereço real cadastrado, mas coordenadas ainda estão no default (Praça da Sé) sem telhado desenhado
+        const isDefaultMapCenter =
+          Math.abs((normalizedConfig.map_center_lat || 0) - DEFAULT_SOLAR_MAP_CENTER.lat) < 0.0005 &&
+          Math.abs((normalizedConfig.map_center_lng || 0) - DEFAULT_SOLAR_MAP_CENTER.lng) < 0.0005;
+        const hasNoDrawnAreas =
+          (!normalizedConfig.areas || normalizedConfig.areas.length === 0) &&
+          (!normalizedConfig.roof_polygon || normalizedConfig.roof_polygon.length < 3);
+        const autoQuery =
+          targetProject?.zip_code ||
+          ([targetProject?.address, targetProject?.neighborhood, targetProject?.city, targetProject?.state]
+            .filter(Boolean)
+            .join(", "));
+        const isGenericDefaultAddress =
+          !autoQuery || String(autoQuery).trim().toLowerCase() === "são paulo, sp";
+
+        if (isDefaultMapCenter && hasNoDrawnAreas && !isGenericDefaultAddress) {
+          geocodeAddress(autoQuery)
+            .then((autoResults) => {
+              const best = autoResults?.[0];
+              if (best && Number.isFinite(Number(best.lat)) && Number.isFinite(Number(best.lng))) {
+                const resolvedZoom = best.zoom || 19;
+                setConfig((prev) => ({
+                  ...prev,
+                  map_center_lat: Number(best.lat),
+                  map_center_lng: Number(best.lng),
+                  map_zoom: resolvedZoom,
+                }));
+                setViewportRequest((n) => n + 1);
+              }
+            })
+            .catch(() => {});
+        }
 
         try {
           window.localStorage.setItem("voltai_active_project_id", targetProject.id);
@@ -1049,6 +1113,104 @@ export default function SolarProject() {
     toast({ title: "Nome atualizado" });
   };
 
+  const applySelectedLocation = useCallback((loc, rawFallbackQuery = "") => {
+    if (!loc) return false;
+    const nextLat = Number(loc.lat);
+    const nextLng = Number(loc.lng);
+    if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return false;
+
+    const targetZoom = Number.isFinite(Number(loc.zoom)) ? Number(loc.zoom) : 19;
+    const roadWithNum = loc.road
+      ? loc.number
+        ? `${loc.road}, ${loc.number}`
+        : loc.road
+      : "";
+    const formattedDisplay = roadWithNum
+      ? [
+          roadWithNum,
+          loc.neighborhood,
+          loc.city && loc.state ? `${loc.city} - ${loc.state}` : loc.city || loc.state,
+          loc.postcode,
+        ]
+          .filter(Boolean)
+          .join(", ")
+      : loc.display_name || rawFallbackQuery;
+
+    const concession = identifyDistributorByLocation({
+      state: loc.state,
+      city: loc.city,
+      zip_code: loc.postcode,
+      address: loc.road || formattedDisplay,
+    });
+
+    setSearchAddress(formattedDisplay || rawFallbackQuery);
+    setAddressSuggestions([]);
+    setShowSuggestions(false);
+
+    if (viewMode === "3d") {
+      setViewMode("map");
+    }
+
+    let nextConfigSnapshot = null;
+    setConfig((current) => {
+      const updated = {
+        ...current,
+        map_center_lat: nextLat,
+        map_center_lng: nextLng,
+        map_zoom: targetZoom,
+        ...(concession?.distributor && !current.distributor
+          ? { distributor: concession.distributor }
+          : {}),
+      };
+      nextConfigSnapshot = updated;
+      return updated;
+    });
+
+    setViewportRequest((n) => n + 1);
+
+    const activeId = projectId || project?.id;
+    setProject((current) => {
+      if (!current) return current;
+      const nextAddress = roadWithNum || loc.display_name || current.address;
+      const nextNeighborhood = loc.neighborhood || current.neighborhood || "";
+      const nextCity = loc.city || current.city || "";
+      const nextState = loc.state || current.state || "";
+      const nextZip =
+        loc.postcode ||
+        (rawFallbackQuery.match(/\d{5}-?\d{3}/)?.[0] || current.zip_code || "");
+
+      const updatedProj = {
+        ...current,
+        address: nextAddress,
+        neighborhood: nextNeighborhood,
+        city: nextCity,
+        state: nextState,
+        zip_code: nextZip,
+      };
+
+      // Persiste as coordenadas e endereço atualizados no projeto em background
+      if (activeId && nextConfigSnapshot) {
+        backend.entities.Project.update(activeId, {
+          address: nextAddress,
+          neighborhood: nextNeighborhood,
+          city: nextCity,
+          state: nextState,
+          zip_code: nextZip,
+          solar_config: normalizeSolarConfig(nextConfigSnapshot),
+        }).catch(() => {});
+      }
+
+      return updatedProj;
+    });
+
+    toast({
+      title: "Endereço localizado com precisão",
+      description: formattedDisplay || loc.display_name,
+    });
+
+    return true;
+  }, [project?.id, projectId, toast, viewMode]);
+
   const handleSearchAddress = async (e, overrideQuery) => {
     e?.preventDefault?.();
     if (cepDebounceRef.current) {
@@ -1056,65 +1218,40 @@ export default function SolarProject() {
     }
     const query = (typeof overrideQuery === "string" ? overrideQuery : searchAddress)?.trim();
     if (!query) return;
+
+    if (searchAbortRef.current) {
+      searchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    searchSeqRef.current += 1;
+    const seq = searchSeqRef.current;
+
     setSearchingAddress(true);
     try {
-      const results = await geocodeAddress(query);
-      if (results.length > 0) {
-        const first = results[0];
-        const nextLat = Number(first.lat);
-        const nextLng = Number(first.lng);
+      const results = await geocodeAddress(query, { signal: controller.signal });
+      if (seq !== searchSeqRef.current || controller.signal.aborted) return;
 
-        if (Number.isFinite(nextLat) && Number.isFinite(nextLng)) {
-          setConfig((current) => ({
-            ...current,
-            map_center_lat: nextLat,
-            map_center_lng: nextLng,
-            map_zoom: 19,
-          }));
-
-          if (viewMode === "3d") {
-            setViewMode("map");
-          }
-
-          const formattedDisplay = first.road
-            ? [first.road, first.neighborhood, first.city && first.state ? `${first.city} - ${first.state}` : first.city, first.postcode].filter(Boolean).join(", ")
-            : first.display_name;
-          setSearchAddress(formattedDisplay || query);
-
-          setProject((current) => {
-            if (!current) return current;
-            return {
-              ...current,
-              address: first.road
-                ? `${first.road}${first.neighborhood ? ", " + first.neighborhood : ""}`
-                : (first.display_name || current.address),
-              city: first.city || current.city,
-              state: first.state || current.state,
-              zip_code: first.postcode || (query.match(/\d{5}-?\d{3}/)?.[0] || current.zip_code),
-            };
-          });
-
-          setViewportRequest((n) => n + 1);
-          toast({
-            title: "Endereço localizado",
-            description: formattedDisplay || first.display_name,
-          });
-          return;
-        }
+      if (results.length > 0 && applySelectedLocation(results[0], query)) {
+        return;
       }
+
       toast({
         title: "Endereço ou CEP não encontrado",
-        description: "Não foi possível localizar o endereço ou CEP informado. Tente com outro termo ou número.",
+        description: "Confira os 8 dígitos do CEP ou informe rua e cidade.",
         variant: "destructive",
       });
     } catch (err) {
+      if (controller.signal.aborted || err?.name === "AbortError") return;
       toast({
         title: "Erro na pesquisa de endereço",
         description: err.message || "Falha ao consultar CEP ou endereço.",
         variant: "destructive",
       });
     } finally {
-      setSearchingAddress(false);
+      if (seq === searchSeqRef.current) {
+        setSearchingAddress(false);
+      }
     }
   };
 
@@ -1126,13 +1263,48 @@ export default function SolarProject() {
       clearTimeout(cepDebounceRef.current);
     }
 
-    // Detecção automática quando o usuário digita ou cola um CEP (8 dígitos)
-    const digitsOnly = val.replace(/\D/g, "");
-    if (digitsOnly.length === 8) {
-      cepDebounceRef.current = setTimeout(() => {
-        handleSearchAddress(null, val);
-      }, 400);
+    const trimmed = val.trim();
+    if (!trimmed || trimmed.length < 3) {
+      setAddressSuggestions([]);
+      setShowSuggestions(false);
+      return;
     }
+
+    const parsed = parseBrazilianSearchInput(trimmed);
+
+    // 1. Se o usuário digitou/colou diretamente um CEP de 8 dígitos (ou CEP + número), redireciona automaticamente com precisão!
+    if (parsed.kind === "cep") {
+      setShowSuggestions(false);
+      cepDebounceRef.current = setTimeout(() => {
+        handleSearchAddress(null, trimmed);
+      }, 260);
+      return;
+    }
+
+    // 2. Para endereços textuais, exibe sugestões em tempo real abaixo da barra
+    cepDebounceRef.current = setTimeout(async () => {
+      if (searchAbortRef.current) {
+        searchAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+      searchSeqRef.current += 1;
+      const seq = searchSeqRef.current;
+
+      setSearchingAddress(true);
+      try {
+        const candidates = await geocodeAddress(trimmed, { signal: controller.signal });
+        if (seq !== searchSeqRef.current || controller.signal.aborted) return;
+        setAddressSuggestions(candidates);
+        setShowSuggestions(candidates.length > 0);
+      } catch {
+        // silencioso durante digitação
+      } finally {
+        if (seq === searchSeqRef.current) {
+          setSearchingAddress(false);
+        }
+      }
+    }, 340);
   };
 
   const handleMapClick = (latlng) => {
@@ -1645,24 +1817,76 @@ export default function SolarProject() {
 
         {/* GRUPO CENTRAL: CONTEXTO (Busca de Endereço, Layout/Elétrica, 2D/3D) */}
         <div className="hidden md:flex items-center gap-2 shrink-0">
-          {/* Busca de Endereço */}
-          <form onSubmit={handleSearchAddress} className="relative flex items-center shrink-0">
-            <MapPin className="absolute left-2.5 h-3.5 w-3.5 text-[#00d8b8] pointer-events-none" />
-            <Input
-              value={searchAddress}
-              onChange={handleSearchInputChange}
-              placeholder="Buscar endereço ou CEP..."
-              className="h-8 w-52 lg:w-64 xl:w-72 rounded-lg border-slate-200 bg-slate-50 pl-8 pr-8 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#00d8b8] focus:bg-white focus:ring-1 focus:ring-[#00d8b8]"
-            />
-            <button
-              type="submit"
-              disabled={searchingAddress}
-              className="absolute right-2.5 text-slate-400 hover:text-slate-700 transition"
-              title="Buscar no mapa"
-            >
-              {searchingAddress ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#00d8b8]" /> : <Search className="h-3.5 w-3.5" />}
-            </button>
-          </form>
+          {/* Busca de Endereço e CEP de Alta Precisão */}
+          <div ref={searchBoxRef} className="relative shrink-0">
+            <form onSubmit={handleSearchAddress} className="relative flex items-center">
+              <MapPin className="absolute left-2.5 h-3.5 w-3.5 text-[#00d8b8] pointer-events-none" />
+              <Input
+                value={searchAddress}
+                onChange={handleSearchInputChange}
+                onFocus={() => {
+                  if (addressSuggestions.length > 0) {
+                    setShowSuggestions(true);
+                  }
+                }}
+                placeholder="Digite o CEP (ex: 26313-240) ou endereço..."
+                className="h-8 w-56 lg:w-72 xl:w-80 rounded-lg border-slate-200 bg-slate-50 pl-8 pr-12 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#00d8b8] focus:bg-white focus:ring-1 focus:ring-[#00d8b8]"
+              />
+              {searchAddress && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchAddress("");
+                    setAddressSuggestions([]);
+                    setShowSuggestions(false);
+                  }}
+                  className="absolute right-7 p-0.5 rounded text-slate-300 hover:text-slate-600 transition"
+                  title="Limpar pesquisa"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={searchingAddress}
+                className="absolute right-2.5 text-slate-400 hover:text-[#009b84] transition"
+                title="Localizar endereço ou CEP no mapa"
+              >
+                {searchingAddress ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#00d8b8]" /> : <Search className="h-3.5 w-3.5" />}
+              </button>
+            </form>
+
+            {showSuggestions && addressSuggestions.length > 0 && (
+              <div className="absolute left-0 top-full mt-1.5 w-[360px] max-w-[85vw] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl z-[700] py-1">
+                {addressSuggestions.map((sug, idx) => (
+                  <button
+                    key={`${sug.lat}-${sug.lng}-${idx}`}
+                    type="button"
+                    onClick={() => applySelectedLocation(sug, searchAddress)}
+                    className="flex w-full items-start gap-2.5 px-3 py-2 text-left text-xs hover:bg-[#E6FAF7]/70 transition border-b border-slate-100 last:border-b-0"
+                  >
+                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#009b84]" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-slate-900 truncate">
+                        {sug.road
+                          ? `${sug.road}${sug.number ? ", " + sug.number : ""}`
+                          : sug.display_name}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {[
+                          sug.neighborhood,
+                          sug.city && sug.state ? `${sug.city} - ${sug.state}` : sug.city || sug.state,
+                          sug.postcode,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || sug.display_name}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <span className="h-5 w-px bg-slate-200 shrink-0" />
 
@@ -3330,8 +3554,33 @@ export default function SolarProject() {
         sizing={visualSizing}
         initialStep={projectParamsInitialStep}
         onSave={async (updatedProjectPayload, updatedConfigPatch) => {
+          const prevLat = Number(config?.map_center_lat);
+          const prevLng = Number(config?.map_center_lng);
           const nextConfig = normalizeSolarConfig({ ...config, ...updatedConfigPatch });
           setConfig(nextConfig);
+
+          if (
+            Math.abs((nextConfig.map_center_lat || 0) - prevLat) > 0.00001 ||
+            Math.abs((nextConfig.map_center_lng || 0) - prevLng) > 0.00001
+          ) {
+            setViewportRequest((n) => n + 1);
+          }
+
+          if (updatedProjectPayload?.address || updatedProjectPayload?.zip_code) {
+            const nextDisplay = [
+              updatedProjectPayload.address,
+              updatedProjectPayload.neighborhood,
+              updatedProjectPayload.city && updatedProjectPayload.state
+                ? `${updatedProjectPayload.city} - ${updatedProjectPayload.state}`
+                : updatedProjectPayload.city,
+              updatedProjectPayload.zip_code,
+            ]
+              .filter(Boolean)
+              .join(", ");
+            if (nextDisplay) {
+              setSearchAddress(nextDisplay);
+            }
+          }
           const activeId = projectId || project?.id;
           if (activeId) {
             try {

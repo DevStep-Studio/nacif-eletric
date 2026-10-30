@@ -3,9 +3,8 @@ import L from "leaflet";
 import { Layers, Loader2, MapPin, Navigation, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { searchAddressPrecise } from "@/lib/geocodingService";
 import "leaflet/dist/leaflet.css";
-
-const NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search";
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse";
 
 const STATE_NAME_TO_UF = {
@@ -179,11 +178,8 @@ export default function AddressPickerMap({
     setSearching(true);
     setSearchError("");
     try {
-      const url = `${NOMINATIM_SEARCH_URL}?format=json&addressdetails=1&limit=5&countrycodes=br&q=${encodeURIComponent(text)}`;
-      const response = await fetch(url, { headers: { Accept: "application/json" } });
-      if (!response.ok) throw new Error("Falha na busca.");
-      const data = await response.json();
-      setResults(Array.isArray(data) ? data : []);
+      const candidates = await searchAddressPrecise(text);
+      setResults(Array.isArray(candidates) ? candidates : []);
     } catch {
       setSearchError("Não foi possível buscar no momento. Posicione o marcador manualmente.");
       setResults([]);
@@ -195,22 +191,21 @@ export default function AddressPickerMap({
   const handleQueryChange = (value) => {
     setQuery(value);
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => runSearch(value), 500);
+    debounceRef.current = window.setTimeout(() => runSearch(value), 350);
   };
 
   const handleSelectResult = (result) => {
     const nextLat = Number(result.lat);
-    const nextLng = Number(result.lon);
-    const addr = result.address || {};
+    const nextLng = Number(result.lng ?? result.lon);
     onAddressSelect?.({
       lat: nextLat,
       lng: nextLng,
-      address: [addr.road].filter(Boolean).join(" ") || result.display_name,
-      number: addr.house_number || "",
-      neighborhood: addr.suburb || addr.neighbourhood || addr.village || "",
-      city: addr.city || addr.town || addr.municipality || "",
-      state: resolveUf(addr),
-      zip_code: addr.postcode || "",
+      address: result.road || result.display_name,
+      number: result.number || "",
+      neighborhood: result.neighborhood || "",
+      city: result.city || "",
+      state: result.state || "",
+      zip_code: result.postcode || "",
     });
     setResults([]);
     setQuery(result.display_name);
@@ -231,9 +226,9 @@ export default function AddressPickerMap({
         )}
         {results.length > 0 && (
           <div className="absolute z-[600] mt-1 w-full overflow-hidden rounded-xl border border-border bg-white shadow-xl">
-            {results.map((result) => (
+            {results.map((result, idx) => (
               <button
-                key={`${result.place_id}`}
+                key={`${result.lat}-${result.lng}-${idx}`}
                 type="button"
                 onClick={() => handleSelectResult(result)}
                 className="flex w-full items-start gap-2.5 border-b border-border/50 px-3.5 py-2.5 text-left text-xs font-semibold last:border-b-0 hover:bg-primary/10 transition"
