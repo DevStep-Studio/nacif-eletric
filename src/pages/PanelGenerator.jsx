@@ -3239,6 +3239,27 @@ export default function PanelGenerator() {
     return svgPoint.matrixTransform(matrix.inverse());
   };
 
+  const startMarqueeFromEvent = (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    if (window.getSelection) {
+      try {
+        window.getSelection().removeAllRanges();
+      } catch (_) {}
+    }
+    const point = getSvgCursorPoint(event);
+    if (!point) return;
+    try {
+      svgRef.current?.setPointerCapture?.(event.pointerId);
+    } catch (_) {}
+    setMarqueeSelection({
+      startX: point.x,
+      startY: point.y,
+      currentX: point.x,
+      currentY: point.y,
+    });
+  };
+
   const findNearestConnectionPin = (point, maxDistance = 34) => {
     if (!point) return null;
     return connectionPins.reduce((closest, pin) => {
@@ -3449,6 +3470,7 @@ export default function PanelGenerator() {
   };
 
   const selectEditableWire = (wireId) => {
+    if (marqueeMode) return;
     if (!wireId) return;
     setSelectedWireId(wireId);
     setSelectedRoutePoint(null);
@@ -3855,6 +3877,10 @@ export default function PanelGenerator() {
   };
 
   const startWireEndpointDrag = (event, endpoint) => {
+    if (marqueeMode) {
+      startMarqueeFromEvent(event);
+      return;
+    }
     if (!selectedWireId) return;
     if (isCableLocked(getEditableWire(selectedWireId))) return;
     event.stopPropagation();
@@ -4539,6 +4565,10 @@ export default function PanelGenerator() {
   };
 
   const startWireRoutePointDrag = (event, wireId, routeIndex, initialPoint, isVirtual) => {
+    if (marqueeMode) {
+      startMarqueeFromEvent(event);
+      return;
+    }
     if (!wireId) return;
     const wire = getEditableWire(wireId);
     if (isCableLocked(wire)) return;
@@ -4579,6 +4609,10 @@ export default function PanelGenerator() {
   };
 
   const startWireSegmentDrag = (event, wireId, segmentIndex, routePoints = []) => {
+    if (marqueeMode) {
+      startMarqueeFromEvent(event);
+      return;
+    }
     if (!wireId || segmentIndex < 0) return;
     const wire = getEditableWire(wireId);
     if (isCableLocked(wire)) return;
@@ -4671,6 +4705,10 @@ export default function PanelGenerator() {
 
   const startInfrastructureResizeDrag = (event, infraId, edge, startItem = {}) => {
     if (!infraId || !edge) return;
+    if (marqueeMode) {
+      startMarqueeFromEvent(event);
+      return;
+    }
     if (wiringMode || wireMoveMode) return;
     event.stopPropagation();
     event.preventDefault();
@@ -4735,6 +4773,10 @@ export default function PanelGenerator() {
   };
 
   const startAnnotationDrag = (event, annotationId) => {
+    if (marqueeMode) {
+      startMarqueeFromEvent(event);
+      return;
+    }
     if (!annotationId) return;
     if (wiringMode || wireMoveMode) return;
     event.stopPropagation();
@@ -5019,7 +5061,12 @@ export default function PanelGenerator() {
   };
 
   const startComponentDrag = (event, componentId) => {
-    if (event.button !== 0 || marqueeMode || wiringMode || wireMoveMode || wireEndpointDrag || wireRoutePointDrag || wireSegmentDrag || infraResizeDrag) return;
+    if (marqueeMode) {
+      startMarqueeFromEvent(event);
+      return;
+    }
+    if (event.button !== 0 || wiringMode || wireMoveMode || wireEndpointDrag || wireRoutePointDrag || wireSegmentDrag || infraResizeDrag) return;
+    event.preventDefault();
     const point = getSvgCursorPoint(event);
     if (!point) return;
     svgRef.current?.setPointerCapture?.(event.pointerId);
@@ -5035,6 +5082,10 @@ export default function PanelGenerator() {
   };
 
   const startLegendDrag = (event) => {
+    if (marqueeMode) {
+      startMarqueeFromEvent(event);
+      return;
+    }
     event.stopPropagation();
     event.preventDefault();
     const point = getSvgCursorPoint(event);
@@ -5050,6 +5101,7 @@ export default function PanelGenerator() {
     const point = getSvgCursorPoint(event);
 
     if (marqueeSelection && point) {
+      event.preventDefault();
       setMarqueeSelection((current) => (current ? { ...current, currentX: point.x, currentY: point.y } : null));
       return;
     }
@@ -6692,6 +6744,7 @@ export default function PanelGenerator() {
   }, [clearMultiSelection, infrastructure, project, rails, selectedComponentId, selectedComponentIds, selectedWireId, selectedWireIds, toast, updateWires, wires]);
 
   const selectComponent = (componentId) => {
+    if (marqueeMode) return;
     setSelectedComponentId(componentId);
     setSelectedWireId("");
     setSelectedTextWireId("");
@@ -8882,10 +8935,18 @@ export default function PanelGenerator() {
         onPointerEnter={() => setHoveredWireId(descriptor.wire.id)}
         onPointerLeave={() => setHoveredWireId("")}
         onClick={(event) => {
+          if (marqueeMode) return;
           event.stopPropagation();
           selectEditableWire(descriptor.wire.id);
         }}
+        onPointerDown={(event) => {
+          if (marqueeMode) {
+            startMarqueeFromEvent(event);
+            return;
+          }
+        }}
         onDoubleClick={(event) => {
+          if (marqueeMode) return;
           event.stopPropagation();
           selectEditableWire(descriptor.wire.id);
           setWireMoveMode("target");
@@ -10733,12 +10794,35 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     height={panelHeight}
                     viewBox={`0 0 ${PANEL_W} ${panelHeight}`}
                     xmlns="http://www.w3.org/2000/svg"
-                    style={{ fontFamily: "'Inter','Arial',sans-serif", cursor: marqueeMode || wiringMode ? "crosshair" : undefined }}
+                    className="select-none"
+                    style={{
+                      fontFamily: "'Inter','Arial',sans-serif",
+                      cursor: marqueeMode || wiringMode ? "crosshair" : undefined,
+                      userSelect: "none",
+                      WebkitUserSelect: "none",
+                      MozUserSelect: "none",
+                      msUserSelect: "none",
+                    }}
                     ref={svgRef}
                     onPointerDown={(e) => {
-                      if (!wiringMode && (e.target.tagName === "svg" || e.target.id === "panel-background")) {
+                      e.preventDefault();
+
+                      // 1. Modo de Seleção Retangular (Marquee) ativo: inicia seleção com botão esquerdo
+                      if (marqueeMode && e.button === 0) {
+                        startMarqueeFromEvent(e);
+                        return;
+                      }
+
+                      // 2. Clique no fundo livre do quadro
+                      if (!wiringMode && (e.target.tagName === "svg" || e.target.id === "panel-background" || e.target.id === "chassis-plate")) {
                         clearWireSelection({ exitWiringMode: false });
+                        clearMultiSelection();
                         setSelectedComponentId("");
+
+                        // Arrastar no fundo vazio com botão primário também aciona seleção retangular
+                        if (e.button === 0 && !wireMoveMode && !wireEndpointDrag) {
+                          startMarqueeFromEvent(e);
+                        }
                       }
                     }}
                     onPointerMove={handleSvgPointerMove}
@@ -10759,6 +10843,19 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                   >
                     {/* Definições de Gradientes Metálicos, Texturas e Efeitos de Profundidade */}
                     <defs>
+                      <style>{`
+                        text, tspan {
+                          user-select: none;
+                          -webkit-user-select: none;
+                          -moz-user-select: none;
+                          -ms-user-select: none;
+                          pointer-events: none;
+                        }
+                        ::selection {
+                          background: transparent !important;
+                          color: inherit !important;
+                        }
+                      `}</style>
                       {/* Gradiente da chapa de fundo do gabinete eletrostático (RAL 7035 Industrial) */}
                       <linearGradient id="chassisPlateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#f8fafc" />

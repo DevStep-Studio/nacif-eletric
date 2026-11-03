@@ -571,3 +571,33 @@ label.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10),
 }
 
 
+
+/* ==========================================================================
+   AMBIENTE CAD / QUADRO ELÉTRICO: BLOQUEIO TOTAL DE SELEÇÃO DE TEXTO DO BROWSER
+   Garante comportamento nativo de aplicativo vetorial/CAD (AutoCAD, Figma, etc.)
+   ========================================================================== */
+.print-panel-area,
+.print-panel-area *,
+#print-panel-area,
+#print-panel-area * {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+#print-panel-area text,
+#print-panel-area tspan,
+.print-panel-area text,
+.print-panel-area tspan {
+  pointer-events: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+#print-panel-area ::selection,
+.print-panel-area ::selection {
+  background: transparent !important;
+  color: inherit !important;
+}
