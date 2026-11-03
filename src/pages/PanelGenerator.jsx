@@ -40,6 +40,12 @@ import {
   WIRE_SPACING,
   DEFAULT_CORNER_RADIUS,
 } from "@/lib/orthogonalRouter";
+import {
+  normalizeAABB,
+  computeRailComponentBoxes,
+  queryMarqueeSelection,
+  executeBatchDelete,
+} from "@/lib/marqueeSelection";
 import { optimizePanelWiring } from "@/lib/wireRoutingOptimizer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -77,6 +83,7 @@ import {
   Minus,
   Scissors,
   Wand2,
+  BoxSelect,
 } from "lucide-react";
 
 // ─── CONSTANTES DE DIMENSIONAMENTO DO PAINEL ───────────────────────────────────
@@ -1581,6 +1588,12 @@ export default function PanelGenerator() {
   const [hoveredPinId, setHoveredPinId] = useState("");
   const [componentDrag, setComponentDrag] = useState(null); // { componentId, startX, startY, active, x, y }
   const [hoveredItem, setHoveredItem] = useState(null);
+  
+  // FERRAMENTA DE SELEÇÃO RETANGULAR (MARQUEE / BOUNDING BOX)
+  const [marqueeMode, setMarqueeMode] = useState(false);
+  const [marqueeSelection, setMarqueeSelection] = useState(null); // { startX, startY, currentX, currentY }
+  const [selectedComponentIds, setSelectedComponentIds] = useState([]);
+  const [selectedWireIds, setSelectedWireIds] = useState([]);
   
   // ADD COMPONENT FORM
   const [newCompType, setNewCompType] = useState("breaker");
@@ -4316,6 +4329,11 @@ export default function PanelGenerator() {
   };
 
   const deleteSelectedElement = () => {
+    if (selectedComponentIds.length > 0 || selectedWireIds.length > 0) {
+      handleBatchDelete();
+      return true;
+    }
+
     if (selectedTextWireId) {
       updateWireLabelMeta(selectedTextWireId, { hidden: true, text: "" });
       setSelectedTextWireId("");
@@ -4376,7 +4394,15 @@ export default function PanelGenerator() {
         return;
       }
 
-      const isPlainXDelete = lowerKey === "x" && !event.metaKey && !event.ctrlKey && !event.altKey;
+      if (key === "Escape") {
+        clearMultiSelection();
+        setMarqueeSelection(null);
+        setSelectedComponentId("");
+        clearWireSelection();
+        return;
+      }
+
+            const isPlainXDelete = lowerKey === "x" && !event.metaKey && !event.ctrlKey && !event.altKey;
       if (key === "Delete" || key === "Backspace" || isPlainXDelete) {
         const handled = deleteSelectedElement();
         if (!handled) return;
@@ -5024,7 +5050,7 @@ export default function PanelGenerator() {
   };
 
   const startComponentDrag = (event, componentId) => {
-    if (event.button !== 0 || wiringMode || wireMoveMode || wireEndpointDrag || wireRoutePointDrag || wireSegmentDrag || infraResizeDrag) return;
+    if (event.button !== 0 || marqueeMode || wiringMode || wireMoveMode || wireEndpointDrag || wireRoutePointDrag || wireSegmentDrag || infraResizeDrag) return;
     const point = getSvgCursorPoint(event);
     if (!point) return;
     svgRef.current?.setPointerCapture?.(event.pointerId);
@@ -5053,6 +5079,11 @@ export default function PanelGenerator() {
 
   const handleSvgPointerMove = (event) => {
     const point = getSvgCursorPoint(event);
+
+    if (marqueeSelection && point) {
+      setMarqueeSelection((current) => (current ? { ...current, currentX: point.x, currentY: point.y } : null));
+      return;
+    }
 
     if (legendDrag && point) {
       setLegendPosition({
@@ -5131,6 +5162,22 @@ export default function PanelGenerator() {
     } catch (_) {}
 
     const point = getSvgCursorPoint(event);
+
+    if (marqueeSelection && point) {
+      const aabb = normalizeAABB(
+        { x: marqueeSelection.startX, y: marqueeSelection.startY },
+        { x: point.x, y: point.y }
+      );
+      if (aabb.width >= 4 && aabb.height >= 4) {
+        executeMarqueeSelection(aabb);
+      } else {
+        clearMultiSelection();
+        setSelectedComponentId("");
+        setSelectedWireId("");
+      }
+      setMarqueeSelection(null);
+      return;
+    }
 
     if (legendDrag) {
       setLegendDrag(null);
@@ -6528,6 +6575,152 @@ export default function PanelGenerator() {
     
     updateWires(nextWires, options);
   };
+
+  const clearMultiSelection = useCallback(() => {
+    setSelectedComponentIds([]);
+    setSelectedWireIds([]);
+    setRails((prevRails) =>
+      prevRails.map((r) => ({
+        ...r,
+        components: (r.components || []).map((c) => (c.selected ? { ...c, selected: false } : c)),
+      }))
+    );
+    setWires((prevWires) =>
+      prevWires.map((w) => (w.selected ? { ...w, selected: false } : w))
+    );
+  }, []);
+
+  const executeMarqueeSelection = useCallback((marqueeBox) => {
+    const result = queryMarqueeSelection({
+      marqueeBox,
+      rails,
+      wires,
+      resolvePinPositionFn: (pinId) => getPinCoords(pinId, rails, panelHeight, infrastructure),
+      panelHeight,
+      infrastructure,
+      wireRouteMeta: wireRouteMetaRef.current,
+      wirePaths: wirePathsRef.current,
+    });
+
+    const compIdSet = new Set(result.selectedComponentIds);
+    const wireIdSet = new Set(result.selectedWireIds);
+
+    setSelectedComponentIds(result.selectedComponentIds);
+    setSelectedWireIds(result.selectedWireIds);
+
+    if (result.selectedComponentIds.length === 1) {
+      setSelectedComponentId(result.selectedComponentIds[0]);
+    } else {
+      setSelectedComponentId(result.selectedComponentIds[0] || "");
+    }
+
+    if (result.selectedWireIds.length === 1) {
+      setSelectedWireId(result.selectedWireIds[0]);
+    } else {
+      setSelectedWireId(result.selectedWireIds[0] || "");
+    }
+
+    // Atribui selected: true aos objetos de componentes e fios
+    setRails((prevRails) =>
+      prevRails.map((r) => ({
+        ...r,
+        components: (r.components || []).map((c) => ({
+          ...c,
+          selected: compIdSet.has(String(c.id)),
+        })),
+      }))
+    );
+
+    setWires((prevWires) =>
+      prevWires.map((w) => ({
+        ...w,
+        selected: wireIdSet.has(String(w.id)),
+      }))
+    );
+
+    const totalFound = result.selectedComponentIds.length + result.selectedWireIds.length;
+    if (totalFound > 0) {
+      toast({
+        title: "Seleção retangular realizada",
+        description: `${result.selectedComponentIds.length} componente(s) e ${result.selectedWireIds.length} condutor(es) selecionado(s).`,
+      });
+    }
+  }, [infrastructure, panelHeight, rails, toast, wires]);
+
+  const handleBatchDelete = useCallback(async () => {
+    const compsToDelete = new Set(selectedComponentIds);
+    if (selectedComponentId) compsToDelete.add(String(selectedComponentId));
+    rails.forEach((r) => {
+      (r.components || []).forEach((c) => {
+        if (c.selected) compsToDelete.add(String(c.id));
+      });
+    });
+
+    const wiresToDelete = new Set(selectedWireIds);
+    if (selectedWireId) wiresToDelete.add(String(selectedWireId));
+    wires.forEach((w) => {
+      if (w.selected) wiresToDelete.add(String(w.id));
+    });
+
+    if (compsToDelete.size === 0 && wiresToDelete.size === 0) {
+      return false;
+    }
+
+    const deleteOutcome = executeBatchDelete({
+      rails,
+      wires,
+      compsToDelete: Array.from(compsToDelete),
+      wiresToDelete: Array.from(wiresToDelete),
+      circuits: project?.circuits || [],
+      isProtectedFn: isProtectedPanelComponent,
+    });
+
+    deleteOutcome.deletedWireIds.forEach((wireId) => {
+      delete wirePathsRef.current[wireId];
+      delete wireRouteMetaRef.current[wireId];
+    });
+
+    const normalizedRails = normalizeRailsLayout(deleteOutcome.nextRails);
+    setRails(normalizedRails);
+    updateWires(deleteOutcome.nextWires, { immediate: true });
+
+    const nextInfrastructureBase = infrastructure.filter(
+      (item) => !deleteOutcome.deletedComponentIds.some((compId) => infrastructureReferencesComponent(item, compId))
+    );
+    const nextInfrastructure = upsertPanelLayoutMeta(nextInfrastructureBase, {
+      manualDeviceEdits: true,
+      lastAction: "batch-delete",
+      deletedComponentIds: deleteOutcome.deletedComponentIds,
+      deletedCircuitRefs: deleteOutcome.deletedCircuitIds,
+      deletedWireIds: deleteOutcome.deletedWireIds,
+    });
+    setInfrastructure(nextInfrastructure);
+
+    saveLayoutToDb(normalizedRails, deleteOutcome.nextWires, nextInfrastructure);
+
+    if (project?.id && deleteOutcome.deletedCircuitIds.length > 0) {
+      const updatedProject = {
+        ...project,
+        circuits: deleteOutcome.nextCircuits,
+      };
+      setProject(updatedProject);
+      backend.projects.update(project.id, { circuits: deleteOutcome.nextCircuits }).catch((error) => {
+        console.error("Erro ao sincronizar circuitos após exclusão em massa:", error);
+      });
+    }
+
+    clearMultiSelection();
+    setSelectedComponentId("");
+    setSelectedWireId("");
+    setSelectedRoutePoint(null);
+
+    toast({
+      title: "Exclusão em massa concluída",
+      description: `${deleteOutcome.deletedComponentIds.length} componente(s) e ${deleteOutcome.deletedWireIds.length} condutor(es) foram removidos do quadro.`,
+    });
+
+    return true;
+  }, [clearMultiSelection, infrastructure, project, rails, selectedComponentId, selectedComponentIds, selectedWireId, selectedWireIds, toast, updateWires, wires]);
 
   const selectComponent = (componentId) => {
     setSelectedComponentId(componentId);
@@ -8703,7 +8896,8 @@ export default function PanelGenerator() {
     const isTraced = tracedCircuitId && isWireMatchingCircuit(activeWire || descriptor.wire, tracedCircuitId);
     const isDimmed = tracedCircuitId && !isTraced;
     const wireOpacity = isDimmed ? (isIsolatedView ? 0.06 : 0.32) : 1;
-    const isHighlighted = selectedWireId === descriptor.wire.id || hoveredWireId === descriptor.wire.id || isTraced;
+    const isWireSelected = selectedWireId === descriptor.wire.id || selectedWireIds.includes(String(descriptor.wire.id)) || Boolean(activeWire?.selected);
+    const isHighlighted = isWireSelected || hoveredWireId === descriptor.wire.id || isTraced;
     const tapPoint = options.showTap ? editableRoutePoints[0] : null;
     const explicitTextLabel = cleanDisplayText(activeWire?.labelMeta?.text || "");
     const shouldShowTextLabel = Boolean(options.showLabel || explicitTextLabel);
@@ -10405,10 +10599,10 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={wiringMode ? "destructive" : "secondary"} className="h-8 rounded-lg px-3 text-xs font-bold uppercase">
-                      {wiringMode ? "Modo Conexão" : "Modo Navegação"}
+                      {marqueeMode ? "Seleção em Massa (Marquee)" : wiringMode ? "Modo Conexão" : "Modo Navegação"}
                     </Badge>
                     <span className="truncate text-xs font-medium text-slate-500">
-                      {wiringMode ? "Clique em dois bornes para ligar o cabo" : activeBoardDisplayName}
+                      {marqueeMode ? "Clique e arraste no quadro para selecionar múltiplos componentes e fios" : wiringMode ? "Clique em dois bornes para ligar o cabo" : activeBoardDisplayName}
                     </span>
                   </div>
                 </div>
@@ -10462,6 +10656,27 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     <span>{showLegend ? "Ocultar Legendas" : "Mostrar Legendas"}</span>
                   </Button>
                   <Button
+                    variant={marqueeMode ? "default" : "secondary"}
+                    size="icon"
+                    className={`h-9 w-9 rounded-lg transition-all duration-150 ${
+                      marqueeMode
+                        ? "bg-[#00d8b8] text-slate-900 hover:bg-[#00bda1] shadow-sm ring-2 ring-[#00d8b8]/40 font-bold scale-105"
+                        : "hover:bg-slate-200 text-slate-700"
+                    }`}
+                    onClick={() => {
+                      const nextMode = !marqueeMode;
+                      setMarqueeMode(nextMode);
+                      if (nextMode) {
+                        setWiringMode(false);
+                        setWiringStart("");
+                      }
+                    }}
+                    aria-label={marqueeMode ? "Desativar seleção retangular" : "Seleção retangular em massa (Marquee)"}
+                    title={marqueeMode ? "Desativar seleção retangular" : "Seleção retangular em massa (Marquee)"}
+                  >
+                    <BoxSelect className="h-4 w-4" />
+                  </Button>
+                  <Button
                     variant={wiringMode ? "destructive" : "secondary"}
                     size="icon"
                     className="h-9 w-9 rounded-lg"
@@ -10495,6 +10710,45 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
             </div>
 
             {/* PAINEL DE DESENHO VETORIAL */}
+            {/* BARRA FLUTUANTE DE EXCLUSÃO EM MASSA (BATCH DELETE) */}
+            {(selectedComponentIds.length > 0 || selectedWireIds.length > 0) && (
+              <div id="batch-delete-floating-bar" className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl border border-slate-700/80 bg-slate-900/95 px-5 py-2.5 text-white shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-200">
+                <div className="flex items-center gap-2 pr-3 border-r border-slate-700">
+                  <BoxSelect className="h-4 w-4 text-[#00d8b8]" />
+                  <span className="text-xs font-bold text-slate-300">
+                    Selecionados:
+                  </span>
+                  <Badge className="bg-[#00d8b8] text-slate-950 font-black text-xs h-5 px-2">
+                    {selectedComponentIds.length + selectedWireIds.length}
+                  </Badge>
+                  <span className="text-[11px] text-slate-400">
+                    ({selectedComponentIds.length} comp${selectedComponentIds.length !== 1 ? "s" : ""}, ${selectedWireIds.length} fio${selectedWireIds.length !== 1 ? "s" : ""})
+                  </span>
+                </div>
+
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-8 gap-1.5 px-3 font-bold text-xs shadow-md bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+                  onClick={handleBatchDelete}
+                  title="Excluir todos os elementos selecionados (Delete ou Backspace)"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Deletar Selecionados</span>
+                  <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-rose-800 rounded border border-rose-500/50">Del</kbd>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer"
+                  onClick={clearMultiSelection}
+                  title="Limpar seleção (Esc)"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             <div id="print-panel-area" ref={panelViewportRef} className="print-panel-area overflow-auto rounded-2xl border border-slate-200 bg-[#eef2f6] p-6 shadow-lg min-h-[600px] flex items-center justify-center">
               <div
                 style={{
@@ -10510,7 +10764,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     height={panelHeight}
                     viewBox={`0 0 ${PANEL_W} ${panelHeight}`}
                     xmlns="http://www.w3.org/2000/svg"
-                    style={{ fontFamily: "'Inter','Arial',sans-serif" }}
+                    style={{ fontFamily: "'Inter','Arial',sans-serif", cursor: marqueeMode ? "crosshair" : undefined }}
                     ref={svgRef}
                     onPointerDown={(e) => {
                       if (!wiringMode && (e.target.tagName === "svg" || e.target.id === "panel-background")) {
@@ -11219,7 +11473,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                             const compW = c.type === "spacer"
                               ? (Number(c.poles) || 1) * (MOD + 2) - 2
                               : c.poles * MOD;
-                            const isSelected = selectedComponentId === c.id;
+                            const isSelected = selectedComponentId === c.id || selectedComponentIds.includes(String(c.id)) || Boolean(c.selected);
                             const x = currentX;
                             currentX += compW + 2;
                             
@@ -11243,6 +11497,23 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     {renderTextAnnotations()}
                     {renderComponentDragPreview()}
                     {renderSelectedComponentOverlay()}
+                    {/* 8. RETÂNGULO DE SELEÇÃO EM MASSA (MARQUEE / BOUNDING BOX) */}
+                    {marqueeSelection && (
+                      <g id="marquee-selection-layer" pointerEvents="none">
+                        <rect
+                          x={Math.min(marqueeSelection.startX, marqueeSelection.currentX)}
+                          y={Math.min(marqueeSelection.startY, marqueeSelection.currentY)}
+                          width={Math.max(1, Math.abs(marqueeSelection.currentX - marqueeSelection.startX))}
+                          height={Math.max(1, Math.abs(marqueeSelection.currentY - marqueeSelection.startY))}
+                          fill="#00d8b8"
+                          fillOpacity="0.18"
+                          stroke="#00d8b8"
+                          strokeWidth="1.6"
+                          strokeDasharray="4 3"
+                          rx="3"
+                        />
+                      </g>
+                    )}
                     {renderConnectionHotspots()}
                     {renderDebugTerminals()}
                     {renderSelectedWireRouteHandles()}
