@@ -18,7 +18,7 @@ const getEnvVar = (key) => {
   return "";
 };
 
-export const STRIPE_TEST_PRICE_IDS = {
+export const STRIPE_PRICE_IDS = {
   estudante: {
     monthly: getEnvVar("VITE_STRIPE_PRICE_ESTUDANTE_MONTHLY") || "price_1UVAQqJl6h9d8TBMRYFoOdBM",
     // NOTA: Estudante NÃO POSSUI chave anual por regra de negócio
@@ -36,6 +36,14 @@ export const STRIPE_TEST_PRICE_IDS = {
     annual: getEnvVar("VITE_STRIPE_PRICE_COMPLETO_ANNUAL") || "price_1UVAgoJl6h9d8TBMubc39FAP",
   },
 };
+
+// Aliases para retrocompatibilidade
+export const STRIPE_TEST_PRICE_IDS = STRIPE_PRICE_IDS;
+
+export const STRIPE_PUBLISHABLE_KEY = getEnvVar("VITE_STRIPE_PUBLISHABLE_KEY");
+export const isStripeLivePublishableKey = Boolean(
+  STRIPE_PUBLISHABLE_KEY && STRIPE_PUBLISHABLE_KEY.startsWith("pk_live_"),
+);
 
 /**
  * Links Diretos Oficiais de Pagamento da Stripe (Stripe Payment Links)

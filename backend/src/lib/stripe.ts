@@ -7,10 +7,21 @@ const stripeSecretKey = env.STRIPE_SECRET_KEY || "sk_test_placeholder";
 
 export const isStripeConfigured = Boolean(
   env.STRIPE_SECRET_KEY &&
-    env.STRIPE_SECRET_KEY.trim().startsWith("sk_") &&
+    (env.STRIPE_SECRET_KEY.trim().startsWith("sk_live_") ||
+      env.STRIPE_SECRET_KEY.trim().startsWith("sk_test_")) &&
     env.STRIPE_SECRET_KEY.trim() !== "sk_test_placeholder" &&
     !env.STRIPE_SECRET_KEY.includes("..."),
 );
+
+export const isStripeLiveMode = Boolean(
+  isStripeConfigured && env.STRIPE_SECRET_KEY.trim().startsWith("sk_live_"),
+);
+
+export const stripeEnvironment = isStripeLiveMode
+  ? "live"
+  : isStripeConfigured
+    ? "test"
+    : "unconfigured";
 
 export const stripe = new Stripe(stripeSecretKey, {
   typescript: true,

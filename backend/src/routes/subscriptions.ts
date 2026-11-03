@@ -9,6 +9,8 @@ import { env } from "../config/env.js";
 import {
   stripe,
   isStripeConfigured,
+  isStripeLiveMode,
+  stripeEnvironment,
   getOrCreateStripeCustomer,
   resolvePlanFromPriceId,
   resolveRealStripePriceId,
@@ -351,110 +353,129 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
   // 1. STRIPE CHECKOUT: POST /create-checkout-session
   // =========================================================================
   const handleCreateCheckoutSession = async (request: FastifyRequest, reply: FastifyReply) => {
-    const parsed = createCheckoutSessionSchema.parse(request.body || {});
-    const { priceId, planCode, cycle, ...userData } = parsed;
+    try {
+      const parsed = createCheckoutSessionSchema.parse(request.body || {});
+      const { priceId, planCode, cycle, ...userData } = parsed;
 
-    // Validação da Regra de Negócio:
-    // Nacif Estudante: APENAS faturamento mensal (R$ 99,99/mês).
-    const effectiveCycle = planCode === "estudante" ? "monthly" : cycle || "monthly";
-    const resolvedPriceId = resolveRealStripePriceId(priceId, planCode, effectiveCycle);
-    const planInfo = resolvePlanFromPriceId(resolvedPriceId, planCode, effectiveCycle);
-    const targetPlanCode = planInfo?.plan || planCode || "completo";
-    const targetCycle = targetPlanCode === "estudante" ? "monthly" : planInfo?.cycle || effectiveCycle;
+      // Validação da Regra de Negócio:
+      // Nacif Estudante: APENAS faturamento mensal (R$ 99,99/mês).
+      const effectiveCycle = planCode === "estudante" ? "monthly" : cycle || "monthly";
+      const resolvedPriceId = resolveRealStripePriceId(priceId, planCode, effectiveCycle);
+      const planInfo = resolvePlanFromPriceId(resolvedPriceId, planCode, effectiveCycle);
+      const targetPlanCode = planInfo?.plan || planCode || "completo";
+      const targetCycle = targetPlanCode === "estudante" ? "monthly" : planInfo?.cycle || effectiveCycle;
 
-    if (!resolvedPriceId) {
-      throw new AppError("Identificador de preço (priceId) ou plano válido é obrigatório.", 400);
-    }
-
-    const user = await resolveOrCreateUser(request, userData);
-    const frontendOrigin = resolveFrontendOrigin(request);
-
-    // Caso a chave secreta não esteja presente no servidor, redireciona com segurança via Stripe Payment Link oficial
-    if (!isStripeConfigured) {
-      const fallbackLink = buildStripePaymentLinkUrl(targetPlanCode, targetCycle, {
-        id: user.id,
-        email: user.email,
-      });
-
-      if (fallbackLink) {
-        app.log.warn(
-          `[Stripe] STRIPE_SECRET_KEY ausente no ambiente; redirecionando para Payment Link oficial da Stripe (${targetPlanCode}/${targetCycle}).`,
-        );
-        return reply.send({
-          url: fallbackLink,
-          isDirectPaymentLink: true,
-          provider: "stripe_payment_link",
+      if (!resolvedPriceId) {
+        return reply.status(400).send({
+          error: "Identificador de preço (priceId) ou plano válido é obrigatório.",
+          code: "INVALID_PRICE_ID",
         });
       }
 
-      throw new AppError(
-        "Chave STRIPE_SECRET_KEY não configurada no servidor de produção.",
-        503,
-      );
-    }
+      const user = await resolveOrCreateUser(request, userData);
+      const frontendOrigin = resolveFrontendOrigin(request);
 
-    const successUrl = `${frontendOrigin}/subscription?session_id={CHECKOUT_SESSION_ID}&checkout=success&plan=${encodeURIComponent(targetPlanCode)}&cycle=${encodeURIComponent(targetCycle)}`;
-    const cancelUrl = `${frontendOrigin}/subscription?checkout=cancelled`;
+      // Caso a chave secreta não esteja presente no servidor, redireciona com segurança via Stripe Payment Link oficial
+      if (!isStripeConfigured) {
+        const fallbackLink = buildStripePaymentLinkUrl(targetPlanCode, targetCycle, {
+          id: user.id,
+          email: user.email,
+        });
 
-    // Obtém ou cria o Customer ID da Stripe para este usuário
-    const customerId = await getOrCreateStripeCustomer(user);
+        if (fallbackLink) {
+          app.log.warn(
+            `[Stripe] STRIPE_SECRET_KEY ausente no ambiente; redirecionando para Payment Link oficial da Stripe (${targetPlanCode}/${targetCycle}).`,
+          );
+          return reply.status(200).send({
+            url: fallbackLink,
+            isDirectPaymentLink: true,
+            provider: "stripe_payment_link",
+          });
+        }
 
-    // Salva o customerId no banco local se MySQL estiver ativo
-    if (!user._ephemeral && (user.customPermissions as any)?.stripeCustomerId !== customerId) {
-      await prisma.user
-        .update({
-          where: { id: user.id },
-          data: {
-            customPermissions: {
-              ...((user.customPermissions as any) || {}),
-              stripeCustomerId: customerId,
+        return reply.status(503).send({
+          error: "Chave STRIPE_SECRET_KEY não configurada no servidor de produção.",
+          code: "STRIPE_NOT_CONFIGURED",
+        });
+      }
+
+      const successUrl = `${frontendOrigin}/subscription?session_id={CHECKOUT_SESSION_ID}&checkout=success&plan=${encodeURIComponent(targetPlanCode)}&cycle=${encodeURIComponent(targetCycle)}`;
+      const cancelUrl = `${frontendOrigin}/subscription?checkout=cancelled`;
+
+      // Obtém ou cria o Customer ID da Stripe para este usuário
+      const customerId = await getOrCreateStripeCustomer(user);
+
+      // Salva o customerId no banco local se MySQL estiver ativo
+      if (!user._ephemeral && (user.customPermissions as any)?.stripeCustomerId !== customerId) {
+        await prisma.user
+          .update({
+            where: { id: user.id },
+            data: {
+              customPermissions: {
+                ...((user.customPermissions as any) || {}),
+                stripeCustomerId: customerId,
+              },
             },
-          },
-        })
-        .catch(() => null);
-    }
+          })
+          .catch(() => null);
+      }
 
-    // Cria a sessão de Checkout oficial no Stripe Billing
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      client_reference_id: user.id,
-      locale: "pt-BR",
-      line_items: [
-        {
-          price: resolvedPriceId,
-          quantity: 1,
-        },
-      ],
-      metadata: {
-        userId: user.id,
-        userEmail: user.email,
-        planCode: targetPlanCode,
-        cycle: targetCycle,
-        priceId: resolvedPriceId,
-      },
-      subscription_data: {
+      // Cria a sessão de Checkout oficial no Stripe Billing
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        customer: customerId,
+        client_reference_id: user.id,
+        locale: "pt-BR",
+        line_items: [
+          {
+            price: resolvedPriceId,
+            quantity: 1,
+          },
+        ],
         metadata: {
           userId: user.id,
           userEmail: user.email,
           planCode: targetPlanCode,
           cycle: targetCycle,
           priceId: resolvedPriceId,
+          platform: "nacif_energy",
         },
-      },
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      allow_promotion_codes: true,
-      billing_address_collection: "auto",
-    });
+        subscription_data: {
+          metadata: {
+            userId: user.id,
+            userEmail: user.email,
+            planCode: targetPlanCode,
+            cycle: targetCycle,
+            priceId: resolvedPriceId,
+            platform: "nacif_energy",
+          },
+        },
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        allow_promotion_codes: true,
+        billing_address_collection: "auto",
+      });
 
-    return reply.send({
-      url: session.url,
-      sessionId: session.id,
-      provider: "stripe",
-      plan: targetPlanCode,
-      cycle: targetCycle,
-    });
+      app.log.info(
+        `[Stripe Checkout] Sessão criada com sucesso (${session.id}) para o usuário ${user.id} (${user.email}) - Plano ${targetPlanCode} [${targetCycle}] em modo ${session.livemode ? "LIVE" : "TEST"}`,
+      );
+
+      return reply.status(200).send({
+        url: session.url,
+        sessionId: session.id,
+        provider: "stripe",
+        plan: targetPlanCode,
+        cycle: targetCycle,
+        liveMode: session.livemode,
+      });
+    } catch (err: any) {
+      app.log.error(`[Stripe Checkout] Erro ao criar sessão de pagamento: ${err?.message || err}`);
+      const statusCode = err?.statusCode || (err?.type?.startsWith("Stripe") ? 400 : 500);
+      return reply.status(statusCode).send({
+        error: err?.message || "Erro ao processar sessão de checkout da Stripe",
+        code: err?.code || "CHECKOUT_SESSION_FAILED",
+      });
+    }
   };
 
   // Handlers utilitários para compatibilidade total com proxies, Cloudflare e preflight
@@ -475,6 +496,8 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
       ok: true,
       service: "Nacif Energy - Stripe Billing API",
       stripeConfigured: isStripeConfigured,
+      liveMode: isStripeLiveMode,
+      environment: stripeEnvironment,
       endpoint: name,
       method: "POST",
     });
@@ -824,86 +847,138 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
   app.options("/api/subscriptions/sync-stripe", handlePreflight);
 
   // =========================================================================
-  // 5. STRIPE WEBHOOK: POST /webhook (utiliza Raw Body preservado)
+  // 5. STRIPE WEBHOOK: POST /webhook (utiliza Raw Body preservado e assinatura whsec_)
   // =========================================================================
   const handleStripeWebhook = async (request: FastifyRequest, reply: FastifyReply) => {
-    const sig = request.headers["stripe-signature"] as string;
-    const rawBody = (request as any).rawBody || request.body;
+    const sig = request.headers["stripe-signature"] as string | undefined;
+    const rawBody =
+      (request as any).rawBody ||
+      (typeof request.body === "string"
+        ? Buffer.from(request.body)
+        : Buffer.from(JSON.stringify(request.body || {})));
+    const webhookSecret = (env.STRIPE_WEBHOOK_SECRET || "").trim();
 
-    let event: Stripe.Event;
-
-    if (env.STRIPE_WEBHOOK_SECRET && isStripeConfigured && sig) {
-      try {
-        event = stripe.webhooks.constructEvent(rawBody, sig, env.STRIPE_WEBHOOK_SECRET);
-      } catch (err: any) {
-        app.log.error(`[Stripe Webhook] Falha de validação da assinatura: ${err.message}`);
-        return reply.status(400).send({ error: `Webhook Error: ${err.message}` });
-      }
-    } else {
-      event = (typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody) as Stripe.Event;
+    // 1. Verificação de segurança: cabeçalho 'stripe-signature' é obrigatório
+    if (!sig) {
+      app.log.warn("[Stripe Webhook] Requisição rejeitada: cabeçalho 'stripe-signature' ausente.");
+      return reply.status(400).send({
+        error: "Missing stripe-signature header. Webhooks must be cryptographically signed by Stripe.",
+        code: "MISSING_STRIPE_SIGNATURE",
+      });
     }
 
-    app.log.info(`[Stripe Webhook] Processando evento recebido: ${event.type}`);
+    // 2. Validação da Chave Secreta do Webhook (STRIPE_WEBHOOK_SECRET)
+    if (!webhookSecret || !webhookSecret.startsWith("whsec_")) {
+      app.log.error(
+        "[Stripe Webhook] Falha de configuração do servidor: STRIPE_WEBHOOK_SECRET não configurado ou formato inválido (deve iniciar com 'whsec_').",
+      );
+      return reply.status(500).send({
+        error: "Webhook secret is unconfigured or invalid on server.",
+        code: "WEBHOOK_SECRET_UNCONFIGURED",
+      });
+    }
+
+    // 3. Validação Criptográfica Estrita da Assinatura (rejeita requisições forjadas)
+    let event: Stripe.Event;
+    try {
+      if (!rawBody || (Buffer.isBuffer(rawBody) && rawBody.length === 0)) {
+        throw new Error("Raw body vazio recebido no webhook.");
+      }
+      event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+    } catch (err: any) {
+      app.log.error(`[Stripe Webhook] Rejeição de segurança: Assinatura criptográfica inválida: ${err.message}`);
+      return reply.status(400).send({
+        error: `Webhook signature verification failed: ${err.message}`,
+        code: "INVALID_WEBHOOK_SIGNATURE",
+      });
+    }
+
+    app.log.info(
+      `[Stripe Webhook] Evento autenticado e verificado: ${event.type} (ID: ${event.id}, LiveMode: ${event.livemode})`,
+    );
 
     try {
       switch (event.type) {
         case "checkout.session.completed": {
           const session = event.data.object as Stripe.Checkout.Session;
           const userId = session.client_reference_id || session.metadata?.userId;
-          const priceId = session.metadata?.priceId;
+          const customerEmail = session.customer_details?.email || session.metadata?.userEmail;
           const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
           const subscriptionId =
             typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+          const priceId = session.metadata?.priceId;
+
+          app.log.info(
+            `[Stripe Webhook] checkout.session.completed para userId: ${userId || "n/a"}, email: ${customerEmail}, customer: ${customerId}`,
+          );
 
           const targetUser = await safeFindUser({
             userId,
-            email: session.customer_details?.email || session.metadata?.userEmail,
+            email: customerEmail,
             customerId,
           });
 
-          if (targetUser) {
-            const planInfo = resolvePlanFromPriceId(
-              priceId,
-              session.metadata?.planCode || session.metadata?.plan,
-              session.metadata?.cycle,
+          if (!targetUser) {
+            app.log.warn(
+              `[Stripe Webhook] Usuário não encontrado no banco de dados para a sessão ${session.id} (userId: ${userId}, email: ${customerEmail}).`,
             );
-            const newPlan = planInfo?.plan || "completo";
-
-            await prisma.user
-              .update({
-                where: { id: targetUser.id },
-                data: {
-                  plan: newPlan,
-                  status: "active",
-                  customPermissions: {
-                    ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
-                      ? targetUser.customPermissions
-                      : {}),
-                    stripeCustomerId: customerId,
-                    stripeSubscriptionId: subscriptionId,
-                    stripePriceId: priceId,
-                    subscriptionStatus: "active",
-                    subscriptionCycle: planInfo?.cycle || "monthly",
-                    lastEvent: "checkout.session.completed",
-                    updatedAt: new Date().toISOString(),
-                  },
-                },
-              })
-              .catch(() => null);
-
-            await prisma.notification
-              .create({
-                data: {
-                  userId: targetUser.id,
-                  title: "Assinatura confirmada!",
-                  description: `Seu plano Nacif ${newPlan.toUpperCase()} está ativo e seus recursos foram liberados.`,
-                  category: "Assinatura",
-                  tone: "success",
-                  href: "/subscription",
-                },
-              })
-              .catch(() => null);
+            return reply.status(200).send({
+              received: true,
+              warning: "User not found in local database, but event acknowledged",
+            });
           }
+
+          const planInfo = resolvePlanFromPriceId(
+            priceId,
+            session.metadata?.planCode || session.metadata?.plan,
+            session.metadata?.cycle,
+          );
+          const newPlan = planInfo?.plan || "completo";
+          const cycle = planInfo?.cycle || session.metadata?.cycle || "monthly";
+
+          // Atualiza o plano e os metadados do Stripe no banco de dados
+          await prisma.user
+            .update({
+              where: { id: targetUser.id },
+              data: {
+                plan: newPlan,
+                status: "active",
+                customPermissions: {
+                  ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
+                    ? targetUser.customPermissions
+                    : {}),
+                  stripeCustomerId: customerId,
+                  stripeSubscriptionId: subscriptionId,
+                  stripePriceId: priceId,
+                  subscriptionStatus: "active",
+                  subscriptionCycle: cycle,
+                  lastEvent: "checkout.session.completed",
+                  liveMode: event.livemode,
+                  updatedAt: new Date().toISOString(),
+                },
+              },
+            })
+            .catch((dbErr) => {
+              app.log.error(`[Stripe Webhook] Erro ao persistir upgrade do usuário ${targetUser.id}: ${dbErr?.message}`);
+            });
+
+          // Notificação de boas-vindas ao plano
+          await prisma.notification
+            .create({
+              data: {
+                userId: targetUser.id,
+                title: "Assinatura ativada com sucesso!",
+                description: `Seu plano Nacif ${newPlan.toUpperCase()} está ativo e todos os recursos foram liberados.`,
+                category: "Assinatura",
+                tone: "success",
+                href: "/subscription",
+              },
+            })
+            .catch(() => null);
+
+          app.log.info(
+            `[Stripe Webhook] Plano ${newPlan} (${cycle}) liberado com sucesso para o usuário ${targetUser.id} (${targetUser.email}).`,
+          );
           break;
         }
 
@@ -912,14 +987,19 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
           const sub = event.data.object as Stripe.Subscription;
           const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
           const userId = sub.metadata?.userId;
+          const userEmail = sub.metadata?.userEmail;
           const item = sub.items?.data?.[0];
           const priceId = item?.price?.id || sub.metadata?.priceId;
           const interval = item?.price?.recurring?.interval;
           const cycle = interval === "year" ? "annual" : "monthly";
 
+          app.log.info(
+            `[Stripe Webhook] ${event.type} para subId: ${sub.id}, status: ${sub.status}, customerId: ${customerId}`,
+          );
+
           const targetUser = await safeFindUser({
             userId,
-            email: sub.metadata?.userEmail,
+            email: userEmail,
             customerId,
           });
 
@@ -944,11 +1024,77 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
                     subscriptionCycle: planInfo?.cycle || cycle,
                     autoRenew: !sub.cancel_at_period_end,
                     lastEvent: event.type,
+                    liveMode: event.livemode,
                     updatedAt: new Date().toISOString(),
                   },
                 },
               })
+              .catch((dbErr) => {
+                app.log.error(`[Stripe Webhook] Erro ao sincronizar assinatura: ${dbErr?.message}`);
+              });
+
+            app.log.info(
+              `[Stripe Webhook] Assinatura sincronizada para usuário ${targetUser.id}: plano ${nextPlan}, status ${sub.status}.`,
+            );
+          }
+          break;
+        }
+
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object as Stripe.Subscription;
+          const customerId =
+            typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
+          const userId = subscription.metadata?.userId;
+          const userEmail = subscription.metadata?.userEmail;
+
+          app.log.warn(
+            `[Stripe Webhook] customer.subscription.deleted para subId: ${subscription.id}, customer: ${customerId}`,
+          );
+
+          const targetUser = await safeFindUser({
+            userId,
+            email: userEmail,
+            customerId,
+          });
+
+          if (targetUser) {
+            await prisma.user
+              .update({
+                where: { id: targetUser.id },
+                data: {
+                  plan: "gratuito",
+                  customPermissions: {
+                    ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
+                      ? targetUser.customPermissions
+                      : {}),
+                    subscriptionStatus: "canceled",
+                    autoRenew: false,
+                    canceledAt: new Date().toISOString(),
+                    lastEvent: "customer.subscription.deleted",
+                    liveMode: event.livemode,
+                    updatedAt: new Date().toISOString(),
+                  },
+                },
+              })
+              .catch((dbErr) => {
+                app.log.error(`[Stripe Webhook] Erro ao rebaixar usuário para gratuito: ${dbErr?.message}`);
+              });
+
+            await prisma.notification
+              .create({
+                data: {
+                  userId: targetUser.id,
+                  title: "Assinatura encerrada",
+                  description:
+                    "Sua assinatura na Stripe foi cancelada e seu perfil retornou ao plano Gratuito. Seus projetos e dados permanecem salvos.",
+                  category: "Assinatura",
+                  tone: "warning",
+                  href: "/subscription",
+                },
+              })
               .catch(() => null);
+
+            app.log.info(`[Stripe Webhook] Usuário ${targetUser.id} retornado ao plano gratuito com sucesso.`);
           }
           break;
         }
@@ -981,6 +1127,7 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
                     stripeSubscriptionId: subscriptionId,
                     subscriptionStatus: "active",
                     lastInvoicePaidAt: new Date().toISOString(),
+                    liveMode: event.livemode,
                   },
                 },
               })
@@ -1021,56 +1168,9 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
                   userId: targetUser.id,
                   title: "Falha na renovação da assinatura",
                   description:
-                    "Houve um problema com a cobrança da sua mensalidade. Atualize seus dados de pagamento para evitar suspensão.",
+                    "Houve uma falha na tentativa de cobrança da sua mensalidade. Atualize seus dados de pagamento para manter seus recursos ativos.",
                   category: "Cobrança",
                   tone: "danger",
-                  href: "/subscription",
-                },
-              })
-              .catch(() => null);
-          }
-          break;
-        }
-
-        case "customer.subscription.deleted": {
-          const subscription = event.data.object as Stripe.Subscription;
-          const customerId =
-            typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
-          const userId = subscription.metadata?.userId;
-
-          const targetUser = await safeFindUser({
-            userId,
-            email: subscription.metadata?.userEmail,
-            customerId,
-          });
-
-          if (targetUser) {
-            await prisma.user
-              .update({
-                where: { id: targetUser.id },
-                data: {
-                  plan: "gratuito",
-                  customPermissions: {
-                    ...(targetUser.customPermissions && typeof targetUser.customPermissions === "object"
-                      ? targetUser.customPermissions
-                      : {}),
-                    subscriptionStatus: "canceled",
-                    autoRenew: false,
-                    canceledAt: new Date().toISOString(),
-                  },
-                },
-              })
-              .catch(() => null);
-
-            await prisma.notification
-              .create({
-                data: {
-                  userId: targetUser.id,
-                  title: "Assinatura encerrada",
-                  description:
-                    "Sua assinatura foi cancelada e sua conta retornou para o plano Gratuito. Todos os seus dados permanecem salvos.",
-                  category: "Assinatura",
-                  tone: "warning",
                   href: "/subscription",
                 },
               })
@@ -1083,16 +1183,27 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
           app.log.info(`[Stripe Webhook] Evento não mapeado ignorado: ${event.type}`);
       }
 
-      return reply.send({ received: true });
+      return reply.status(200).send({ received: true, event: event.type, liveMode: event.livemode });
     } catch (err: any) {
       app.log.error(`[Stripe Webhook] Erro ao processar evento ${event.type}: ${err.message}`);
-      return reply.status(500).send({ error: "Erro interno ao processar webhook" });
+      return reply.status(500).send({
+        error: "Internal server error while processing webhook event",
+        code: "WEBHOOK_PROCESSING_ERROR",
+      });
     }
   };
 
   app.post("/webhook", handleStripeWebhook);
+  app.get("/webhook", handleStatusPing("/webhook"));
+  app.options("/webhook", handlePreflight);
+
   app.post("/api/webhook", handleStripeWebhook);
+  app.get("/api/webhook", handleStatusPing("/api/webhook"));
+  app.options("/api/webhook", handlePreflight);
+
   app.post("/api/subscriptions/webhook", handleStripeWebhook);
+  app.get("/api/subscriptions/webhook", handleStatusPing("/api/subscriptions/webhook"));
+  app.options("/api/subscriptions/webhook", handlePreflight);
 
   // =========================================================================
   // ROTAS DE GERENCIAMENTO DE ASSINATURA
