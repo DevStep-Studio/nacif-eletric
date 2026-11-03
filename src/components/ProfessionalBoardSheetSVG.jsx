@@ -154,8 +154,114 @@ function Header({ data, sheet }) {
 
 function TitleBlock({ data, sheet, x = 438, y = 720, w = 705, h = 86 }) {
   const { colors } = data;
-  const metaW = 180;
-  const logoW = 150;
+  const isCompact = w < 500;
+
+  if (isCompact) {
+    const tier1H = 96;
+    const tier2H = h - tier1H; // 98px
+    const tier2LeftW = 195;
+    const tier2RightW = w - tier2LeftW; // 178px
+    const rowCount = Math.max(data.titleRows.length, 1);
+    const rowH = (tier1H - 22) / rowCount; // ~12.33px
+
+    return (
+      <g>
+        {/* Moldura Externa do Carimbo */}
+        <rect x={x} y={y} width={w} height={h} fill="#ffffff" stroke={colors.ink} strokeWidth="0.8" />
+
+        {/* TIER 1: INFORMAÇÕES DO PROJETO (SUPERIOR, LARGURA TOTAL COM RESPIRO) */}
+        <rect x={x} y={y} width={w} height="22" fill={colors.soft} stroke={colors.faint} strokeWidth="0.6" />
+        <Text x={x + 10} y={y + 15} size={7.5} weight={900} color={colors.ink}>
+          {clipText(sheet?.title || data.title, 50)}
+        </Text>
+
+        {data.titleRows.map(([label, value], index) => {
+          const rowY = y + 22 + index * rowH;
+          return (
+            <g key={label}>
+              <rect x={x} y={rowY} width={w} height={rowH} fill={index % 2 === 0 ? "#ffffff" : "#fbfcfe"} />
+              <line x1={x} y1={rowY + rowH} x2={x + w} y2={rowY + rowH} stroke={colors.faint} strokeWidth="0.4" />
+              <Text x={x + 10} y={rowY + rowH * 0.72} size={5.8} weight={900} color={colors.muted}>
+                {label}
+              </Text>
+              <Text x={x + 76} y={rowY + rowH * 0.72} size={6.2} weight={700} color={colors.ink}>
+                {clipText(value, 46)}
+              </Text>
+            </g>
+          );
+        })}
+
+        {/* DIVISÓRIA ENTRE TIER 1 E TIER 2 */}
+        <line x1={x} y1={y + tier1H} x2={x + w} y2={y + tier1H} stroke={colors.ink} strokeWidth="0.8" />
+
+        {/* TIER 2 - ESQUERDA: PROJETISTA / ENGENHARIA & LOGOTIPO NACIF ENERGY */}
+        <rect x={x} y={y + tier1H} width={tier2LeftW} height="18" fill={colors.soft} stroke={colors.faint} strokeWidth="0.5" />
+        <Text x={x + tier2LeftW / 2} y={y + tier1H + 12} size={6.2} weight={900} color={colors.muted} anchor="middle">
+          PROJETISTA / ENGENHARIA
+        </Text>
+        <image
+          href={brandLogoEnergy}
+          xlinkHref={brandLogoEnergy}
+          x={x + (tier2LeftW - 138) / 2}
+          y={y + tier1H + 20}
+          width="138"
+          height="40"
+          preserveAspectRatio="xMidYMid meet"
+        />
+        <Text x={x + tier2LeftW / 2} y={y + tier1H + 72} size={6} weight={800} color="#00a98e" anchor="middle">
+          NACIF ENERGY
+        </Text>
+        <Text x={x + tier2LeftW / 2} y={y + tier1H + 82} size={4.9} weight={600} color={colors.muted} anchor="middle">
+          Soluções em Energia & Projetos
+        </Text>
+
+        {/* DIVISÓRIA VERTICAL ENTRE LOGO E METADADOS */}
+        <line x1={x + tier2LeftW} y1={y + tier1H} x2={x + tier2LeftW} y2={y + h} stroke={colors.ink} strokeWidth="0.8" />
+
+        {/* TIER 2 - DIREITA: METADADOS E FOLHA (3 CÉLULAS COM RESPIRO) */}
+        {(() => {
+          const metaCellH = tier2H / 3;
+          const cell1Y = y + tier1H;
+          const cell2Y = cell1Y + metaCellH;
+          const cell3Y = cell2Y + metaCellH;
+
+          return (
+            <g>
+              {/* Célula 1: PRANCHA */}
+              <line x1={x + tier2LeftW} y1={cell2Y} x2={x + w} y2={cell2Y} stroke={colors.faint} strokeWidth="0.6" />
+              <Text x={x + tier2LeftW + 10} y={cell1Y + 12} size={6.2} weight={900} color={colors.muted}>
+                PRANCHA
+              </Text>
+              <Text x={x + w - 10} y={cell1Y + 24} size={11} weight={900} color={colors.ink} anchor="end">
+                {sheet?.sheetCode || data.drawingCode}
+              </Text>
+
+              {/* Célula 2: FOLHA / REV. */}
+              <line x1={x + tier2LeftW} y1={cell3Y} x2={x + w} y2={cell3Y} stroke={colors.faint} strokeWidth="0.6" />
+              <Text x={x + tier2LeftW + 10} y={cell2Y + 12} size={6.2} weight={900} color={colors.muted}>
+                FOLHA / REV.
+              </Text>
+              <Text x={x + w - 10} y={cell2Y + 24} size={9} weight={900} color={colors.ink} anchor="end">
+                {sheet ? `${sheet.sheetIndex}/${sheet.totalSheets}` : "01/01"} · {data.revision}
+              </Text>
+
+              {/* Célula 3: DATA */}
+              <Text x={x + tier2LeftW + 10} y={cell3Y + 12} size={6.2} weight={900} color={colors.muted}>
+                DATA
+              </Text>
+              <Text x={x + w - 10} y={cell3Y + 24} size={9} weight={900} color={colors.ink} anchor="end">
+                {data.date}
+              </Text>
+            </g>
+          );
+        })()}
+      </g>
+    );
+  }
+
+  // Layout Amplo (Landscape Title Block - Folhas combinadas e quadro de cargas)
+  const metaW = Math.min(200, Math.max(160, Math.round(w * 0.22)));
+  const logoW = Math.min(180, Math.max(140, Math.round(w * 0.20)));
   const infoW = w - metaW - logoW;
 
   return (
@@ -164,20 +270,20 @@ function TitleBlock({ data, sheet, x = 438, y = 720, w = 705, h = 86 }) {
       <rect x={x} y={y} width={w} height={h} fill="#ffffff" stroke={colors.ink} strokeWidth="0.8" />
 
       {/* 1. SEÇÃO DE INFORMAÇÕES DO PROJETO (Esquerda) */}
-      <rect x={x} y={y} width={infoW} height="24" fill={colors.soft} stroke={colors.faint} strokeWidth="0.6" />
-      <Text x={x + 10} y={y + 16} size={8} weight={900} color={colors.ink}>
+      <rect x={x} y={y} width={infoW} height="22" fill={colors.soft} stroke={colors.faint} strokeWidth="0.6" />
+      <Text x={x + 10} y={y + 15} size={7.8} weight={900} color={colors.ink}>
         {clipText(sheet?.title || data.title, 48)}
       </Text>
 
       {data.titleRows.map(([label, value], index) => {
-        const rowY = y + 28 + index * 10.5;
+        const rowY = y + 26 + index * 9.8;
         return (
           <g key={label}>
-            <Text x={x + 10} y={rowY} size={5.9} weight={900} color={colors.muted}>
+            <Text x={x + 10} y={rowY} size={5.8} weight={900} color={colors.muted}>
               {label}
             </Text>
-            <Text x={x + 92} y={rowY} size={6.4} weight={700} color={colors.ink}>
-              {clipText(value, 38)}
+            <Text x={x + 76} y={rowY} size={6.2} weight={700} color={colors.ink}>
+              {clipText(value, Math.max(20, Math.floor((infoW - 86) / 5.2)))}
             </Text>
           </g>
         );
@@ -193,15 +299,15 @@ function TitleBlock({ data, sheet, x = 438, y = 720, w = 705, h = 86 }) {
         href={brandLogoEnergy}
         xlinkHref={brandLogoEnergy}
         x={x + infoW + 10}
-        y={y + 22}
+        y={y + 20}
         width={logoW - 20}
-        height="44"
+        height="40"
         preserveAspectRatio="xMidYMid meet"
       />
-      <Text x={x + infoW + logoW / 2} y={y + 74} size={5.5} weight={800} color="#00a98e" anchor="middle">
+      <Text x={x + infoW + logoW / 2} y={y + 70} size={5.5} weight={800} color="#00a98e" anchor="middle">
         NACIF ENERGY
       </Text>
-      <Text x={x + infoW + logoW / 2} y={y + 81} size={4.8} weight={600} color={colors.muted} anchor="middle">
+      <Text x={x + infoW + logoW / 2} y={y + 78} size={4.8} weight={600} color={colors.muted} anchor="middle">
         Soluções em Energia & Projetos
       </Text>
 
@@ -453,8 +559,8 @@ function CombinedPanelDiagram({ data, sheet }) {
           };
         });
 
-        const outX = side === "left" ? x + 56 : x + w - 56;
-        const labelX = side === "left" ? x + 12 : x + w - 12;
+        const outX = side === "left" ? x + 58 : x + w - 58;
+        const labelX = side === "left" ? x + 16 : x + w - 16;
         const color = isCircuit ? phaseColor(colors, circuit.phaseSet?.[0]) : "#a5adb8";
         const label = isCircuit
           ? `${circuit.id} · ${clipText(circuit.description, 20)} · ${circuit.breaker}A`
@@ -863,66 +969,86 @@ function DedicatedDiagramSheet({ data, sheet }) {
           };
         });
 
-        const outX = side === "left" ? x + 80 : x + w - 80;
-        const labelX = side === "left" ? x + 16 : x + w - 16;
+        // Coordenadas calculadas com respiro interno garantido (sem tocar nas bordas ou sobrepor elementos)
+        // Lado esquerdo: Margem esquerda de 24px (X = 68), Breaker em X in [220, 264], Busbars em X in [347, 451]
+        // Lado direito: Busbars em X in [347, 451], Breaker em X in [534, 578], Margem direita de 24px (X = 730)
+        const labelX = side === "left" ? x + 24 : x + w - 24;
+        const breakerInX = side === "left" ? 264 : 534;
+        const terminalX = side === "left" ? 220 : 578;
         const color = isCircuit ? phaseColor(colors, circuit.phaseSet?.[0]) : "#a5adb8";
-        const title = isCircuit ? `${circuit.id} · ${clipText(circuit.description, 26)}` : row.label;
+        const title = isCircuit ? `${circuit.id} · ${clipText(circuit.description, 22)}` : row.label;
         const sub = isCircuit
           ? `${circuit.breaker}A/${circuit.breakerCurve || "B"} · ${circuit.wireGauge} · ΔU ${formatNumber(circuit.voltageDropPct, 1)}%`
           : "Reserva Técnica";
 
         const bundleHalfHeight = isCircuit ? ((phaseSet.length - 1) * 5.5) / 2 : 0;
-        const labelY = yy - 6;
-        const subY = yy + 7;
+        const labelY = yy - 4.5;
+        const subY = yy + 7.5;
         const breakerPathFor = (lineY) => side === "left"
-          ? `M ${outX} ${lineY} h -14 q -10 -10 -26 0 h -10`
-          : `M ${outX} ${lineY} h 14 q 10 -10 26 0 h 10`;
+          ? `M 264 ${lineY} h -12 q -8 -8 -20 0 h -12`
+          : `M 534 ${lineY} h 12 q 8 -8 20 0 h 12`;
 
         return (
           <g key={`${row.type}-${index}`}>
+            {/* Linha vertical de amarração de fases para circuitos bifásicos/trifásicos */}
             {isCircuit && phaseSet.length > 1 && (
               <line
-                x1={outX}
+                x1={terminalX}
                 y1={yy - bundleHalfHeight}
-                x2={outX}
+                x2={terminalX}
                 y2={yy + bundleHalfHeight}
                 stroke={color}
-                strokeWidth="1.1"
+                strokeWidth="1.2"
               />
             )}
             {phaseConnections.map((connection, pIdx) => {
               const lineY = yy + (isCircuit ? connection.offsetY : 0);
               const lineColor = isCircuit ? phaseColor(colors, connection.phase) : "#cfd6df";
               const dotColor = isCircuit ? phaseColor(colors, connection.phase) : "#a5adb8";
+              const feederEndX = isCircuit ? breakerInX : terminalX;
+
               return (
                 <g key={`phase-line-${pIdx}`}>
+                  {/* Linha de alimentação do barramento até o disjuntor / borne */}
                   <line
                     x1={connection.x}
                     y1={lineY}
-                    x2={outX}
+                    x2={feederEndX}
                     y2={lineY}
                     stroke={lineColor}
                     strokeWidth={isCircuit ? "1.2" : "0.8"}
                     strokeDasharray={isCircuit ? undefined : "4 4"}
                   />
-                  <circle cx={connection.x} cy={lineY} r="2.8" fill="#ffffff" stroke={dotColor} strokeWidth="1.1" />
-                  <circle cx={outX} cy={lineY} r="2.8" fill="#ffffff" stroke={isCircuit ? dotColor : color} strokeWidth="1.1" />
-                  {isCircuit && (
-                    <path
-                      d={breakerPathFor(lineY)}
-                      fill="none"
-                      stroke={colors.red}
-                      strokeWidth="1.1"
-                    />
+                  {/* Ponto de derivação no barramento */}
+                  <circle cx={connection.x} cy={lineY} r="2.6" fill="#ffffff" stroke={dotColor} strokeWidth="1.1" />
+
+                  {isCircuit ? (
+                    <>
+                      {/* Ponto de entrada no disjuntor */}
+                      <circle cx={breakerInX} cy={lineY} r="2.6" fill="#ffffff" stroke={dotColor} strokeWidth="1.1" />
+                      {/* Símbolo normalizado do disjuntor termomagnético */}
+                      <path
+                        d={breakerPathFor(lineY)}
+                        fill="none"
+                        stroke={colors.red}
+                        strokeWidth="1.1"
+                      />
+                      {/* Ponto de saída / borne terminal para o circuito */}
+                      <circle cx={terminalX} cy={lineY} r="2.6" fill="#ffffff" stroke={color} strokeWidth="1.1" />
+                    </>
+                  ) : (
+                    /* Ponto terminal para circuitos reserva */
+                    <circle cx={terminalX} cy={lineY} r="2.6" fill="#ffffff" stroke="#a5adb8" strokeWidth="1.1" />
                   )}
                 </g>
               );
             })}
 
+            {/* Identificação textual do circuito com respiro e alinhamento impecável */}
             <Text
               x={labelX}
               y={labelY}
-              size={7.5}
+              size={7.2}
               weight={isCircuit ? 800 : 700}
               color={isCircuit ? colors.ink : "#8b95a3"}
               anchor={side === "left" ? "start" : "end"}
@@ -932,7 +1058,7 @@ function DedicatedDiagramSheet({ data, sheet }) {
             <Text
               x={labelX}
               y={subY}
-              size={6.4}
+              size={6.2}
               weight={700}
               color={isCircuit ? colors.muted : "#a5adb8"}
               anchor={side === "left" ? "start" : "end"}
@@ -952,7 +1078,15 @@ function DedicatedDiagramSheet({ data, sheet }) {
           </Text>
         </g>
       ) : (
-        <line x1={phaseXs[0] - 10} y1={busBottom + 10} x2={phaseXs[phaseXs.length - 1] + 10} y2={busBottom + 10} stroke={colors.ink} strokeWidth="3" />
+        <line
+          x1={phaseXs[0] - 10}
+          y1={busBottom}
+          x2={phaseXs[phaseXs.length - 1] + 10}
+          y2={busBottom}
+          stroke={colors.ink}
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
       )}
 
       {/* COLUNA LATERAL DIREITA */}
@@ -983,8 +1117,8 @@ function DedicatedDiagramSheet({ data, sheet }) {
         NOTAS DE PROJETO E NORMAS
       </Text>
       {data.notes.map((note, index) => (
-        <Text key={note} x={rightX + 14} y={y + 356 + index * 25} size={6.8} weight={600} color={colors.ink}>
-          {index + 1}. {clipText(note, 78)}
+        <Text key={note} x={rightX + 14} y={y + 356 + index * 25} size={6.5} weight={600} color={colors.ink}>
+          {index + 1}. {clipText(note, 70)}
         </Text>
       ))}
 
