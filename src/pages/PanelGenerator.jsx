@@ -712,9 +712,10 @@ const phaseTypeConfig = {
   "Monofásico": { poles: 1, phase: "A", label: "Monofásico - fase preta + neutro azul claro" },
   "Bifásico": { poles: 2, phase: "AB", label: "Bifásico - preto + vermelho" },
   "Trifásico": { poles: 3, phase: "ABC", label: "Trifásico - preto + vermelho + marrom" },
+  "Tetrapolar": { poles: 4, phase: "ABCN", label: "Tetrapolar (4 DIN) - 3 fases + neutro azul" },
 };
 
-const phaseWireColor = (poleIndex = 0) => ["black", "red", "brown"][poleIndex] || "black";
+const phaseWireColor = (poleIndex = 0) => ["black", "red", "brown", "blue"][poleIndex] || "black";
 
 const pinPoleIndex = (pinId = "") => {
   const match = String(pinId).match(/^comp:[^:]+:(?:top|bottom):(\d+)$/);
@@ -762,6 +763,7 @@ const normalizedWireColor = (wire = {}) => {
 
 const supplyTypeFromBreaker = (component = {}) => {
   if (component.supply_type) return component.supply_type;
+  if (Number(component.poles) === 4 || component.phase === "ABCN") return "Tetrapolar";
   if (component.phase === "ABC" || Number(component.poles) >= 3) return "Trifásico";
   if (component.phase === "AB" || Number(component.poles) === 2) return "Bifásico";
   return "Monofásico";
@@ -847,7 +849,13 @@ const layoutSnapshotsEqual = (a = {}, b = {}) => (
 );
 
 const polePhaseLabel = (component = {}, poleIndex = 0) => {
-  if (component.isGeneral) return `L${poleIndex + 1}`;
+  if (component.isGeneral) {
+    if (Number(component.poles) === 4) return ["L1", "L2", "L3", "N"][poleIndex] || "N";
+    return `L${poleIndex + 1}`;
+  }
+  if (Number(component.poles) === 4 || component.supply_type === "Tetrapolar" || component.phase === "ABCN") {
+    return ["A", "B", "C", "N"][poleIndex] || "N";
+  }
   if (component.phase === "ABC" || component.supply_type === "Trifásico") return ["A", "B", "C"][poleIndex] || "C";
   if (component.phase === "AB" || component.supply_type === "Bifásico") return ["A", "B"][poleIndex] || "B";
   if (component.phase && String(component.phase).length === 1) return component.phase;
@@ -3692,7 +3700,7 @@ export default function PanelGenerator() {
         breaker_curve: component.curve || "B",
         breaker_poles: poles,
         phase: component.phase || "A",
-        supply_type: component.supply_type || (poles === 1 ? "Monofásico" : poles === 2 ? "Bifásico" : "Trifásico"),
+        supply_type: component.supply_type || (poles === 1 ? "Monofásico" : poles === 2 ? "Bifásico" : poles === 4 ? "Tetrapolar" : "Trifásico"),
         wire_section: component.conductorSection || "2.5mm²",
         status: "Ativo",
       };
@@ -6106,7 +6114,11 @@ export default function PanelGenerator() {
   const handleAddComponent = async (e) => {
     e.preventDefault();
     const newId = `comp_${Date.now()}`;
-    const phaseConfig = phaseTypeConfig[newCompSupplyType] || phaseTypeConfig.Monofásico;
+    const polesCount = parseInt(newCompPoles, 10) || 1;
+    const supplyType = newCompType === "breaker"
+      ? (polesCount === 4 ? "Tetrapolar" : polesCount === 3 ? "Trifásico" : polesCount === 2 ? "Bifásico" : "Monofásico")
+      : newCompSupplyType;
+    const phaseConfig = phaseTypeConfig[supplyType] || phaseTypeConfig.Monofásico;
     const normalizedLabel = cleanDisplayText(newCompLabel) || "Circuito sem identificação";
     const currentList = project?.circuits || [];
     const nextCircuitNum = currentList.length + 1;
@@ -6120,9 +6132,9 @@ export default function PanelGenerator() {
       description: "",
       current: parseInt(newCompCurrent, 10) || 16,
       curve: newCompCurve,
-      poles: newCompType === "breaker" ? phaseConfig.poles : parseInt(newCompPoles, 10) || 1,
+      poles: polesCount,
       phase: newCompType === "breaker" ? phaseConfig.phase : newCompPhase,
-      supply_type: newCompType === "breaker" ? newCompSupplyType : undefined,
+      supply_type: supplyType,
       conductorSection: parseInt(newCompCurrent, 10) >= 40 ? "10mm²" : "6mm²",
       status: "ON"
     };
@@ -6143,8 +6155,17 @@ export default function PanelGenerator() {
       const sourceCompId = rails.some((rail) => rail.components?.some((item) => item.id === "gen_dr")) ? "gen_dr" : "gen_brk";
       const gauge = parseInt(newCompCurrent, 10) >= 40 ? "10mm²" : "6mm²";
       const label = parseInt(newCompCurrent, 10) >= 40 ? "10 mm²" : "6 mm²";
-      const phaseWires = Array.from({ length: phaseConfig.poles }).flatMap((_, poleIndex) => {
-        const color = phaseWireColor(poleIndex);
+      const phaseWires = Array.from({ length: polesCount }).flatMap((_, poleIndex) => {
+        const isNeutralPole = polesCount === 4 && poleIndex === 3;
+        const color = isNeutralPole ? "blue" : phaseWireColor(poleIndex);
+        const conductorType = isNeutralPole ? "neutral" : "phase";
+        const phaseName = isNeutralPole ? "N" : `L${poleIndex + 1}`;
+        const sourcePin = isNeutralPole
+          ? (rails.some((r) => r.components?.some((item) => item.id === sourceCompId && Number(item.poles) >= 4))
+              ? `comp:${sourceCompId}:bottom:3`
+              : "busbar_neutral:1")
+          : `comp:${sourceCompId}:bottom:${poleIndex}`;
+
         return [
           {
             id: `wire_${newId}_phase_in_${poleIndex}`,
@@ -6154,9 +6175,9 @@ export default function PanelGenerator() {
             circuit_id: newId,
             circuitName: normalizedLabel,
             circuitLabel: normalizedLabel,
-            conductorType: "phase",
-            phase: `L${poleIndex + 1}`,
-            source: `comp:${sourceCompId}:bottom:${poleIndex}`,
+            conductorType,
+            phase: phaseName,
+            source: sourcePin,
             target: `comp:${newId}:top:${poleIndex}`,
             label,
           },
@@ -6168,15 +6189,15 @@ export default function PanelGenerator() {
             circuit_id: newId,
             circuitName: normalizedLabel,
             circuitLabel: normalizedLabel,
-            conductorType: "phase",
-            phase: `L${poleIndex + 1}`,
+            conductorType,
+            phase: phaseName,
             source: `comp:${newId}:bottom:${poleIndex}`,
             target: `load_out:${newId}:${poleIndex}`,
             label,
           },
         ];
       });
-      const neutralWire = newCompSupplyType === "Monofásico"
+      const neutralWire = (supplyType === "Monofásico" && polesCount < 4)
         ? [{
             id: `wire_${newId}_neutral`,
             color: "blue",
@@ -6225,10 +6246,10 @@ export default function PanelGenerator() {
         type: "Circuito",
         breaker_a: parseInt(newCompCurrent, 10) || 16,
         breaker_curve: newCompCurve || "B",
-        breaker_poles: phaseConfig.poles,
-        phase: phaseConfig.phase,
-        supply_type: newCompSupplyType,
-        power_w: (parseInt(newCompCurrent, 10) || 16) * (newCompSupplyType === "Monofásico" ? 127 : 220),
+        breaker_poles: polesCount,
+        phase: comp.phase,
+        supply_type: supplyType,
+        power_w: (parseInt(newCompCurrent, 10) || 16) * (supplyType === "Monofásico" ? 127 : 220),
         wire_gauge: parseInt(newCompCurrent, 10) >= 40 ? "10mm²" : "6mm²",
       };
       nextCircuits = [...currentList, newCircuit];
@@ -12002,7 +12023,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                                 <Select value={String(component.poles)} onValueChange={(val) => {
                                   const poles = parseInt(val, 10);
                                   if (component.type === "breaker") {
-                                    const supplyType = poles >= 3 ? "Trifásico" : poles === 2 ? "Bifásico" : "Monofásico";
+                                    const supplyType = poles === 4 ? "Tetrapolar" : poles === 3 ? "Trifásico" : poles === 2 ? "Bifásico" : "Monofásico";
                                     const config = phaseTypeConfig[supplyType] || phaseTypeConfig.Monofásico;
                                     handleUpdateComponentFields({
                                       poles,
@@ -12324,7 +12345,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                           const poles = parseInt(val, 10);
                           setNewCompPoles(poles);
                           if (newCompType === "breaker") {
-                            const supplyType = poles >= 3 ? "Trifásico" : poles === 2 ? "Bifásico" : "Monofásico";
+                            const supplyType = poles === 4 ? "Tetrapolar" : poles === 3 ? "Trifásico" : poles === 2 ? "Bifásico" : "Monofásico";
                             const config = phaseTypeConfig[supplyType] || phaseTypeConfig.Monofásico;
                             setNewCompSupplyType(supplyType);
                             setNewCompPhase(config.phase);
