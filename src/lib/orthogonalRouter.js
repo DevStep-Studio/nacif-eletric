@@ -393,6 +393,11 @@ export const inferTerminalDirection = (pinId = "", point = { x: 0, y: 0 }, rails
     return "DOWN";
   }
 
+  // Entradas de alimentação apontadas para cima esperando direcionamento
+  if (pin.startsWith("feed_in:")) {
+    return "DOWN";
+  }
+
   // Barramento superior de neutro
   if (pin.startsWith("busbar_neutral:")) {
     return "DOWN";
@@ -478,11 +483,11 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
   if (options.sourceComponentId) excludedIds.add(String(options.sourceComponentId));
   if (options.targetComponentId) excludedIds.add(String(options.targetComponentId));
   if (options.sourcePin) {
-    const match = String(options.sourcePin).match(/comp:([^:]+)/);
+    const match = String(options.sourcePin).match(/(?:comp|feed_in|load_out):([^:]+)/);
     if (match) excludedIds.add(match[1]);
   }
   if (options.targetPin) {
-    const match = String(options.targetPin).match(/comp:([^:]+)/);
+    const match = String(options.targetPin).match(/(?:comp|feed_in|load_out):([^:]+)/);
     if (match) excludedIds.add(match[1]);
   }
 
@@ -1025,6 +1030,33 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
     return { x: groundBus.x + groundBus.width - 18, y: groundBus.pinY };
   }
 
+  // Entradas de alimentação apontadas para cima esperando direcionamento
+  if (pin.startsWith("feed_in:")) {
+    const parts = pin.split(":");
+    const compId = parts[1];
+    const poleToken = parts[2] || "0";
+
+    for (let rIdx = 0; rIdx < rails.length; rIdx++) {
+      const rail = rails[rIdx];
+      const railY = 190 + rIdx * 240;
+      let currentX = RAIL_START_X;
+
+      for (const comp of rail.components || []) {
+        const compW = comp.type === "spacer"
+          ? (Number(comp.poles) || 1) * (DIN_MODULE_WIDTH + 2) - 2
+          : (Number(comp.poles) || 1) * DIN_MODULE_WIDTH;
+        if (comp.id === compId || comp.circuit_id === compId) {
+          const poleIdx = parseInt(poleToken, 10) || 0;
+          const terminalX = currentX + poleIdx * DIN_MODULE_WIDTH + DIN_MODULE_WIDTH / 2;
+          return { x: terminalX, y: snapToGrid(railY - 100) };
+        }
+        currentX += compW + 2;
+      }
+    }
+
+    return { x: RAIL_START_X, y: 90 };
+  }
+
   // Saídas de carga (vai para circuito)
   if (pin.startsWith("load_out:")) {
     const parts = pin.split(":");
@@ -1128,5 +1160,7 @@ const extractComponentIdFromPin = (pinId = "") => {
   if (match) return match[1];
   const loadMatch = String(pinId).match(/^load_out:([^:]+)/);
   if (loadMatch) return loadMatch[1];
+  const feedMatch = String(pinId).match(/^feed_in:([^:]+)/);
+  if (feedMatch) return feedMatch[1];
   return "";
 };

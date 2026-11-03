@@ -161,6 +161,18 @@ export function getDuctForPin(pinId, point, rails = [], corridors = {}, panelHei
   if (pin.startsWith("busbar_ground:") || pin.startsWith("load_out:")) {
     return bottomDuct;
   }
+  if (pin.startsWith("feed_in:")) {
+    const parts = pin.split(":");
+    const compId = parts[1];
+    let railIdx = 0;
+    rails.forEach((r, idx) => {
+      if ((r.components || []).some((c) => c.id === compId || c.circuit_id === compId)) {
+        railIdx = idx;
+      }
+    });
+    if (railIdx === 0) return topDuct;
+    return interRailDucts[railIdx - 1] || topDuct;
+  }
 
   if (pin.startsWith("comp:")) {
     const parts = pin.split(":");
@@ -194,7 +206,7 @@ export function getDuctForPin(pinId, point, rails = [], corridors = {}, panelHei
  */
 export function extractComponentIdFromPin(pinId) {
   if (!pinId || typeof pinId !== "string") return null;
-  if (pinId.startsWith("comp:")) {
+  if (pinId.startsWith("comp:") || pinId.startsWith("load_out:") || pinId.startsWith("feed_in:")) {
     const parts = pinId.split(":");
     return parts[1] || null;
   }

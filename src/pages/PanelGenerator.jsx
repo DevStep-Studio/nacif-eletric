@@ -623,7 +623,7 @@ const pinReferencesComponent = (pinId = "", componentId = "") => {
   const pin = String(pinId || "");
   const id = String(componentId || "");
   if (!pin || !id) return false;
-  return pin.startsWith(`comp:${id}:`) || pin.startsWith(`load_out:${id}:`) || pin.includes(`:${id}:`);
+  return pin.startsWith(`comp:${id}:`) || pin.startsWith(`load_out:${id}:`) || pin.startsWith(`feed_in:${id}:`) || pin.includes(`:${id}:`);
 };
 
 const wireReferencesComponent = (wire = {}, componentId = "") => (
@@ -1331,6 +1331,27 @@ const parsePinMeta = (pinId = "", point = { x: 0, y: 0 }, rails = []) => {
 
   if (isGroundBusPin(pin)) {
     return { type: "ground-bus", term: "bus", railIndex: rails.length, railY: null, point };
+  }
+
+  if (pin.startsWith("feed_in:")) {
+    const [, compId, poleToken = "0"] = pin.split(":");
+    const placement = findLoadComponentPlacement(compId, rails);
+    if (placement) {
+      return {
+        type: "feed_in",
+        term: "top",
+        railIndex: placement.railIndex,
+        railY: placement.railY,
+        point,
+      };
+    }
+    return {
+      type: "feed_in",
+      term: "top",
+      railIndex: 0,
+      railY: null,
+      point,
+    };
   }
 
   if (pin.startsWith("load_out:")) {
@@ -3190,9 +3211,12 @@ export default function PanelGenerator() {
     });
 
     const loadPinIds = new Set();
+    const feedPinIds = new Set();
     visibleWires.forEach((wire) => {
       [wire.source, wire.target].forEach((pinId) => {
-        if (String(pinId || "").startsWith("load_out:")) loadPinIds.add(pinId);
+        const pStr = String(pinId || "");
+        if (pStr.startsWith("load_out:")) loadPinIds.add(pinId);
+        if (pStr.startsWith("feed_in:")) feedPinIds.add(pinId);
       });
     });
     loadPinIds.forEach((id) => {
@@ -3206,6 +3230,18 @@ export default function PanelGenerator() {
         label: pole === "neutral" ? "Saida N" : pole === "ground" ? "Saida PE" : `Saida ${Number(pole) + 1 || pole}`,
         kind,
         group: "Saida",
+      });
+    });
+    feedPinIds.forEach((id) => {
+      const point = getPinCoords(id, rails, panelHeight, infrastructure);
+      const parts = String(id).split(":");
+      const pole = parts[2] || "0";
+      addPin({
+        id,
+        ...point,
+        label: `Entrada P${Number(pole) + 1 || pole}`,
+        kind: phaseWireColor(Number(pole) || 0),
+        group: "Entrada",
       });
     });
 
@@ -6152,7 +6188,6 @@ export default function PanelGenerator() {
     const normalizedRails = normalizeRailsLayout(updated);
     let nextWires = wires;
     if (newCompType === "breaker") {
-      const sourceCompId = rails.some((rail) => rail.components?.some((item) => item.id === "gen_dr")) ? "gen_dr" : "gen_brk";
       const gauge = parseInt(newCompCurrent, 10) >= 40 ? "10mm²" : "6mm²";
       const label = parseInt(newCompCurrent, 10) >= 40 ? "10 mm²" : "6 mm²";
       const phaseWires = Array.from({ length: polesCount }).flatMap((_, poleIndex) => {
@@ -6160,11 +6195,6 @@ export default function PanelGenerator() {
         const color = isNeutralPole ? "blue" : phaseWireColor(poleIndex);
         const conductorType = isNeutralPole ? "neutral" : "phase";
         const phaseName = isNeutralPole ? "N" : `L${poleIndex + 1}`;
-        const sourcePin = isNeutralPole
-          ? (rails.some((r) => r.components?.some((item) => item.id === sourceCompId && Number(item.poles) >= 4))
-              ? `comp:${sourceCompId}:bottom:3`
-              : "busbar_neutral:1")
-          : `comp:${sourceCompId}:bottom:${poleIndex}`;
 
         return [
           {
@@ -6177,7 +6207,7 @@ export default function PanelGenerator() {
             circuitLabel: normalizedLabel,
             conductorType,
             phase: phaseName,
-            source: sourcePin,
+            source: `feed_in:${newId}:${poleIndex}`,
             target: `comp:${newId}:top:${poleIndex}`,
             label,
           },
@@ -6197,35 +6227,7 @@ export default function PanelGenerator() {
           },
         ];
       });
-      const neutralWire = (supplyType === "Monofásico" && polesCount < 4)
-        ? [{
-            id: `wire_${newId}_neutral`,
-            color: "blue",
-            gauge: "2.5mm²",
-            name: `Neutro — ${normalizedLabel}`,
-            circuit_id: newId,
-            circuitName: normalizedLabel,
-            circuitLabel: normalizedLabel,
-            conductorType: "neutral",
-            source: "busbar_neutral:1",
-            target: `load_out:${newId}:neutral`,
-            label: "2.5 mm²",
-          }]
-        : [];
-      const groundWire = [{
-        id: `wire_${newId}_ground`,
-        color: "green",
-        gauge: "2.5mm²",
-        name: `Terra — ${normalizedLabel}`,
-        circuit_id: newId,
-        circuitName: normalizedLabel,
-        circuitLabel: normalizedLabel,
-        conductorType: "ground",
-        source: "busbar_ground:1",
-        target: `load_out:${newId}:ground`,
-        label: "2.5 mm²",
-      }];
-      nextWires = [...wires, ...phaseWires, ...neutralWire, ...groundWire];
+      nextWires = [...wires, ...phaseWires];
     }
     const nextInfrastructure = upsertPanelLayoutMeta(infrastructure, {
       manualDeviceEdits: true,
@@ -9033,6 +9035,10 @@ export default function PanelGenerator() {
   const routeServicePowerDescriptor = (descriptor) => {
     const { p1, p2, sourceMeta, targetMeta } = descriptor;
     if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return [];
+
+    if (String(descriptor.wire?.source || "").startsWith("feed_in:") || String(descriptor.wire?.target || "").startsWith("feed_in:")) {
+      return [p1, p2];
+    }
     const obstacles = extractPanelObstacles(rails, infrastructure);
 
     const storedWire = getStoredWire(descriptor.wire?.id);
