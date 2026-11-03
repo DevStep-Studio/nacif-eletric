@@ -4398,7 +4398,9 @@ export default function PanelGenerator() {
         clearMultiSelection();
         setMarqueeSelection(null);
         setSelectedComponentId("");
-        clearWireSelection();
+        clearWireSelection({ exitWiringMode: true });
+        setWiringMode(false);
+        setWiringStart("");
         return;
       }
 
@@ -6311,7 +6313,6 @@ export default function PanelGenerator() {
           variant: "destructive",
         });
         setWiringStart("");
-        setWiringMode(false);
         return;
       }
 
@@ -6326,7 +6327,6 @@ export default function PanelGenerator() {
             variant: "destructive",
           });
           setWiringStart("");
-          setWiringMode(false);
           return;
         }
       }
@@ -6342,7 +6342,6 @@ export default function PanelGenerator() {
           variant: "destructive",
         });
         setWiringStart("");
-        setWiringMode(false);
         return;
       }
 
@@ -6353,7 +6352,6 @@ export default function PanelGenerator() {
           variant: "destructive",
         });
         setWiringStart("");
-        setWiringMode(false);
         return;
       }
 
@@ -6364,7 +6362,6 @@ export default function PanelGenerator() {
           variant: "destructive",
         });
         setWiringStart("");
-        setWiringMode(false);
         return;
       }
 
@@ -6375,7 +6372,6 @@ export default function PanelGenerator() {
           variant: "destructive",
         });
         setWiringStart("");
-        setWiringMode(false);
         return;
       }
 
@@ -6420,10 +6416,14 @@ export default function PanelGenerator() {
       setSelectedComponentId("");
       setActiveTab("wiring");
       setWiringStart("");
-      setWiringMode(false);
+      // MODO CONTÍNUO (Sticky Tool): Mantém o Modo Conexão ativo para ligações consecutivas sem interrupção
       setHoveredPinId("");
       setWireName("");
       setWireDisplayText("");
+      toast({
+        title: "Condutor conectado com sucesso",
+        description: `Ligação criada (${newWire.name || newWire.gauge}). Modo Conexão permanece ativo para novas ligações.`,
+      });
     }
   };
 
@@ -10602,7 +10602,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       {marqueeMode ? "Seleção em Massa (Marquee)" : wiringMode ? "Modo Conexão" : "Modo Navegação"}
                     </Badge>
                     <span className="truncate text-xs font-medium text-slate-500">
-                      {marqueeMode ? "Clique e arraste no quadro para selecionar múltiplos componentes e fios" : wiringMode ? "Clique em dois bornes para ligar o cabo" : activeBoardDisplayName}
+                      {marqueeMode ? "Clique e arraste no quadro para selecionar múltiplos componentes e fios" : wiringMode ? (wiringStart ? "1º Borne selecionado. Clique no 2º borne para conectar o condutor" : "Modo contínuo ativo: clique em dois bornes para ligar o cabo") : activeBoardDisplayName}
                     </span>
                   </div>
                 </div>
@@ -10764,7 +10764,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     height={panelHeight}
                     viewBox={`0 0 ${PANEL_W} ${panelHeight}`}
                     xmlns="http://www.w3.org/2000/svg"
-                    style={{ fontFamily: "'Inter','Arial',sans-serif", cursor: marqueeMode ? "crosshair" : undefined }}
+                    style={{ fontFamily: "'Inter','Arial',sans-serif", cursor: marqueeMode || wiringMode ? "crosshair" : undefined }}
                     ref={svgRef}
                     onPointerDown={(e) => {
                       if (!wiringMode && (e.target.tagName === "svg" || e.target.id === "panel-background")) {

@@ -340,3 +340,4 @@ export function executeBatchDelete({
     totalDeletedCount: compIdSet.size + wireIdSet.size,
   };
 }
+
