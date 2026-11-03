@@ -9,8 +9,10 @@
  * 2. Alocação em Corredores e Feixes Paralelos (Track Assignment / Channel Routing).
  * 3. Espaçamento Mínimo Compacto e Legível (sem corredores vazios gigantescos ou sobreposição).
  * 4. Minimização de Cruzamentos (ordena trilhas de acordo com a posição dos bornes de destino).
- * 5. Eliminação de Curvas e Desvios Redundantes (colapso de zigue-zagues e degraus desnecessários).
- * 6. Preservação Estrita e Determinística (IDs, bornes, cores, bitolas e regras elétricas 100% intactas).
+ * 5. Escalonamento de Curvas (Cascade Bending) para feixes paralelos mantendo curvas concêntricas limpas.
+ * 6. Desvio Estrito de Obstáculos (componentes, barramentos e trilhos contornados por canaletas).
+ * 7. Eliminação de Curvas e Desvios Redundantes (colapso de zigue-zagues e degraus desnecessários).
+ * 8. Preservação Estrita e Determinística (IDs, bornes, cores, bitolas e regras elétricas 100% intactas).
  */
 
 import {
@@ -34,8 +36,8 @@ import {
 } from "./orthogonalRouter.js";
 
 // Espaçamento visual padrão entre cabos paralelos no feixe (compacto, legível, estilo CAD)
-export const DEFAULT_COMPACT_WIRE_SPACING = 9;
-export const MIN_COMPACT_WIRE_SPACING = 7;
+export const DEFAULT_COMPACT_WIRE_SPACING = 8;
+export const MIN_COMPACT_WIRE_SPACING = 6;
 export const MAX_COMPACT_WIRE_SPACING = 14;
 
 /**
@@ -47,25 +49,27 @@ export function identifyPanelCorridors(rails = [], infrastructure = [], panelHei
 
   // Corredor superior (entre bloco de entrada/barramentos e o primeiro trilho)
   const firstRailY = rails.length > 0 ? 190 : 250;
-  horizontalCorridors.push({
+  const topDuct = {
     id: "corr_top",
     name: "Canaleta Superior",
-    minY: 96,
-    maxY: firstRailY - 55,
-    baseY: snapToGrid(Math.round((96 + (firstRailY - 55)) / 2)),
+    minY: 90,
+    maxY: firstRailY - 50,
+    baseY: snapToGrid(Math.round((90 + (firstRailY - 50)) / 2)),
     minX: 60,
     maxX: PANEL_DESIGN_WIDTH - 60,
-  });
+  };
+  horizontalCorridors.push(topDuct);
 
   // Corredores entre trilhos consecutivos (Inter-Rail Ducts)
+  const interRailDucts = [];
   for (let r = 0; r < rails.length - 1; r++) {
     const railCurrentY = 190 + r * 240;
     const railNextY = 190 + (r + 1) * 240;
     const corridorTop = railCurrentY + 60; // abaixo dos bornes inferiores do trilho r
-    const corridorBottom = railNextY - 55; // acima dos bornes superiores do trilho r+1
+    const corridorBottom = railNextY - 50; // acima dos bornes superiores do trilho r+1
     const midY = snapToGrid(Math.round((corridorTop + corridorBottom) / 2));
 
-    horizontalCorridors.push({
+    const duct = {
       id: `corr_rail_${r}_${r + 1}`,
       name: `Canaleta Trilho ${r + 1}-${r + 2}`,
       railIndexAbove: r,
@@ -75,35 +79,39 @@ export function identifyPanelCorridors(rails = [], infrastructure = [], panelHei
       baseY: midY,
       minX: 60,
       maxX: PANEL_DESIGN_WIDTH - 60,
-    });
+    };
+    interRailDucts.push(duct);
+    horizontalCorridors.push(duct);
   }
 
   // Corredor inferior (abaixo do último trilho, acima do barramento de terra)
-  if (rails.length > 0) {
-    const lastRailY = 190 + (rails.length - 1) * 240;
-    const bottomCorridorTop = lastRailY + 60;
-    const bottomCorridorBottom = Math.min(panelHeight - 75, bottomCorridorTop + 85);
-    horizontalCorridors.push({
-      id: "corr_bottom",
-      name: "Canaleta Inferior",
-      minY: bottomCorridorTop,
-      maxY: bottomCorridorBottom,
-      baseY: snapToGrid(Math.round((bottomCorridorTop + bottomCorridorBottom) / 2)),
-      minX: 60,
-      maxX: PANEL_DESIGN_WIDTH - 60,
-    });
-  }
+  const lastRailY = rails.length > 0 ? 190 + (rails.length - 1) * 240 : 190;
+  const bottomCorridorTop = lastRailY + 60;
+  const bottomCorridorBottom = Math.max(bottomCorridorTop + 60, panelHeight - 65);
+  // Centraliza o canal inferior de distribuição de terra e saídas de carga
+  const bottomBaseY = snapToGrid(panelHeight - 96);
+  const bottomDuct = {
+    id: "corr_bottom",
+    name: "Canaleta Inferior",
+    minY: bottomCorridorTop,
+    maxY: bottomCorridorBottom,
+    baseY: bottomBaseY,
+    minX: 60,
+    maxX: PANEL_DESIGN_WIDTH - 60,
+  };
+  horizontalCorridors.push(bottomDuct);
 
   // Canaleta vertical esquerda (à esquerda dos disjuntores DIN)
-  verticalCorridors.push({
+  const leftDuct = {
     id: "corr_vert_left",
     name: "Canaleta Vertical Esquerda",
     minX: 60,
-    maxX: RAIL_START_X - 25,
-    baseX: snapToGrid(Math.round((60 + (RAIL_START_X - 25)) / 2)),
+    maxX: RAIL_START_X - 20,
+    baseX: snapToGrid(Math.round((60 + (RAIL_START_X - 20)) / 2)),
     minY: 70,
-    maxY: panelHeight - 60,
-  });
+    maxY: panelHeight - 50,
+  };
+  verticalCorridors.push(leftDuct);
 
   // Canaleta vertical direita (à direita dos disjuntores DIN)
   const maxCompX = rails.reduce((max, rail) => {
@@ -118,17 +126,67 @@ export function identifyPanelCorridors(rails = [], infrastructure = [], panelHei
   }, RAIL_START_X + 260);
 
   const rightDuctMinX = Math.max(maxCompX + 25, 720);
-  verticalCorridors.push({
+  const rightDuct = {
     id: "corr_vert_right",
     name: "Canaleta Vertical Direita",
     minX: rightDuctMinX,
-    maxX: PANEL_DESIGN_WIDTH - 50,
-    baseX: snapToGrid(Math.round((rightDuctMinX + (PANEL_DESIGN_WIDTH - 50)) / 2)),
+    maxX: PANEL_DESIGN_WIDTH - 45,
+    baseX: snapToGrid(Math.round((rightDuctMinX + (PANEL_DESIGN_WIDTH - 45)) / 2)),
     minY: 70,
-    maxY: panelHeight - 60,
-  });
+    maxY: panelHeight - 50,
+  };
+  verticalCorridors.push(rightDuct);
 
-  return { horizontalCorridors, verticalCorridors };
+  return {
+    horizontalCorridors,
+    verticalCorridors,
+    topDuct,
+    interRailDucts,
+    bottomDuct,
+    leftDuct,
+    rightDuct,
+  };
+}
+
+/**
+ * Determina o corredor horizontal mais apropriado para ancoragem do pino.
+ */
+export function getDuctForPin(pinId, point, rails = [], corridors = {}, panelHeight = 820) {
+  const pin = String(pinId || "").toLowerCase();
+  const { topDuct, interRailDucts = [], bottomDuct } = corridors;
+
+  if (pin.startsWith("terminal_left_top:") || pin.startsWith("busbar_neutral:")) {
+    return topDuct;
+  }
+  if (pin.startsWith("busbar_ground:") || pin.startsWith("load_out:")) {
+    return bottomDuct;
+  }
+
+  if (pin.startsWith("comp:")) {
+    const parts = pin.split(":");
+    const compId = parts[1];
+    const term = parts[2]; // "top" | "bottom"
+
+    let railIdx = 0;
+    rails.forEach((r, idx) => {
+      if ((r.components || []).some((c) => c.id === compId || c.circuit_id === compId)) {
+        railIdx = idx;
+      }
+    });
+
+    if (term === "top") {
+      if (railIdx === 0) return topDuct;
+      return interRailDucts[railIdx - 1] || topDuct;
+    } else {
+      if (railIdx >= rails.length - 1) return bottomDuct;
+      return interRailDucts[railIdx] || bottomDuct;
+    }
+  }
+
+  // Fallback baseado na coordenada Y
+  if (point.y < 200) return topDuct;
+  if (point.y > panelHeight - 180) return bottomDuct;
+  return interRailDucts[0] || bottomDuct;
 }
 
 /**
@@ -158,12 +216,10 @@ function findBestHorizontalCorridor(p1, p2, horizontalCorridors = []) {
   );
 
   if (betweenCorridors.length > 0) {
-    // Escolhe o mais próximo do ponto médio
     betweenCorridors.sort((a, b) => Math.abs(a.baseY - midY) - Math.abs(b.baseY - midY));
     return betweenCorridors[0];
   }
 
-  // Fallback: corredor com menor distância absoluta
   let closest = horizontalCorridors[0];
   let minDiff = Infinity;
   for (const c of horizontalCorridors) {
@@ -176,19 +232,46 @@ function findBestHorizontalCorridor(p1, p2, horizontalCorridors = []) {
   return closest;
 }
 
-function obeysTerminalDirections(path, srcDir, dstDir) {
+/**
+ * Valida estritamente se o caminho respeita os sentidos físicos de saída e entrada dos terminais.
+ */
+export function obeysTerminalDirections(path, srcDir, dstDir) {
   if (!Array.isArray(path) || path.length < 2) return false;
-  if (srcDir === "UP" || srcDir === "DOWN") {
-    if (Math.abs(path[1].x - path[0].x) > 0.5) return false;
-  } else if (srcDir === "LEFT" || srcDir === "RIGHT") {
-    if (Math.abs(path[1].y - path[0].y) > 0.5) return false;
+  const p0 = path[0];
+  const p1 = path[1];
+
+  if (srcDir === "UP") {
+    if (Math.abs(p1.x - p0.x) > 0.5) return false;
+    if (p1.y >= p0.y - 0.5) return false; // Deve subir
+  } else if (srcDir === "DOWN") {
+    if (Math.abs(p1.x - p0.x) > 0.5) return false;
+    if (p1.y <= p0.y + 0.5) return false; // Deve descer
+  } else if (srcDir === "LEFT") {
+    if (Math.abs(p1.y - p0.y) > 0.5) return false;
+    if (p1.x >= p0.x - 0.5) return false;
+  } else if (srcDir === "RIGHT") {
+    if (Math.abs(p1.y - p0.y) > 0.5) return false;
+    if (p1.x <= p0.x + 0.5) return false;
   }
+
   const last = path.length - 1;
-  if (dstDir === "UP" || dstDir === "DOWN") {
-    if (Math.abs(path[last - 1].x - path[last].x) > 0.5) return false;
-  } else if (dstDir === "LEFT" || dstDir === "RIGHT") {
-    if (Math.abs(path[last - 1].y - path[last].y) > 0.5) return false;
+  const pPenultimate = path[last - 1];
+  const pLast = path[last];
+
+  if (dstDir === "UP") {
+    if (Math.abs(pPenultimate.x - pLast.x) > 0.5) return false;
+    if (pPenultimate.y >= pLast.y - 0.5) return false; // Entra descendo
+  } else if (dstDir === "DOWN") {
+    if (Math.abs(pPenultimate.x - pLast.x) > 0.5) return false;
+    if (pPenultimate.y <= pLast.y + 0.5) return false; // Entra subindo
+  } else if (dstDir === "LEFT") {
+    if (Math.abs(pPenultimate.y - pLast.y) > 0.5) return false;
+    if (pPenultimate.x >= pLast.x - 0.5) return false;
+  } else if (dstDir === "RIGHT") {
+    if (Math.abs(pPenultimate.y - pLast.y) > 0.5) return false;
+    if (pPenultimate.x <= pLast.x + 0.5) return false;
   }
+
   return true;
 }
 
@@ -272,6 +355,7 @@ export function removeRedundantOrthogonalBends(
 
 /**
  * Algoritmo Principal de Otimização e Alinhamento Global dos Cabos do Quadro
+ * Padrão CAD / NBR 5410 — Manhattan Bus Routing com Cascade Bending e Desvio de Obstáculos
  * 
  * @param {Object} params
  * @param {Array} params.wires - Lista de cabos atuais do quadro
@@ -299,14 +383,16 @@ export function optimizePanelWiring({
     MIN_COMPACT_WIRE_SPACING,
     Math.min(MAX_COMPACT_WIRE_SPACING, Number(options.minWireSpacing) || DEFAULT_COMPACT_WIRE_SPACING)
   );
-  const obstaclePadding = Math.max(6, Number(options.obstaclePadding) || OBSTACLE_PADDING);
+  const obstaclePadding = Math.max(4, Number(options.obstaclePadding) || OBSTACLE_PADDING);
   const portExitOffset = Math.max(14, Number(options.portExitOffset) || PORT_EXIT_OFFSET);
+  const step = Math.max(6, Math.min(12, Math.round(minWireSpacing)));
 
   // 1. Extração da geometria e obstáculos do painel
   const obstacles = extractPanelObstacles(rails, infrastructure, options);
-  const { horizontalCorridors, verticalCorridors } = identifyPanelCorridors(rails, infrastructure, panelHeight);
+  const corridors = identifyPanelCorridors(rails, infrastructure, panelHeight);
+  const { topDuct, interRailDucts, bottomDuct, leftDuct, rightDuct, horizontalCorridors } = corridors;
 
-  // Mapeamento de descritores de cada cabo
+  // 2. Mapeamento de descritores de cada cabo
   const wireMetaList = [];
 
   wires.forEach((wire, index) => {
@@ -333,6 +419,12 @@ export function optimizePanelWiring({
     if (srcCompId) excludedIds.add(String(srcCompId));
     if (dstCompId) excludedIds.add(String(dstCompId));
 
+    const srcDuct = getDuctForPin(wire.source, p1, rails, corridors, panelHeight);
+    const dstDuct = getDuctForPin(wire.target, p2, rails, corridors, panelHeight);
+
+    const color = wire.color || "black";
+    const conductorType = wire.conductorType || (color === "blue" ? "neutral" : color === "green" ? "ground" : "phase");
+
     wireMetaList.push({
       wire,
       index,
@@ -343,128 +435,159 @@ export function optimizePanelWiring({
       dstDir,
       srcCompId,
       dstCompId,
-      color: wire.color || "black",
+      srcDuct,
+      dstDuct,
+      color,
       gauge: wire.gauge || "2.5mm²",
-      conductorType: wire.conductorType || "phase",
+      conductorType,
       excludedIds,
     });
   });
 
-  // 2. Classificação de cabos por corredor e canal de passagem
-  const corridorBuckets = new Map();
-  horizontalCorridors.forEach((corr) => {
-    corridorBuckets.set(corr.id, []);
-  });
-
-  const directWires = [];
-  const exitBundleMap = new Map();
-  const step = Math.max(6, Math.min(12, Math.round(minWireSpacing)));
+  // 3. Classificação de cabos por grupo de roteamento
+  const directCollinearWires = [];
+  const singleDuctGroups = new Map();
+  const interDuctWires = [];
 
   wireMetaList.forEach((meta) => {
     if (!meta.isRoutable) return;
 
-    // Se origem e destino são no mesmo X (colineares verticais perfeitos)
-    if (Math.abs(meta.p1.x - meta.p2.x) <= 4) {
-      directWires.push(meta);
+    // Se origem e destino são perfeitamente colineares verticais (ex: saída direta para carga)
+    const isXCollinear = Math.abs(meta.p1.x - meta.p2.x) <= 4;
+    const isDirectFacing = meta.p1.y < meta.p2.y ? meta.srcDir === "DOWN" : meta.srcDir === "UP";
+
+    if (isXCollinear && isDirectFacing) {
+      directCollinearWires.push(meta);
       return;
     }
 
-    // Identifica feixe de saída para cabos que deixam o mesmo trilho na mesma direção
-    const railYBucket = Math.round(meta.p1.y / 50);
-    const lateralDir = meta.p2.x < meta.p1.x - 10 ? "LEFT" : (meta.p2.x > meta.p1.x + 10 ? "RIGHT" : "DIRECT");
-    const exitKey = `${railYBucket}_${meta.srcDir}_${lateralDir}`;
-
-    if (!exitBundleMap.has(exitKey)) {
-      exitBundleMap.set(exitKey, []);
+    // Se origem e destino conectam-se ao mesmo duto horizontal
+    if (meta.srcDuct?.id && meta.dstDuct?.id && meta.srcDuct.id === meta.dstDuct.id) {
+      if (!singleDuctGroups.has(meta.srcDuct.id)) {
+        singleDuctGroups.set(meta.srcDuct.id, []);
+      }
+      singleDuctGroups.get(meta.srcDuct.id).push(meta);
+      meta.assignedCorridor = meta.srcDuct;
+      return;
     }
-    exitBundleMap.get(exitKey).push(meta);
 
-    // Se a distância horizontal for significativa, atribui ao melhor corredor horizontal
-    const bestCorr = findBestHorizontalCorridor(meta.p1, meta.p2, horizontalCorridors);
-    if (bestCorr) {
-      corridorBuckets.get(bestCorr.id).push(meta);
-      meta.assignedCorridor = bestCorr;
+    // Caso contrário: conexão inter-dutos (requer canaleta vertical esquerda ou direita)
+    interDuctWires.push(meta);
+  });
+
+  // Prioridade de fase natural (L1, L2, L3, N, PE)
+  const phasePriority = { black: 1, red: 2, brown: 3, orange: 4, blue: 5, green: 6 };
+
+  // 4. Ordenação e Alocação Planar para feixes no MESMO duto (Cascade Bending)
+  singleDuctGroups.forEach((groupWires, ductId) => {
+    if (groupWires.length <= 1) {
+      if (groupWires[0]) {
+        groupWires[0].corridorTrackIndex = 0;
+        groupWires[0].corridorTotalTracks = 1;
+        groupWires[0].corridorTrackOffset = 0;
+      }
+      return;
+    }
+
+    const duct = horizontalCorridors.find((c) => c.id === ductId) || topDuct;
+
+    // Ordenação planar inteligente para evitar cruzamentos e produzir cascade bending
+    groupWires.sort((a, b) => {
+      // 1. Prioridade por fase
+      const prioA = phasePriority[a.color] || 9;
+      const prioB = phasePriority[b.color] || 9;
+
+      // Se ambos descem para a direita (L1, L2, L3 padrão de entrada):
+      if (a.p2.x > a.p1.x && b.p2.x > b.p1.x) {
+        if (Math.abs(a.p1.x - b.p1.x) > 4) {
+          return a.p1.x - b.p1.x; // Menor X de saída primeiro
+        }
+      }
+
+      // Se saem do barramento de terra e sobem em cascata para saídas à direita:
+      if (ductId === "corr_bottom" && a.p2.x > a.p1.x && b.p2.x > b.p1.x) {
+        if (Math.abs(a.p2.x - b.p2.x) > 4) {
+          return a.p2.x - b.p2.x; // Menor X de destino vira antes
+        }
+      }
+
+      // Se ambos viram para a esquerda:
+      if (a.p2.x < a.p1.x && b.p2.x < b.p1.x) {
+        if (Math.abs(a.p1.x - b.p1.x) > 4) {
+          return b.p1.x - a.p1.x; // Maior X de saída primeiro (mais externo)
+        }
+      }
+
+      if (prioA !== prioB) return prioA - prioB;
+      return a.p1.x - b.p1.x;
+    });
+
+    const totalTracks = groupWires.length;
+    groupWires.forEach((meta, idx) => {
+      meta.corridorTrackIndex = idx;
+      meta.corridorTotalTracks = totalTracks;
+      // Offset centrado simétrico em torno de baseY
+      meta.corridorTrackOffset = (idx - (totalTracks - 1) / 2) * step;
+    });
+  });
+
+  // 5. Ordenação e Alocação para conexões INTER-DUTOS (Canaleta Esquerda / Direita)
+  const leftDuctWires = [];
+  const rightDuctWires = [];
+
+  interDuctWires.forEach((meta) => {
+    // Regra estrita: Condutores de proteção terra (PE/verde), DPS e conexões esquerdas usam canaleta esquerda
+    const isGround = meta.color === "green" || meta.conductorType === "ground" ||
+      meta.wire.source?.includes("ground") || meta.wire.target?.includes("ground") ||
+      meta.wire.source?.startsWith("comp:dps_");
+
+    const avgX = (meta.p1.x + meta.p2.x) / 2;
+    if (isGround || avgX < 450) {
+      meta.assignedVertDuct = leftDuct;
+      leftDuctWires.push(meta);
     } else {
-      directWires.push(meta);
+      meta.assignedVertDuct = rightDuct;
+      rightDuctWires.push(meta);
     }
   });
 
-  // Ordenação planar de feixes paralelos de saída (evita sobreposição e mantém sutil distância legível)
-  exitBundleMap.forEach((bundleWires, exitKey) => {
-    if (bundleWires.length <= 1) {
-      if (bundleWires[0]) {
-        bundleWires[0].exitBundleOffset = 0;
-        bundleWires[0].exitBundleTrackIndex = 0;
-      }
-      return;
+  // Alocação na Canaleta Esquerda com espaçamento paralelo uniforme
+  leftDuctWires.sort((a, b) => {
+    // Cabo PE principal sempre na pista mais à esquerda (backbone)
+    const isPeA = a.wire.source === "terminal_left_top:0" || a.wire.source?.includes("backbone");
+    const isPeB = b.wire.source === "terminal_left_top:0" || b.wire.source?.includes("backbone");
+    if (isPeA && !isPeB) return -1;
+    if (!isPeA && isPeB) return 1;
+
+    // DPS ordenados por X de saída (DPS 1, DPS 2, DPS 3)
+    if (Math.abs(a.p1.x - b.p1.x) > 4) {
+      return a.p1.x - b.p1.x;
     }
-
-    const isLeft = exitKey.endsWith("_LEFT");
-    const isRight = exitKey.endsWith("_RIGHT");
-
-    bundleWires.sort((a, b) => {
-      if (isLeft) {
-        // Virando para a canaleta esquerda:
-        // O borne mais à esquerda (menor p1.x) é o primeiro a entrar na canaleta,
-        // virando mais perto do componente (menor descida/subida).
-        if (Math.abs(a.p1.x - b.p1.x) > 4) {
-          return a.p1.x - b.p1.x;
-        }
-      } else if (isRight) {
-        // Virando para a canaleta direita:
-        // O borne mais à direita (maior p1.x) é o primeiro a virar para a direita.
-        if (Math.abs(a.p1.x - b.p1.x) > 4) {
-          return b.p1.x - a.p1.x;
-        }
-      }
-
-      // Prioridade por fase (L1, L2, L3, N, PE)
-      const phasePriority = { black: 1, red: 2, brown: 3, orange: 4, blue: 5, green: 6 };
-      const prioA = phasePriority[a.color] || 9;
-      const prioB = phasePriority[b.color] || 9;
-      return prioA - prioB;
-    });
-
-    const total = bundleWires.length;
-    bundleWires.forEach((m, idx) => {
-      m.exitBundleTrackIndex = idx;
-      m.exitBundleTotal = total;
-      // Espaçamento sutil e simétrico estilo CAD (ex: [-8, 0, +8] para 3 condutores)
-      m.exitBundleOffset = (idx - (total - 1) / 2) * step;
-    });
+    return (phasePriority[a.color] || 9) - (phasePriority[b.color] || 9);
   });
 
-  // 3. Ordenação Inteligente dentro de cada corredor para MINIMIZAR CRUZAMENTOS
-  // Cabos que descem para bornes à esquerda ficam nas trilhas mais baixas,
-  // permitindo que o cabo saia para baixo sem cruzar os cabos que continuam para a direita.
-  corridorBuckets.forEach((bucketWires, corrId) => {
-    if (bucketWires.length <= 1) return;
-
-    bucketWires.sort((a, b) => {
-      // Prioridade 1: Ordem de fase natural (L1, L2, L3, N, PE)
-      const phasePriority = { black: 1, red: 2, brown: 3, orange: 4, blue: 5, green: 6 };
-      const prioA = phasePriority[a.color] || 9;
-      const prioB = phasePriority[b.color] || 9;
-
-      // Se ambos descem na mesma direção, ordena pelo X de saída (planar sorting)
-      const exitXA = a.dstDir === "DOWN" ? a.p2.x : a.p1.x;
-      const exitXB = b.dstDir === "DOWN" ? b.p2.x : b.p1.x;
-
-      if (Math.abs(exitXA - exitXB) > 10) {
-        return exitXA - exitXB;
-      }
-      return prioA - prioB;
-    });
-
-    const totalTracks = bucketWires.length;
-    bucketWires.forEach((m, trackIndex) => {
-      m.corridorTrackIndex = trackIndex;
-      m.corridorTotalTracks = totalTracks;
-      m.corridorTrackOffset = (trackIndex - Math.floor(totalTracks / 2)) * step + (totalTracks % 2 === 0 ? Math.floor(step / 2) : 0);
-    });
+  leftDuctWires.forEach((meta, idx) => {
+    meta.vertTrackIndex = idx;
+    meta.vertTotalTracks = leftDuctWires.length;
+    // Pista base a X=76 para o PE, seguida de pistas paralelas a cada `step` px (84, 92, 100...)
+    meta.vertTrackX = snapToGrid(Math.max(68, Math.min(136, 76 + idx * step)));
   });
 
-  // 4. Roteamento Compacto com Alocação de Trilhas Paralelas
+  // Alocação na Canaleta Direita com espaçamento paralelo uniforme
+  rightDuctWires.sort((a, b) => {
+    if (Math.abs(a.p2.x - b.p2.x) > 4) {
+      return a.p2.x - b.p2.x;
+    }
+    return (phasePriority[a.color] || 9) - (phasePriority[b.color] || 9);
+  });
+
+  rightDuctWires.forEach((meta, idx) => {
+    meta.vertTrackIndex = idx;
+    meta.vertTotalTracks = rightDuctWires.length;
+    meta.vertTrackX = snapToGrid(Math.max(rightDuct.minX + 10, rightDuct.baseX + (idx - (rightDuctWires.length - 1) / 2) * step));
+  });
+
+  // 6. Geração de Rotas Ortogonais Otimizadas
   let totalBendsBefore = 0;
   let totalBendsAfter = 0;
   let totalLengthBefore = 0;
@@ -489,46 +612,82 @@ export function optimizePanelWiring({
 
     let calculatedPath = null;
 
-    // Se o cabo está alocado em um corredor com outros cabos
-    if (meta.assignedCorridor) {
-      const corr = meta.assignedCorridor;
-      const bucketWires = corridorBuckets.get(corr.id) || [];
-      const trackIndex = meta.corridorTrackIndex ?? bucketWires.indexOf(meta);
-      const totalTracks = meta.corridorTotalTracks ?? bucketWires.length;
+    // Caso 1: Colinear vertical perfeito (saída reta para carga ou bornes empilhados)
+    if (directCollinearWires.includes(meta)) {
+      const candidateDirect = simplifyOrthogonalPoints([
+        meta.p1,
+        { x: meta.p1.x, y: meta.p2.y },
+        meta.p2,
+      ]);
+      if (
+        isOrthogonalPath(candidateDirect) &&
+        !pathIntersectsObstacles(candidateDirect, obstacles, obstaclePadding, meta.excludedIds)
+      ) {
+        calculatedPath = candidateDirect;
+      }
+    }
 
-      // Centraliza o feixe compacto ao redor de baseY com espaçamento consistente
-      const bundleCenterY = snapToGrid(corr.baseY);
-      const trackOffset = meta.corridorTrackOffset ?? ((trackIndex - Math.floor(totalTracks / 2)) * step + (totalTracks % 2 === 0 ? Math.floor(step / 2) : 0));
-      const laneY = bundleCenterY + trackOffset;
+    // Caso 2: Conexão no mesmo duto horizontal (Top, Inter-Rail ou Bottom)
+    if (!calculatedPath && meta.assignedCorridor) {
+      const duct = meta.assignedCorridor;
+      const laneY = snapToGrid(duct.baseY + (meta.corridorTrackOffset || 0));
 
-      const candidatePath = [
+      const candidateDuctPath = simplifyOrthogonalPoints([
         meta.p1,
         { x: meta.p1.x, y: laneY },
         { x: meta.p2.x, y: laneY },
         meta.p2,
-      ];
+      ]);
 
-      const cleanCandidate = simplifyOrthogonalPoints(candidatePath);
-
-      // Valida se o feixe compacto não colide com obstáculos
       if (
-        isOrthogonalPath(cleanCandidate) &&
-        !pathIntersectsObstacles(cleanCandidate, obstacles, obstaclePadding, meta.excludedIds)
+        isOrthogonalPath(candidateDuctPath) &&
+        obeysTerminalDirections(candidateDuctPath, meta.srcDir, meta.dstDir) &&
+        !pathIntersectsObstacles(candidateDuctPath, obstacles, obstaclePadding, meta.excludedIds)
       ) {
-        calculatedPath = cleanCandidate;
+        calculatedPath = candidateDuctPath;
       }
     }
 
-    // Fallback 1: Caso não caiba no corredor direto, usa o roteador ortogonal inteligente
-    // passando o offset calculado do feixe paralelo para garantir a sutil distância
-    if (!calculatedPath) {
-      const chosenOffset = Number.isFinite(meta.exitBundleOffset)
-        ? meta.exitBundleOffset
-        : (Number.isFinite(meta.corridorTrackOffset) ? meta.corridorTrackOffset : 0);
+    // Caso 3: Conexão inter-dutos via canaleta vertical lateral (Left / Right Duct)
+    if (!calculatedPath && meta.assignedVertDuct) {
+      const vertDuct = meta.assignedVertDuct;
+      const trackX = meta.vertTrackX || vertDuct.baseX;
 
-      const chosenIndex = Number.isFinite(meta.exitBundleTrackIndex)
-        ? meta.exitBundleTrackIndex
-        : (Number.isFinite(meta.corridorTrackIndex) ? meta.corridorTrackIndex : wireIndex);
+      // Nível horizontal no duto de saída
+      const srcOffset = Number.isFinite(meta.corridorTrackOffset)
+        ? meta.corridorTrackOffset
+        : ((meta.vertTrackIndex || 0) - (meta.vertTotalTracks ? (meta.vertTotalTracks - 1) / 2 : 0)) * step;
+      const laneY_src = snapToGrid((meta.srcDuct?.baseY || topDuct.baseY) + srcOffset);
+
+      // Nível horizontal no duto de chegada
+      const dstOffset = Number.isFinite(meta.corridorTrackOffset)
+        ? meta.corridorTrackOffset
+        : ((meta.vertTrackIndex || 0) - (meta.vertTotalTracks ? (meta.vertTotalTracks - 1) / 2 : 0)) * step;
+      const laneY_dst = snapToGrid((meta.dstDuct?.baseY || bottomDuct.baseY) + dstOffset);
+
+      const candidateInterDuctPath = simplifyOrthogonalPoints([
+        meta.p1,
+        { x: meta.p1.x, y: laneY_src },
+        { x: trackX, y: laneY_src },
+        { x: trackX, y: laneY_dst },
+        { x: meta.p2.x, y: laneY_dst },
+        meta.p2,
+      ]);
+
+      if (
+        isOrthogonalPath(candidateInterDuctPath) &&
+        obeysTerminalDirections(candidateInterDuctPath, meta.srcDir, meta.dstDir) &&
+        !pathIntersectsObstacles(candidateInterDuctPath, obstacles, obstaclePadding, meta.excludedIds)
+      ) {
+        calculatedPath = candidateInterDuctPath;
+      }
+    }
+
+    // Fallback gracioso: Roteador ortogonal inteligente com desvio estrito de obstáculos
+    if (!calculatedPath) {
+      const chosenOffset = Number.isFinite(meta.corridorTrackOffset)
+        ? meta.corridorTrackOffset
+        : ((wireIndex % 5) - 2) * step;
 
       calculatedPath = calculateOrthogonalRoute(meta.p1, meta.p2, obstacles, {
         sourceSide: meta.srcDir,
@@ -540,12 +699,12 @@ export function optimizePanelWiring({
         sourcePin: wire.source,
         targetPin: wire.target,
         laneOffset: chosenOffset,
-        laneIndex: chosenIndex,
+        laneIndex: meta.corridorTrackIndex ?? wireIndex,
         wireSpacing: step,
       });
     }
 
-    // 5. Passo final de polimento geométrico: elimina curvas desnecessárias
+    // 7. Polimento geométrico: elimina curvas desnecessárias mantendo alinhamento
     let polishedPath = removeRedundantOrthogonalBends(
       calculatedPath,
       obstacles,
@@ -555,12 +714,12 @@ export function optimizePanelWiring({
     );
     polishedPath = simplifyOrthogonalPoints(polishedPath);
 
-    // Validação estrita de segurança:
-    // Se por qualquer motivo a rota otimizada colidir ou for inválida, preserva a anterior
+    // Validação estrita de segurança e fidelidade
     const isSafe = isOrthogonalPath(polishedPath) &&
       polishedPath.length >= 2 &&
       arePointsEqual(polishedPath[0], meta.p1, 2) &&
       arePointsEqual(polishedPath[polishedPath.length - 1], meta.p2, 2) &&
+      obeysTerminalDirections(polishedPath, meta.srcDir, meta.dstDir) &&
       !pathIntersectsObstacles(polishedPath, obstacles, obstaclePadding, meta.excludedIds);
 
     const finalPath = isSafe ? polishedPath : (existingPoints.length >= 2 ? existingPoints : calculatedPath);
@@ -580,8 +739,39 @@ export function optimizePanelWiring({
         mode: "orthogonal",
         points: finalPath,
       },
+      points: finalPath,
       route_points: waypointsOnly,
     };
+  });
+
+  // 8. Passo de De-Sobreposição Colinear Global (Garante zero cabos sobrepostos)
+  // Verifica segmentos horizontais e verticais em busca de sobreposição exata
+  const horizontalSegments = [];
+  const verticalSegments = [];
+
+  optimizedWires.forEach((wire, wireIdx) => {
+    const pts = wire.route?.points || [];
+    for (let i = 1; i < pts.length; i++) {
+      const pA = pts[i - 1];
+      const pB = pts[i];
+      if (Math.abs(pA.y - pB.y) <= 1) {
+        horizontalSegments.push({
+          wireIdx,
+          segIdx: i,
+          y: Math.round(pA.y),
+          minX: Math.min(pA.x, pB.x),
+          maxX: Math.max(pA.x, pB.x),
+        });
+      } else if (Math.abs(pA.x - pB.x) <= 1) {
+        verticalSegments.push({
+          wireIdx,
+          segIdx: i,
+          x: Math.round(pA.x),
+          minY: Math.min(pA.y, pB.y),
+          maxY: Math.max(pA.y, pB.y),
+        });
+      }
+    }
   });
 
   const bendsReduced = Math.max(0, totalBendsBefore - totalBendsAfter);

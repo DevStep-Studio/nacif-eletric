@@ -39,6 +39,7 @@ import {
   isOrthogonalPath,
   WIRE_SPACING,
   DEFAULT_CORNER_RADIUS,
+  clearOrthogonalRouteCache,
 } from "@/lib/orthogonalRouter";
 import {
   normalizeAABB,
@@ -3564,41 +3565,7 @@ export default function PanelGenerator() {
   };
 
   const handleAutoOrganizeAllWires = () => {
-    const obstacles = extractPanelObstacles(rails, infrastructure);
-    let changed = false;
-    const nextWires = wires.map((wire) => {
-      if (wire.deleted || isCableLocked(wire) || wire.routeMode === "manual") return wire;
-      const p1 = getPinCoords(wire.source, rails, panelHeight, infrastructure);
-      const p2 = getPinCoords(wire.target, rails, panelHeight, infrastructure);
-      if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return wire;
-
-      const sourceSide = inferTerminalDirection(wire.source, p1, rails, panelHeight);
-      const targetSide = inferTerminalDirection(wire.target, p2, rails, panelHeight);
-      const laneOffset = wire.color === "black" ? -WIRE_SPACING : wire.color === "brown" || wire.color === "orange" ? WIRE_SPACING : 0;
-
-      const newRoute = calculateOrthogonalRoute(p1, p2, obstacles, {
-        sourceSide,
-        targetSide,
-        laneOffset,
-        sourcePin: wire.source,
-        targetPin: wire.target,
-      });
-
-      const cleanRoute = simplifyOrthogonalPoints(newRoute);
-      changed = true;
-      return {
-        ...wire,
-        route: { mode: "orthogonal", points: cleanRoute },
-        route_points: [],
-        routeMode: "automatic",
-        routingMode: "automatic",
-        points: buildCablePointList(cleanRoute),
-      };
-    });
-
-    if (changed) {
-      updateWires(nextWires);
-    }
+    handleOptimizeWires();
   };
 
   const handleDuplicateComponent = (componentId = selectedComponentId) => {
@@ -6469,7 +6436,7 @@ export default function PanelGenerator() {
         infrastructure,
         panelHeight,
         options: {
-          minWireSpacing: 9,
+          minWireSpacing: 8,
           obstaclePadding: 8,
           portExitOffset: 24,
         },
@@ -6477,6 +6444,8 @@ export default function PanelGenerator() {
 
       // 3. Invalida cache de caminhos visuais para forçar redesenho na nova geometria
       wirePathsRef.current = {};
+      wireRouteMetaRef.current = {};
+      clearOrthogonalRouteCache();
 
       // 4. Aplica novo layout preservando conexões elétricas e persiste no banco
       updateWires(optimizedWires);

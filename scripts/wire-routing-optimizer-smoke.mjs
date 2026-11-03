@@ -228,6 +228,130 @@ console.log("Iniciando bateria de testes do Otimizador Inteligente de Fiação..
   console.log("✓ TESTE 6: Feixe saindo de bornes inferiores paralelos (DPS, IDR) mantém sutil distância: OK");
 }
 
+// ─── TESTE 7: Cenário Real Completo (Layout CAD com Cascade Bending e Desvio de Obstáculos) ─
+{
+  const mockRails = [
+    {
+      id: "rail_0",
+      components: [
+        { id: "dps_a", type: "dps", poles: 1 },
+        { id: "dps_b", type: "dps", poles: 1 },
+        { id: "dps_c", type: "dps", poles: 1 },
+        { id: "gen_brk", type: "breaker", poles: 3 },
+        { id: "idr_geral", type: "dr", poles: 2 },
+      ],
+    },
+    {
+      id: "rail_1",
+      components: Array.from({ length: 12 }, (_, i) => ({ id: `b_${i + 1}`, type: "breaker", poles: 1 })),
+    },
+  ];
+
+  const obstacles = extractPanelObstacles(mockRails, []);
+  const panelHeight = 820;
+
+  const mockWires = [
+    // Entrada trifásica
+    { id: "w_in_l1", source: "terminal_left_top:1", target: "comp:gen_brk:top:0", color: "black" },
+    { id: "w_in_l2", source: "terminal_left_top:2", target: "comp:gen_brk:top:1", color: "red" },
+    { id: "w_in_l3", source: "terminal_left_top:3", target: "comp:gen_brk:top:2", color: "brown" },
+    // Entrada PE principal
+    { id: "w_in_pe", source: "terminal_left_top:0", target: "busbar_ground:0", color: "green" },
+    // Aterramentos DPS em canaleta esquerda paralela
+    { id: "w_dps_a", source: "comp:dps_a:bottom:0", target: "busbar_ground:1", color: "green" },
+    { id: "w_dps_b", source: "comp:dps_b:bottom:0", target: "busbar_ground:2", color: "green" },
+    { id: "w_dps_c", source: "comp:dps_c:bottom:0", target: "busbar_ground:3", color: "green" },
+    // Feixe inter-trilhos (DJ Geral -> Trilho 2)
+    { id: "w_inter_l1", source: "comp:gen_brk:bottom:0", target: "comp:b_1:top:0", color: "black" },
+    { id: "w_inter_l2", source: "comp:gen_brk:bottom:1", target: "comp:b_2:top:0", color: "red" },
+    { id: "w_inter_l3", source: "comp:gen_brk:bottom:2", target: "comp:b_3:top:0", color: "brown" },
+  ];
+
+  const { optimizedWires } = optimizePanelWiring({
+    wires: mockWires,
+    rails: mockRails,
+    infrastructure: [],
+    panelHeight,
+    options: { minWireSpacing: 8 },
+  });
+
+  assert.equal(optimizedWires.length, mockWires.length, "TESTE 7: Todos os cabos devem ser otimizados");
+
+  optimizedWires.forEach((w) => {
+    assert.ok(isOrthogonalPath(w.route.points), `TESTE 7: Cabo ${w.id} deve ser 100% ortogonal`);
+    const excluded = new Set([w.sourceComponentId, w.targetComponentId].filter(Boolean));
+    assert.ok(
+      !pathIntersectsObstacles(w.route.points, obstacles, 4, excluded),
+      `TESTE 7: Cabo ${w.id} não pode colidir com obstáculos do painel`
+    );
+  });
+
+  // Validação de cascade bending nas fases de entrada
+  const l1Y = optimizedWires[0].route.points[1].y;
+  const l2Y = optimizedWires[1].route.points[1].y;
+  const l3Y = optimizedWires[2].route.points[1].y;
+  assert.ok(l1Y !== l2Y && l2Y !== l3Y, "TESTE 7: Fases de entrada devem ter trilhas horizontais distintas");
+
+  // Validação de canaleta esquerda paralela para PE e DPS
+  const pePts = optimizedWires.find(w => w.id === "w_in_pe")?.route?.points || [];
+  const dpsAPts = optimizedWires.find(w => w.id === "w_dps_a")?.route?.points || [];
+  assert.ok(pePts.length >= 4, "TESTE 7: Rota do PE deve navegar via canaleta");
+  assert.ok(dpsAPts.length >= 4, "TESTE 7: Rota do DPS deve navegar via canaleta");
+
+  console.log("✓ TESTE 7: Cenário real com entrada trifásica, DPS e inter-trilhos em cascade bending: OK");
+}
+
+// ─── TESTE 8: Verificação de Não-Sobreposição de Segmentos Paralelos ───────────
+{
+  const mockRails = [
+    {
+      id: "rail_0",
+      components: [
+        { id: "gen_brk", type: "breaker", poles: 3 },
+      ],
+    },
+  ];
+
+  const mockWires = [
+    { id: "p1", source: "terminal_left_top:1", target: "comp:gen_brk:top:0", color: "black" },
+    { id: "p2", source: "terminal_left_top:2", target: "comp:gen_brk:top:1", color: "red" },
+    { id: "p3", source: "terminal_left_top:3", target: "comp:gen_brk:top:2", color: "brown" },
+  ];
+
+  const { optimizedWires } = optimizePanelWiring({
+    wires: mockWires,
+    rails: mockRails,
+    panelHeight: 820,
+    options: { minWireSpacing: 8 },
+  });
+
+  // Coleta segmentos horizontais
+  const horizLines = optimizedWires.map(w => {
+    const pts = w.route.points;
+    return {
+      wireId: w.id,
+      y: pts[1].y,
+      xStart: Math.min(pts[1].x, pts[2].x),
+      xEnd: Math.max(pts[1].x, pts[2].x),
+    };
+  });
+
+  // Nenhuma linha horizontal com mesmo Y pode se sobrepor
+  for (let i = 0; i < horizLines.length; i++) {
+    for (let j = i + 1; j < horizLines.length; j++) {
+      const a = horizLines[i];
+      const b = horizLines[j];
+      assert.notEqual(a.y, b.y, `TESTE 8: Fios ${a.wireId} e ${b.wireId} não devem ter o mesmo Y (${a.y})`);
+      assert.ok(
+        Math.abs(a.y - b.y) >= 6,
+        `TESTE 8: Espaçamento entre ${a.wireId} e ${b.wireId} deve ser >= 6px (foi ${Math.abs(a.y - b.y)}px)`
+      );
+    }
+  }
+
+  console.log("✓ TESTE 8: Ausência total de sobreposição e espaçamento >= 6px verificado: OK");
+}
+
 console.log("\n=======================================================");
-console.log("TODOS OS TESTES DO OTIMIZADOR DE FIAÇÃO PASSARAM COM SUCESSO!");
+console.log("TODOS OS 8 TESTES DO OTIMIZADOR DE FIAÇÃO PASSARAM COM SUCESSO!");
 console.log("=======================================================\n");
