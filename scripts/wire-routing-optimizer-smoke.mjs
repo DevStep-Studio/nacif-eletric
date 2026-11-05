@@ -10,6 +10,8 @@ import {
   pathIntersectsObstacles,
   extractPanelObstacles,
   resolvePinPosition,
+  computeParallelBusRoutes,
+  RouteOccupancyMap,
 } from "../src/lib/orthogonalRouter.js";
 
 console.log("Iniciando bateria de testes do Otimizador Inteligente de Fiação...");
@@ -352,6 +354,65 @@ console.log("Iniciando bateria de testes do Otimizador Inteligente de Fiação..
   console.log("✓ TESTE 8: Ausência total de sobreposição e espaçamento >= 6px verificado: OK");
 }
 
+// ─── TESTE 9: Função Matemática de Roteamento em Barramento (computeParallelBusRoutes) ───
+{
+  const connections = [
+    { id: "b15", p1: { x: 387, y: 241 }, p2: { x: 387, y: 399 } }, // Colinear vertical direto
+    { id: "b16", p1: { x: 415, y: 241 }, p2: { x: 356, y: 399 } }, // Vira para esquerda
+    { id: "b17", p1: { x: 443, y: 241 }, p2: { x: 328, y: 399 } }, // Vira para esquerda
+    { id: "b18", p1: { x: 471, y: 241 }, p2: { x: 300, y: 399 } }, // Vira para esquerda
+  ];
+
+  const routed = computeParallelBusRoutes(connections, { minWireSpacing: 8, baseStubOffset: 24 });
+  assert.equal(routed.length, 4, "TESTE 9: Deve retornar 4 rotas");
+
+  // b15 deve ser colinear direto
+  const pts15 = routed.find(r => r.id === "b15").points;
+  assert.equal(pts15.length, 2, "TESTE 9: Conexão colinear b15 deve ter 2 pontos (linha reta)");
+  assert.equal(pts15[0].x, pts15[1].x, "TESTE 9: b15 deve ser perfeitamente vertical");
+
+  // b16, b17, b18 devem ter cascade bending com Ys estritamente distintos
+  const pts16 = routed.find(r => r.id === "b16").points;
+  const pts17 = routed.find(r => r.id === "b17").points;
+  const pts18 = routed.find(r => r.id === "b18").points;
+
+  const y16 = pts16[1].y;
+  const y17 = pts17[1].y;
+  const y18 = pts18[1].y;
+
+  assert.ok(isOrthogonalPath(pts16), "TESTE 9: Rota b16 deve ser 100% ortogonal");
+  assert.ok(isOrthogonalPath(pts17), "TESTE 9: Rota b17 deve ser 100% ortogonal");
+  assert.ok(isOrthogonalPath(pts18), "TESTE 9: Rota b18 deve ser 100% ortogonal");
+
+  // Escalonamento em cascata (Cascade Bending): y16 < y17 < y18
+  assert.ok(y16 < y17, `TESTE 9: Cascade bending: y16 (${y16}) deve ser menor que y17 (${y17})`);
+  assert.ok(y17 < y18, `TESTE 9: Cascade bending: y17 (${y17}) deve ser menor que y18 (${y18})`);
+  assert.ok(Math.abs(y17 - y16) >= 8, "TESTE 9: Espaçamento entre b16 e b17 deve ser >= 8px");
+  assert.ok(Math.abs(y18 - y17) >= 8, "TESTE 9: Espaçamento entre b17 e b18 deve ser >= 8px");
+
+  console.log("✓ TESTE 9: computeParallelBusRoutes com Cascade Bending e offset paralelo: OK");
+}
+
+// ─── TESTE 10: Mapa de Ocupação Espacial (RouteOccupancyMap) e Penalidade de Rota ───
+{
+  const occ = new RouteOccupancyMap({ spacing: 8 });
+  occ.registerRoute([{ x: 100, y: 304 }, { x: 500, y: 304 }], "wire_1");
+
+  // Traçado na mesma linha virtual (y = 304) deve receber alta penalidade
+  const penaltyOverlapping = occ.getRoutePenalty([{ x: 150, y: 304 }, { x: 450, y: 304 }], "wire_2");
+  assert.ok(penaltyOverlapping >= 50000, "TESTE 10: Rota sobreposta deve receber penalidade de colisão >= 50000");
+
+  // Traçado deslocado em +8px (y = 312) não deve receber penalidade
+  const penaltyOffset = occ.getRoutePenalty([{ x: 150, y: 312 }, { x: 450, y: 312 }], "wire_2");
+  assert.equal(penaltyOffset, 0, "TESTE 10: Rota em faixa paralela livre deve ter penalidade zero");
+
+  // findNextAvailableHorizontalLane deve retornar a próxima faixa livre (312)
+  const nextLane = occ.findNextAvailableHorizontalLane(304, 150, 450, 1);
+  assert.equal(nextLane, 312, "TESTE 10: Próxima faixa horizontal livre deve ser y = 312");
+
+  console.log("✓ TESTE 10: RouteOccupancyMap detecta colisão, penaliza rotas sobrepostas e aloca faixas livres: OK");
+}
+
 console.log("\n=======================================================");
-console.log("TODOS OS 8 TESTES DO OTIMIZADOR DE FIAÇÃO PASSARAM COM SUCESSO!");
+console.log("TODOS OS 10 TESTES DO OTIMIZADOR DE FIAÇÃO PASSARAM COM SUCESSO!");
 console.log("=======================================================\n");

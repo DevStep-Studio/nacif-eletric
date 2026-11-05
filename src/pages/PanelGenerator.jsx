@@ -23,6 +23,7 @@ import { syncPanelDeviceToCircuit } from "@/lib/projectUnifiedSync";
 import { useToast } from "@/components/ui/use-toast";
 import {
   calculateOrthogonalRoute,
+  computeParallelBusRoutes,
   normalizeSavedBoard,
   extractPanelObstacles,
   resolvePinPosition,
@@ -9451,6 +9452,36 @@ export default function PanelGenerator() {
     const color = wireDisplayColor(group.color);
     const obstacles = extractPanelObstacles(rails, infrastructure);
 
+    // Pré-calcula rotas paralelas em cascata (Bus Routing) para descritores sem rota salva
+    const unroutedDescriptors = descriptors.filter((desc) => {
+      const stored = getStoredWire(desc.wire.id);
+      const hasSaved = Array.isArray(stored?.route?.points) && stored.route.points.length >= 2 && isOrthogonalPath(stored.route.points);
+      const savedAligned = hasSaved &&
+        Math.hypot(stored.route.points[0].x - desc.p1.x, stored.route.points[0].y - desc.p1.y) < 25 &&
+        Math.hypot(stored.route.points[stored.route.points.length - 1].x - desc.p2.x, stored.route.points[stored.route.points.length - 1].y - desc.p2.y) < 25;
+      return !savedAligned;
+    });
+
+    const fallbackBusMap = new Map();
+    if (unroutedDescriptors.length > 0) {
+      const busRoutes = computeParallelBusRoutes(
+        unroutedDescriptors.map((d) => ({
+          id: d.wire.id,
+          p1: d.p1,
+          p2: d.p2,
+          color: d.color,
+          sourceSide: d.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
+          targetSide: d.targetMeta?.term === "bottom" ? "DOWN" : "UP",
+        })),
+        {
+          minWireSpacing: 8,
+          baseStubOffset: 24,
+          obstacles,
+        }
+      );
+      busRoutes.forEach((r) => fallbackBusMap.set(r.id, r.points));
+    }
+
     return (
       <g
         key={`phase-distribution-${group.key}-${groupIndex}`}
@@ -9469,13 +9500,17 @@ export default function PanelGenerator() {
             : null;
 
           const laneOffset = (descriptorIndex - (descriptors.length - 1) / 2) * WIRE_SPACING;
-          const routePoints = (savedRoute && savedRoute.length >= 2 && isOrthogonalPath(savedRoute)) ? savedRoute : calculateOrthogonalRoute(descriptor.p1, descriptor.p2, obstacles, {
+          const fallbackRoute = fallbackBusMap.get(descriptor.wire.id) || calculateOrthogonalRoute(descriptor.p1, descriptor.p2, obstacles, {
             sourceSide: descriptor.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
             targetSide: descriptor.targetMeta?.term === "bottom" ? "DOWN" : "UP",
             laneOffset,
             sourcePin: descriptor.wire?.source,
             targetPin: descriptor.wire?.target,
           });
+
+          const routePoints = (savedRoute && savedRoute.length >= 2 && isOrthogonalPath(savedRoute))
+            ? savedRoute
+            : fallbackRoute;
 
           return renderDescriptorPath(descriptor, routePoints, `${descriptor.wire.id}-distribution-independent`, {
             color,

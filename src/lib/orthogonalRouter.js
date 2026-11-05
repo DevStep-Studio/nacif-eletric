@@ -433,6 +433,264 @@ export const inferTerminalDirection = (pinId = "", point = { x: 0, y: 0 }, rails
   return "DOWN";
 };
 
+// ─── MAPA DE OCUPAÇÃO ESPACIAL DE ROTAS (PREVENÇÃO DE SOBREPOSIÇÃO NO PATHFINDING) ───
+export class RouteOccupancyMap {
+  constructor({ spacing = 8, gridSize = 8 } = {}) {
+    this.spacing = Math.max(6, Math.min(16, Number(spacing) || 8));
+    this.gridSize = gridSize;
+    this.horizontalSegments = [];
+    this.verticalSegments = [];
+  }
+
+  clear() {
+    this.horizontalSegments = [];
+    this.verticalSegments = [];
+  }
+
+  registerRoute(points = [], wireId = null) {
+    if (!Array.isArray(points) || points.length < 2) return;
+    for (let i = 1; i < points.length; i++) {
+      const p1 = points[i - 1];
+      const p2 = points[i];
+      if (!p1 || !p2) continue;
+      if (Math.abs(p1.y - p2.y) <= 1) {
+        this.horizontalSegments.push({
+          wireId,
+          y: Math.round(p1.y),
+          minX: Math.min(p1.x, p2.x),
+          maxX: Math.max(p1.x, p2.x),
+        });
+      } else if (Math.abs(p1.x - p2.x) <= 1) {
+        this.verticalSegments.push({
+          wireId,
+          x: Math.round(p1.x),
+          minY: Math.min(p1.y, p2.y),
+          maxY: Math.max(p1.y, p2.y),
+        });
+      }
+    }
+  }
+
+  isHorizontalOccupied(y, minX, maxX, excludeWireId = null) {
+    const yRound = Math.round(y);
+    for (let i = 0; i < this.horizontalSegments.length; i++) {
+      const seg = this.horizontalSegments[i];
+      if (excludeWireId && seg.wireId === excludeWireId) continue;
+      if (Math.abs(seg.y - yRound) < this.spacing - 0.5) {
+        const overlapMin = Math.max(seg.minX, minX);
+        const overlapMax = Math.min(seg.maxX, maxX);
+        if (overlapMax - overlapMin > 4) return true;
+      }
+    }
+    return false;
+  }
+
+  isVerticalOccupied(x, minY, maxY, excludeWireId = null) {
+    const xRound = Math.round(x);
+    for (let i = 0; i < this.verticalSegments.length; i++) {
+      const seg = this.verticalSegments[i];
+      if (excludeWireId && seg.wireId === excludeWireId) continue;
+      if (Math.abs(seg.x - xRound) < this.spacing - 0.5) {
+        const overlapMin = Math.max(seg.minY, minY);
+        const overlapMax = Math.min(seg.maxY, maxY);
+        if (overlapMax - overlapMin > 4) return true;
+      }
+    }
+    return false;
+  }
+
+  getRoutePenalty(points = [], wireId = null) {
+    if (!Array.isArray(points) || points.length < 2) return 0;
+    let penalty = 0;
+    for (let i = 1; i < points.length; i++) {
+      const p1 = points[i - 1];
+      const p2 = points[i];
+      if (!p1 || !p2) continue;
+      if (Math.abs(p1.y - p2.y) <= 1) {
+        const y = Math.round(p1.y);
+        const minX = Math.min(p1.x, p2.x);
+        const maxX = Math.max(p1.x, p2.x);
+        for (let j = 0; j < this.horizontalSegments.length; j++) {
+          const seg = this.horizontalSegments[j];
+          if (wireId && seg.wireId === wireId) continue;
+          if (Math.abs(seg.y - y) < this.spacing - 0.5) {
+            const overlapMin = Math.max(seg.minX, minX);
+            const overlapMax = Math.min(seg.maxX, maxX);
+            if (overlapMax - overlapMin > 4) {
+              penalty += 50000 + (overlapMax - overlapMin) * 20;
+            }
+          }
+        }
+      } else if (Math.abs(p1.x - p2.x) <= 1) {
+        const x = Math.round(p1.x);
+        const minY = Math.min(p1.y, p2.y);
+        const maxY = Math.max(p1.y, p2.y);
+        for (let j = 0; j < this.verticalSegments.length; j++) {
+          const seg = this.verticalSegments[j];
+          if (wireId && seg.wireId === wireId) continue;
+          if (Math.abs(seg.x - x) < this.spacing - 0.5) {
+            const overlapMin = Math.max(seg.minY, minY);
+            const overlapMax = Math.min(seg.maxY, maxY);
+            if (overlapMax - overlapMin > 4) {
+              penalty += 50000 + (overlapMax - overlapMin) * 20;
+            }
+          }
+        }
+      }
+    }
+    return penalty;
+  }
+
+  findNextAvailableHorizontalLane(baseY, minX, maxX, preferredDirection = 1, maxAttempts = 16) {
+    if (!this.isHorizontalOccupied(baseY, minX, maxX)) return snapToGrid(baseY);
+    for (let i = 1; i <= maxAttempts; i++) {
+      const offset = i * this.spacing * preferredDirection;
+      const cand1 = snapToGrid(baseY + offset);
+      if (!this.isHorizontalOccupied(cand1, minX, maxX)) return cand1;
+      const cand2 = snapToGrid(baseY - offset);
+      if (!this.isHorizontalOccupied(cand2, minX, maxX)) return cand2;
+    }
+    return snapToGrid(baseY + maxAttempts * this.spacing * preferredDirection);
+  }
+
+  findNextAvailableVerticalTrack(baseX, minY, maxY, preferredDirection = 1, maxAttempts = 16) {
+    if (!this.isVerticalOccupied(baseX, minY, maxY)) return snapToGrid(baseX);
+    for (let i = 1; i <= maxAttempts; i++) {
+      const offset = i * this.spacing * preferredDirection;
+      const cand1 = snapToGrid(baseX + offset);
+      if (!this.isVerticalOccupied(cand1, minY, maxY)) return cand1;
+      const cand2 = snapToGrid(baseX - offset);
+      if (!this.isVerticalOccupied(cand2, minY, maxY)) return cand2;
+    }
+    return snapToGrid(baseX + maxAttempts * this.spacing * preferredDirection);
+  }
+}
+
+/**
+ * computeParallelBusRoutes
+ * 
+ * Função matemática determinística para roteamento em barramento paralelo (Bus Routing)
+ * com quebras escalonadas concêntricas (Cascade Bending) e incremento estático de offset.
+ * Garante que feixes de cabos paralelos nunca se sobreponham e realizem curvas perfeitamente alinhadas.
+ * 
+ * @param {Array<Object>} connections - Array de conexões a rotear { id, p1, p2, color, sourceSide, targetSide, ... }
+ * @param {Object} options - Opções: { minWireSpacing: 8, baseStubOffset: 24, obstacles: [], occupancyMap: null }
+ * @returns {Array<Object>} Conexões com `points` (trajeto ortogonal 100% alinhado sem sobreposição)
+ */
+export function computeParallelBusRoutes(connections = [], options = {}) {
+  if (!Array.isArray(connections) || connections.length === 0) return [];
+  const spacing = Math.max(6, Math.min(14, Number(options.minWireSpacing) || 8));
+  const baseStubOffset = Math.max(16, Number(options.baseStubOffset) || PORT_EXIT_OFFSET || 24);
+  const obstacles = Array.isArray(options.obstacles) ? options.obstacles : [];
+  const occupancy = options.occupancyMap || new RouteOccupancyMap({ spacing });
+
+  const results = new Map();
+  const nonCollinear = [];
+
+  // 1. Conexões colineares diretas (verticais ou horizontais sem desvio)
+  connections.forEach((conn, index) => {
+    const id = conn.id || `conn_${index}`;
+    const p1 = conn.p1;
+    const p2 = conn.p2;
+    if (!p1 || !p2 || !Number.isFinite(p1.x) || !Number.isFinite(p1.y) || !Number.isFinite(p2.x) || !Number.isFinite(p2.y)) {
+      return;
+    }
+
+    if (Math.abs(p1.x - p2.x) <= 3) {
+      const direct = [p1, p2];
+      if (!pathIntersectsObstacles(direct, obstacles, 4)) {
+        results.set(id, direct);
+        occupancy.registerRoute(direct, id);
+        return;
+      }
+    }
+    nonCollinear.push({ ...conn, id, index });
+  });
+
+  // 2. Agrupamento por corredor e sentido direcional (Bus Clusters)
+  const bundleGroups = new Map();
+  nonCollinear.forEach((conn) => {
+    const isDown = conn.p2.y >= conn.p1.y;
+    const isLeft = conn.p2.x < conn.p1.x;
+    const y1Band = Math.round(conn.p1.y / 60);
+    const y2Band = Math.round(conn.p2.y / 60);
+    const key = `${y1Band}:${y2Band}:${isDown ? "down" : "up"}:${isLeft ? "left" : "right"}`;
+
+    if (!bundleGroups.has(key)) bundleGroups.set(key, []);
+    bundleGroups.get(key).push(conn);
+  });
+
+  // 3. Ordenação planar sem cruzamento e cálculo de Cascade Bending
+  bundleGroups.forEach((groupWires) => {
+    if (groupWires.length === 0) return;
+    const sample = groupWires[0];
+    const isDown = sample.p2.y >= sample.p1.y;
+    const isLeft = sample.p2.x < sample.p1.x;
+
+    // Regra matemática de não-cruzamento (Planar Cascade Bending):
+    if (isDown) {
+      if (isLeft) {
+        // Descendo e virando à esquerda:
+        // Menor p1.x vira primeiro (mais raso/alto)
+        // Maior p1.x desce mais (mais profundo/baixo) para contornar por fora
+        groupWires.sort((a, b) => a.p1.x - b.p1.x);
+      } else {
+        // Descendo e virando à direita:
+        // Maior p1.x vira primeiro (mais raso/alto)
+        // Menor p1.x desce mais (mais profundo/baixo) para contornar por fora
+        groupWires.sort((a, b) => b.p1.x - a.p1.x);
+      }
+    } else {
+      if (isLeft) {
+        // Subindo e virando à esquerda:
+        // Menor p1.x sobe menos (mais raso/baixo)
+        // Maior p1.x sobe mais (mais alto)
+        groupWires.sort((a, b) => a.p1.x - b.p1.x);
+      } else {
+        // Subindo e virando à direita:
+        // Maior p1.x sobe menos
+        // Menor p1.x sobe mais
+        groupWires.sort((a, b) => b.p1.x - a.p1.x);
+      }
+    }
+
+    // Nível Y base para as curvas
+    const baseY = isDown
+      ? snapToGrid(Math.max(...groupWires.map((w) => w.p1.y)) + baseStubOffset)
+      : snapToGrid(Math.min(...groupWires.map((w) => w.p1.y)) - baseStubOffset);
+
+    groupWires.forEach((conn, rank) => {
+      let bendY = isDown
+        ? snapToGrid(baseY + rank * spacing)
+        : snapToGrid(baseY - rank * spacing);
+
+      // Garante faixa desobstruída via occupancyMap
+      const minX = Math.min(conn.p1.x, conn.p2.x);
+      const maxX = Math.max(conn.p1.x, conn.p2.x);
+      bendY = occupancy.findNextAvailableHorizontalLane(bendY, minX, maxX, isDown ? 1 : -1);
+
+      const path = simplifyOrthogonalPoints([
+        conn.p1,
+        { x: conn.p1.x, y: bendY },
+        { x: conn.p2.x, y: bendY },
+        conn.p2,
+      ]);
+
+      results.set(conn.id, path);
+      occupancy.registerRoute(path, conn.id);
+    });
+  });
+
+  return connections.map((conn, idx) => {
+    const id = conn.id || `conn_${idx}`;
+    const pts = results.get(id) || [conn.p1, conn.p2];
+    return {
+      ...conn,
+      points: pts,
+    };
+  });
+}
+
 // ─── CACHE LRU DE ROTEAMENTO ORTOGONAL (ALTO DESEMPENHO) ────────────────────────
 const ROUTE_CACHE_MAX_SIZE = 1500;
 const _routeMemoCache = new Map();
@@ -472,9 +730,12 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
 
   // Verificação de cache LRU para recuperação instantânea em O(1)
   const obsCount = Array.isArray(obstacles) ? obstacles.length : 0;
-  const cacheKey = `${pSrc.x},${pSrc.y}|${pDst.x},${pDst.y}|${laneOffset}|${sourceSide}|${targetSide}|${obsCount}|${options.sourceComponentId ?? ""}|${options.targetComponentId ?? ""}`;
+  const useCache = !options.occupancyMap;
+  const cacheKey = useCache
+    ? `${pSrc.x},${pSrc.y}|${pDst.x},${pDst.y}|${laneOffset}|${sourceSide}|${targetSide}|${obsCount}|${options.sourceComponentId ?? ""}|${options.targetComponentId ?? ""}`
+    : null;
 
-  if (_routeMemoCache.has(cacheKey)) {
+  if (cacheKey && _routeMemoCache.has(cacheKey)) {
     const cached = _routeMemoCache.get(cacheKey);
     _routeMemoCache.delete(cacheKey);
     _routeMemoCache.set(cacheKey, cached);
@@ -483,11 +744,13 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
 
   const storeRoute = (res) => {
     if (!res || res.length === 0) return res;
-    if (_routeMemoCache.size >= ROUTE_CACHE_MAX_SIZE) {
-      const oldestKey = _routeMemoCache.keys().next().value;
-      _routeMemoCache.delete(oldestKey);
+    if (cacheKey) {
+      if (_routeMemoCache.size >= ROUTE_CACHE_MAX_SIZE) {
+        const oldestKey = _routeMemoCache.keys().next().value;
+        _routeMemoCache.delete(oldestKey);
+      }
+      _routeMemoCache.set(cacheKey, res.map((pt) => ({ ...pt })));
     }
-    _routeMemoCache.set(cacheKey, res.map((pt) => ({ ...pt })));
     return res;
   };
 
@@ -635,11 +898,12 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
   const lTurnY = isGoingUp
     ? (laneOffset !== 0 ? endStub.y - laneOffset : endStub.y)
     : (laneOffset !== 0 ? endStub.y + laneOffset : endStub.y);
+  const lVertStubX = snapToGrid(lVertStub.x + laneOffset);
 
   const lVerticalFirst = [
     pSrc,
-    lVertStub,
-    { x: lVertStub.x, y: lTurnY },
+    { x: lVertStubX, y: lVertStub.y },
+    { x: lVertStubX, y: lTurnY },
     { x: lVertEndStub.x, y: lTurnY },
     lVertEndStub,
     pDst,
@@ -653,11 +917,12 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
   const lTurnX = isGoingLeft
     ? (laneOffset !== 0 ? endStub.x + laneOffset : endStub.x)
     : (laneOffset !== 0 ? endStub.x - laneOffset : endStub.x);
+  const lStubY = snapToGrid(lStub.y + laneOffset);
 
   const lHorizontalFirst = [
     pSrc,
-    lStub,
-    { x: lTurnX, y: lStub.y },
+    { x: lStub.x, y: lStubY },
+    { x: lTurnX, y: lStubY },
     { x: lTurnX, y: lEndStub.y },
     lEndStub,
     pDst,
@@ -715,7 +980,24 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
     }
   });
 
-  // Avalia candidatos por pontuação: sem colisão + menor comprimento + menor número de cantos
+  // 8. Se mapa de ocupação fornecido, injeta candidatos em faixas livres disponíveis
+  if (options.occupancyMap) {
+    const minX = Math.min(startStub.x, endStub.x);
+    const maxX = Math.max(startStub.x, endStub.x);
+    const freeMidY = options.occupancyMap.findNextAvailableHorizontalLane(midCorridorY, minX, maxX);
+    if (freeMidY !== midCorridorY) {
+      candidateRoutes.push([
+        pSrc,
+        startStub,
+        { x: startStub.x, y: freeMidY },
+        { x: endStub.x, y: freeMidY },
+        endStub,
+        pDst,
+      ]);
+    }
+  }
+
+  // Avalia candidatos por pontuação: sem colisão + menor penalidade de ocupação + menor comprimento + menor número de cantos
   let bestRoute = null;
   let bestScore = Infinity;
 
@@ -729,7 +1011,10 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
       length += Math.hypot(simplified[i].x - simplified[i - 1].x, simplified[i].y - simplified[i - 1].y);
     }
     const corners = Math.max(0, simplified.length - 2);
-    const score = (hasCollision ? 1000000 : 0) + length + corners * 50;
+    const occupancyPenalty = options.occupancyMap
+      ? options.occupancyMap.getRoutePenalty(simplified, options.wireId)
+      : 0;
+    const score = (hasCollision ? 1000000 : 0) + occupancyPenalty + length + corners * 50;
 
     if (score < bestScore) {
       bestScore = score;

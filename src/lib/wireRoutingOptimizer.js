@@ -33,6 +33,8 @@ import {
   calculateOrthogonalRoute,
   snapToGrid,
   arePointsEqual,
+  RouteOccupancyMap,
+  computeParallelBusRoutes,
 } from "./orthogonalRouter.js";
 
 // Espaçamento visual padrão entre cabos paralelos no feixe (compacto, legível, estilo CAD)
@@ -298,7 +300,7 @@ export function removeRedundantOrthogonalBends(
   excludedIds = new Set(),
   terminalDirs = {}
 ) {
-  if (!Array.isArray(points) || points.length <= 3) return points;
+  if (!Array.isArray(points) || points.length <= 4) return points;
   const { srcDir, dstDir } = terminalDirs;
 
   let current = simplifyOrthogonalPoints(points);
@@ -403,6 +405,7 @@ export function optimizePanelWiring({
   const obstacles = extractPanelObstacles(rails, infrastructure, options);
   const corridors = identifyPanelCorridors(rails, infrastructure, panelHeight);
   const { topDuct, interRailDucts, bottomDuct, leftDuct, rightDuct, horizontalCorridors } = corridors;
+  const batchOccupancy = new RouteOccupancyMap({ spacing: step });
 
   // 2. Mapeamento de descritores de cada cabo
   const wireMetaList = [];
@@ -521,16 +524,36 @@ export function optimizePanelWiring({
 
     const duct = horizontalCorridors.find((c) => c.id === ductId) || topDuct;
 
-    // Ordenação planar inteligente para evitar cruzamentos e produzir cascade bending
+    // Ordenação planar inteligente para evitar cruzamentos e produzir cascade bending concêntrico
     groupWires.sort((a, b) => {
-      // 1. Prioridade por fase
-      const prioA = phasePriority[a.color] || 9;
-      const prioB = phasePriority[b.color] || 9;
+      const isDownA = a.p2.y >= a.p1.y;
+      const isDownB = b.p2.y >= b.p1.y;
+      const isLeftA = a.p2.x < a.p1.x;
+      const isLeftB = b.p2.x < b.p1.x;
 
-      // Se ambos descem para a direita (L1, L2, L3 padrão de entrada):
-      if (a.p2.x > a.p1.x && b.p2.x > b.p1.x) {
-        if (Math.abs(a.p1.x - b.p1.x) > 4) {
-          return a.p1.x - b.p1.x; // Menor X de saída primeiro
+      if (isDownA && isDownB) {
+        if (isLeftA && isLeftB) {
+          // Ambos descem e viram à esquerda: menor X vira mais alto (shallowest), maior X desce mais (deepest)
+          if (Math.abs(a.p1.x - b.p1.x) > 4) {
+            return a.p1.x - b.p1.x;
+          }
+        }
+        if (!isLeftA && !isLeftB) {
+          // Ambos descem e viram à direita: maior X vira mais alto, menor X desce mais
+          if (Math.abs(a.p1.x - b.p1.x) > 4) {
+            return b.p1.x - a.p1.x;
+          }
+        }
+      } else if (!isDownA && !isDownB) {
+        if (isLeftA && isLeftB) {
+          if (Math.abs(a.p1.x - b.p1.x) > 4) {
+            return a.p1.x - b.p1.x;
+          }
+        }
+        if (!isLeftA && !isLeftB) {
+          if (Math.abs(a.p1.x - b.p1.x) > 4) {
+            return b.p1.x - a.p1.x;
+          }
         }
       }
 
@@ -541,13 +564,9 @@ export function optimizePanelWiring({
         }
       }
 
-      // Se ambos viram para a esquerda:
-      if (a.p2.x < a.p1.x && b.p2.x < b.p1.x) {
-        if (Math.abs(a.p1.x - b.p1.x) > 4) {
-          return b.p1.x - a.p1.x; // Maior X de saída primeiro (mais externo)
-        }
-      }
-
+      // Prioridade por fase
+      const prioA = phasePriority[a.color] || 9;
+      const prioB = phasePriority[b.color] || 9;
       if (prioA !== prioB) return prioA - prioB;
       return a.p1.x - b.p1.x;
     });
@@ -660,7 +679,12 @@ export function optimizePanelWiring({
     // Caso 2: Conexão no mesmo duto horizontal (Top, Inter-Rail ou Bottom)
     if (!calculatedPath && meta.assignedCorridor) {
       const duct = meta.assignedCorridor;
-      const laneY = snapToGrid(duct.baseY + (meta.corridorTrackOffset || 0));
+      let laneY = snapToGrid(duct.baseY + (meta.corridorTrackOffset || 0));
+      const minX = Math.min(meta.p1.x, meta.p2.x);
+      const maxX = Math.max(meta.p1.x, meta.p2.x);
+      if (batchOccupancy.isHorizontalOccupied(laneY, minX, maxX, wire.id)) {
+        laneY = batchOccupancy.findNextAvailableHorizontalLane(laneY, minX, maxX);
+      }
 
       const candidateDuctPath = simplifyOrthogonalPoints([
         meta.p1,
@@ -731,6 +755,8 @@ export function optimizePanelWiring({
         laneOffset: chosenOffset,
         laneIndex: meta.corridorTrackIndex ?? wireIndex,
         wireSpacing: step,
+        occupancyMap: batchOccupancy,
+        wireId: wire.id,
       });
     }
 
@@ -766,9 +792,12 @@ export function optimizePanelWiring({
           obstaclePadding,
           sourcePin: wire.source,
           targetPin: wire.target,
+          occupancyMap: batchOccupancy,
+          wireId: wire.id,
         });
       }
     }
+    batchOccupancy.registerRoute(finalPath, wire.id);
     const waypointsOnly = finalPath.length > 2 ? finalPath.slice(1, -1) : [];
 
     // Estatísticas de melhoria
