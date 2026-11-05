@@ -1029,6 +1029,42 @@ const getNeutralBackboneTopY = () => PROFESSIONAL_BUS.neutralTopY;
 const getGroundBackboneY = (panelH) => panelH - 92;
 const getGroundBackboneLeftX = () => VIRTUAL_DUCTS.groundX;
 
+const getPinClassification = (pinId = "", componentLookup = null) => {
+  const pin = String(pinId || "");
+  if (!pin) return "unknown";
+  if (pin === "terminal_left_top:0" || pin.startsWith("busbar_ground:") || pin.startsWith("backbone_ground:") || pin.endsWith(":ground")) {
+    return "ground";
+  }
+  if (pin === "terminal_left_top:4" || pin.startsWith("busbar_neutral:") || pin.startsWith("backbone_neutral:") || pin.endsWith(":neutral")) {
+    return "neutral";
+  }
+  if (["terminal_left_top:1", "terminal_left_top:2", "terminal_left_top:3"].includes(pin)) {
+    return "phase";
+  }
+  if (pin.startsWith("comp:") || pin.startsWith("feed_in:") || pin.startsWith("load_out:")) {
+    const parts = pin.split(":");
+    const compId = parts[1];
+    const termSide = parts[2]; // top | bottom
+    const poleIdx = parseInt(parts[3] || "0", 10);
+    const comp = typeof componentLookup === "function" ? componentLookup(compId) : null;
+    if (comp) {
+      if (comp.type === "dps") {
+        if (termSide === "bottom") return "ground";
+        return comp.phase === "N" ? "neutral" : "phase";
+      }
+      const poles = Number(comp.poles) || 1;
+      if (poles === 4) {
+        return poleIdx === 3 ? "neutral" : "phase";
+      }
+      if (poles === 2 && (comp.supply_type === "Monofásico" || comp.phase === "FN" || comp.phase === "F+N")) {
+        return poleIdx === 1 ? "neutral" : "phase";
+      }
+      return "phase";
+    }
+  }
+  return "unknown";
+};
+
 const componentMatchesLoadTarget = (compId = "", component = {}) => {
   const loadId = String(compId || "").toLowerCase();
   const componentId = String(component?.id || "").toLowerCase();
@@ -1272,6 +1308,20 @@ const getWireRouteBends = (wire = {}) => {
   return normalizeWireRoutePoints(directRoute?.length ? directRoute : controlPoints);
 };
 
+const makePointsOrthogonal = (points = []) => {
+  if (!Array.isArray(points) || points.length < 2) return points;
+  const result = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const prev = result[result.length - 1];
+    const curr = points[i];
+    if (Math.abs(curr.x - prev.x) > 1.5 && Math.abs(curr.y - prev.y) > 1.5) {
+      result.push({ x: curr.x, y: prev.y });
+    }
+    result.push(curr);
+  }
+  return simplifyOrthogonalPoints(result);
+};
+
 const getEditableWireRoutePoints = (wire = {}, routePoints = []) => {
   const fallback = normalizeCablePoints(routePoints || []);
   const bends = getWireRouteBends(wire);
@@ -1286,18 +1336,7 @@ const getEditableWireRoutePoints = (wire = {}, routePoints = []) => {
 
   if (routingMode !== "orthogonal") return editablePoints;
 
-  return normalizeCablePoints(editablePoints.map((point, index, list) => {
-    if (index === 0 || index === list.length - 1) return point;
-    const prev = list[index - 1];
-    const next = list[index + 1];
-    if (Math.abs(point.x - prev.x) <= Math.abs(point.y - prev.y)) {
-      return { ...point, x: prev.x };
-    }
-    if (Math.abs(point.y - next.y) <= Math.abs(point.x - next.x)) {
-      return { ...point, y: next.y };
-    }
-    return point;
-  }));
+  return makePointsOrthogonal(editablePoints);
 };
 
 const getRouteMidpoint = (routePoints = []) => {
@@ -3862,6 +3901,33 @@ export default function PanelGenerator() {
     const sourcePin = endpoint === "source" ? pinId : otherPinId;
     const targetPin = endpoint === "target" ? pinId : otherPinId;
 
+    const sourceClass = getPinClassification(sourcePin, findComponentById);
+    const targetClass = getPinClassification(targetPin, findComponentById);
+    if ((sourceClass === "neutral" && targetClass === "phase") || (sourceClass === "phase" && targetClass === "neutral")) {
+      toast({
+        title: "Curto-circuito proibido (NBR 5410)",
+        description: "Não é permitido conectar condutor/barramento de neutro (N) a um terminal de fase (L).",
+        variant: "destructive",
+      });
+      setWireMoveMode("");
+      setWireEndpointDrag(null);
+      setEndpointDragCoords(null);
+      setHoveredPinId("");
+      return;
+    }
+    if ((sourceClass === "ground" && targetClass === "phase") || (sourceClass === "phase" && targetClass === "ground")) {
+      toast({
+        title: "Curto-circuito proibido (NBR 5410)",
+        description: "Não é permitido conectar proteção (PE) a uma fase (L).",
+        variant: "destructive",
+      });
+      setWireMoveMode("");
+      setWireEndpointDrag(null);
+      setEndpointDragCoords(null);
+      setHoveredPinId("");
+      return;
+    }
+
     let cleanRoute = [];
     if (isValidWirePoint(sourcePoint) && isValidWirePoint(targetPoint)) {
       const obstacles = extractPanelObstacles(rails, infrastructure);
@@ -5621,7 +5687,19 @@ export default function PanelGenerator() {
           wireId: wire.id,
         });
       } else {
-        correctConnections += 1;
+        const srcClass = getPinClassification(wire.source, findComponentById);
+        const tgtClass = getPinClassification(wire.target, findComponentById);
+        if ((srcClass === "phase" && tgtClass === "neutral") || (srcClass === "neutral" && tgtClass === "phase")) {
+          issues.push({
+            id: `wire_short_fn_${wire.id}`,
+            type: "error",
+            title: `Curto-circuito Fase-Neutro: ${wire.name || wire.id}`,
+            description: `Condutor de fase conectado indevidamente ao barramento de neutro. Use "Otimizar Fiação" para corrigir automaticamente.`,
+            wireId: wire.id,
+          });
+        } else {
+          correctConnections += 1;
+        }
       }
     });
 
@@ -6392,31 +6470,30 @@ export default function PanelGenerator() {
         }
       }
 
-      const isGroundPin = (p) => p.startsWith("busbar_ground:") || p.startsWith("backbone_ground:") || p === "terminal_left_top:0";
-      const isPhaseInputPin = (p) => ["terminal_left_top:2", "terminal_left_top:3", "terminal_left_top:4"].includes(p);
-      const isNeutralPin = (p) => p.startsWith("busbar_neutral:") || p.startsWith("backbone_neutral:") || p === "terminal_left_top:1";
+      const startClass = getPinClassification(wiringStart, findComponentById);
+      const targetClass = getPinClassification(pinId, findComponentById);
 
-      if ((isGroundPin(wiringStart) && isPhaseInputPin(pinId)) || (isGroundPin(pinId) && isPhaseInputPin(wiringStart))) {
+      if ((startClass === "ground" && targetClass === "phase") || (startClass === "phase" && targetClass === "ground")) {
         toast({
           title: "Curto-circuito proibido (NBR 5410)",
-          description: "Conexão direta proibida entre condutor de proteção (PE) e barramento/terminal de fase (L).",
+          description: "Conexão direta proibida entre condutor de proteção (PE) e condutor/terminal de fase (L).",
           variant: "destructive",
         });
         setWiringStart("");
         return;
       }
 
-      if ((isNeutralPin(wiringStart) && isPhaseInputPin(pinId)) || (isNeutralPin(pinId) && isPhaseInputPin(wiringStart))) {
+      if ((startClass === "neutral" && targetClass === "phase") || (startClass === "phase" && targetClass === "neutral")) {
         toast({
           title: "Curto-circuito proibido (NBR 5410)",
-          description: "Conexão direta proibida entre condutor neutro (N) e barramento/terminal de fase (L).",
+          description: "Conexão direta proibida entre neutro (N) e condutor/terminal de fase (L). Fases devem ser alimentadas pelos terminais de fase da rede (L1, L2, L3) ou pente de barramento.",
           variant: "destructive",
         });
         setWiringStart("");
         return;
       }
 
-      if (isPhaseInputPin(wiringStart) && isPhaseInputPin(pinId) && wiringStart !== pinId) {
+      if (startClass === "phase" && targetClass === "phase" && wiringStart.startsWith("terminal_left_top:") && pinId.startsWith("terminal_left_top:") && wiringStart !== pinId) {
         toast({
           title: "Curto-circuito entre fases (NBR 5410)",
           description: "Conexão direta proibida entre fases distintas de alimentação (L1/L2/L3).",
@@ -6426,7 +6503,7 @@ export default function PanelGenerator() {
         return;
       }
 
-      if ((isGroundPin(wiringStart) && isNeutralPin(pinId)) || (isGroundPin(pinId) && isNeutralPin(wiringStart))) {
+      if ((startClass === "ground" && targetClass === "neutral") || (startClass === "neutral" && targetClass === "ground")) {
         toast({
           title: "Violação de Esquema TN-S (NBR 5410, item 6.4.3.1)",
           description: "Neutro (N) e Proteção (PE) não devem ser interligados a jusante do ponto de separação no quadro de distribuição.",
@@ -6437,17 +6514,40 @@ export default function PanelGenerator() {
       }
 
       // Conectar
+      let resolvedColor = wireColor;
+      if (startClass === "neutral" || targetClass === "neutral") {
+        resolvedColor = "blue";
+      } else if (startClass === "ground" || targetClass === "ground") {
+        resolvedColor = "green";
+      }
+
+      const p1 = resolvePinPosition(wiringStart, rails, panelHeight, infrastructure);
+      const p2 = resolvePinPosition(pinId, rails, panelHeight, infrastructure);
+      let initialPoints = [];
+      if (isValidWirePoint(p1) && isValidWirePoint(p2)) {
+        const obstacles = extractPanelObstacles(rails, infrastructure);
+        const sourceSide = inferTerminalDirection(wiringStart, p1, rails, panelHeight);
+        const targetSide = inferTerminalDirection(pinId, p2, rails, panelHeight);
+        initialPoints = calculateOrthogonalRoute(p1, p2, obstacles, {
+          sourceSide,
+          targetSide,
+          laneOffset: phaseLaneOffset(resolvedColor),
+          sourcePin: wiringStart,
+          targetPin: pinId,
+        });
+      }
+
       const manualName = cleanDisplayText(wireName);
       const manualDisplayText = cleanDisplayText(wireDisplayText);
       const newWire = {
         id: `wire_${Date.now()}`,
-        name: manualName || `${getConductorDisplayLabel({ color: wireColor })} manual`,
-        color: wireColor,
+        name: manualName || `${getConductorDisplayLabel({ color: resolvedColor })} manual`,
+        color: resolvedColor,
         gauge: wireGauge,
         section: wireGauge,
-        conductorType: conductorTypeFromWire({ color: wireColor }),
-        routeMode: "manual",
-        routingMode: "manual",
+        conductorType: conductorTypeFromWire({ color: resolvedColor }),
+        routeMode: "orthogonal",
+        routingMode: "orthogonal",
         lineStyle: "solid",
         cornerRadius: DEFAULT_CABLE_CORNER_RADIUS,
         locked: false,
@@ -6458,7 +6558,9 @@ export default function PanelGenerator() {
         sourcePortId: wiringStart,
         targetComponentId: getCableComponentId(pinId),
         targetPortId: pinId,
-        points: [],
+        points: initialPoints,
+        route: { mode: "orthogonal", points: initialPoints },
+        route_points: initialPoints.length > 2 ? initialPoints.slice(1, -1) : [],
         originId: wiringStart,
         destinationId: pinId,
         label: wireGauge,
@@ -8987,28 +9089,41 @@ export default function PanelGenerator() {
     const pEnd = routePoints[routePoints.length - 1];
 
     const isStoredAligned = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 &&
+      isOrthogonalPath(storedWire.route.points) &&
       Math.hypot(storedWire.route.points[0].x - pStart.x, storedWire.route.points[0].y - pStart.y) < 25 &&
       Math.hypot(storedWire.route.points[storedWire.route.points.length - 1].x - pEnd.x, storedWire.route.points[storedWire.route.points.length - 1].y - pEnd.y) < 25;
 
     const isActiveAligned = Array.isArray(activeWire?.route?.points) && activeWire.route.points.length >= 2 &&
+      isOrthogonalPath(activeWire.route.points) &&
       Math.hypot(activeWire.route.points[0].x - pStart.x, activeWire.route.points[0].y - pStart.y) < 25 &&
       Math.hypot(activeWire.route.points[activeWire.route.points.length - 1].x - pEnd.x, activeWire.route.points[activeWire.route.points.length - 1].y - pEnd.y) < 25;
 
     const candidateSavedPoints = isStoredAligned
       ? storedWire.route.points
-      : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
+      : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0 && isOrthogonalPath([pStart, ...storedWire.route_points, pEnd])
         ? [pStart, ...storedWire.route_points, pEnd]
         : isActiveAligned
           ? activeWire.route.points
-          : Array.isArray(activeWire?.route_points) && activeWire.route_points.length > 0
+          : Array.isArray(activeWire?.route_points) && activeWire.route_points.length > 0 && isOrthogonalPath([pStart, ...activeWire.route_points, pEnd])
             ? [pStart, ...activeWire.route_points, pEnd]
-            : (Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2)
-              ? [pStart, ...storedWire.route.points.slice(1, -1), pEnd]
-              : null;
+            : null;
 
-    const baseRoutePoints = (candidateSavedPoints && candidateSavedPoints.length >= 2)
+    let baseRoutePoints = (candidateSavedPoints && candidateSavedPoints.length >= 2 && isOrthogonalPath(candidateSavedPoints))
       ? candidateSavedPoints
       : routePoints;
+
+    if ((!baseRoutePoints || !isOrthogonalPath(baseRoutePoints)) && isValidWirePoint(pStart) && isValidWirePoint(pEnd)) {
+      const obstacles = extractPanelObstacles(rails, infrastructure);
+      const sourceSide = inferTerminalDirection(descriptor.wire?.source, pStart, rails, panelHeight);
+      const targetSide = inferTerminalDirection(descriptor.wire?.target, pEnd, rails, panelHeight);
+      baseRoutePoints = calculateOrthogonalRoute(pStart, pEnd, obstacles, {
+        sourceSide,
+        targetSide,
+        laneOffset: phaseLaneOffset(descriptor.color),
+        sourcePin: descriptor.wire?.source,
+        targetPin: descriptor.wire?.target,
+      });
+    }
 
     const registeredRoutePoints = registerWireRoute(activeWire, baseRoutePoints, {
       descriptor,
@@ -9129,21 +9244,20 @@ export default function PanelGenerator() {
     const { p1, p2, sourceMeta, targetMeta } = descriptor;
     if (!isValidWirePoint(p1) || !isValidWirePoint(p2)) return [];
 
-    if (String(descriptor.wire?.source || "").startsWith("feed_in:") || String(descriptor.wire?.target || "").startsWith("feed_in:")) {
-      return [p1, p2];
+    const isCollinear = Math.abs(p1.x - p2.x) <= 2 || Math.abs(p1.y - p2.y) <= 2;
+    const isFeedInStub = (String(descriptor.wire?.source || "").startsWith("feed_in:") || String(descriptor.wire?.target || "").startsWith("feed_in:")) && isCollinear;
+    if (isFeedInStub) {
+      return cleanRoutePoints([p1, p2]);
     }
     const obstacles = extractPanelObstacles(rails, infrastructure);
 
     const storedWire = getStoredWire(descriptor.wire?.id);
-    const hasSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2;
+    const hasSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points);
     const savedAligned = hasSaved &&
       Math.hypot(storedWire.route.points[0].x - p1.x, storedWire.route.points[0].y - p1.y) < 25 &&
       Math.hypot(storedWire.route.points[storedWire.route.points.length - 1].x - p2.x, storedWire.route.points[storedWire.route.points.length - 1].y - p2.y) < 25;
     if (savedAligned) {
       return storedWire.route.points;
-    }
-    if (hasSaved) {
-      return [p1, ...storedWire.route.points.slice(1, -1), p2];
     }
 
     const sourceSide = isTerminalFeedWire(descriptor) || String(descriptor.wire?.source || "").startsWith("terminal_") ? "DOWN" : sourceMeta?.term === "bottom" ? "DOWN" : "UP";
@@ -9345,21 +9459,17 @@ export default function PanelGenerator() {
       >
         {descriptors.map((descriptor, descriptorIndex) => {
           const storedWire = getStoredWire(descriptor.wire.id);
-          const hasSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2;
+          const hasSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points);
           const savedAligned = hasSaved &&
             Math.hypot(storedWire.route.points[0].x - descriptor.p1.x, storedWire.route.points[0].y - descriptor.p1.y) < 25 &&
             Math.hypot(storedWire.route.points[storedWire.route.points.length - 1].x - descriptor.p2.x, storedWire.route.points[storedWire.route.points.length - 1].y - descriptor.p2.y) < 25;
 
           const savedRoute = savedAligned
             ? storedWire.route.points
-            : hasSaved
-              ? [descriptor.p1, ...storedWire.route.points.slice(1, -1), descriptor.p2]
-              : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
-                ? [descriptor.p1, ...storedWire.route_points, descriptor.p2]
-                : null;
+            : null;
 
           const laneOffset = (descriptorIndex - (descriptors.length - 1) / 2) * WIRE_SPACING;
-          const routePoints = (savedRoute && savedRoute.length >= 2) ? savedRoute : calculateOrthogonalRoute(descriptor.p1, descriptor.p2, obstacles, {
+          const routePoints = (savedRoute && savedRoute.length >= 2 && isOrthogonalPath(savedRoute)) ? savedRoute : calculateOrthogonalRoute(descriptor.p1, descriptor.p2, obstacles, {
             sourceSide: descriptor.sourceMeta?.term === "bottom" ? "DOWN" : "UP",
             targetSide: descriptor.targetMeta?.term === "bottom" ? "DOWN" : "UP",
             laneOffset,
@@ -9387,20 +9497,16 @@ export default function PanelGenerator() {
 
     const obstacles = extractPanelObstacles(rails, infrastructure);
     const storedWire = getStoredWire(descriptor.wire.id);
-    const hasSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2;
+    const hasSaved = Array.isArray(storedWire?.route?.points) && storedWire.route.points.length >= 2 && isOrthogonalPath(storedWire.route.points);
     const savedAligned = hasSaved &&
       Math.hypot(storedWire.route.points[0].x - devicePoint.x, storedWire.route.points[0].y - devicePoint.y) < 25 &&
       Math.hypot(storedWire.route.points[storedWire.route.points.length - 1].x - loadEndpoint.point.x, storedWire.route.points[storedWire.route.points.length - 1].y - loadEndpoint.point.y) < 25;
 
     const savedRoute = savedAligned
       ? storedWire.route.points
-      : hasSaved
-        ? [devicePoint, ...storedWire.route.points.slice(1, -1), loadEndpoint.point]
-        : Array.isArray(storedWire?.route_points) && storedWire.route_points.length > 0
-          ? [devicePoint, ...storedWire.route_points, loadEndpoint.point]
-          : null;
+      : null;
 
-    const routePoints = (savedRoute && savedRoute.length >= 2) ? savedRoute : calculateOrthogonalRoute(devicePoint, loadEndpoint.point, obstacles, {
+    const routePoints = (savedRoute && savedRoute.length >= 2 && isOrthogonalPath(savedRoute)) ? savedRoute : calculateOrthogonalRoute(devicePoint, loadEndpoint.point, obstacles, {
       sourceSide: "DOWN",
       targetSide: "DOWN",
       sourcePin: descriptor.wire?.source,
@@ -9466,11 +9572,13 @@ export default function PanelGenerator() {
       const customWire = wires.find(w => w.id === branchId || w.id === descriptor.wire.id);
       if (customWire?.deleted) return null;
 
-      const savedRoute = Array.isArray(customWire?.route?.points) && customWire.route.points.length >= 2
+      const savedRoute = Array.isArray(customWire?.route?.points) && customWire.route.points.length >= 2 && isOrthogonalPath(customWire.route.points)
         ? customWire.route.points
-        : Array.isArray(customWire?.route_points) && customWire.route_points.length > 0
-          ? [routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]]
-          : null;
+        : Array.isArray(customWire?.points) && customWire.points.length >= 2 && isOrthogonalPath(customWire.points)
+          ? customWire.points
+          : Array.isArray(customWire?.route_points) && customWire.route_points.length > 0 && isOrthogonalPath([routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]])
+            ? [routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]]
+            : null;
 
       const activeRoutePoints = (savedRoute && savedRoute.length >= 2) ? savedRoute : routePoints;
       const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId } };
@@ -9543,11 +9651,13 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       const customWire = wires.find(w => w.id === branchId || w.id === descriptor.wire.id);
       if (customWire?.deleted) return null;
 
-      const savedRoute = Array.isArray(customWire?.route?.points) && customWire.route.points.length >= 2
+      const savedRoute = Array.isArray(customWire?.route?.points) && customWire.route.points.length >= 2 && isOrthogonalPath(customWire.route.points)
         ? customWire.route.points
-        : Array.isArray(customWire?.route_points) && customWire.route_points.length > 0
-          ? [routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]]
-          : null;
+        : Array.isArray(customWire?.points) && customWire.points.length >= 2 && isOrthogonalPath(customWire.points)
+          ? customWire.points
+          : Array.isArray(customWire?.route_points) && customWire.route_points.length > 0 && isOrthogonalPath([routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]])
+            ? [routePoints[0], ...customWire.route_points, routePoints[routePoints.length - 1]]
+            : null;
 
       const activeRoutePoints = (savedRoute && savedRoute.length >= 2) ? savedRoute : routePoints;
       const branchDesc = { ...descriptor, wire: { ...descriptor.wire, id: branchId } };

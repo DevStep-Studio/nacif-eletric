@@ -413,6 +413,24 @@ export function optimizePanelWiring({
       return;
     }
 
+    // Correção automática de condutor de fase indevidamente conectado no barramento de neutro
+    const isNeutral = wire.color === "blue" || wire.conductorType === "neutral";
+    const srcIsBusbarN = String(wire.source || "").startsWith("busbar_neutral:");
+    const tgtIsBusbarN = String(wire.target || "").startsWith("busbar_neutral:");
+    if (!isNeutral && (srcIsBusbarN || tgtIsBusbarN)) {
+      const otherPin = srcIsBusbarN ? wire.target : wire.source;
+      const poleMatch = String(otherPin).match(/:(?:top|bottom):(\d+)/);
+      const poleIdx = poleMatch ? parseInt(poleMatch[1], 10) : 0;
+      const phaseNum = (poleIdx % 3) + 1;
+      const correctedSource = `terminal_left_top:${phaseNum}`;
+      if (srcIsBusbarN) wire.source = correctedSource;
+      if (tgtIsBusbarN) wire.target = correctedSource;
+      wire.conductorType = "phase";
+      if (!wire.color || wire.color === "blue") {
+        wire.color = phaseNum === 1 ? "black" : phaseNum === 2 ? "red" : "brown";
+      }
+    }
+
     const p1 = resolvePinPosition(wire.source, rails, panelHeight, infrastructure);
     const p2 = resolvePinPosition(wire.target, rails, panelHeight, infrastructure);
 
@@ -734,7 +752,23 @@ export function optimizePanelWiring({
       obeysTerminalDirections(polishedPath, meta.srcDir, meta.dstDir) &&
       !pathIntersectsObstacles(polishedPath, obstacles, obstaclePadding, meta.excludedIds);
 
-    const finalPath = isSafe ? polishedPath : (existingPoints.length >= 2 ? existingPoints : calculatedPath);
+    let finalPath = polishedPath;
+    if (!isSafe) {
+      if (calculatedPath && isOrthogonalPath(calculatedPath) && calculatedPath.length >= 2) {
+        finalPath = calculatedPath;
+      } else if (existingPoints.length >= 2 && isOrthogonalPath(existingPoints)) {
+        finalPath = existingPoints;
+      } else {
+        finalPath = calculateOrthogonalRoute(meta.p1, meta.p2, obstacles, {
+          sourceSide: meta.srcDir,
+          targetSide: meta.dstDir,
+          portExitOffset,
+          obstaclePadding,
+          sourcePin: wire.source,
+          targetPin: wire.target,
+        });
+      }
+    }
     const waypointsOnly = finalPath.length > 2 ? finalPath.slice(1, -1) : [];
 
     // Estatísticas de melhoria

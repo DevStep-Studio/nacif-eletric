@@ -294,6 +294,7 @@ export const segmentIntersectsBox = (p1, p2, box, padding = 0) => {
 
   // Segmento Vertical
   if (Math.abs(p1.x - p2.x) <= 0.5) {
+    if (box.blockHorizontalOnly) return false;
     const x = p1.x;
     if (x > minX && x < maxX) {
       return segMaxY > minY && segMinY < maxY;
@@ -350,6 +351,18 @@ export const extractPanelObstacles = (rails = [], infrastructure = [], options =
         });
       }
       currentX += width + 2;
+    });
+
+    // Bloqueio de passagem horizontal pelo interior dos trilhos metálicos DIN (força passagem pelas canaletas)
+    obstacles.push({
+      id: `din_rail_corridor_${rail.id || railIndex}`,
+      type: "din_rail_zone",
+      railIndex,
+      x: 100,
+      y: railY - 35,
+      width: 680,
+      height: 70,
+      blockHorizontalOnly: true,
     });
   });
 
@@ -566,6 +579,20 @@ export const calculateOrthogonalRoute = (source, target, obstacles = [], options
     pDst,
   ];
   candidateRoutes.push(zVertical);
+
+  // 1b. Rotas através das canaletas físicas reais do quadro elétrico (Top, Inter-trilhos, Bottom)
+  const knownDuctYs = [110, 315, 555, 720];
+  knownDuctYs.forEach((ductY) => {
+    const laneY = snapToGrid(ductY + laneOffset);
+    candidateRoutes.push([
+      pSrc,
+      startStub,
+      { x: startStub.x, y: laneY },
+      { x: endStub.x, y: laneY },
+      endStub,
+      pDst,
+    ]);
+  });
 
   // 2. Rota Z horizontal (Horizontal -> Vertical -> Horizontal)
   const midCorridorX = snapToGrid((startStub.x + endStub.x) / 2) + laneOffset;
