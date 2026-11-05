@@ -869,6 +869,25 @@ const drPoleLabel = (component = {}, poleIndex = 0) => {
   return `L${poleIndex + 1}`;
 };
 
+const dpsPoleLabel = (component = {}, poleIndex = 0) => {
+  const poles = Math.max(1, Number(component.poles) || 1);
+  if (poles === 1) {
+    if (component.phase && String(component.phase).length === 1) return component.phase;
+    return "A";
+  }
+  if (poles === 2) {
+    const isNeutral = component.supply_type === "Monofásico" || String(component.label || "").toLowerCase().includes("neutro");
+    return isNeutral ? (["A", "N"][poleIndex] || "N") : (["A", "B"][poleIndex] || "B");
+  }
+  if (poles === 3) {
+    return ["A", "B", "C"][poleIndex] || `L${poleIndex + 1}`;
+  }
+  if (poles === 4) {
+    return ["A", "B", "C", "N"][poleIndex] || (poleIndex === 3 ? "N" : `L${poleIndex + 1}`);
+  }
+  return `P${poleIndex + 1}`;
+};
+
 
 const getBoardGeneralBreaker = (board) => {
   const components = (board?.layout?.rails || []).flatMap((rail) => rail.components || []);
@@ -7843,16 +7862,23 @@ export default function PanelGenerator() {
   };
 
   const renderDPS = (c, x, y, isSelected) => {
-    const W = MOD;
-    const pinTopId = `comp:${c.id}:top:0`;
-    const pinBottomId = `comp:${c.id}:bottom:0`;
+    const poles = Math.max(1, Number(c.poles) || 1);
+    const W = poles * MOD;
     const isTraced = tracedCircuitId && isComponentMatchingCircuit(c, tracedCircuitId);
     const isDimmed = tracedCircuitId && !isTraced;
     const compOpacity = isDimmed ? (isIsolatedView ? 0.08 : 0.38) : 1;
     
-    const toggleStatus = (e) => {
+    const toggleStatus = (e, poleIndex = 0) => {
       e.stopPropagation();
-      handleUpdateComponent("dpsStatus", c.dpsStatus === "OK" ? "REPLACE" : "OK");
+      const currentStatuses = Array.isArray(c.dpsStatuses)
+        ? [...c.dpsStatuses]
+        : Array.from({ length: poles }).map(() => c.dpsStatus || "OK");
+      const nextStatus = currentStatuses[poleIndex] === "OK" ? "REPLACE" : "OK";
+      currentStatuses[poleIndex] = nextStatus;
+      handleUpdateComponentFields({
+        dpsStatus: currentStatuses.every((s) => s === "OK") ? "OK" : "REPLACE",
+        dpsStatuses: currentStatuses,
+      });
     };
 
     return (
@@ -7870,6 +7896,16 @@ export default function PanelGenerator() {
             selectComponent(c.id);
           }
         }}
+        onMouseEnter={() => setHoveredItem({
+          type: "component",
+          label: c.circuitLabel || c.name || c.label || "DPS",
+          poles,
+          deviceType: "dps",
+          phase: c.phase,
+          status: "ON",
+          dpsStatus: c.dpsStatus || "OK",
+        })}
+        onMouseLeave={() => setHoveredItem(null)}
       >
         {/* Sombra */}
         <rect x={x + 1} y={y + 2} width={W - 2} height={BRK_H} rx="5" fill="#0f172a" fillOpacity="0.14" filter="url(#deviceShadow)" />
@@ -7887,65 +7923,122 @@ export default function PanelGenerator() {
         />
         <rect x={x + 1} y={y + 1} width={W - 2} height={BRK_H - 2} rx="4" fill="none" stroke="#ffffff" strokeOpacity="0.35" strokeWidth="0.8" />
 
-        {/* Guias do cartucho plugável */}
-        <line x1={x + 3} y1={y + 24} x2={x + W - 3} y2={y + 24} stroke="#7f1d1d" strokeWidth="1" />
-        <line x1={x + 3} y1={y + 64} x2={x + W - 3} y2={y + 64} stroke="#7f1d1d" strokeWidth="1" />
+        {/* Divisórias modulares entre cartuchos de DPS para modelos multipolares */}
+        {poles > 1 && Array.from({ length: poles - 1 }).map((_, divIdx) => {
+          const divX = x + (divIdx + 1) * MOD;
+          return (
+            <g key={`dps-div-${divIdx}`}>
+              <line
+                x1={divX}
+                y1={y + 2}
+                x2={divX}
+                y2={y + BRK_H - 2}
+                stroke="#520707"
+                strokeWidth="1.2"
+              />
+              <line
+                x1={divX + 0.6}
+                y1={y + 3}
+                x2={divX + 0.6}
+                y2={y + BRK_H - 3}
+                stroke="#f87171"
+                strokeWidth="0.6"
+                strokeOpacity="0.4"
+              />
+            </g>
+          );
+        })}
 
-        {/* Parafuso Topo (Entrada de Linha) */}
-        <path d={`M ${x + 5} ${y} L ${x + W - 5} ${y} L ${x + W - 6} ${y + 3} L ${x + 6} ${y + 3} Z`} fill="#334155" />
-        <rect x={x + 2.5} y={y + 4} width={W - 5} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
-        <circle cx={x + W / 2} cy={y + 14} r="5.5" fill="#1e293b" />
-        <circle cx={x + W / 2} cy={y + 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-        <line x1={x + W / 2 - 2.8} y1={y + 14} x2={x + W / 2 + 2.8} y2={y + 14} stroke="#fecaca" strokeWidth="1.1" />
-        <line x1={x + W / 2} y1={y + 14 - 2.8} x2={x + W / 2} y2={y + 14 + 2.8} stroke="#fecaca" strokeWidth="1.1" />
+        {/* Cartuchos individuais de cada polo do DPS */}
+        {Array.from({ length: poles }).map((_, pi) => {
+          const px = x + pi * MOD;
+          const pinTopId = `comp:${c.id}:top:${pi}`;
+          const pinBottomId = `comp:${c.id}:bottom:${pi}`;
+          const poleLabel = dpsPoleLabel(c, pi);
+          const poleStatus = (Array.isArray(c.dpsStatuses) && c.dpsStatuses[pi]) || c.dpsStatus || "OK";
 
-        {/* Parafuso Base (Saída de Terra PE) */}
-        <path d={`M ${x + 5} ${y + BRK_H} L ${x + W - 5} ${y + BRK_H} L ${x + W - 6} ${y + BRK_H - 3} L ${x + 6} ${y + BRK_H - 3} Z`} fill="#334155" />
-        <rect x={x + 2.5} y={y + BRK_H - 24} width={W - 5} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
-        <circle cx={x + W / 2} cy={y + BRK_H - 14} r="5.5" fill="#1e293b" />
-        <circle cx={x + W / 2} cy={y + BRK_H - 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
-        <line x1={x + W / 2 - 2.8} y1={y + BRK_H - 14} x2={x + W / 2 + 2.8} y2={y + BRK_H - 14} stroke="#fecaca" strokeWidth="1.1" />
-        <line x1={x + W / 2} y1={y + BRK_H - 14 - 2.8} x2={x + W / 2} y2={y + BRK_H - 14 + 2.8} stroke="#fecaca" strokeWidth="1.1" />
+          return (
+            <g key={`dps-pole-${pi}`}>
+              {/* Guias do cartucho plugável */}
+              <line x1={px + 3} y1={y + 24} x2={px + MOD - 3} y2={y + 24} stroke="#7f1d1d" strokeWidth="1" />
+              <line x1={px + 3} y1={y + 64} x2={px + MOD - 3} y2={y + 64} stroke="#7f1d1d" strokeWidth="1" />
 
-        {/* Janela de Status Óptica do Varistor (Verde = OK / Vermelho = DEFEITO) */}
-        <rect x={x + 3.5} y={y + 26} width={W - 7} height="13" rx="2" fill="#0f172a" stroke="#450a0a" strokeWidth="0.6" />
-        <rect
-          x={x + 4.5}
-          y={y + 27}
-          width={W - 9}
-          height="11"
-          rx="1.5"
-          fill={c.dpsStatus === "OK" ? COLORS.dpsGreen : "#ef4444"}
-          onClick={toggleStatus}
-          className="transition-colors duration-150"
-        />
-        {/* Brilho da lente da janela óptica */}
-        <rect x={x + 5.5} y={y + 28} width={W - 11} height="4" rx="1" fill="#ffffff" fillOpacity="0.4" pointerEvents="none" />
-        <text x={x + W / 2} y={y + 35} fill="#ffffff" fontSize="6.2" fontWeight="950" textAnchor="middle" pointerEvents="none">
-          {c.dpsStatus}
-        </text>
+              {/* Parafuso Topo (Entrada de Linha / Fase / Neutro) */}
+              <path d={`M ${px + 5} ${y} L ${px + MOD - 5} ${y} L ${px + MOD - 6} ${y + 3} L ${px + 6} ${y + 3} Z`} fill="#334155" />
+              <rect x={px + 2.5} y={y + 4} width={MOD - 5} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="5.5" fill="#1e293b" />
+              <circle cx={px + MOD / 2} cy={y + 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              <line x1={px + MOD / 2 - 2.8} y1={y + 14} x2={px + MOD / 2 + 2.8} y2={y + 14} stroke="#fecaca" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + 14 - 2.8} x2={px + MOD / 2} y2={y + 14 + 2.8} stroke="#fecaca" strokeWidth="1.1" />
 
-        {/* Símbolo de Raio de Alta Tensão */}
-        <polygon
-          points={`${x + W / 2},${y + 42} ${x + W / 2 + 4.5},${y + 49} ${x + W / 2 + 1.5},${y + 49} ${x + W / 2 + 3.5},${y + 59} ${x + W / 2 - 4.5},${y + 50} ${x + W / 2 - 1.5},${y + 50}`}
-          fill="#fbbf24"
-          stroke="#b45309"
-          strokeWidth="0.6"
-        />
+              {/* Parafuso Base (Saída de Terra PE) */}
+              <path d={`M ${px + 5} ${y + BRK_H} L ${px + MOD - 5} ${y + BRK_H} L ${px + MOD - 6} ${y + BRK_H - 3} L ${px + 6} ${y + BRK_H - 3} Z`} fill="#334155" />
+              <rect x={px + 2.5} y={y + BRK_H - 24} width={MOD - 5} height="20" rx="3" fill="#7f1d1d" stroke="#520707" strokeWidth="0.8" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="5.5" fill="#1e293b" />
+              <circle cx={px + MOD / 2} cy={y + BRK_H - 14} r="4.2" fill="url(#metallicScrew)" stroke="#0f172a" strokeWidth="0.3" />
+              <line x1={px + MOD / 2 - 2.8} y1={y + BRK_H - 14} x2={px + MOD / 2 + 2.8} y2={y + BRK_H - 14} stroke="#fecaca" strokeWidth="1.1" />
+              <line x1={px + MOD / 2} y1={y + BRK_H - 14 - 2.8} x2={px + MOD / 2} y2={y + BRK_H - 14 + 2.8} stroke="#fecaca" strokeWidth="1.1" />
 
-        {/* Cartão de etiqueta técnica com normas IEC 61643-11 */}
-        <rect x={x + 1.5} y={y + 66} width={W - 3} height="18.5" fill="#ffffff" rx="2" stroke="#7f1d1d" strokeWidth="0.85" />
-        <text x={x + W / 2} y={y + 72} fill="#0f172a" fontSize="4.8" fontWeight="950" textAnchor="middle">DPS-{c.phase || "A"}</text>
-        <text x={x + W / 2} y={y + 77.5} fill="#b91c1c" fontSize="5.2" fontWeight="950" textAnchor="middle">20 kA</text>
-        <text x={x + W / 2} y={y + 82.5} fill="#64748b" fontSize="4.2" fontWeight="800" textAnchor="middle">275V</text>
+              {/* Janela de Status Óptica do Varistor (Verde = OK / Vermelho = DEFEITO) */}
+              <rect x={px + 3.5} y={y + 26} width={MOD - 7} height="13" rx="2" fill="#0f172a" stroke="#450a0a" strokeWidth="0.6" />
+              <rect
+                x={px + 4.5}
+                y={y + 27}
+                width={MOD - 9}
+                height="11"
+                rx="1.5"
+                fill={poleStatus === "OK" ? COLORS.dpsGreen : "#ef4444"}
+                onClick={(e) => toggleStatus(e, pi)}
+                className="transition-colors duration-150"
+              />
+              {/* Brilho da lente da janela óptica */}
+              <rect x={px + 5.5} y={y + 28} width={MOD - 11} height="4" rx="1" fill="#ffffff" fillOpacity="0.4" pointerEvents="none" />
+              <text x={px + MOD / 2} y={y + 35} fill="#ffffff" fontSize="6.2" fontWeight="950" textAnchor="middle" pointerEvents="none">
+                {poleStatus}
+              </text>
 
-        {/* Pinos interativos de fiação */}
-        {(wiringMode || !!wireMoveMode) && (
-          <>
-            <circle cx={x + W / 2} cy={y + 14} r="9" fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }} />
-            <circle cx={x + W / 2} cy={y + BRK_H - 14} r="9" fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"} fillOpacity="0.85" className="animate-pulse" onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }} />
-          </>
-        )}
+              {/* Símbolo de Raio de Alta Tensão */}
+              <polygon
+                points={`${px + MOD / 2},${y + 42} ${px + MOD / 2 + 4.5},${y + 49} ${px + MOD / 2 + 1.5},${y + 49} ${px + MOD / 2 + 3.5},${y + 59} ${px + MOD / 2 - 4.5},${y + 50} ${px + MOD / 2 - 1.5},${y + 50}`}
+                fill="#fbbf24"
+                stroke="#b45309"
+                strokeWidth="0.6"
+              />
+
+              {/* Cartão de etiqueta técnica com normas IEC 61643-11 */}
+              <rect x={px + 1.5} y={y + 66} width={MOD - 3} height="18.5" fill="#ffffff" rx="2" stroke="#7f1d1d" strokeWidth="0.85" />
+              <text x={px + MOD / 2} y={y + 72} fill="#0f172a" fontSize="4.8" fontWeight="950" textAnchor="middle">
+                DPS-{poleLabel}
+              </text>
+              <text x={px + MOD / 2} y={y + 77.5} fill="#b91c1c" fontSize="5.2" fontWeight="950" textAnchor="middle">20 kA</text>
+              <text x={px + MOD / 2} y={y + 82.5} fill="#64748b" fontSize="4.2" fontWeight="800" textAnchor="middle">275V</text>
+
+              {/* Pinos interativos de fiação */}
+              {(wiringMode || !!wireMoveMode) && (
+                <>
+                  <circle
+                    cx={px + MOD / 2}
+                    cy={y + 14}
+                    r="9"
+                    fill={wiringStart === pinTopId ? "#00d8b8" : "#22c55e"}
+                    fillOpacity="0.85"
+                    className="animate-pulse"
+                    onClick={(e) => { e.stopPropagation(); handlePinClick(pinTopId); }}
+                  />
+                  <circle
+                    cx={px + MOD / 2}
+                    cy={y + BRK_H - 14}
+                    r="9"
+                    fill={wiringStart === pinBottomId ? "#00d8b8" : "#22c55e"}
+                    fillOpacity="0.85"
+                    className="animate-pulse"
+                    onClick={(e) => { e.stopPropagation(); handlePinClick(pinBottomId); }}
+                  />
+                </>
+              )}
+            </g>
+          );
+        })}
 
         {isTraced && (
           <rect
