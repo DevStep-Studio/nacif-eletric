@@ -14,6 +14,9 @@ type SafeUser = {
   role: UserRole;
   plan: UserPlan;
   profession: string;
+  profissao?: string;
+  is_super_admin?: boolean;
+  status?: string;
   company: string;
   crea: string;
   phone: string;
@@ -59,20 +62,47 @@ type SafeProject = {
   updated_date: string;
 };
 
-export const serializeUser = (user: User): SafeUser => ({
-  id: user.id,
-  email: user.email,
-  full_name: user.fullName,
-  role: user.role,
-  plan: user.plan,
-  profession: user.profession ?? "",
-  company: user.company ?? "",
-  crea: user.crea ?? "",
-  phone: user.phone ?? "",
-  avatar_url: user.avatarUrl ?? "",
-  created_date: user.createdAt.toISOString(),
-  updated_date: user.updatedAt.toISOString(),
-});
+const SUPER_ADMIN_EMAILS = [
+  "admin@nacif.com",
+  "grc22.09@hotmail.com",
+  "ian.mellofla@gmail.com",
+  "wellingtonalfredo550@gmail.com",
+  "comercial@nacifsolutions.com.br",
+  "gabrielderezende13@gmail.com",
+];
+
+export const serializeUser = (user: User): SafeUser => {
+  const normalizedEmail = (user.email || "").toLowerCase().trim();
+  const isSuper = user.role === "super_admin" || Boolean(user.isSuperAdmin) || SUPER_ADMIN_EMAILS.includes(normalizedEmail);
+  const permissions = (user.customPermissions as Record<string, unknown>) || {};
+
+  return {
+    id: user.id,
+    email: user.email,
+    full_name: user.fullName,
+    role: isSuper ? ("super_admin" as UserRole) : user.role,
+    plan: user.plan,
+    profession: user.profession ?? "",
+    profissao: user.profession ?? "",
+    is_super_admin: isSuper,
+    status: user.status || "active",
+    company: user.company ?? "",
+    crea: user.crea ?? "",
+    phone: user.phone ?? "",
+    avatar_url: user.avatarUrl ?? "",
+    created_date: user.createdAt.toISOString(),
+    updated_date: user.updatedAt.toISOString(),
+    subscription_status: (permissions.subscriptionStatus as string) || (user.plan === "gratuito" ? "active" : "active"),
+    subscription_cycle: (permissions.subscriptionCycle as string) || "monthly",
+    academic_status: (permissions.academicStatus as string) || (user.plan === "estudante" ? "approved" : undefined),
+    academic_institution: (permissions.academicInstitution as string) || undefined,
+    academic_course: (permissions.academicCourse as string) || undefined,
+    monthly_exports_count: typeof permissions.monthlyExportsCount === "number" ? permissions.monthlyExportsCount : 0,
+    monthly_ai_scans_count: typeof permissions.monthlyAiScansCount === "number" ? permissions.monthlyAiScansCount : 0,
+    usage_period: (permissions.usagePeriod as string) || new Date().toISOString().slice(0, 7),
+    storage_used_mb: typeof permissions.storageUsedMb === "number" ? permissions.storageUsedMb : 0,
+  };
+};
 
 export const serializeProject = (
   project: Project & { createdBy?: { email: string } | null },

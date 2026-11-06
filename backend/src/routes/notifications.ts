@@ -20,7 +20,7 @@ const createNotificationSchema = z.object({
   href: z.string().trim().optional(),
   audience: z.enum(["self", "all", "user"]).optional(),
   user_id: z.string().trim().optional(),
-}).strict();
+}).passthrough();
 
 export const registerNotificationRoutes = async (app: FastifyInstance) => {
   app.get("/api/notifications", { preHandler: [app.authenticate] }, async (request) => {
@@ -40,7 +40,7 @@ export const registerNotificationRoutes = async (app: FastifyInstance) => {
     const audience = data.audience ?? "self";
 
     if (audience === "all" || audience === "user") {
-      if (request.authUser.role !== "admin") {
+      if (request.authUser.role !== "admin" && (request.authUser.role as string) !== "super_admin") {
         throw new AppError("Apenas administradores podem enviar notificações para outros usuários.", 403);
       }
     }

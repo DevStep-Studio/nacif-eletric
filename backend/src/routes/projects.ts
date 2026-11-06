@@ -29,7 +29,7 @@ const projectPayloadSchema = z.object({
   notes: z.string().optional(),
   materials: z.array(z.unknown()).optional(),
   manual_budget_items: z.array(z.unknown()).optional(),
-}).strict();
+}).passthrough();
 
 const projectUpdateSchema = projectPayloadSchema.partial();
 

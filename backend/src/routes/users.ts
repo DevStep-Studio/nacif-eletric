@@ -3,17 +3,32 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { serializeUser } from "../lib/serializers.js";
 
+const normalizeProfession = (val: unknown) => {
+  if (!val || typeof val !== "string") return undefined;
+  const text = val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  if (!text) return undefined;
+  if (text.includes("arquit")) return "arquiteto";
+  if (text.includes("engenh")) return "engenheiro";
+  if (text.includes("proj")) return "projetista";
+  if (text.includes("tecn")) return "tecnico";
+  if (text.includes("estud") || text.includes("acad")) return "estudante";
+  if (text.includes("elet")) return "eletricista";
+  return "projetista";
+};
+
+const professionSchema = z.preprocess(normalizeProfession, z.enum(["engenheiro", "projetista", "eletricista", "arquiteto", "tecnico", "estudante"]).optional());
+
 const updateUserSchema = z.object({
   full_name: z.string().trim().min(1).optional(),
-  role: z.enum(["admin", "user"]).optional(),
+  role: z.enum(["super_admin", "admin", "user"]).optional(),
   plan: z.enum(["gratuito", "profissional", "engenharia", "estudante", "eletrico", "solar", "completo"]).optional(),
-  profession: z.enum(["engenheiro", "projetista", "eletricista", "arquiteto", "tecnico", "estudante"]).optional(),
-  profissao: z.enum(["engenheiro", "projetista", "eletricista", "arquiteto", "tecnico", "estudante"]).optional(),
+  profession: professionSchema,
+  profissao: professionSchema,
   company: z.string().trim().optional(),
   crea: z.string().trim().optional(),
   phone: z.string().trim().optional(),
   avatar_url: z.string().trim().optional(),
-}).strict();
+}).passthrough();
 
 export const registerUserRoutes = async (app: FastifyInstance) => {
   app.get("/api/users", { preHandler: [app.requireAdmin] }, async () => {

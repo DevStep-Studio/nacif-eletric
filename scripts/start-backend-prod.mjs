@@ -76,6 +76,20 @@ async function main() {
         } catch {
           // sem processo anterior
         }
+      } else {
+        try {
+          const findPortOut = execSync("netstat -ano | findstr :3001", { encoding: "utf-8" });
+          const lines = findPortOut.trim().split("\n");
+          for (const line of lines) {
+            const parts = line.trim().split(/\s+/);
+            const pid = parts[parts.length - 1];
+            if (pid && !isNaN(Number(pid))) {
+              execSync(`taskkill /F /PID ${pid}`, { stdio: "ignore" });
+            }
+          }
+        } catch {
+          // nenhum processo na porta
+        }
       }
 
       const logPath = path.join(backendDir, "backend-prod.log");

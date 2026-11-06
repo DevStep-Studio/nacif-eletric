@@ -46,7 +46,10 @@ import {
 const rawApiBaseUrl = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.trim() : "");
 const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
 const TOKEN_KEYS = ["voltai_access_token", "voltai_token"];
-export const isLocalAuthMode = true;
+export const isLocalAuthMode = Boolean(
+  (typeof process !== "undefined" && (process.env?.NODE_ENV === "test" || process.argv?.some((a) => String(a).includes("smoke")))) ||
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_AUTH_MODE === "local")
+);
 const LOCAL_USERS_KEY = "voltai_local_users";
 const LOCAL_PROJECTS_KEY = "voltai_local_projects";
 const LOCAL_BUDGETS_KEY = "voltai_local_budgets";
@@ -463,6 +466,7 @@ const request = async (path, options = {}) => {
   const response = await fetch(buildUrl(path, options.query), {
     method: options.method || "GET",
     headers,
+    credentials: "include",
     body: options.body instanceof FormData || options.body === undefined ? options.body : JSON.stringify(options.body),
   });
 
@@ -670,6 +674,7 @@ const auth = {
         terms_accepted,
         terms_version,
         terms_accepted_at,
+        full_name,
       },
     });
 

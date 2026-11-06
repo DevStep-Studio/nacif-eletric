@@ -9,17 +9,40 @@ import { serializeUser } from "../lib/serializers.js";
 
 const emailSchema = z.string().trim().toLowerCase().email("Informe um email válido.");
 const passwordSchema = z.string().min(6, "A senha deve ter pelo menos 6 caracteres.");
-const professionSchema = z.enum(["engenheiro", "projetista", "eletricista", "arquiteto", "tecnico", "estudante"]);
+const normalizeProfession = (val: unknown) => {
+  if (!val || typeof val !== "string") return undefined;
+  const text = val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  if (!text) return undefined;
+  if (text.includes("arquit")) return "arquiteto";
+  if (text.includes("engenh")) return "engenheiro";
+  if (text.includes("proj")) return "projetista";
+  if (text.includes("tecn")) return "tecnico";
+  if (text.includes("estud") || text.includes("acad")) return "estudante";
+  if (text.includes("elet")) return "eletricista";
+  return "projetista";
+};
+
+const professionEnum = z.enum(["engenheiro", "projetista", "eletricista", "arquiteto", "tecnico", "estudante"]);
+const professionSchema = z.preprocess(normalizeProfession, professionEnum.optional());
+
+const SUPER_ADMIN_EMAILS = [
+  "admin@nacif.com",
+  "grc22.09@hotmail.com",
+  "ian.mellofla@gmail.com",
+  "wellingtonalfredo550@gmail.com",
+  "comercial@nacifsolutions.com.br",
+  "gabrielderezende13@gmail.com",
+];
 
 const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
-  profession: professionSchema.optional(),
+  profession: professionSchema,
   full_name: z.string().trim().optional(),
   terms_accepted: z.boolean().optional(),
   terms_version: z.string().trim().optional(),
   terms_accepted_at: z.string().trim().optional(),
-});
+}).passthrough();
 
 const loginSchema = z.object({
   email: emailSchema,
@@ -59,20 +82,27 @@ const resetPasswordSchema = z.object({
 
 export const registerAuthRoutes = async (app: FastifyInstance) => {
   app.post("/api/auth/register", async (request) => {
-    const { email, password, profession } = registerSchema.parse(request.body);
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const { email, password, profession, full_name } = registerSchema.parse(request.body);
+    const normalizedEmail = email.toLowerCase().trim();
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
     if (existing) {
       throw new AppError("Este email já está cadastrado.", 409);
     }
 
+    const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
     const usersCount = await prisma.user.count();
+    const role: "super_admin" | "admin" | "user" = isSuperAdminEmail ? "super_admin" : (usersCount === 0 ? "admin" : "user");
+    const plan: "completo" | "gratuito" = isSuperAdminEmail ? "completo" : "gratuito";
+
     const user = await prisma.user.create({
       data: {
-        email,
+        email: normalizedEmail,
         passwordHash: await hashPassword(password),
-        fullName: email.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
-        role: usersCount === 0 ? "admin" : "user",
+        fullName: full_name?.trim() || normalizedEmail.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
+        role,
+        plan,
+        isSuperAdmin: isSuperAdminEmail,
         profession: profession ?? "projetista",
       },
     });
@@ -125,6 +155,37 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       throw new AppError("Usuário não encontrado.", 404);
     }
     return serializeUser(user);
+  });
+
+  app.delete("/api/auth/me", { preHandler: [app.authenticate] }, async (request) => {
+    await prisma.user.update({
+      where: { id: request.authUser.id },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+        status: "deleted",
+      },
+    });
+    return { ok: true, message: "Conta excluída com sucesso." };
+  });
+
+  app.get("/api/auth/export-data", { preHandler: [app.authenticate] }, async (request) => {
+    const user = await prisma.user.findUnique({
+      where: { id: request.authUser.id },
+      include: {
+        projects: true,
+        notifications: true,
+      },
+    });
+    if (!user) {
+      throw new AppError("Usuário não encontrado.", 404);
+    }
+    return {
+      exported_at: new Date().toISOString(),
+      user: serializeUser(user),
+      projects: user.projects,
+      notifications: user.notifications,
+    };
   });
 
   app.patch("/api/auth/me", { preHandler: [app.authenticate] }, async (request) => {

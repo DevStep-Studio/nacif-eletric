@@ -18,6 +18,8 @@ import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerAnalysisRoutes } from "./routes/analysis.js";
 import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
+import { registerBudgetRoutes } from "./routes/budgets.js";
+import { registerIssueRoutes } from "./routes/issues.js";
 import { isAppError } from "./lib/errors.js";
 import { ensureUploadDir } from "./lib/uploads.js";
 
@@ -149,20 +151,48 @@ export const buildApp = async () => {
   await registerSettingsRoutes(app);
   await registerCatalogRoutes(app);
   await registerSubscriptionRoutes(app);
+  await registerBudgetRoutes(app);
+  await registerIssueRoutes(app);
 
   app.setErrorHandler((error, _request, reply) => {
-    const typedError = error as { issues?: Array<{ message?: string }> };
+    const typedError = error as {
+      statusCode?: number;
+      status?: number;
+      code?: string;
+      issues?: Array<{ message?: string }>;
+      errors?: Array<{ message?: string }>;
+    };
 
     if (isAppError(error)) {
       return reply.status(error.statusCode).send({ message: error.message });
     }
 
-    if (Array.isArray(typedError.issues)) {
+    // Zod validation errors
+    if (Array.isArray(typedError.issues) && typedError.issues.length > 0) {
       return reply.status(400).send({ message: typedError.issues[0]?.message ?? "Dados inválidos." });
+    }
+    if (Array.isArray(typedError.errors) && typedError.errors.length > 0) {
+      return reply.status(400).send({ message: typedError.errors[0]?.message ?? "Dados inválidos." });
+    }
+
+    // Prisma known errors
+    if (typedError.code === "P2002") {
+      return reply.status(409).send({ message: "Este registro já está cadastrado no sistema." });
+    }
+    if (typedError.code === "P2025") {
+      return reply.status(404).send({ message: "Registro não encontrado." });
+    }
+
+    // Fastify or standard HTTP error with statusCode
+    const explicitStatus = typedError.statusCode || typedError.status;
+    if (typeof explicitStatus === "number" && explicitStatus >= 400 && explicitStatus < 500) {
+      return reply.status(explicitStatus).send({
+        message: error instanceof Error ? error.message : "Requisição inválida.",
+      });
     }
 
     app.log.error(error);
-    return reply.status(500).send({
+    return reply.status(typeof explicitStatus === "number" && explicitStatus >= 500 ? explicitStatus : 500).send({
       message: error instanceof Error ? error.message : "Erro interno do servidor.",
     });
   });
