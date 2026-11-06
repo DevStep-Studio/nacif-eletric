@@ -51,6 +51,7 @@ type SafeProject = {
   name: string;
   client_name: string;
   address: string;
+  city: string;
   project_type: string;
   solar_config: unknown;
   voltage: number | null;
@@ -133,6 +134,7 @@ export const serializeProject = (
   name: project.name,
   client_name: project.clientName ?? "",
   address: project.address ?? "",
+  city: (project as any).city ?? "",
   project_type: project.projectType ?? "Instalações Elétricas",
   solar_config: project.solarConfig ?? null,
   voltage: project.voltage,

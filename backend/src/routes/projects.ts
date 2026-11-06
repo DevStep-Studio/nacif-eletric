@@ -16,6 +16,7 @@ const projectPayloadSchema = z.object({
   name: z.string().trim().min(1, "Nome do projeto é obrigatório."),
   client_name: z.string().trim().optional(),
   address: z.string().trim().optional(),
+  city: z.string().trim().optional(),
   project_type: z.string().trim().optional(),
   solar_config: z.unknown().optional(),
   voltage: z.number().int().nullable().optional(),
@@ -120,6 +121,7 @@ const buildRevisionSnapshot = (project: {
   name: project.name,
   client_name: project.clientName ?? "",
   address: project.address ?? "",
+  city: (project as any).city ?? "",
   project_type: project.projectType ?? "Instalações Elétricas",
   solar_config: project.solarConfig ?? null,
   voltage: project.voltage,
@@ -298,6 +300,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
             name: data.name,
             clientName: data.client_name ?? "",
             address: data.address ?? "",
+            city: data.city ?? "",
             projectType: data.project_type ?? "Instalações Elétricas",
             solarConfig: (data.solar_config ?? null) as
               | Prisma.InputJsonValue
@@ -405,6 +408,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
           name: data.name,
           clientName: data.client_name,
           address: data.address,
+          city: data.city,
           projectType: data.project_type,
           solarConfig: data.solar_config as Prisma.InputJsonValue | undefined,
           voltage: data.voltage,
