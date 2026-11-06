@@ -1,3 +1,4 @@
+import { assertAccountAvailable } from "../lib/accountAccess.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { env } from "../config/env.js";
@@ -106,6 +107,8 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
       throw new AppError("Email ou senha inválidos.", 401);
     }
+
+    assertAccountAvailable(user);
 
     return {
       access_token: signAccessToken(app, user),

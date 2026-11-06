@@ -101,3 +101,16 @@ recarrega o PM2 usando `ecosystem.config.cjs`. Agora verifica também a rota de 
 e retorna erro se a instância continuar desatualizada. Compilar apenas o frontend
 com `--ignore-scripts` não recarrega o backend. Se apenas o endereço público falhar,
 confira se o proxy de `/api` aponta para a mesma porta/processo testado localmente.
+
+### Login seguido de “Conta indisponível”
+
+Login e rotas autenticadas usam a mesma validação de conta. Os valores legados
+`ativo`, `ativa`, diferenças de caixa/espaços e status vazio são tratados como
+`active`. Contas suspensas, inativas ou excluídas continuam bloqueadas, com uma
+mensagem específica; sessões cujo usuário não existe exigem novo login.
+
+Para corrigir dados antigos no banco selecionado, execute
+`backend/prisma/migrations/20261105030000_normalize_legacy_account_status/migration.sql`.
+Esse SQL normaliza somente os status ativos reconhecidos e não reativa contas
+suspensas, inativas ou excluídas. Publique o backend atualizado e recarregue a API
+com `npm run start:api` antes de fazer login novamente.

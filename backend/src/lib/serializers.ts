@@ -1,3 +1,4 @@
+import { normalizeAccountStatus } from "./accountAccess.js";
 import { effectivePlanCode } from "./planGovernance.js";
 import type { Project, ProjectStatus, User, UserPlan, UserRole } from "@prisma/client";
 
@@ -73,7 +74,7 @@ type SafeProject = {
 };
 
 export const serializeUser = (user: User): SafeUser => ({
-  status: user.status,
+  status: normalizeAccountStatus(user.status),
   is_super_admin: user.isSuperAdmin,
   subscription_status: (user.customPermissions as any)?.subscriptionStatus || "active",
   subscription_cycle: (user.customPermissions as any)?.subscriptionCycle || "monthly",

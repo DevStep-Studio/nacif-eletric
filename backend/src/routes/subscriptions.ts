@@ -1,3 +1,4 @@
+import { assertAccountAvailable } from "../lib/accountAccess.js";
 import type { FastifyInstance } from "fastify";
 import type Stripe from "stripe";
 import { z } from "zod";
@@ -33,8 +34,7 @@ const requireStripe = () => {
 };
 const getUser = async (id: string) => {
   const user = await prisma.user.findUnique({ where: { id } });
-  if (!user || user.isDeleted || user.status !== "active")
-    throw new AppError("Conta indisponível.", 403);
+  assertAccountAvailable(user);
   return user;
 };
 const priceFor = (plan: string, cycle: string) => {

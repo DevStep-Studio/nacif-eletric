@@ -18,6 +18,7 @@ const { stripe, STRIPE_PRICES } = await import("../src/lib/stripe.js");
 const { effectivePlanCode, checkServerModuleAccess } = await import(
   "../src/lib/planGovernance.js"
 );
+const { normalizeAccountStatus, assertAccountAvailable } = await import("../src/lib/accountAccess.js");
 const app = await buildApp();
 const createdIds: string[] = [];
 const eventIds: string[] = [];
@@ -41,6 +42,8 @@ const eq = (actual: any, expected: any) => {
   assertions++;
 };
 try {
+  for (const [input, expected] of [[null, "active"], [" AtIvA ", "active"], ["SUSPENSO", "suspended"], ["BLOQUEADA", "suspended"], ["INATIVO", "inactive"], ["EXCLUÍDA", "deleted"]]) eq(normalizeAccountStatus(input), expected);
+  assert.throws(() => assertAccountAvailable({ status: "suspenso" }), { statusCode: 403, message: "Sua conta está suspensa. Entre em contato com o administrador." });
   const plans = await call("GET", "/api/subscriptions/plans");
   eq(plans.status, 200);
   eq(plans.body.plans.length, 5);
@@ -84,6 +87,70 @@ try {
       .status,
     401,
   );
+  for (const legacy of ["ativo", "ATIVA", " Active ", ""]) {
+    await prisma.user.update({ where: { id }, data: { status: legacy } });
+    const legacyLogin = await call("POST", "/api/auth/login", {
+      email,
+      password: "test-secret-123",
+    });
+    eq(legacyLogin.status, 200);
+    eq(legacyLogin.body.user.status, "active");
+    eq((await call("GET", "/api/auth/me", undefined, token)).status, 200);
+    eq(
+      (await call("GET", "/api/subscriptions/status", undefined, token)).status,
+      200,
+    );
+  }
+  for (const blocked of [
+    "suspended",
+    "bloqueado",
+    "inactive",
+    "inativo",
+    "deleted",
+    "unexpected",
+  ]) {
+    await prisma.user.update({ where: { id }, data: { status: blocked } });
+    const blockedLogin = await call("POST", "/api/auth/login", {
+      email,
+      password: "test-secret-123",
+    });
+    eq(blockedLogin.status, 403);
+    eq(blockedLogin.body.access_token, undefined);
+    eq((await call("GET", "/api/auth/me", undefined, token)).status, 403);
+  }
+  for (const deleted of [
+    { isDeleted: true, deletedAt: null },
+    { isDeleted: false, deletedAt: new Date() },
+  ]) {
+    await prisma.user.update({
+      where: { id },
+      data: { status: "active", ...deleted },
+    });
+    eq(
+      (
+        await call("POST", "/api/auth/login", {
+          email,
+          password: "test-secret-123",
+        })
+      ).status,
+      403,
+    );
+    eq((await call("GET", "/api/auth/me", undefined, token)).status, 403);
+  }
+  await prisma.user.update({
+    where: { id },
+    data: { status: "active", isDeleted: false, deletedAt: null },
+  });
+  const missingUserToken = app.jwt.sign({
+    sub: "missing-user",
+    email,
+    role: "user",
+  });
+  eq(
+    (await call("GET", "/api/auth/me", undefined, missingUserToken)).status,
+    401,
+  );
+
   eq(
     (await call("PATCH", "/api/auth/me", { plan: "completo" }, token)).status,
     403,
@@ -543,7 +610,7 @@ try {
   eq(checkServerModuleAccess({ plan: "gratuito" }, "solar").allowed, false);
   eq(checkServerModuleAccess({ plan: "solar" }, "unifilar").allowed, false);
   await prisma.user.update({ where: { id }, data: { status: "suspended" } });
-  eq((await call("GET", "/api/auth/me", undefined, token)).status, 401);
+  eq((await call("GET", "/api/auth/me", undefined, token)).status, 403);
   console.log(
     `PASS: ${assertions} API integration assertions (real MySQL; Stripe mocked, no charges).`,
   );

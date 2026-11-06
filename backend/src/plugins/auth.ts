@@ -1,3 +1,4 @@
+import { assertAccountAvailable } from "../lib/accountAccess.js";
 import { effectivePlanCode } from "../lib/planGovernance.js";
 import { prisma } from "../lib/prisma.js";
 import fp from "fastify-plugin";
@@ -23,7 +24,7 @@ export const authPlugin = fp(async (app) => {
     });
 
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user || user.isDeleted || user.status !== "active") return reply.unauthorized("Conta indisponível.");
+    assertAccountAvailable(user);
     request.authUser = {
       id: payload.sub,
       email: payload.email,
