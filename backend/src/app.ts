@@ -1,3 +1,4 @@
+import { registerWorkspaceRoutes } from "./routes/workspace.js";
 import path from "node:path";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
@@ -18,7 +19,7 @@ import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerAnalysisRoutes } from "./routes/analysis.js";
 import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
-import { isAppError } from "./lib/errors.js";
+import { AppError, isAppError } from "./lib/errors.js";
 import { ensureUploadDir } from "./lib/uploads.js";
 
 export const buildApp = async () => {
@@ -43,34 +44,11 @@ export const buildApp = async () => {
       return true;
     }
 
-    try {
-      const url = new URL(origin);
-      const hostname = url.hostname;
-
-      if (hostname === "localhost" || hostname === "127.0.0.1") {
-        return true;
-      }
-
-      if (
-        hostname === "nacifenergy.com.br" ||
-        hostname.endsWith(".nacifenergy.com.br") ||
-        hostname.endsWith(".vercel.app") ||
-        hostname.endsWith(".pages.dev")
-      ) {
-        return true;
-      }
-
-      if (hostname.startsWith("192.168.") || hostname.startsWith("10.") || hostname.startsWith("172.")) {
-        return true;
-      }
-    } catch {
-      return true;
-    }
-
-    return true;
+    return false;
   };
 
   const app = Fastify({
+    bodyLimit: 30 * 1024 * 1024,
     logger: true,
     trustProxy: true, // Essencial para proxies reversos, Cloudflare e Nginx
     ajv: {
@@ -108,7 +86,7 @@ export const buildApp = async () => {
         return;
       }
 
-      callback(null, true);
+      callback(new AppError("Origem não autorizada.", 403), false);
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     allowedHeaders: [
@@ -149,21 +127,24 @@ export const buildApp = async () => {
   await registerSettingsRoutes(app);
   await registerCatalogRoutes(app);
   await registerSubscriptionRoutes(app);
+  await registerWorkspaceRoutes(app);
 
   app.setErrorHandler((error, _request, reply) => {
     const typedError = error as { issues?: Array<{ message?: string }> };
 
     if (isAppError(error)) {
-      return reply.status(error.statusCode).send({ message: error.message });
+      return reply.status(error.statusCode).send({ message: error instanceof Error ? error.message : "Requisição inválida." });
     }
 
     if (Array.isArray(typedError.issues)) {
       return reply.status(400).send({ message: typedError.issues[0]?.message ?? "Dados inválidos." });
     }
 
+    const status = (error as { statusCode?: number }).statusCode;
+    if (status && status >= 400 && status < 500) return reply.status(status).send({ message: error instanceof Error ? error.message : "Requisição inválida." });
     app.log.error(error);
     return reply.status(500).send({
-      message: error instanceof Error ? error.message : "Erro interno do servidor.",
+      message: "Erro interno do servidor.",
     });
   });
 

@@ -8,7 +8,9 @@
     "start": "tsx src/server.ts",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "typecheck": "tsc --noEmit",
+    "test:integration": "tsx test/api-integration.ts"
   },
   "keywords": [],
   "author": "",

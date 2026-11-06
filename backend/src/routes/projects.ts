@@ -1,4 +1,9 @@
-import { checkServerProjectCreation, getServerPlan, isServerAdmin } from "../lib/planGovernance.js";
+import {
+  checkServerModuleAccess,
+  checkServerProjectCreation,
+  getServerPlan,
+  isServerAdmin,
+} from "../lib/planGovernance.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { Prisma, type ProjectRevision } from "@prisma/client";
@@ -7,29 +12,33 @@ import { AppError } from "../lib/errors.js";
 import { serializeProject } from "../lib/serializers.js";
 import { createNotification } from "../lib/notifications.js";
 
-const projectPayloadSchema = z.object({
-  name: z.string().trim().min(1, "Nome do projeto é obrigatório."),
-  client_name: z.string().trim().optional(),
-  address: z.string().trim().optional(),
-  project_type: z.string().trim().optional(),
-  solar_config: z.unknown().optional(),
-  voltage: z.number().int().nullable().optional(),
-  supply_type: z.string().trim().optional(),
-  circuits: z.array(z.unknown()).optional(),
-  total_demand_w: z.number().optional(),
-  panel_size: z.number().int().nullable().optional(),
-  panel_boards: z.array(z.unknown()).optional(),
-  panel_layout: z.unknown().optional(),
-  diagram_layout: z.unknown().optional(),
-  plant_design: z.unknown().optional(),
-  plant_points_count: z.number().int().optional(),
-  plant_routes_count: z.number().int().optional(),
-  plant_infra_type: z.string().trim().optional(),
-  status: z.enum(["Rascunho", "Em Andamento", "Concluído", "Aprovado"]).optional(),
-  notes: z.string().optional(),
-  materials: z.array(z.unknown()).optional(),
-  manual_budget_items: z.array(z.unknown()).optional(),
-}).strict();
+const projectPayloadSchema = z
+  .object({
+    name: z.string().trim().min(1, "Nome do projeto é obrigatório."),
+    client_name: z.string().trim().optional(),
+    address: z.string().trim().optional(),
+    project_type: z.string().trim().optional(),
+    solar_config: z.unknown().optional(),
+    voltage: z.number().int().nullable().optional(),
+    supply_type: z.string().trim().optional(),
+    circuits: z.array(z.unknown()).optional(),
+    total_demand_w: z.number().optional(),
+    panel_size: z.number().int().nullable().optional(),
+    panel_boards: z.array(z.unknown()).optional(),
+    panel_layout: z.unknown().optional(),
+    diagram_layout: z.unknown().optional(),
+    plant_design: z.unknown().optional(),
+    plant_points_count: z.number().int().optional(),
+    plant_routes_count: z.number().int().optional(),
+    plant_infra_type: z.string().trim().optional(),
+    status: z
+      .enum(["Rascunho", "Em Andamento", "Concluído", "Aprovado"])
+      .optional(),
+    notes: z.string().optional(),
+    materials: z.array(z.unknown()).optional(),
+    manual_budget_items: z.array(z.unknown()).optional(),
+  })
+  .strict();
 
 const projectUpdateSchema = projectPayloadSchema.partial();
 
@@ -47,20 +56,26 @@ const sortMap: Record<string, Record<string, "asc" | "desc">> = {
   "-name": { name: "desc" },
 };
 
-const mapStatus = (value?: "Rascunho" | "Em Andamento" | "Concluído" | "Aprovado") => {
+const mapStatus = (
+  value?: "Rascunho" | "Em Andamento" | "Concluído" | "Aprovado",
+) => {
   if (!value) return undefined;
 
   const map = {
-    "Rascunho": "Rascunho",
+    Rascunho: "Rascunho",
     "Em Andamento": "Em_Andamento",
-    "Concluído": "Concluido",
-    "Aprovado": "Aprovado",
+    Concluído: "Concluido",
+    Aprovado: "Aprovado",
   } as const;
 
   return map[value];
 };
 
-const ensureProjectAccess = async (projectId: string, userId: string, isAdmin: boolean) => {
+const ensureProjectAccess = async (
+  projectId: string,
+  userId: string,
+  isAdmin: boolean,
+) => {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: { createdBy: { select: { email: true } } },
@@ -126,7 +141,9 @@ const buildRevisionSnapshot = (project: {
   status: project.status,
   notes: project.notes ?? "",
   materials: Array.isArray(project.materials) ? project.materials : [],
-  manual_budget_items: Array.isArray(project.manualBudgetItems) ? project.manualBudgetItems : [],
+  manual_budget_items: Array.isArray(project.manualBudgetItems)
+    ? project.manualBudgetItems
+    : [],
   created_by: project.createdBy?.email ?? "",
   created_by_id: project.createdById,
   created_date: project.createdAt.toISOString(),
@@ -181,7 +198,8 @@ const notifyProjectState = async ({
     await createNotification({
       userId,
       title: `Projeto "${projectName}" sem circuitos`,
-      description: "Cadastre os primeiros circuitos para liberar análises, quadro e documentação.",
+      description:
+        "Cadastre os primeiros circuitos para liberar análises, quadro e documentação.",
       category: "Projeto",
       tone: "warning",
       href: `/projects/${projectId}`,
@@ -190,246 +208,360 @@ const notifyProjectState = async ({
 };
 
 export const registerProjectRoutes = async (app: FastifyInstance) => {
-  app.get("/api/projects", { preHandler: [app.authenticate] }, async (request) => {
-    const query = listQuerySchema.parse(request.query);
-    const isAdmin = request.authUser.role === "admin";
-    const projects = await prisma.project.findMany({
-      where: isAdmin ? undefined : { createdById: request.authUser.id },
-      include: { createdBy: { select: { email: true } } },
-      orderBy: query.sortBy ? sortMap[query.sortBy] ?? { createdAt: "desc" } : { createdAt: "desc" },
-      take: query.limit,
-    });
+  app.get(
+    "/api/projects",
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const query = listQuerySchema.parse(request.query);
+      const isAdmin = isServerAdmin(request.authUser);
+      const projects = await prisma.project.findMany({
+        where: isAdmin ? undefined : { createdById: request.authUser.id },
+        include: { createdBy: { select: { email: true } } },
+        orderBy: query.sortBy
+          ? (sortMap[query.sortBy] ?? { createdAt: "desc" })
+          : { createdAt: "desc" },
+        take: query.limit,
+      });
 
-    return projects.map(serializeProject);
-  });
+      return projects.map(serializeProject);
+    },
+  );
 
-  app.get("/api/projects/:id", { preHandler: [app.authenticate] }, async (request) => {
-    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-    const project = await ensureProjectAccess(id, request.authUser.id, request.authUser.role === "admin");
-    return serializeProject(project);
-  });
+  app.get(
+    "/api/projects/:id",
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+      const project = await ensureProjectAccess(
+        id,
+        request.authUser.id,
+        isServerAdmin(request.authUser),
+      );
+      return serializeProject(project);
+    },
+  );
 
-  app.get("/api/projects/:id/revisions", { preHandler: [app.authenticate] }, async (request) => {
-    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-    await ensureProjectAccess(id, request.authUser.id, request.authUser.role === "admin");
+  app.get(
+    "/api/projects/:id/revisions",
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+      await ensureProjectAccess(
+        id,
+        request.authUser.id,
+        isServerAdmin(request.authUser),
+      );
 
-    const revisions = await prisma.projectRevision.findMany({
-      where: { projectId: id },
-      orderBy: { version: "desc" },
-    });
+      const revisions = await prisma.projectRevision.findMany({
+        where: { projectId: id },
+        orderBy: { version: "desc" },
+      });
 
-    return revisions.map((revision: ProjectRevision) => ({
-      id: revision.id,
-      project_id: revision.projectId,
-      version: revision.version,
-      action: revision.action,
-      actor_user_id: revision.actorUserId,
-      actor_email: revision.actorEmail,
-      snapshot: revision.snapshot,
-      summary: revision.summary ?? "",
-      created_date: revision.createdAt.toISOString(),
-    }));
-  });
+      return revisions.map((revision: ProjectRevision) => ({
+        id: revision.id,
+        project_id: revision.projectId,
+        version: revision.version,
+        action: revision.action,
+        actor_user_id: revision.actorUserId,
+        actor_email: revision.actorEmail,
+        snapshot: revision.snapshot,
+        summary: revision.summary ?? "",
+        created_date: revision.createdAt.toISOString(),
+      }));
+    },
+  );
 
-  app.post("/api/projects", { preHandler: [app.authenticate] }, async (request) => {
-    const data = projectPayloadSchema.parse(request.body);
+  app.post(
+    "/api/projects",
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const data = projectPayloadSchema.parse(request.body);
 
-        // Validação centralizada de limite de projetos e restrição de escopo por plano
-    const totalUserProjects = await prisma.project.count({
-      where: { createdById: request.authUser.id },
-    });
+      // Validação centralizada de limite de projetos e restrição de escopo por plano
+      const project = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${request.authUser.id} FOR UPDATE`;
+        const totalUserProjects = await tx.project.count({
+          where: { createdById: request.authUser.id },
+        });
 
-    const creationCheck = checkServerProjectCreation(
-      request.authUser,
-      totalUserProjects,
-      data.project_type,
-    );
-    if (!creationCheck.allowed) {
-      throw new AppError(creationCheck.reason || "Limite de projetos atingido para o seu plano.", 403);
-    }
+        const creationCheck = checkServerProjectCreation(
+          request.authUser,
+          totalUserProjects,
+          data.project_type,
+        );
+        if (!creationCheck.allowed) {
+          throw new AppError(
+            creationCheck.reason ||
+              "Limite de projetos atingido para o seu plano.",
+            403,
+          );
+        }
 
-    const project = await prisma.project.create({
-      data: {
-        name: data.name,
-        clientName: data.client_name ?? "",
-        address: data.address ?? "",
-        projectType: data.project_type ?? "Instalações Elétricas",
-        solarConfig: (data.solar_config ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
-        voltage: data.voltage ?? null,
-        supplyType: data.supply_type ?? "",
-        circuits: (data.circuits ?? []) as Prisma.InputJsonValue,
-        totalDemandW: data.total_demand_w ?? 0,
-        panelSize: data.panel_size ?? null,
-        panelBoards: (data.panel_boards ?? []) as Prisma.InputJsonValue,
-        panelLayout: (data.panel_layout ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
-        diagramLayout: (data.diagram_layout ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
-        plantDesign: (data.plant_design ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
-        plantPointsCount: data.plant_points_count ?? 0,
-        plantRoutesCount: data.plant_routes_count ?? 0,
-        plantInfraType: data.plant_infra_type ?? "",
-        status: mapStatus(data.status) ?? "Rascunho",
-        notes: data.notes ?? "",
-        materials: (data.materials ?? []) as Prisma.InputJsonValue,
-        manualBudgetItems: (data.manual_budget_items ?? []) as Prisma.InputJsonValue,
-        createdById: request.authUser.id,
-      },
-      include: { createdBy: { select: { email: true } } },
-    });
+        return tx.project.create({
+          data: {
+            name: data.name,
+            clientName: data.client_name ?? "",
+            address: data.address ?? "",
+            projectType: data.project_type ?? "Instalações Elétricas",
+            solarConfig: (data.solar_config ?? null) as
+              | Prisma.InputJsonValue
+              | Prisma.NullableJsonNullValueInput,
+            voltage: data.voltage ?? null,
+            supplyType: data.supply_type ?? "",
+            circuits: (data.circuits ?? []) as Prisma.InputJsonValue,
+            totalDemandW: data.total_demand_w ?? 0,
+            panelSize: data.panel_size ?? null,
+            panelBoards: (data.panel_boards ?? []) as Prisma.InputJsonValue,
+            panelLayout: (data.panel_layout ?? null) as
+              | Prisma.InputJsonValue
+              | Prisma.NullableJsonNullValueInput,
+            diagramLayout: (data.diagram_layout ?? null) as
+              | Prisma.InputJsonValue
+              | Prisma.NullableJsonNullValueInput,
+            plantDesign: (data.plant_design ?? null) as
+              | Prisma.InputJsonValue
+              | Prisma.NullableJsonNullValueInput,
+            plantPointsCount: data.plant_points_count ?? 0,
+            plantRoutesCount: data.plant_routes_count ?? 0,
+            plantInfraType: data.plant_infra_type ?? "",
+            status: mapStatus(data.status) ?? "Rascunho",
+            notes: data.notes ?? "",
+            materials: (data.materials ?? []) as Prisma.InputJsonValue,
+            manualBudgetItems: (data.manual_budget_items ??
+              []) as Prisma.InputJsonValue,
+            createdById: request.authUser.id,
+          },
+          include: { createdBy: { select: { email: true } } },
+        });
+      });
 
-    await createProjectRevision({
-      project,
-      actorUserId: request.authUser.id,
-      actorEmail: request.authUser.email,
-      action: "create",
-      summary: "Projeto criado",
-    });
+      await createProjectRevision({
+        project,
+        actorUserId: request.authUser.id,
+        actorEmail: request.authUser.email,
+        action: "create",
+        summary: "Projeto criado",
+      });
 
-    await createNotification({
-      userId: request.authUser.id,
-      title: "Projeto criado com sucesso",
-      description: `"${project.name}" foi cadastrado e já pode receber circuitos, quadro e documentação.`,
-      category: "Projeto",
-      tone: "success",
-      href: `/projects/${project.id}`,
-    });
+      await createNotification({
+        userId: request.authUser.id,
+        title: "Projeto criado com sucesso",
+        description: `"${project.name}" foi cadastrado e já pode receber circuitos, quadro e documentação.`,
+        category: "Projeto",
+        tone: "success",
+        href: `/projects/${project.id}`,
+      });
 
-    await notifyProjectState({
-      userId: request.authUser.id,
-      projectId: project.id,
-      projectName: project.name,
-      circuits: project.circuits,
-    });
+      await notifyProjectState({
+        userId: request.authUser.id,
+        projectId: project.id,
+        projectName: project.name,
+        circuits: project.circuits,
+      });
 
-    return serializeProject(project);
-  });
+      return serializeProject(project);
+    },
+  );
 
-  app.patch("/api/projects/:id", { preHandler: [app.authenticate] }, async (request) => {
-    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-    await ensureProjectAccess(id, request.authUser.id, request.authUser.role === "admin");
-    const data = projectUpdateSchema.parse(request.body);
+  app.patch(
+    "/api/projects/:id",
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+      await ensureProjectAccess(
+        id,
+        request.authUser.id,
+        isServerAdmin(request.authUser),
+      );
+      const data = projectUpdateSchema.parse(request.body);
+      if (data.project_type) {
+        const access = checkServerProjectCreation(
+          request.authUser,
+          0,
+          data.project_type,
+        );
+        if (!access.allowed)
+          throw new AppError(
+            access.reason || "Tipo de projeto não permitido.",
+            403,
+          );
+      }
+      for (const [field, module] of [
+        ["solar_config", "solar"],
+        ["panel_layout", "panel"],
+        ["panel_boards", "panel"],
+        ["diagram_layout", "unifilar"],
+      ] as const) {
+        const value = data[field];
+        if (
+          value != null &&
+          (typeof value !== "object" || Object.keys(value).length > 0)
+        ) {
+          const access = checkServerModuleAccess(request.authUser, module);
+          if (!access.allowed)
+            throw new AppError(access.message || "Módulo não permitido.", 403);
+        }
+      }
 
-    const project = await prisma.project.update({
-      where: { id },
-      data: {
-        name: data.name,
-        clientName: data.client_name,
-        address: data.address,
-        projectType: data.project_type,
-        solarConfig: data.solar_config as Prisma.InputJsonValue | undefined,
-        voltage: data.voltage,
-        supplyType: data.supply_type,
-        circuits: data.circuits as Prisma.InputJsonValue | undefined,
-        totalDemandW: data.total_demand_w,
-        panelSize: data.panel_size,
-        panelBoards: data.panel_boards as Prisma.InputJsonValue | undefined,
-        panelLayout: data.panel_layout as Prisma.InputJsonValue | undefined,
-        diagramLayout: data.diagram_layout as Prisma.InputJsonValue | undefined,
-        plantDesign: data.plant_design as Prisma.InputJsonValue | undefined,
-        plantPointsCount: data.plant_points_count,
-        plantRoutesCount: data.plant_routes_count,
-        plantInfraType: data.plant_infra_type,
-        status: mapStatus(data.status),
-        notes: data.notes,
-        materials: data.materials as Prisma.InputJsonValue | undefined,
-        manualBudgetItems: data.manual_budget_items as Prisma.InputJsonValue | undefined,
-      },
-      include: { createdBy: { select: { email: true } } },
-    });
+      const project = await prisma.project.update({
+        where: { id },
+        data: {
+          name: data.name,
+          clientName: data.client_name,
+          address: data.address,
+          projectType: data.project_type,
+          solarConfig: data.solar_config as Prisma.InputJsonValue | undefined,
+          voltage: data.voltage,
+          supplyType: data.supply_type,
+          circuits: data.circuits as Prisma.InputJsonValue | undefined,
+          totalDemandW: data.total_demand_w,
+          panelSize: data.panel_size,
+          panelBoards: data.panel_boards as Prisma.InputJsonValue | undefined,
+          panelLayout: data.panel_layout as Prisma.InputJsonValue | undefined,
+          diagramLayout: data.diagram_layout as
+            | Prisma.InputJsonValue
+            | undefined,
+          plantDesign: data.plant_design as Prisma.InputJsonValue | undefined,
+          plantPointsCount: data.plant_points_count,
+          plantRoutesCount: data.plant_routes_count,
+          plantInfraType: data.plant_infra_type,
+          status: mapStatus(data.status),
+          notes: data.notes,
+          materials: data.materials as Prisma.InputJsonValue | undefined,
+          manualBudgetItems: data.manual_budget_items as
+            | Prisma.InputJsonValue
+            | undefined,
+        },
+        include: { createdBy: { select: { email: true } } },
+      });
 
-    await createProjectRevision({
-      project,
-      actorUserId: request.authUser.id,
-      actorEmail: request.authUser.email,
-      action: "update",
-      summary: "Projeto atualizado",
-    });
+      await createProjectRevision({
+        project,
+        actorUserId: request.authUser.id,
+        actorEmail: request.authUser.email,
+        action: "update",
+        summary: "Projeto atualizado",
+      });
 
-    await notifyProjectState({
-      userId: request.authUser.id,
-      projectId: project.id,
-      projectName: project.name,
-      circuits: project.circuits,
-    });
+      await notifyProjectState({
+        userId: request.authUser.id,
+        projectId: project.id,
+        projectName: project.name,
+        circuits: project.circuits,
+      });
 
-    return serializeProject(project);
-  });
+      return serializeProject(project);
+    },
+  );
 
-  app.post("/api/projects/:id/duplicate", { preHandler: [app.authenticate] }, async (request) => {
-    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-    const original = await ensureProjectAccess(id, request.authUser.id, request.authUser.role === "admin");
+  app.post(
+    "/api/projects/:id/duplicate",
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+      const original = await ensureProjectAccess(
+        id,
+        request.authUser.id,
+        isServerAdmin(request.authUser),
+      );
 
-    const totalUserProjects = await prisma.project.count({
-      where: { createdById: request.authUser.id },
-    });
-    const creationCheck = checkServerProjectCreation(
-      request.authUser,
-      totalUserProjects,
-      original.projectType,
-    );
-    if (!creationCheck.allowed) {
-      throw new AppError(creationCheck.reason || "Limite de projetos atingido para o seu plano.", 403);
-    }
+      const duplicated = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${request.authUser.id} FOR UPDATE`;
+        const totalUserProjects = await tx.project.count({
+          where: { createdById: request.authUser.id },
+        });
+        const creationCheck = checkServerProjectCreation(
+          request.authUser,
+          totalUserProjects,
+          original.projectType,
+        );
+        if (!creationCheck.allowed) {
+          throw new AppError(
+            creationCheck.reason ||
+              "Limite de projetos atingido para o seu plano.",
+            403,
+          );
+        }
 
-    const duplicated = await prisma.project.create({
-      data: {
-        name: `${original.name} (Cópia)`,
-        clientName: original.clientName,
-        address: original.address,
-        projectType: original.projectType,
-        solarConfig: (original.solarConfig ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
-        voltage: original.voltage,
-        supplyType: original.supplyType,
-        circuits: (original.circuits ?? []) as Prisma.InputJsonValue,
-        totalDemandW: original.totalDemandW,
-        panelSize: original.panelSize,
-        panelBoards: (original.panelBoards ?? []) as Prisma.InputJsonValue,
-        panelLayout: (original.panelLayout ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
-        diagramLayout: (original.diagramLayout ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
-        plantDesign: (original.plantDesign ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
-        plantPointsCount: original.plantPointsCount,
-        plantRoutesCount: original.plantRoutesCount,
-        plantInfraType: original.plantInfraType,
-        status: "Rascunho",
-        notes: original.notes,
-        materials: (original.materials ?? []) as Prisma.InputJsonValue,
-        manualBudgetItems: (original.manualBudgetItems ?? []) as Prisma.InputJsonValue,
-        createdById: request.authUser.id,
-      },
-      include: { createdBy: { select: { email: true } } },
-    });
+        return tx.project.create({
+          data: {
+            name: `${original.name} (Cópia)`,
+            clientName: original.clientName,
+            address: original.address,
+            projectType: original.projectType,
+            solarConfig: (original.solarConfig ?? null) as
+              | Prisma.InputJsonValue
+              | Prisma.NullableJsonNullValueInput,
+            voltage: original.voltage,
+            supplyType: original.supplyType,
+            circuits: (original.circuits ?? []) as Prisma.InputJsonValue,
+            totalDemandW: original.totalDemandW,
+            panelSize: original.panelSize,
+            panelBoards: (original.panelBoards ?? []) as Prisma.InputJsonValue,
+            panelLayout: (original.panelLayout ?? null) as
+              | Prisma.InputJsonValue
+              | Prisma.NullableJsonNullValueInput,
+            diagramLayout: (original.diagramLayout ?? null) as
+              | Prisma.InputJsonValue
+              | Prisma.NullableJsonNullValueInput,
+            plantDesign: (original.plantDesign ?? null) as
+              | Prisma.InputJsonValue
+              | Prisma.NullableJsonNullValueInput,
+            plantPointsCount: original.plantPointsCount,
+            plantRoutesCount: original.plantRoutesCount,
+            plantInfraType: original.plantInfraType,
+            status: "Rascunho",
+            notes: original.notes,
+            materials: (original.materials ?? []) as Prisma.InputJsonValue,
+            manualBudgetItems: (original.manualBudgetItems ??
+              []) as Prisma.InputJsonValue,
+            createdById: request.authUser.id,
+          },
+          include: { createdBy: { select: { email: true } } },
+        });
+      });
 
-    await createProjectRevision({
-      project: duplicated,
-      actorUserId: request.authUser.id,
-      actorEmail: request.authUser.email,
-      action: "create",
-      summary: "Projeto duplicado",
-    });
+      await createProjectRevision({
+        project: duplicated,
+        actorUserId: request.authUser.id,
+        actorEmail: request.authUser.email,
+        action: "create",
+        summary: "Projeto duplicado",
+      });
 
-    return serializeProject(duplicated);
-  });
+      return serializeProject(duplicated);
+    },
+  );
 
-  app.delete("/api/projects/:id", { preHandler: [app.authenticate] }, async (request) => {
-    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-    const project = await ensureProjectAccess(id, request.authUser.id, request.authUser.role === "admin");
-    await createProjectRevision({
-      project,
-      actorUserId: request.authUser.id,
-      actorEmail: request.authUser.email,
-      action: "delete",
-      summary: "Projeto removido",
-    });
-    await prisma.project.delete({ where: { id } });
+  app.delete(
+    "/api/projects/:id",
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+      const project = await ensureProjectAccess(
+        id,
+        request.authUser.id,
+        isServerAdmin(request.authUser),
+      );
+      await createProjectRevision({
+        project,
+        actorUserId: request.authUser.id,
+        actorEmail: request.authUser.email,
+        action: "delete",
+        summary: "Projeto removido",
+      });
+      await prisma.project.delete({ where: { id } });
 
-    await createNotification({
-      userId: request.authUser.id,
-      title: "Projeto removido",
-      description: `"${project.name}" foi excluído da base do sistema.`,
-      category: "Projeto",
-      tone: "info",
-      href: "/projects",
-    });
+      await createNotification({
+        userId: request.authUser.id,
+        title: "Projeto removido",
+        description: `"${project.name}" foi excluído da base do sistema.`,
+        category: "Projeto",
+        tone: "info",
+        href: "/projects",
+      });
 
-    return { ok: true };
-  });
+      return { ok: true };
+    },
+  );
 };

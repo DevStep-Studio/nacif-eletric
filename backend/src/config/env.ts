@@ -31,7 +31,7 @@ const envSchema = z.object({
   FRONTEND_URL: z
     .string()
     .url()
-    .default(process.env.VITE_APP_URL || "https://nacifenergy.com.br"),
+    .default(process.env.VITE_APP_URL || "https://nacifenergy.com.br").transform(value => value.replace(/\/+$/, "")),
   DATABASE_URL: z
     .string()
     .min(1)

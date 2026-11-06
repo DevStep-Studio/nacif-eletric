@@ -1,3 +1,4 @@
+import { effectivePlanCode } from "./planGovernance.js";
 import type { Project, ProjectStatus, User, UserPlan, UserRole } from "@prisma/client";
 
 const projectStatusLabelMap: Record<ProjectStatus, "Rascunho" | "Em Andamento" | "Concluído" | "Aprovado"> = {
@@ -20,6 +21,18 @@ type SafeUser = {
   avatar_url: string;
   created_date: string;
   updated_date: string;
+  status?: string;
+  is_super_admin?: boolean;
+  subscription_start_date?: string | null;
+  subscription_valid_until?: string | null;
+  subscription_auto_renew?: boolean;
+  billing_provider?: string;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  team_members_count?: number;
+  academic_document_url?: string;
+  academic_document_name?: string;
+  academic_valid_until?: string | null;
   subscription_status?: string;
   subscription_cycle?: string;
   academic_status?: string;
@@ -60,11 +73,32 @@ type SafeProject = {
 };
 
 export const serializeUser = (user: User): SafeUser => ({
+  status: user.status,
+  is_super_admin: user.isSuperAdmin,
+  subscription_status: (user.customPermissions as any)?.subscriptionStatus || "active",
+  subscription_cycle: (user.customPermissions as any)?.subscriptionCycle || "monthly",
+  subscription_start_date: (user.customPermissions as any)?.subscriptionStartDate || null,
+  subscription_valid_until: (user.customPermissions as any)?.subscriptionRenewalDate || null,
+  subscription_auto_renew: (user.customPermissions as any)?.autoRenew ?? false,
+  billing_provider: (user.customPermissions as any)?.billingProvider || "manual",
+  stripe_customer_id: (user.customPermissions as any)?.stripeCustomerId || null,
+  stripe_subscription_id: (user.customPermissions as any)?.stripeSubscriptionId || null,
+  academic_status: (user.customPermissions as any)?.academicStatus || "not_submitted",
+  academic_institution: (user.customPermissions as any)?.academicInstitution || "",
+  academic_course: (user.customPermissions as any)?.academicCourse || "",
+  academic_valid_until: (user.customPermissions as any)?.academicValidUntil || null,
+  academic_document_name: (user.customPermissions as any)?.academicDocumentName || "",
+  academic_document_url: (user.customPermissions as any)?.academicDocumentUrl || "",
+  monthly_exports_count: (user.customPermissions as any)?.monthlyExports || 0,
+  monthly_ai_scans_count: (user.customPermissions as any)?.monthlyAiScans || 0,
+  usage_period: (user.customPermissions as any)?.usagePeriod || "",
+  storage_used_mb: (user.customPermissions as any)?.storageUsedMb || 0,
+  team_members_count: ((user.customPermissions as any)?.teamMembers || []).length + 1,
   id: user.id,
   email: user.email,
   full_name: user.fullName,
   role: user.role,
-  plan: user.plan,
+  plan: effectivePlanCode(user) as UserPlan,
   profession: user.profession ?? "",
   company: user.company ?? "",
   crea: user.crea ?? "",

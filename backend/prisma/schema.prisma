@@ -319,3 +319,10 @@ model AppSetting {
 
   @@map("app_settings")
 }
+
+model StripeEvent {
+  id String @id
+  type String
+  processedAt DateTime @default(now()) @map("processed_at")
+  @@map("stripe_events")
+}

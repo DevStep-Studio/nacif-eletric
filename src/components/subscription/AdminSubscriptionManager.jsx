@@ -2,11 +2,8 @@ import { useEffect, useState } from "react";
 import {
   CreditCard,
   GraduationCap,
-  Users,
   CheckCircle2,
   XCircle,
-  AlertCircle,
-  Calendar,
   DollarSign,
   FileText,
   Search,
@@ -15,7 +12,6 @@ import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { COMMERCIAL_PLANS, PLAN_COMPARISON_ROWS, getPlanByCode } from "@/lib/subscriptionPlans";
 
@@ -46,24 +42,6 @@ export default function AdminSubscriptionManager() {
   useEffect(() => {
     loadData();
   }, []);
-
-  const handleUpdateUserPlan = async (userId, planCode) => {
-    setFeedbackMessage("");
-    try {
-      if (backend?.subscriptions?.adminUpdateUserPlan) {
-        await backend.subscriptions.adminUpdateUserPlan(userId, { plan: planCode });
-      } else {
-        await backend.entities.User.update(userId, { plan: planCode });
-      }
-      setFeedbackMessage("Plano do usuário atualizado com sucesso!");
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, plan: planCode, plan_code: planCode } : u)),
-      );
-      setTimeout(() => setFeedbackMessage(""), 4000);
-    } catch (err) {
-      setFeedbackMessage(err.message || "Erro ao atualizar plano.");
-    }
-  };
 
   const handleDecideAcademic = async (userId, decision) => {
     setFeedbackMessage("");
@@ -282,23 +260,7 @@ export default function AdminSubscriptionManager() {
                         <p className="text-xs text-[#667085]">{u.email}</p>
                       </TableCell>
                       <TableCell className="py-3">
-                        <Select
-                          value={planObj.code}
-                          onValueChange={(val) => handleUpdateUserPlan(u.id, val)}
-                        >
-                          <SelectTrigger className="h-8 w-44 rounded-[6px] text-xs font-bold border-[#D0D5DD]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="estudante">Nacif Estudante</SelectItem>
-                            <SelectItem value="eletrico">Nacif Elétrico</SelectItem>
-                            <SelectItem value="solar">Nacif Solar</SelectItem>
-                            <SelectItem value="completo">Nacif Completo</SelectItem>
-                            <SelectItem value="free">Gratuito (Legado)</SelectItem>
-                            <SelectItem value="professional">Profissional (Legado)</SelectItem>
-                            <SelectItem value="engineering">Engenharia (Legado)</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <span className="text-xs font-bold">{planObj.name}</span>
                       </TableCell>
                       <TableCell className="py-3 text-xs font-medium text-[#344054]">
                         {u.subscription_cycle === "annual" ? "Anual (-30%)" : "Mensal"}
@@ -321,14 +283,7 @@ export default function AdminSubscriptionManager() {
                         )}
                       </TableCell>
                       <TableCell className="py-3 text-right">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => handleUpdateUserPlan(u.id, "completo")}
-                          className="h-7 text-xs font-bold text-[#00d8b8] hover:bg-[#E8FCF8]"
-                        >
-                          Conceder Completo
-                        </Button>
+                        <span className="text-xs text-slate-500">Gerenciado pela Stripe</span>
                       </TableCell>
                     </TableRow>
                   );

@@ -59,7 +59,7 @@ const resetPasswordSchema = z.object({
 
 export const registerAuthRoutes = async (app: FastifyInstance) => {
   app.post("/api/auth/register", async (request) => {
-    const { email, password, profession } = registerSchema.parse(request.body);
+    const { email, password, profession, full_name } = registerSchema.parse(request.body);
     const existing = await prisma.user.findUnique({ where: { email } });
 
     if (existing) {
@@ -71,7 +71,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       data: {
         email,
         passwordHash: await hashPassword(password),
-        fullName: email.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
+        fullName: full_name || email.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
         role: usersCount === 0 ? "admin" : "user",
         profession: profession ?? "projetista",
       },
@@ -143,15 +143,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       nextPasswordHash = await hashPassword(data.new_password);
     }
 
-    const isAdmin = request.authUser.role === "admin" || (request.authUser.role as string) === "super_admin";
-    let resolvedPlan: typeof data.plan | undefined;
-    if (data.plan) {
-      if (isAdmin) {
-        resolvedPlan = data.plan;
-      } else if (data.plan === "gratuito") {
-        resolvedPlan = "gratuito";
-      }
-    }
+    if (data.plan) throw new AppError("Planos são gerenciados pela assinatura Stripe.", 403);
 
     const user = await prisma.user.update({
       where: { id: request.authUser.id },
@@ -162,7 +154,6 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         crea: data.crea,
         phone: data.phone,
         avatarUrl: data.avatar_url,
-        ...(resolvedPlan ? { plan: resolvedPlan } : {}),
         ...(nextPasswordHash ? { passwordHash: nextPasswordHash } : {}),
       },
     });

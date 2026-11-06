@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, ShieldCheck, ArrowRight, AlertTriangle, Sparkles } from "lucide-react";
+import { CheckCircle2, ShieldCheck, AlertTriangle, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,19 +28,8 @@ export default function PlanChangeModal({
     setErrorMessage("");
 
     try {
-      if (backend?.subscriptions?.changePlan) {
-        await backend.subscriptions.changePlan({
-          planCode: targetPlan.code,
-          cycle: targetPlan.hasAnnualOption ? cycle : "monthly",
-        });
-      } else {
-        await backend.auth.updateMe({
-          plan: targetPlan.code,
-          subscription_cycle: targetPlan.hasAnnualOption ? cycle : "monthly",
-          subscription_price: cycle === "annual" && targetPlan.annualPrice ? targetPlan.annualPrice : targetPlan.monthlyPrice,
-          subscription_status: "active",
-        });
-      }
+      const result = await backend.subscriptions.changePlan({ planCode: targetPlan.code, cycle: targetPlan.hasAnnualOption ? cycle : "monthly" });
+      if (result?.url) { window.location.assign(result.url); return; }
 
       if (onSuccess) onSuccess(targetPlan);
       onClose();

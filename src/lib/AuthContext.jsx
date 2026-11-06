@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { applyRemotePlanCatalog } from '@/lib/subscriptionPlans';
 import { backend } from '@/api/backendClient';
 import { PENDING_REGISTER_PROFESSION_KEY, normalizeProfession } from '@/lib/professionalAccess';
 
@@ -88,6 +89,8 @@ export const AuthProvider = ({ children }) => {
       });
       setIsLoadingPublicSettings(false);
 
+      const catalog = await backend.subscriptions.getPlans();
+      applyRemotePlanCatalog(catalog.plans);
       if (backend.auth.getToken?.()) {
         await checkUserAuth();
       } else {

@@ -20,7 +20,7 @@ import PageHeader from "@/components/PageHeader";
 import { createBillingProvider } from "@/lib/billingProvider";
 import {
   FEATURE_KEYS,
-  PLAN_CATALOG,
+  applyRemotePlanCatalog,
   PLAN_COMPARISON_ROWS,
   buildUsageFromProjects,
   getUsageRows,
@@ -32,7 +32,6 @@ import AcademicVerificationModal from "@/components/subscription/AcademicVerific
 import PlanChangeModal from "@/components/subscription/PlanChangeModal";
 import ManageSubscriptionModal from "@/components/subscription/ManageSubscriptionModal";
 import {
-  getPlanPriceId,
   createCheckoutSession,
   createPortalSession,
   verifyCheckoutSession,
@@ -73,44 +72,12 @@ const formatIsoDate = (iso) => {
   }
 };
 
-const PLAN_HIGHLIGHTS = {
-  estudante: [
-    "Até 5 projetos ativos (1 GB)",
-    "Editor de plantas e quadros acadêmico",
-    "Calculadora elétrica NBR 5410",
-    "20 exportações e scans IA/mês",
-  ],
-  eletrico: [
-    "Até 30 projetos ativos (5 GB)",
-    "Editor completo de plantas NBR 5410",
-    "Quadros DIN e diagramas unifilares",
-    "3 usuários inclusos na equipe",
-  ],
-  solar: [
-    "Até 30 projetos ativos (5 GB)",
-    "Dimensionamento fotovoltaico e strings",
-    "Layout solar 2D/3D no mapa",
-    "Memorial solar e 3 usuários inclusos",
-  ],
-  completo: [
-    "Projetos e exportações ilimitados",
-    "Todas as ferramentas Elétrico + Solar",
-    "50 GB de armazenamento (15 membros)",
-    "500 operações de IA por mês",
-    "Suporte técnico prioritário",
-  ],
-};
-
-const PLAN_SUBTITLES = {
-  estudante: "Uso acadêmico para formação técnica",
-  eletrico: "Projetos elétricos prediais e NBR 5410",
-  solar: "Dimensionamento e usinas fotovoltaicas",
-  completo: "Acesso total elétrico e solar unificado",
-};
-
 export default function Subscription() {
   const { user } = useAuth();
   const [activeUser, setActiveUser] = useState(user);
+  const [serverUsage, setServerUsage] = useState({});
+  const [catalog, setCatalog] = useState([]);
+  const [loadError, setLoadError] = useState("");
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [billingMessage, setBillingMessage] = useState("");
@@ -129,12 +96,20 @@ export default function Subscription() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [me, projectList] = await Promise.all([
-        backend.auth.me().catch(() => user),
-        backend.entities.Project.list("-updated_date", 100).catch(() => []),
+      const [me, projectList, plans, status] = await Promise.all([
+        backend.auth.me(),
+        backend.entities.Project.list("-updated_date", 100),
+        backend.subscriptions.getPlans(),
+        backend.subscriptions.getStatus(),
       ]);
+      setServerUsage(status.usage || {});
+      applyRemotePlanCatalog(plans.plans);
+      setCatalog(plans.plans.filter(p => p.code !== "free"));
+      setLoadError("");
       setActiveUser(me || user);
       setProjects(Array.isArray(projectList) ? projectList : []);
+    } catch (error) {
+      setLoadError(error.message);
     } finally {
       setLoading(false);
     }
@@ -145,7 +120,7 @@ export default function Subscription() {
   }, [user]);
 
   const subscription = normalizeSubscription(activeUser);
-  const usage = useMemo(() => buildUsageFromProjects(projects, {}, activeUser), [projects, activeUser]);
+  const usage = useMemo(() => ({ ...buildUsageFromProjects(projects, {}, activeUser), ...serverUsage }), [projects, activeUser, serverUsage]);
   const usageRows = useMemo(() => getUsageRows(subscription.plan, usage), [subscription.plan, usage]);
   const billingProvider = useMemo(() => createBillingProvider(activeUser), [activeUser]);
 
@@ -184,11 +159,7 @@ export default function Subscription() {
     if (!activeUser?.email) return;
     let cancelled = false;
 
-    syncStripeSubscription({
-      userId: activeUser.id,
-      userEmail: activeUser.email,
-      stripeCustomerId: activeUser.stripe_customer_id,
-    })
+    syncStripeSubscription()
       .then(async (syncRes) => {
         if (cancelled || !syncRes?.synced) return;
         if (syncRes.hasActiveSubscription && syncRes.plan) {
@@ -230,48 +201,21 @@ export default function Subscription() {
     const checkoutStatus = params.get("checkout");
     const portalReturn = params.get("portal_return");
     const sessionId = params.get("session_id");
-    const returnPlan = params.get("plan");
-    const returnCycle = params.get("cycle") || "monthly";
 
     if (checkoutStatus === "success") {
-      setBillingMessage("🎉 Pagamento confirmado com sucesso! Sincronizando sua assinatura com a Stripe...");
+      setBillingMessage("Verificando o pagamento com a Stripe...");
       window.history.replaceState({}, document.title, window.location.pathname);
 
       const finalizeCheckoutSync = async () => {
-        let syncedViaApi = false;
-
-        if (
-          sessionId &&
-          sessionId !== "{CHECKOUT_SESSION_ID}" &&
-          !sessionId.startsWith("cs_simulated")
-        ) {
-          const verified = await verifyCheckoutSession({ sessionId }).catch(() => null);
-          if (verified?.plan && backend.subscriptions?.syncFromStripe) {
-            await backend.subscriptions.syncFromStripe(verified).catch(() => null);
-            syncedViaApi = true;
-          } else if (verified?.plan && backend.subscriptions?.changePlan) {
-            await backend.subscriptions
-              .changePlan({
-                planCode: verified.plan,
-                cycle: verified.cycle || returnCycle,
-              })
-              .catch(() => null);
-            syncedViaApi = true;
-          }
+        try {
+          if (!sessionId) throw new Error("Pagamento em processamento. Aguarde a confirmação da Stripe.");
+          const verified = await verifyCheckoutSession({ sessionId });
+          if (!verified.paid) throw new Error("Pagamento ainda não confirmado. Aguarde e atualize a página.");
+          await loadData();
+          setBillingMessage("Assinatura confirmada pela Stripe.");
+        } catch (error) {
+          setBillingMessage(error.message);
         }
-
-        if (!syncedViaApi && returnPlan && backend.subscriptions?.changePlan) {
-          await backend.subscriptions
-            .changePlan({
-              planCode: returnPlan,
-              cycle: returnPlan === "estudante" ? "monthly" : returnCycle,
-            })
-            .catch(() => null);
-        }
-
-        await loadData();
-        setBillingMessage("🎉 Assinatura Nacif ativada e sincronizada com a Stripe com sucesso!");
-        setTimeout(() => setBillingMessage(""), 8000);
       };
 
       finalizeCheckoutSync();
@@ -293,25 +237,17 @@ export default function Subscription() {
    * Disparada pelos botões "Contratar com documento" e "Fazer upgrade"
    * Comunica com a API da Stripe e redireciona o cliente para o Checkout seguro
    */
-  const handleSubscription = async (priceId, planCode) => {
-    if (!priceId && !planCode) {
-      setBillingMessage("Identificador de preço (priceId) não configurado para este plano.");
-      return;
-    }
+  const handleSubscription = async (planCode) => {
 
     const effectiveCycle = planCode === "estudante" ? "monthly" : cycle;
 
     try {
-      setSubscribingPriceId(planCode || priceId);
+      setSubscribingPriceId(planCode);
       setBillingMessage("Redirecionando com segurança para a Stripe...");
 
       const data = await createCheckoutSession({
-        priceId,
         planCode,
         cycle: effectiveCycle,
-        userId: activeUser?.id,
-        userEmail: activeUser?.email,
-        userName: activeUser?.fullName || activeUser?.full_name || activeUser?.name,
       });
 
       if (data?.url) {
@@ -335,13 +271,7 @@ export default function Subscription() {
   const handleCustomerPortal = async () => {
     try {
       setPortalLoading(true);
-      const data = await createPortalSession({
-        userId: activeUser?.id,
-        userEmail: activeUser?.email,
-        userName: activeUser?.fullName || activeUser?.full_name || activeUser?.name,
-        stripeCustomerId: subscription.stripeCustomerId,
-        allowDirectFallback: false,
-      });
+      const data = await createPortalSession();
       if (data?.url) {
         window.location.href = data.url;
       } else {
@@ -354,6 +284,9 @@ export default function Subscription() {
       setPortalLoading(false);
     }
   };
+
+  if (loadError) return <div role="alert" className="p-6"><p>{loadError}</p><button type="button" onClick={loadData}>Tentar novamente</button></div>;
+  if (loading && !catalog.length) return <div className="p-6" role="status">Carregando planos...</div>;
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-7 pb-20">
@@ -503,7 +436,7 @@ export default function Subscription() {
             <div>
               <h2 className="text-lg font-extrabold text-[#101828]">Uso no período</h2>
               <p className="mt-0.5 text-xs font-medium text-[#667085]">
-                {loading ? "Calculando consumo real..." : "Consumo calculado a partir dos projetos carregados no workspace."}
+                {loading ? "Calculando consumo real..." : "Consumo informado pelo servidor."}
               </p>
             </div>
             <Badge variant="outline" className="w-fit rounded-[6px] border-[#D0D5DD] text-xs font-bold text-[#344054]">
@@ -600,15 +533,14 @@ export default function Subscription() {
 
         {/* Grid dos 4 Cards Minimalistas */}
         <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          {PLAN_CATALOG.map((plan) => {
+          {catalog.map((plan) => {
             const isCurrent = plan.code === subscription.planCode;
             const isCompleto = plan.code === "completo";
             const annualSavings = calculateAnnualSavings(plan);
-            const targetPriceId = getPlanPriceId(plan.code, cycle);
-            const isSubscribingThis = subscribingPriceId === plan.code || subscribingPriceId === targetPriceId;
+            const isSubscribingThis = subscribingPriceId === plan.code;
 
-            const highlights = PLAN_HIGHLIGHTS[plan.code] || plan.features.slice(0, 4);
-            const subtitle = PLAN_SUBTITLES[plan.code] || plan.description;
+            const highlights = plan.features.slice(0, 4);
+            const subtitle = plan.description;
 
             return (
               <article
@@ -684,11 +616,11 @@ export default function Subscription() {
                       type="button"
                       disabled={isCurrent || subscribingPriceId !== null}
                       onClick={() => {
-                        if (plan.isAcademic && (!activeUser?.academic_status || activeUser?.academic_status === "not_submitted" || activeUser?.academic_status === "rejected")) {
+                        if (plan.isAcademic && (!activeUser?.academic_status || activeUser?.academic_status === "not_submitted" || activeUser?.academic_status === "rejected" || activeUser?.academic_status === "expired" || (activeUser?.academic_valid_until && Date.parse(activeUser.academic_valid_until) <= Date.now()))) {
                           setIsAcademicModalOpen(true);
                           return;
                         }
-                        handleSubscription(targetPriceId, plan.code);
+                        handleSubscription(plan.code);
                       }}
                       className={`h-11 w-full rounded-xl font-bold text-xs transition-all ${
                         isCurrent

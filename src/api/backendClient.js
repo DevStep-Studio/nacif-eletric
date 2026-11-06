@@ -44,9 +44,9 @@ import {
 } from "../lib/subscriptionPlans.js";
 
 const rawApiBaseUrl = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.trim() : "");
-const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "");
+const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, "").replace(/\/api$/, "");
 const TOKEN_KEYS = ["voltai_access_token", "voltai_token"];
-export const isLocalAuthMode = true;
+export const isLocalAuthMode = false;
 const LOCAL_USERS_KEY = "voltai_local_users";
 const LOCAL_PROJECTS_KEY = "voltai_local_projects";
 const LOCAL_BUDGETS_KEY = "voltai_local_budgets";
@@ -401,7 +401,12 @@ const localUploadFile = async (file) => {
 
 const getStoredToken = () => {
   if (typeof window === "undefined") return null;
-  return TOKEN_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean) || null;
+  const token = TOKEN_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean) || null;
+  if (token?.startsWith("local:")) {
+    TOKEN_KEYS.forEach(key => window.localStorage.removeItem(key));
+    return null;
+  }
+  return token;
 };
 
 const setStoredToken = (value) => {
@@ -443,11 +448,11 @@ const readResponse = async (response) => {
     return response.json();
   }
 
-  const text = await response.text();
-  return text ? { message: text } : null;
+  if (response.status === 204) return null;
+  throw createError("Resposta inválida da API. Verifique VITE_API_BASE_URL e o proxy de /api.", response.ok ? 502 : response.status);
 };
 
-const request = async (path, options = {}) => {
+export const request = async (path, options = {}) => {
   const token = getStoredToken();
   const headers = new Headers(options.headers || {});
   const hasJsonBody = options.body !== undefined && !(options.body instanceof FormData);
@@ -460,16 +465,21 @@ const request = async (path, options = {}) => {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(buildUrl(path, options.query), {
-    method: options.method || "GET",
-    headers,
-    body: options.body instanceof FormData || options.body === undefined ? options.body : JSON.stringify(options.body),
-  });
+  let response;
+  try {
+    response = await fetch(buildUrl(path, options.query), {
+      method: options.method || "GET",
+      headers,
+      body: options.body instanceof FormData || options.body === undefined ? options.body : JSON.stringify(options.body),
+    });
+  } catch {
+    throw createError("Não foi possível conectar ao backend. Verifique a conexão e a configuração da API.", 503);
+  }
 
   const data = await readResponse(response);
 
   if (!response.ok) {
-    throw createError(data?.message || "Falha na comunicação com o servidor.", response.status);
+    throw createError(data?.message || data?.error || "Falha na comunicação com o servidor.", response.status);
   }
 
   return data;
@@ -667,6 +677,7 @@ const auth = {
         email,
         password,
         profession: normalizeProfession(profession) || profession,
+        full_name,
         terms_accepted,
         terms_version,
         terms_accepted_at,
@@ -2825,6 +2836,7 @@ const budgetEntity = {
 };
 
 const subscriptionEntity = {
+  async getPlans() { return request("/api/subscriptions/plans"); },
   async consumeExportQuota({ projectId = null, format = "PDF", label = "Exportação Técnica" } = {}) {
     if (isLocalAuthMode) {
       const user = requireLocalUser();
@@ -3103,7 +3115,7 @@ const subscriptionEntity = {
       return updated;
     }
 
-    return null;
+    return auth.me();
   },
 
   async submitAcademicVerification({ institution, course, documentName, documentUrl }) {
