@@ -403,6 +403,7 @@ export const inferTerminalDirection = (pinId = "", point = { x: 0, y: 0 }, rails
 
   // Saídas de carga (vai para circuito)
   if (pin.startsWith("load_out:")) {
+    if (pin.endsWith(":ground")) return "LEFT";
     return "DOWN";
   }
 
@@ -1374,8 +1375,12 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
     const parts = pin.split(":");
     const compId = parts[1];
     const poleToken = parts[2] || "0";
-    const circuitMatch = String(compId || "").match(/circuit_(\d+)/i);
-    const outputIndex = circuitMatch ? Number(circuitMatch[1]) : 0;
+
+    let distCounter = 0;
+    let targetCircuitIndex = -1;
+    let foundComp = null;
+    let foundRailY = 190;
+    let foundTerminalX = RAIL_START_X;
 
     for (let rIdx = 0; rIdx < rails.length; rIdx++) {
       const rail = rails[rIdx];
@@ -1386,20 +1391,48 @@ export const resolvePinPosition = (pinId = "", rails = [], panelHeight = 820, in
         const compW = comp.type === "spacer"
           ? (Number(comp.poles) || 1) * (DIN_MODULE_WIDTH + 2) - 2
           : (Number(comp.poles) || 1) * DIN_MODULE_WIDTH;
-        if (comp.id === compId || comp.circuit_id === compId) {
-          const poleIdx = parseInt(poleToken, 10) || 0;
-          const terminalX = currentX + poleIdx * DIN_MODULE_WIDTH + DIN_MODULE_WIDTH / 2;
 
-          if (poleToken === "neutral") {
-            return { x: terminalX, y: snapToGrid(railY + 136 + (outputIndex % 4) * 6) };
-          }
-          if (poleToken === "ground") {
-            return { x: PANEL_DESIGN_WIDTH - 140, y: snapToGrid(panelHeight - 240 + outputIndex * 16) };
-          }
-          return { x: terminalX, y: snapToGrid(railY + 132 + (poleIdx % 2) * 8) };
+        const isDist = comp.type !== "spacer" && comp.type !== "dps" && comp.type !== "switch" && comp.type !== "main_breaker" && comp.type !== "idr" && comp.id !== "gen_brk" && comp.id !== "gen_dr";
+
+        if (comp.id === compId || comp.circuit_id === compId) {
+          foundComp = comp;
+          foundRailY = railY;
+          const poleIdx = parseInt(poleToken, 10) || 0;
+          foundTerminalX = currentX + poleIdx * DIN_MODULE_WIDTH + DIN_MODULE_WIDTH / 2;
+
+          const numMatch = String(comp.circuitNumber ?? comp.circuitLabel ?? comp.label ?? comp.circuit_id ?? comp.id ?? "").match(/\d+/);
+          targetCircuitIndex = numMatch ? Math.max(0, Number(numMatch[0]) - 1) : distCounter;
+          break;
+        }
+
+        if (isDist) {
+          distCounter++;
         }
         currentX += compW + 2;
       }
+      if (foundComp) break;
+    }
+
+    const fallbackNumMatch = String(compId || "").match(/\d+/);
+    const circuitIndex = targetCircuitIndex >= 0 ? targetCircuitIndex : (fallbackNumMatch ? Math.max(0, Number(fallbackNumMatch[0]) - 1) : 0);
+
+    if (foundComp) {
+      const poleIdx = parseInt(poleToken, 10) || 0;
+      if (poleToken === "neutral") {
+        return { x: foundTerminalX, y: snapToGrid(foundRailY + 136 + (circuitIndex % 4) * 8) };
+      }
+      if (poleToken === "ground") {
+        // Espaçamento vertical generoso e determinístico (32px por condutor) para evitar
+        // sobreposição de cabos, terminais (ilhós) e legendas de identificação PE
+        const baseY = panelHeight - 260;
+        return { x: PANEL_DESIGN_WIDTH - 140, y: snapToGrid(baseY + circuitIndex * 32) };
+      }
+      return { x: foundTerminalX, y: snapToGrid(foundRailY + 132 + (poleIdx % 2) * 8) };
+    }
+
+    if (poleToken === "ground") {
+      const baseY = panelHeight - 260;
+      return { x: PANEL_DESIGN_WIDTH - 140, y: snapToGrid(baseY + circuitIndex * 32) };
     }
 
     return { x: PANEL_DESIGN_WIDTH - 94, y: panelHeight - 118 };

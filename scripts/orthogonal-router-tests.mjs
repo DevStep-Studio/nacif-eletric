@@ -463,6 +463,43 @@ console.log("Iniciando bateria de testes obrigatórios do Roteador Ortogonal e P
   console.log("✓ TESTE 15: Espaçadores mantêm o alinhamento 100% centralizado de bornes subsequentes.");
 }
 
+// ─── TESTE 16: Condutores de proteção terra (PE) não colidem nem sobrepõem ───
+{
+  const rails = [
+    {
+      id: "rail_1",
+      components: [
+        { id: "gen_brk", type: "breaker", poles: 3, current: 63 },
+      ],
+    },
+    {
+      id: "rail_2",
+      components: [
+        { id: "comp-c1", type: "breaker", poles: 3, circuitLabel: "C1", circuitNumber: 1 },
+        { id: "comp-c2", type: "breaker", poles: 3, circuitLabel: "C2", circuitNumber: 2 },
+        { id: "comp-c3", type: "breaker", poles: 3, circuitLabel: "C3", circuitNumber: 3 },
+      ],
+    },
+  ];
+
+  const panelHeight = 760;
+  const pGndC1 = resolvePinPosition("load_out:comp-c1:ground", rails, panelHeight);
+  const pGndC2 = resolvePinPosition("load_out:comp-c2:ground", rails, panelHeight);
+  const pGndC3 = resolvePinPosition("load_out:comp-c3:ground", rails, panelHeight);
+
+  assert.ok(pGndC1 && pGndC2 && pGndC3, "TESTE 16: Todas as posições de terra resolvidas");
+  assert.equal(pGndC1.x, 710, "TESTE 16: Saída de terra no corredor direito (x=710)");
+  assert.equal(pGndC2.x, 710, "TESTE 16: Saída de terra no corredor direito (x=710)");
+  assert.equal(pGndC3.x, 710, "TESTE 16: Saída de terra no corredor direito (x=710)");
+
+  assert.notEqual(pGndC1.y, pGndC2.y, "TESTE 16: C1 e C2 possuem Ys diferentes");
+  assert.notEqual(pGndC2.y, pGndC3.y, "TESTE 16: C2 e C3 possuem Ys diferentes");
+  assert.ok(Math.abs(pGndC2.y - pGndC1.y) >= 28, "TESTE 16: Espaçamento de pelo menos 28px entre saídas PE");
+  assert.ok(Math.abs(pGndC3.y - pGndC2.y) >= 28, "TESTE 16: Espaçamento de pelo menos 28px entre saídas PE");
+
+  console.log("✓ TESTE 16: Condutores de proteção terra (PE) possuem saídas perfeitamente espaçadas e sem sobreposição.");
+}
+
 console.log("\n=======================================================");
-console.log("TODOS OS 15 TESTES OBRIGATÓRIOS PASSARAM COM SUCESSO!");
+console.log("TODOS OS 16 TESTES OBRIGATÓRIOS PASSARAM COM SUCESSO!");
 console.log("=======================================================\n");

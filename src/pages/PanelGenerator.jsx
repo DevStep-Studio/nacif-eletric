@@ -1009,8 +1009,15 @@ const getEffectiveWireThickness = (wire = {}, fallback = 1.4) => {
   return clampWireThickness(Number(fallback) || 1.4);
 };
 
-const isNeutralBusPin = (pinId = "") => String(pinId || "").startsWith("busbar_neutral:");
-const isGroundBusPin = (pinId = "") => String(pinId || "").startsWith("busbar_ground:");
+const isNeutralBusPin = (pinId = "") => {
+  const s = String(pinId || "");
+  return s.startsWith("busbar_neutral:") || s.startsWith("free-neutral-bus");
+};
+const isGroundBusPin = (pinId = "") => {
+  const s = String(pinId || "");
+  return s.startsWith("busbar_ground:") || s.startsWith("free-ground-bus");
+};
+const getCanonicalWireId = (id = "") => String(id || "").replace(/-(ground|neutral)-\d+$/, "");
 
 const getWireKind = (color) => {
   if (color === "blue") return "neutral";
@@ -1033,10 +1040,24 @@ const getGroundBackboneLeftX = () => VIRTUAL_DUCTS.groundX;
 const getPinClassification = (pinId = "", componentLookup = null) => {
   const pin = String(pinId || "");
   if (!pin) return "unknown";
-  if (pin === "terminal_left_top:0" || pin.startsWith("busbar_ground:") || pin.startsWith("backbone_ground:") || pin.endsWith(":ground")) {
+  if (
+    pin === "terminal_left_top:0" ||
+    pin.startsWith("busbar_ground:") ||
+    pin.startsWith("free-ground-bus") ||
+    pin.startsWith("backbone_ground:") ||
+    pin.endsWith(":ground") ||
+    pin.includes("ground") ||
+    pin.includes("terra")
+  ) {
     return "ground";
   }
-  if (pin === "terminal_left_top:4" || pin.startsWith("busbar_neutral:") || pin.startsWith("backbone_neutral:") || pin.endsWith(":neutral")) {
+  if (
+    pin === "terminal_left_top:4" ||
+    pin.startsWith("busbar_neutral:") ||
+    pin.startsWith("free-neutral-bus") ||
+    pin.startsWith("backbone_neutral:") ||
+    pin.endsWith(":neutral")
+  ) {
     return "neutral";
   }
   if (["terminal_left_top:1", "terminal_left_top:2", "terminal_left_top:3"].includes(pin)) {
@@ -1052,6 +1073,11 @@ const getPinClassification = (pinId = "", componentLookup = null) => {
       if (comp.type === "dps") {
         if (termSide === "bottom") return "ground";
         return comp.phase === "N" ? "neutral" : "phase";
+      }
+      if (comp.type === "borne") {
+        if (comp.function === "PE" || comp.color === "green" || comp.color === "green-yellow" || comp.phase === "PE" || comp.phase === "terra") return "ground";
+        if (comp.function === "N" || comp.color === "blue" || comp.phase === "N" || comp.phase === "neutro") return "neutral";
+        return "phase";
       }
       const poles = Number(comp.poles) || 1;
       if (poles === 4) {
@@ -3379,11 +3405,17 @@ export default function PanelGenerator() {
       : ""
   );
 
-  const getStoredWire = (wireId) => wires.find((wire) => wire.id === wireId) || null;
+  const getStoredWire = (wireId) => {
+    if (!wireId) return null;
+    const canonicalId = getCanonicalWireId(wireId);
+    return wires.find((wire) => wire.id === wireId || wire.id === canonicalId) || null;
+  };
 
-  const getWireDescriptor = (wireId) => (
-    routedWires.find((descriptor) => descriptor.wire?.id === wireId) || null
-  );
+  const getWireDescriptor = (wireId) => {
+    if (!wireId) return null;
+    const canonicalId = getCanonicalWireId(wireId);
+    return routedWires.find((descriptor) => descriptor.wire?.id === wireId || descriptor.wire?.id === canonicalId) || null;
+  };
 
   const inferRouteEndpointPins = (descriptor, routePoints = []) => {
     const points = cleanRoutePoints(routePoints);
@@ -3470,12 +3502,18 @@ export default function PanelGenerator() {
     return points;
   };
 
-  const getEditableWire = (wireId) => (
-    getStoredWire(wireId)
-    || wireRouteMetaRef.current[wireId]?.wire
-    || getWireDescriptor(wireId)?.wire
-    || { id: wireId, source: "", target: "", route_points: [] }
-  );
+  const getEditableWire = (wireId) => {
+    if (!wireId) return { id: "", source: "", target: "", route_points: [] };
+    const canonicalId = getCanonicalWireId(wireId);
+    return (
+      getStoredWire(wireId)
+      || wireRouteMetaRef.current[wireId]?.wire
+      || wireRouteMetaRef.current[canonicalId]?.wire
+      || getWireDescriptor(wireId)?.wire
+      || getWireDescriptor(canonicalId)?.wire
+      || { id: wireId, source: "", target: "", route_points: [] }
+    );
+  };
 
   const getCurrentVisualWireRoute = (wireId) => {
     if (!wireId) return [];
@@ -3546,20 +3584,20 @@ export default function PanelGenerator() {
 
   const ensureWireRecord = (wireId, updates = {}, options = {}) => {
     if (!wireId) return null;
+    const canonicalId = getCanonicalWireId(wireId);
     let changed = false;
     let ensuredWire = null;
     const nextWires = wires.map((wire) => {
-      if (wire.id !== wireId) return wire;
-      const enriched = buildWireRecordFromVisual(wireId, { ...updates, ...wire });
-      changed = (
-        JSON.stringify(wire) !== JSON.stringify(enriched)
-      );
+      if (wire.id !== wireId && wire.id !== canonicalId) return wire;
+      const targetId = wire.id;
+      const enriched = buildWireRecordFromVisual(targetId, { ...updates, ...wire });
+      changed = JSON.stringify(wire) !== JSON.stringify(enriched);
       ensuredWire = enriched;
       return enriched;
     });
 
     if (!ensuredWire) {
-      ensuredWire = buildWireRecordFromVisual(wireId, updates);
+      ensuredWire = buildWireRecordFromVisual(canonicalId, updates);
       nextWires.push(ensuredWire);
       changed = true;
     }
@@ -3575,7 +3613,8 @@ export default function PanelGenerator() {
   const selectEditableWire = (wireId) => {
     if (marqueeMode) return;
     if (!wireId) return;
-    setSelectedWireId(wireId);
+    const canonicalId = getCanonicalWireId(wireId);
+    setSelectedWireId(canonicalId);
     setSelectedRoutePoint(null);
     setSelectedComponentId("");
     setSelectedInfrastructureId("");
@@ -3875,14 +3914,17 @@ export default function PanelGenerator() {
 
   const commitWireEndpointMove = (wireId, endpoint, pinId) => {
     if (!wireId || !endpoint || !pinId) return;
-    const currentWire = getEditableWire(wireId);
+    const canonicalWireId = getCanonicalWireId(wireId);
+    const currentWire = getEditableWire(canonicalWireId) || getEditableWire(wireId);
     if (isCableLocked(currentWire)) return;
 
-    captureEditHistoryStart(`wire-endpoint:${wireId}`);
+    captureEditHistoryStart(`wire-endpoint:${canonicalWireId}`);
 
     // Limpa referências cacheadas do cabo para forçar reconstrução imediata
     delete wirePathsRef.current[wireId];
     delete wireRouteMetaRef.current[wireId];
+    delete wirePathsRef.current[canonicalWireId];
+    delete wireRouteMetaRef.current[canonicalWireId];
 
     const endpointPoint = getPinCoords(pinId, rails, panelHeight, infrastructure);
     if (!isValidWirePoint(endpointPoint)) {
@@ -3954,7 +3996,7 @@ export default function PanelGenerator() {
 
     let found = false;
     const nextWires = wires.map((wire) => {
-      if (wire.id === wireId) {
+      if (wire.id === wireId || wire.id === canonicalWireId) {
         found = true;
         return {
           ...wire,
@@ -3977,9 +4019,9 @@ export default function PanelGenerator() {
     });
 
     if (!found) {
-      const baseRecord = buildWireRecordFromVisual(wireId, {
+      const baseRecord = buildWireRecordFromVisual(canonicalWireId, {
         ...currentWire,
-        id: wireId,
+        id: canonicalWireId,
         source: sourcePin,
         target: targetPin,
         sourceComponentId: getCableComponentId(sourcePin),
@@ -3997,9 +4039,9 @@ export default function PanelGenerator() {
       nextWires.push(baseRecord);
     }
 
-    commitEditHistory(`wire-endpoint:${wireId}`);
+    commitEditHistory(`wire-endpoint:${canonicalWireId}`);
     updateWires(nextWires);
-    setSelectedWireId(wireId);
+    setSelectedWireId(canonicalWireId);
     setWireMoveMode("");
     setWireEndpointDrag(null);
     setEndpointDragCoords(null);
@@ -9604,7 +9646,7 @@ export default function PanelGenerator() {
     if (descriptor.wire?.id?.includes("main") || descriptor.wire?.id?.includes("backbone") || descriptor.wire?.id?.includes("tie")) return null;
     const branches = routeNeutralDescriptorBranches(descriptor);
     return branches.map((routePoints, index) => {
-      const branchId = `${descriptor.wire.id}-neutral-${index}`;
+      const branchId = branches.length > 1 ? `${descriptor.wire.id}-neutral-${index}` : descriptor.wire.id;
       const customWire = wires.find(w => w.id === branchId || w.id === descriptor.wire.id);
       if (customWire?.deleted) return null;
 
@@ -9668,7 +9710,8 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     return endpoints.map(({ point, pin, meta }, branchIndex) => {
       if (!isValidWirePoint(busPoint) || !isValidWirePoint(point)) return [];
 
-      const targetSide = String(pin).startsWith("load_out:") ? "DOWN" : meta?.term === "bottom" ? "DOWN" : "UP";
+      const isLoadGround = String(pin).startsWith("load_out:") && String(pin).endsWith(":ground");
+      const targetSide = isLoadGround ? "LEFT" : (String(pin).startsWith("load_out:") ? "DOWN" : meta?.term === "bottom" ? "DOWN" : "UP");
       return calculateOrthogonalRoute(busPoint, point, obstacles, {
         sourceSide: "UP",
         targetSide,
@@ -9683,7 +9726,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
     if (descriptor.wire?.id?.includes("main") || descriptor.wire?.id?.includes("backbone") || descriptor.wire?.id?.includes("tie")) return null;
     const branches = routeGroundDescriptorBranches(descriptor);
     return branches.map((routePoints, index) => {
-      const branchId = `${descriptor.wire.id}-ground-${index}`;
+      const branchId = branches.length > 1 ? `${descriptor.wire.id}-ground-${index}` : descriptor.wire.id;
       const customWire = wires.find(w => w.id === branchId || w.id === descriptor.wire.id);
       if (customWire?.deleted) return null;
 
