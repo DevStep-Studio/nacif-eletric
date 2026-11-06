@@ -124,6 +124,7 @@ export default function SuperAdminPage() {
   });
 
   // Notificação / Feedback de Ação
+  const [loadErrors, setLoadErrors] = useState([]);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
 
   const showFeedback = (type, message) => {
@@ -135,17 +136,25 @@ export default function SuperAdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [m, uList, logs, sysSettings] = await Promise.all([
+      const results = await Promise.allSettled([
         backend.entities.SuperAdmin.getMetrics(),
         backend.entities.SuperAdmin.listUsers({ sortBy: sortOrder === "desc" ? "-created_date" : "created_date" }),
         backend.entities.SuperAdmin.listAuditLogs({ limit: 150 }),
         backend.entities.SuperAdmin.getSettings(),
       ]);
-
-      setMetrics(m);
-      setUsers(Array.isArray(uList) ? uList : []);
-      setAuditLogs(Array.isArray(logs) ? logs : []);
-      if (sysSettings) setSettings(sysSettings);
+      const labels = ["Indicadores", "Usuários", "Auditoria", "Configurações"];
+      const errors = [];
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          errors.push(`${labels[index]}: ${result.reason?.message || "Falha ao carregar"}`);
+          return;
+        }
+        if (index === 0) setMetrics(result.value);
+        if (index === 1) setUsers(Array.isArray(result.value) ? result.value : []);
+        if (index === 2) setAuditLogs(Array.isArray(result.value) ? result.value : []);
+        if (index === 3 && result.value) setSettings(result.value);
+      });
+      setLoadErrors(errors);
     } catch (err) {
       console.error("Erro ao carregar dados do Super Admin:", err);
       showFeedback("error", err.message || "Erro ao carregar dados administrativos.");
@@ -330,6 +339,13 @@ export default function SuperAdminPage() {
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
             )}
             <span>{feedback.message}</span>
+          </div>
+        )}
+
+        {loadErrors.length > 0 && (
+          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+            {loadErrors.map(message => <p key={message}>{message}</p>)}
+            <button type="button" className="mt-2 font-bold underline" onClick={loadData}>Tentar novamente</button>
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GraduationCap, UploadCloud, CheckCircle2, AlertCircle, X, FileText } from "lucide-react";
+import { GraduationCap, UploadCloud, CheckCircle2, AlertCircle, FileText } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ export default function AcademicVerificationModal({
 }) {
   const [institution, setInstitution] = useState(user?.academic_institution || "");
   const [course, setCourse] = useState(user?.academic_course || "");
+  const [documentFile, setDocumentFile] = useState(null);
   const [documentName, setDocumentName] = useState(user?.academic_document_name || "");
   const [documentData, setDocumentData] = useState(user?.academic_document_url || "");
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -33,11 +34,8 @@ export default function AcademicVerificationModal({
     setDocumentName(file.name);
     setErrorMessage("");
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setDocumentData(event.target?.result || "");
-    };
-    reader.readAsDataURL(file);
+    setDocumentFile(file);
+    setDocumentData("");
   };
 
   const handleSubmit = async (e) => {
@@ -52,7 +50,7 @@ export default function AcademicVerificationModal({
       setErrorMessage("Por favor, informe seu Curso (ex: Engenharia Elétrica, Eletrotécnica).");
       return;
     }
-    if (!documentData) {
+    if (!documentData && !documentFile) {
       setErrorMessage("Por favor, anexe o comprovante de matrícula (PDF, PNG ou JPG).");
       return;
     }
@@ -63,23 +61,11 @@ export default function AcademicVerificationModal({
 
     setIsSubmitting(true);
     try {
-      if (backend?.subscriptions?.submitAcademicVerification) {
-        await backend.subscriptions.submitAcademicVerification({
-          institution: institution.trim(),
-          course: course.trim(),
-          documentName,
-          documentUrl: documentData,
-        });
-      } else {
-        await backend.auth.updateMe({
-          academic_status: "pending_review",
-          academic_institution: institution.trim(),
-          academic_course: course.trim(),
-          academic_document_name: documentName,
-          academic_document_url: documentData,
-          academic_submitted_at: new Date().toISOString(),
-        });
-      }
+      const uploaded = documentFile ? await backend.integrations.Core.UploadFile({ file: documentFile }) : null;
+      await backend.subscriptions.submitAcademicVerification({
+        institution: institution.trim(), course: course.trim(), documentName,
+        documentUrl: uploaded?.file_url || documentData,
+      });
 
       setSubmittedSuccess(true);
       if (onSuccess) onSuccess();

@@ -34,6 +34,7 @@ export const saveUpload = async (file: MultipartFile) => {
 
   return {
     fileName: safeName,
+    sizeBytes: buffer.length,
     relativeUrl: `/uploads/${safeName}`,
   };
 };

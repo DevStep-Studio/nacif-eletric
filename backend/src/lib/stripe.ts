@@ -37,19 +37,19 @@ export const stripe = new Stripe(stripeSecretKey, {
  */
 export const STRIPE_PRICES = {
   estudante: {
-    monthly: env.STRIPE_PRICE_ESTUDANTE_MONTHLY || "price_1UVAQqJl6h9d8TBMRYFoOdBM",
+    monthly: env.STRIPE_PRICE_ESTUDANTE_MONTHLY,
   },
   eletrico: {
-    monthly: env.STRIPE_PRICE_ELETRICO_MONTHLY || "price_1UVAS5Jl6h9d8TBMQLt9F7nB",
-    annual: env.STRIPE_PRICE_ELETRICO_ANNUAL || "price_1UVAfiJl6h9d8TBMcF6J01KS",
+    monthly: env.STRIPE_PRICE_ELETRICO_MONTHLY,
+    annual: env.STRIPE_PRICE_ELETRICO_ANNUAL,
   },
   solar: {
-    monthly: env.STRIPE_PRICE_SOLAR_MONTHLY || "price_1UVAX2Jl6h9d8TBMkWZsDn0s",
-    annual: env.STRIPE_PRICE_SOLAR_ANNUAL || "price_1UVAgGJl6h9d8TBMmK3sEsRZ",
+    monthly: env.STRIPE_PRICE_SOLAR_MONTHLY,
+    annual: env.STRIPE_PRICE_SOLAR_ANNUAL,
   },
   completo: {
-    monthly: env.STRIPE_PRICE_COMPLETO_MONTHLY || "price_1UVAYaJl6h9d8TBMc8YTZsHp",
-    annual: env.STRIPE_PRICE_COMPLETO_ANNUAL || "price_1UVAgoJl6h9d8TBMubc39FAP",
+    monthly: env.STRIPE_PRICE_COMPLETO_MONTHLY,
+    annual: env.STRIPE_PRICE_COMPLETO_ANNUAL,
   },
 } as const;
 

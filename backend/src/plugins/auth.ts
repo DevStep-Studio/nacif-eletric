@@ -1,3 +1,6 @@
+import { assertAccountAvailable } from "../lib/accountAccess.js";
+import { effectivePlanCode } from "../lib/planGovernance.js";
+import { prisma } from "../lib/prisma.js";
 import fp from "fastify-plugin";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -16,21 +19,26 @@ export const authPlugin = fp(async (app) => {
       return reply.unauthorized("Faça login para continuar.");
     }
 
-    const payload = await request.jwtVerify<{ sub: string; email: string; role: "admin" | "user" }>({
+    const payload = await request.jwtVerify<{ sub: string; email: string; role: "admin" | "super_admin" | "user" }>({
       onlyCookie: false,
     });
 
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+    assertAccountAvailable(user);
     request.authUser = {
       id: payload.sub,
       email: payload.email,
-      role: payload.role,
+      role: user.role,
+      plan: effectivePlanCode(user),
+      customPermissions: user.customPermissions,
     };
   });
 
   app.decorate("requireAdmin", async (request, reply) => {
     await app.authenticate(request, reply);
 
-    if (request.authUser.role !== "admin") {
+    if (reply.sent) return;
+    if (request.authUser.role !== "admin" && request.authUser.role !== "super_admin") {
       return reply.forbidden("Acesso restrito a administradores.");
     }
   });

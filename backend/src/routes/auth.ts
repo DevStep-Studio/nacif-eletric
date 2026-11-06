@@ -1,3 +1,4 @@
+import { assertAccountAvailable } from "../lib/accountAccess.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { env } from "../config/env.js";
@@ -137,6 +138,8 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       throw new AppError("Email ou senha inválidos.", 401);
     }
 
+    assertAccountAvailable(user);
+
     return {
       access_token: signAccessToken(app, user),
       user: serializeUser(user),
@@ -204,15 +207,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       nextPasswordHash = await hashPassword(data.new_password);
     }
 
-    const isAdmin = request.authUser.role === "admin" || (request.authUser.role as string) === "super_admin";
-    let resolvedPlan: typeof data.plan | undefined;
-    if (data.plan) {
-      if (isAdmin) {
-        resolvedPlan = data.plan;
-      } else if (data.plan === "gratuito") {
-        resolvedPlan = "gratuito";
-      }
-    }
+    if (data.plan) throw new AppError("Planos são gerenciados pela assinatura Stripe.", 403);
 
     const user = await prisma.user.update({
       where: { id: request.authUser.id },
@@ -223,7 +218,6 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         crea: data.crea,
         phone: data.phone,
         avatarUrl: data.avatar_url,
-        ...(resolvedPlan ? { plan: resolvedPlan } : {}),
         ...(nextPasswordHash ? { passwordHash: nextPasswordHash } : {}),
       },
     });

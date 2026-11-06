@@ -19,22 +19,129 @@ A documentação detalhada da arquitetura, motores de cálculo e especificaçõe
 ### 1. Configurar Variáveis de Ambiente
 Crie um arquivo `.env` na raiz do projeto:
 ```env
-VITE_API_BASE_URL=http://localhost:3001
+VITE_API_BASE_URL=
 ```
 
 ### 2. Instalação e Desenvolvimento
 ```bash
-npm install
+npm ci
+npm --prefix backend ci
+# Configure backend/.env a partir de backend/.env.example, com MySQL e JWT_SECRET.
+npm --prefix backend run prisma:generate
+npm --prefix backend run prisma:push
+npm run dev:api
+# Em outro terminal:
 npm run dev
 ```
 
+O endereço vazio usa `/api` pelo proxy do Vite em desenvolvimento. Para um backend
+separado, informe sua origem em `VITE_API_BASE_URL`. Em produção com a mesma origem,
+configure o proxy de `/api` e `/uploads` para o Fastify. Ajuste `FRONTEND_URL` no backend
+para a origem exata do frontend, inclusive a porta em desenvolvimento.
+
+Sessões antigas com token `local:` são descartadas. Faça login com uma conta do
+backend; usuários e projetos do navegador não são migrados automaticamente.
+
+### Planos e Stripe
+
+O catálogo está em `backend/src/lib/planCatalog.js` e é servido por
+`GET /api/subscriptions/plans`. O frontend carrega preços, recursos e limites dessa
+rota; `null` em um limite significa ilimitado. Códigos legados permanecem compatíveis.
+
+Configure no **backend** `STRIPE_SECRET_KEY`, os sete `STRIPE_PRICE_*` e
+`STRIPE_WEBHOOK_SECRET`. Aponte o webhook para `/api/subscriptions/webhook` com eventos
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`customer.subscription.created`, `customer.subscription.updated`,
+`customer.subscription.deleted`, `invoice.paid` e `invoice.payment_failed`.
+
+O checkout usa apenas código de plano e ciclo. Planos pagos são liberados após
+confirmação da Stripe, com estado persistido no MySQL. Trocas de uma assinatura
+existente usam o portal Stripe; habilite os produtos/preços e alterações no portal.
+O cancelamento interrompe a renovação e conserva o período pago. Estudante exige
+comprovante aprovado e permite apenas cobrança mensal.
+
+A tabela `stripe_events` impede o processamento duplicado de webhooks. Em uma
+instalação existente, aplique a migration
+`backend/prisma/migrations/20261105000000_stripe_events/migration.sql` após backup,
+ou use o procedimento de sincronização Prisma já adotado pelo ambiente. O histórico
+antigo não contém uma migration inicial completa: não execute `migrate deploy` em
+um banco novo sem estabelecer o baseline. Para banco novo, use `prisma:push`.
+
 ### 3. Testes Automatizados
 ```bash
-npm run test:orthogonal-router
+node scripts/api-client-integration.mjs
+npm --prefix backend run typecheck
+# Use exclusivamente um banco descartável cujo nome termine em _test:
+DATABASE_URL=mysql://usuario:senha@localhost:3306/nacif_test npm --prefix backend run prisma:push
+DATABASE_URL=mysql://usuario:senha@localhost:3306/nacif_test npm --prefix backend run test:integration
 ```
 
 ### 4. Build de Produção
 ```bash
-npm run build
+npm run build --ignore-scripts
 npm run preview
 ```
+
+### Backend publicado responde “Route GET:/api/subscriptions/plans not found”
+
+Essa rota está registrada no backend atual e não depende do banco ou da Stripe.
+Um `/api/health` com HTTP 200, acompanhado de 404 em `/api/subscriptions/plans`,
+indica uma instância antiga ou outro checkout sendo servido. No checkout do
+servidor de produção, publique o código atual e recarregue o processo:
+
+```bash
+git pull --ff-only
+npm run start:api
+curl --fail http://127.0.0.1:3001/api/subscriptions/plans
+curl --fail https://nacifenergy.com.br/api/subscriptions/plans
+```
+
+O comando `start:api` instala as dependências do backend, gera o Prisma Client e
+recarrega o PM2 usando `ecosystem.config.cjs`. Agora verifica também a rota de planos
+e retorna erro se a instância continuar desatualizada. Compilar apenas o frontend
+com `--ignore-scripts` não recarrega o backend. Se apenas o endereço público falhar,
+confira se o proxy de `/api` aponta para a mesma porta/processo testado localmente.
+
+### Login seguido de “Conta indisponível”
+
+Login e rotas autenticadas usam a mesma validação de conta. Os valores legados
+`ativo`, `ativa`, diferenças de caixa/espaços e status vazio são tratados como
+`active`. Contas suspensas, inativas ou excluídas continuam bloqueadas, com uma
+mensagem específica; sessões cujo usuário não existe exigem novo login.
+
+Para corrigir dados antigos no banco selecionado, execute
+`backend/prisma/migrations/20261105030000_normalize_legacy_account_status/migration.sql`.
+Esse SQL normaliza somente os status ativos reconhecidos e não reativa contas
+suspensas, inativas ou excluídas. Publique o backend atualizado e recarregue a API
+com `npm run start:api` antes de fazer login novamente.
+
+### Stripe retorna “No such price”
+
+Configure os sete `STRIPE_PRICE_*` em `backend/.env` com IDs existentes na mesma
+conta e no mesmo ambiente da `STRIPE_SECRET_KEY`. IDs de outra conta, de outro
+ambiente ou valores de exemplo não funcionam. O backend não usa mais IDs fixos
+nem busca preços nas variáveis `VITE_STRIPE_PRICE_*`.
+
+```bash
+npm --prefix backend run stripe:check
+```
+
+Esse diagnóstico consulta os preços sem criar produtos, clientes ou pagamentos.
+Ele verifica se estão ativos, em BRL e com os valores e ciclos do catálogo Nacif.
+Corrija as variáveis indicadas, publique as alterações e recarregue a API com
+`npm run start:api`. Referências: [preços](https://docs.stripe.com/api/prices/retrieve)
+e [ambientes Stripe](https://docs.stripe.com/keys#sandbox-versus-live-mode).
+
+### Erro ao carregar auditoria ou configurações do Super Admin
+
+Execute `npm --prefix backend run db:check` para listar todas as tabelas e colunas
+ausentes em relação ao Prisma. O diagnóstico é somente leitura e não mostra
+registros de usuários nem credenciais.
+
+Erros Prisma de tabela/coluna ausente retornam `DATABASE_SCHEMA_OUTDATED`, sem
+expor SQL ou dados internos. Para reconciliar `audit_logs` e `system_settings`,
+execute no banco da aplicação
+`backend/prisma/migrations/20261105040000_reconcile_admin_tables/migration.sql`.
+O SQL é aditivo e pode ser executado novamente. Se a falha tiver outra causa,
+consulte o log da API: o painel agora identifica a seção que falhou e mantém as
+outras seções carregadas, com aviso persistente e opção de tentar novamente.

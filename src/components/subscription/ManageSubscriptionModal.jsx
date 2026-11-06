@@ -25,13 +25,7 @@ export default function ManageSubscriptionModal({
   const handleOpenPortal = async () => {
     try {
       setPortalLoading(true);
-      const data = await createPortalSession({
-        userId: user?.id,
-        userEmail: user?.email,
-        userName: user?.fullName || user?.full_name || user?.name,
-        stripeCustomerId: subscription?.stripeCustomerId,
-        allowDirectFallback: true,
-      });
+      const data = await createPortalSession();
       if (data?.url) {
         window.location.href = data.url;
       }

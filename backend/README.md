@@ -6,8 +6,8 @@ Backend de alta performance desenvolvido em **Node.js com Fastify e TypeScript**
 
 ## 1. Visão Geral da Arquitetura
 
-O ecossistema **Nacif Electric** adota uma arquitetura híbrida e resiliente:
-- **Frontend SPA (React 19 + Vite):** Opera prioritariamente em modo *offline-first* com persistência em IndexedDB / LocalStorage para cálculos e dimensionamentos elétricos ininterruptos em campo.
+O ecossistema **Nacif Electric** usa o backend como fonte dos dados persistidos:
+- **Frontend SPA (React 18 + Vite):** Consome a API com JWT. Cálculos e rascunhos do editor continuam no navegador; contas, projetos, orçamentos e assinaturas são persistidos pelo backend.
 - **Backend API (Fastify + Prisma):** Atua como autoridade central de sincronização, autenticação robusta, governança multi-usuário (RBAC), controle orçamentário avançado, auditoria inviolável, processamento de plantas assistidas por inteligência artificial e backup/disaster recovery.
 
 ```mermaid
@@ -54,7 +54,7 @@ graph TD
 
 ## 3. Mapeamento de Módulos: Frontend vs Backend
 
-Todos os contratos de integração foram sincronizados com as entidades do cliente [`src/api/backendClient.js`](../src/api/backendClient.js):
+Os contratos de integração são usados pelas entidades do cliente [`src/api/backendClient.js`](../src/api/backendClient.js):
 
 | Módulo Frontend | Entidade Backend | Endpoints Principais | Status Sincronização |
 | :--- | :--- | :--- | :---: |

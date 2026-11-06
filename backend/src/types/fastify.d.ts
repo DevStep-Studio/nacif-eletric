@@ -8,6 +8,7 @@ declare module "fastify" {
       email: string;
       role: UserRole;
       plan?: string;
+      customPermissions?: unknown;
     };
   }
 }

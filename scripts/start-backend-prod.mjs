@@ -10,17 +10,28 @@ const backendDir = path.resolve(rootDir, "backend");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function checkHealth(port = 3001) {
+export async function checkHealth(port = 3001) {
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/api/health`);
-    if (res.ok) {
-      const json = await res.json().catch(() => ({}));
-      return { ok: true, data: json };
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const [healthResponse, plansResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(3000) }),
+      fetch(`${baseUrl}/api/subscriptions/plans`, { signal: AbortSignal.timeout(3000) }),
+    ]);
+    if (!healthResponse.ok) return { ok: false, data: null, reason: `Health HTTP ${healthResponse.status}` };
+    const health = await healthResponse.json();
+    if (plansResponse.status === 404) {
+      return { ok: false, data: health, reason: "Backend desatualizado: GET /api/subscriptions/plans não registrado. Atualize o checkout do servidor e reinicie nacif-electric-api." };
     }
-  } catch {
-    // ainda iniciando
+    if (!plansResponse.ok) return { ok: false, data: health, reason: `Catálogo de planos HTTP ${plansResponse.status}` };
+    const catalog = await plansResponse.json();
+    const expectedPlans = ["free", "estudante", "eletrico", "solar", "completo"];
+    if (health.ok !== true || health.service !== "nacif-electric-backend" || !Array.isArray(catalog?.plans) || !expectedPlans.every(code => catalog.plans.some(plan => plan.code === code))) {
+      return { ok: false, data: health, reason: "A porta configurada não está servindo a API e o catálogo esperados." };
+    }
+    return { ok: true, data: health, reason: null };
+  } catch (error) {
+    return { ok: false, data: null, reason: error.message };
   }
-  return { ok: false, data: null };
 }
 
 async function main() {
@@ -51,7 +62,7 @@ async function main() {
       stdio: "inherit",
     });
   } catch (err) {
-    console.warn("[deploy-backend] Aviso ao preparar dependências do backend:", err.message);
+    throw new Error(`Falha ao preparar dependências do backend: ${err.message}`);
   }
 
   let startedWithPm2 = false;
@@ -112,21 +123,25 @@ async function main() {
     }
   }
 
+  let lastReason = "API indisponível";
   for (let i = 0; i < 8; i++) {
     await sleep(600);
     const health = await checkHealth(Number(process.env.PORT || 3001));
+    lastReason = health.reason;
     if (health.ok) {
       console.log(
-        `[deploy-backend] Backend API ativo com sucesso em 127.0.0.1:3001 (stripeConfigured=${Boolean(health.data?.stripeConfigured)})`,
+        `[deploy-backend] Backend API e catálogo de planos ativos em 127.0.0.1:${Number(process.env.PORT || 3001)} (stripeConfigured=${Boolean(health.data?.stripeConfigured)})`,
       );
       return;
     }
   }
 
-  console.warn("[deploy-backend] Aviso: Health check na porta 3001 ainda não respondeu (o processo pode continuar subindo em background).");
+  throw new Error(`Backend não ficou pronto: ${lastReason}`);
 }
 
-main().catch((err) => {
-  console.warn("[deploy-backend] Erro não fatal no pós-build:", err.message);
-  process.exit(0);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main().catch((err) => {
+    console.error("[deploy-backend] Falha ao iniciar a API:", err.message);
+    process.exitCode = 1;
+  });
+}
