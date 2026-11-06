@@ -160,37 +160,6 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     return serializeUser(user);
   });
 
-  app.delete("/api/auth/me", { preHandler: [app.authenticate] }, async (request) => {
-    await prisma.user.update({
-      where: { id: request.authUser.id },
-      data: {
-        isDeleted: true,
-        deletedAt: new Date(),
-        status: "deleted",
-      },
-    });
-    return { ok: true, message: "Conta excluída com sucesso." };
-  });
-
-  app.get("/api/auth/export-data", { preHandler: [app.authenticate] }, async (request) => {
-    const user = await prisma.user.findUnique({
-      where: { id: request.authUser.id },
-      include: {
-        projects: true,
-        notifications: true,
-      },
-    });
-    if (!user) {
-      throw new AppError("Usuário não encontrado.", 404);
-    }
-    return {
-      exported_at: new Date().toISOString(),
-      user: serializeUser(user),
-      projects: user.projects,
-      notifications: user.notifications,
-    };
-  });
-
   app.patch("/api/auth/me", { preHandler: [app.authenticate] }, async (request) => {
     const data = updateMeSchema.parse(request.body);
     const profession = data.profession ?? data.profissao;

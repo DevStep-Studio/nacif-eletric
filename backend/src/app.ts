@@ -19,8 +19,6 @@ import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerAnalysisRoutes } from "./routes/analysis.js";
 import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
-import { registerBudgetRoutes } from "./routes/budgets.js";
-import { registerIssueRoutes } from "./routes/issues.js";
 import { AppError, isAppError } from "./lib/errors.js";
 import { ensureUploadDir } from "./lib/uploads.js";
 
@@ -129,8 +127,6 @@ export const buildApp = async () => {
   await registerSettingsRoutes(app);
   await registerCatalogRoutes(app);
   await registerSubscriptionRoutes(app);
-  await registerBudgetRoutes(app);
-  await registerIssueRoutes(app);
   await registerWorkspaceRoutes(app);
 
   app.setErrorHandler((error, _request, reply) => {

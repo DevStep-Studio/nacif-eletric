@@ -10,6 +10,9 @@ const __dirname = path.dirname(__filename);
 // Carrega variáveis de ambiente tanto de backend/.env quanto do .env da raiz (DevStep / VPS)
 const candidateEnvPaths = [
   path.resolve(process.cwd(), ".env"),
+  path.resolve(process.cwd(), "../.env"),
+  path.resolve(process.cwd(), "backend/.env"),
+  path.resolve(__dirname, "../.env"),
   path.resolve(__dirname, "../../.env"),
   path.resolve(__dirname, "../../../.env"),
 ];
