@@ -7803,7 +7803,7 @@ export default function PanelGenerator() {
               <line x1={px + MOD / 2} y1={y + BRK_H - 14 - 2.8} x2={px + MOD / 2} y2={y + BRK_H - 14 + 2.8} stroke="#cbd5e1" strokeWidth="1.1" />
 
               {/* Indicador de fase gravado no polo */}
-              <text x={px + MOD / 2} y={y + 32} fill="#1e293b" fontSize="7.2" textAnchor="middle" fontWeight="900">
+              <text x={px + MOD / 2} y={y + 32.5} fill="#1e293b" fontSize="7.5" textAnchor="middle" fontWeight="900">
                 {polePhaseLabel(c, pi)}
               </text>
 
@@ -7819,23 +7819,27 @@ export default function PanelGenerator() {
         })}
 
         {/* Linha técnica de recuo frontal da carcaça */}
-        <line x1={x + 3} y1={y + 36} x2={x + W - 3} y2={y + 36} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={x + 3} y1={y + 37} x2={x + W - 3} y2={y + 37} stroke="#cbd5e1" strokeWidth="1" />
 
-        {/* Cavidades individuais de cada manopla com ranhura de operação */}
+        {/* Cavidades individuais de cada manopla com marcações IEC 60898-1 */}
         {Array.from({ length: c.poles }).map((_, pi) => {
           const px = x + pi * MOD;
           return (
-            <rect
-              key={`cavity-${pi}`}
-              x={px + MOD / 2 - 5.5}
-              y={y + 39}
-              width="11"
-              height="28"
-              rx="2"
-              fill="#0f172a"
-              stroke="#475569"
-              strokeWidth="0.5"
-            />
+            <g key={`cavity-${pi}`}>
+              <rect
+                x={px + MOD / 2 - 5.5}
+                y={y + 39}
+                width="11"
+                height="28"
+                rx="2"
+                fill="#0f172a"
+                stroke="#475569"
+                strokeWidth="0.5"
+              />
+              {/* Marcações IEC I / O gravadas no fundo da cavidade mecânica */}
+              <text x={px + MOD / 2} y={y + 44.5} fill="#64748b" fontSize="5.2" textAnchor="middle" fontWeight="900" pointerEvents="none">I</text>
+              <text x={px + MOD / 2} y={y + 64} fill="#64748b" fontSize="5.2" textAnchor="middle" fontWeight="900" pointerEvents="none">O</text>
+            </g>
           );
         })}
 
@@ -7913,10 +7917,6 @@ export default function PanelGenerator() {
           </g>
         )}
         
-        {/* Marcações técnicas liga/desliga I / O (Norma IEC 60898-1) */}
-        <text x={x + W / 2} y={y + 37.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="950">I</text>
-        <text x={x + W / 2} y={y + 67.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="950">O</text>
-        
         {/* Janela de inspeção de estado mecânico (Vermelho = Ligado / Verde = Desligado) */}
         <rect
           x={c.poles === 1 ? x + 2 : x + 3.5}
@@ -7929,32 +7929,32 @@ export default function PanelGenerator() {
           strokeWidth="0.4"
         />
 
-        {/* Cartão de etiqueta de identificação técnica embutido na face */}
+        {/* Cartão de etiqueta de identificação técnica perfeitamente centralizado e enquadrado */}
         <rect
-          x={c.poles === 1 ? x + 1.5 : x + 2.5}
-          y={y + 69}
-          width={c.poles === 1 ? 15 : W - 5}
-          height="16"
+          x={c.poles === 1 ? x + 2 : x + 2.5}
+          y={y + 68}
+          width={c.poles === 1 ? W - 4 : W - 5}
+          height="17"
           fill="#ffffff"
-          rx="2"
+          rx="2.5"
           stroke="#94a3b8"
           strokeWidth="0.85"
         />
         {c.poles === 1 ? (
           <g>
-            <text x={x + W / 2} y={y + 75.8} fill="#0f172a" fontSize="5.8" fontWeight="950" textAnchor="middle">
+            <text x={x + W / 2} y={y + 75.2} fill="#0f172a" fontSize="6.2" fontWeight="900" textAnchor="middle">
               {shortLabel ? (shortLabel.length <= 4 ? shortLabel : shortLabel.slice(0, 4)) : "DJ"}
             </text>
-            <text x={x + W / 2} y={y + 82} fill="#dc2626" fontSize="5.4" fontWeight="950" textAnchor="middle">
+            <text x={x + W / 2} y={y + 82.2} fill="#dc2626" fontSize="5.6" fontWeight="900" textAnchor="middle">
               {`${c.curve || "C"}${c.current}`}
             </text>
           </g>
         ) : (
           <g>
-            <text x={x + W / 2} y={y + 75.8} fill="#0f172a" fontSize={c.poles === 2 ? "5.6" : "6.5"} fontWeight="900" textAnchor="middle">
+            <text x={x + W / 2} y={y + 75.2} fill="#0f172a" fontSize={c.poles === 2 ? "5.6" : "6.5"} fontWeight="900" textAnchor="middle">
               {isGen ? "DJ GERAL" : (displayLabel ? displayLabel.slice(0, c.poles === 2 ? 10 : 18) : "DISJUNTOR")}
             </text>
-            <text x={x + W / 2} y={y + 82} fill="#dc2626" fontSize={c.poles === 2 ? "5.2" : "5.6"} fontWeight="950" textAnchor="middle">
+            <text x={x + W / 2} y={y + 82.2} fill="#dc2626" fontSize={c.poles === 2 ? "5.2" : "5.6"} fontWeight="950" textAnchor="middle">
               {`${c.current}A/${c.curve || "C"} · ${c.poles}P`}
             </text>
           </g>
@@ -8265,7 +8265,12 @@ export default function PanelGenerator() {
         </g>
 
         {/* Cavidade e Alavanca do DR */}
-        <rect x={x + W / 2 + 1} y={y + 39} width="12" height="28" rx="2" fill="#0f172a" stroke="#475569" strokeWidth="0.5" />
+        <g>
+          <rect x={x + W / 2 + 1} y={y + 39} width="12" height="28" rx="2" fill="#0f172a" stroke="#475569" strokeWidth="0.5" />
+          {/* Marcações IEC I / O gravadas no fundo da cavidade mecânica */}
+          <text x={x + W / 2 + 7} y={y + 44.5} fill="#64748b" fontSize="5.2" textAnchor="middle" fontWeight="900" pointerEvents="none">I</text>
+          <text x={x + W / 2 + 7} y={y + 64} fill="#64748b" fontSize="5.2" textAnchor="middle" fontWeight="900" pointerEvents="none">O</text>
+        </g>
         <rect
           x={x + W / 2 + 2.5}
           y={c.status === "ON" ? y + 41 : y + 51}
@@ -8287,17 +8292,13 @@ export default function PanelGenerator() {
           fill="url(#toggleGlow)"
           className="transition-all duration-150 pointer-events-none"
         />
-        
-        {/* Indicadores I / O */}
-        <text x={x + W / 2 + 7} y={y + 37.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">I</text>
-        <text x={x + W / 2 + 7} y={y + 67.5} fill="#64748b" fontSize="6.2" textAnchor="middle" fontWeight="900">O</text>
 
         {/* Cartão de etiqueta de identificação embutido */}
-        <rect x={x + 2.5} y={y + 69} width={W - 5} height="16" fill="#ffffff" rx="2" stroke="#94a3b8" strokeWidth="0.85" />
-        <text x={x + W / 2} y={y + 75.8} fill="#0f172a" fontSize={c.poles === 2 ? "5.6" : "6.6"} fontWeight="900" textAnchor="middle">
+        <rect x={x + 2.5} y={y + 68} width={W - 5} height="17" fill="#ffffff" rx="2.5" stroke="#94a3b8" strokeWidth="0.85" />
+        <text x={x + W / 2} y={y + 75.2} fill="#0f172a" fontSize={c.poles === 2 ? "5.6" : "6.6"} fontWeight="900" textAnchor="middle">
           {(c.label || "IDR").slice(0, c.poles === 2 ? 10 : 16)}
         </text>
-        <text x={x + W / 2} y={y + 82} fill="#0284c7" fontSize={c.poles === 2 ? "5.0" : "5.6"} fontWeight="950" textAnchor="middle">
+        <text x={x + W / 2} y={y + 82.2} fill="#0284c7" fontSize={c.poles === 2 ? "5.0" : "5.6"} fontWeight="950" textAnchor="middle">
           {c.poles === 2 ? `${c.current}A · 30mA` : `${c.current}A / IΔn 30mA`}
         </text>
 
