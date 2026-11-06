@@ -1,3 +1,4 @@
+import { getCheckoutPrice } from "../lib/stripePrices.js";
 import { assertAccountAvailable } from "../lib/accountAccess.js";
 import type { FastifyInstance } from "fastify";
 import type Stripe from "stripe";
@@ -36,15 +37,6 @@ const getUser = async (id: string) => {
   const user = await prisma.user.findUnique({ where: { id } });
   assertAccountAvailable(user);
   return user;
-};
-const priceFor = (plan: string, cycle: string) => {
-  const prices = STRIPE_PRICES[plan as keyof typeof STRIPE_PRICES] as
-    | Record<string, string>
-    | undefined;
-  const price = prices?.[cycle];
-  if (!price || !/^price_[A-Za-z0-9]+$/.test(price))
-    throw new AppError("Preço não configurado no servidor.", 503);
-  return price;
 };
 const planFromPrice = (price: string) => {
   for (const [plan, cycles] of Object.entries(STRIPE_PRICES)) {
@@ -137,6 +129,7 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
         "A contratação acadêmica exige comprovante aprovado.",
         403,
       );
+    const priceId = await getCheckoutPrice(planCode, cycle);
     const customer = await getOrCreateStripeCustomer(user);
     await prisma.user.update({
       where: { id: user.id },
@@ -147,7 +140,7 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
         mode: "subscription",
         customer,
         client_reference_id: user.id,
-        line_items: [{ price: priceFor(planCode, cycle), quantity: 1 }],
+        line_items: [{ price: priceId, quantity: 1 }],
         metadata: { userId: user.id, planCode, cycle },
         subscription_data: { metadata: { userId: user.id, planCode, cycle } },
         success_url: `${env.FRONTEND_URL}/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,

@@ -559,7 +559,13 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
     };
   });
   app.get("/api/super-admin/audit-logs", admin, async () =>
-    prisma.auditLog.findMany({ orderBy: { timestamp: "desc" }, take: 500 }),
+    (await prisma.auditLog.findMany({ orderBy: { timestamp: "desc" }, take: 500 })).map(log => ({
+      id: log.id, actor_id: log.actorId, actor_name: log.actorName, actor_email: log.actorEmail,
+      actor_role: log.actorRole, action: log.action, target_type: log.targetType,
+      target_id: log.targetId, target_name: log.targetName, details: log.details,
+      metadata: log.metadata, ip_address: log.ipAddress, user_agent: log.userAgent,
+      timestamp: log.timestamp.toISOString(),
+    })),
   );
   const settingNames: Record<string, string> = {
     require_mfa_super_admin: "requireMfaSuperAdmin",

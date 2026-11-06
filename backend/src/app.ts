@@ -140,6 +140,10 @@ export const buildApp = async () => {
       return reply.status(400).send({ message: typedError.issues[0]?.message ?? "Dados inválidos." });
     }
 
+    if (["P2021", "P2022"].includes((error as { code?: string }).code || "")) {
+      app.log.error(error);
+      return reply.status(503).send({ code: "DATABASE_SCHEMA_OUTDATED", message: "Estrutura do banco de dados desatualizada. Aplique as migrations pendentes no servidor." });
+    }
     const status = (error as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) return reply.status(status).send({ message: error instanceof Error ? error.message : "Requisição inválida." });
     app.log.error(error);

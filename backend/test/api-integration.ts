@@ -12,13 +12,25 @@ process.env.STRIPE_WEBHOOK_SECRET = "whsec_integration_fake";
 process.env.JWT_SECRET = "integration-only-secret-minimum-32-characters";
 process.env.FRONTEND_URL = "http://localhost:5173";
 process.env.UPLOAD_DIR = "/tmp/nacif-integration-uploads";
+for (const name of [
+  "ESTUDANTE_MONTHLY",
+  "ELETRICO_MONTHLY",
+  "ELETRICO_ANNUAL",
+  "SOLAR_MONTHLY",
+  "SOLAR_ANNUAL",
+  "COMPLETO_MONTHLY",
+  "COMPLETO_ANNUAL",
+])
+  process.env[`STRIPE_PRICE_${name}`] = `price_test${name.replaceAll("_", "")}`;
 const { buildApp } = await import("../src/app.js");
 const { prisma } = await import("../src/lib/prisma.js");
 const { stripe, STRIPE_PRICES } = await import("../src/lib/stripe.js");
 const { effectivePlanCode, checkServerModuleAccess } = await import(
   "../src/lib/planGovernance.js"
 );
-const { normalizeAccountStatus, assertAccountAvailable } = await import("../src/lib/accountAccess.js");
+const { normalizeAccountStatus, assertAccountAvailable } = await import(
+  "../src/lib/accountAccess.js"
+);
 const app = await buildApp();
 const createdIds: string[] = [];
 const eventIds: string[] = [];
@@ -42,8 +54,19 @@ const eq = (actual: any, expected: any) => {
   assertions++;
 };
 try {
-  for (const [input, expected] of [[null, "active"], [" AtIvA ", "active"], ["SUSPENSO", "suspended"], ["BLOQUEADA", "suspended"], ["INATIVO", "inactive"], ["EXCLUÍDA", "deleted"]]) eq(normalizeAccountStatus(input), expected);
-  assert.throws(() => assertAccountAvailable({ status: "suspenso" }), { statusCode: 403, message: "Sua conta está suspensa. Entre em contato com o administrador." });
+  for (const [input, expected] of [
+    [null, "active"],
+    [" AtIvA ", "active"],
+    ["SUSPENSO", "suspended"],
+    ["BLOQUEADA", "suspended"],
+    ["INATIVO", "inactive"],
+    ["EXCLUÍDA", "deleted"],
+  ])
+    eq(normalizeAccountStatus(input), expected);
+  assert.throws(() => assertAccountAvailable({ status: "suspenso" }), {
+    statusCode: 403,
+    message: "Sua conta está suspensa. Entre em contato com o administrador.",
+  });
   const plans = await call("GET", "/api/subscriptions/plans");
   eq(plans.status, 200);
   eq(plans.body.plans.length, 5);
@@ -448,6 +471,60 @@ try {
       .status,
     404,
   );
+  await prisma.user.update({
+    where: { id: other.id },
+    data: { role: "super_admin" },
+  });
+  const auditId = `audit-integration-${Date.now()}`;
+  await prisma.auditLog.create({
+    data: {
+      id: auditId,
+      actorId: id,
+      actorName: "Actor",
+      actorEmail: email,
+      actorRole: "user",
+      action: "INTEGRATION",
+      targetType: "user",
+      details: "Test",
+    },
+  });
+  try {
+    const logs = await call(
+      "GET",
+      "/api/super-admin/audit-logs",
+      undefined,
+      otherToken,
+    );
+    eq(logs.status, 200);
+    eq(logs.body.find((log: any) => log.id === auditId).actor_name, "Actor");
+    const findAuditLogs = prisma.auditLog.findMany;
+    try {
+      (prisma.auditLog as any).findMany = async () => {
+        throw Object.assign(new Error("Missing table"), { code: "P2021" });
+      };
+      const missingAudit = await call(
+        "GET",
+        "/api/super-admin/audit-logs",
+        undefined,
+        otherToken,
+      );
+      eq(missingAudit.status, 503);
+      eq(missingAudit.body.code, "DATABASE_SCHEMA_OUTDATED");
+      eq(
+        (await call("GET", "/api/super-admin/settings", undefined, otherToken))
+          .status,
+        200,
+      );
+    } finally {
+      (prisma.auditLog as any).findMany = findAuditLogs;
+    }
+  } finally {
+    await prisma.auditLog.delete({ where: { id: auditId } });
+    await prisma.user.update({
+      where: { id: other.id },
+      data: { role: "user" },
+    });
+  }
   const future = Math.floor(Date.now() / 1000) + 86400;
   const subscription: any = {
     id: "sub_integration",
@@ -459,6 +536,33 @@ try {
     metadata: { userId: id },
     items: { data: [{ price: { id: STRIPE_PRICES.completo.monthly } }] },
   };
+  const { COMMERCIAL_PLANS } = await import("../src/lib/planCatalog.js");
+  const validPrice = async (id: string) => {
+    for (const [planCode, cycles] of Object.entries(STRIPE_PRICES))
+      for (const [cycle, configured] of Object.entries(cycles))
+        if (id === configured) {
+          const plan = COMMERCIAL_PLANS.find((p) => p.code === planCode);
+          return {
+            id,
+            active: true,
+            livemode: false,
+            type: "recurring",
+            currency: "brl",
+            unit_amount: Math.round(
+              (cycle === "annual" ? plan.annualPrice : plan.monthlyPrice) * 100,
+            ),
+            recurring: {
+              interval: cycle === "annual" ? "year" : "month",
+              interval_count: 1,
+              usage_type: "licensed",
+            },
+          };
+        }
+    throw Object.assign(new Error("No such price"), {
+      code: "resource_missing",
+    });
+  };
+  (stripe.prices as any).retrieve = validPrice;
   let checkoutInput: any;
   (stripe.customers as any).create = async () => ({ id: "cus_integration" });
   (stripe.customers as any).list = async () => ({ data: [] });
@@ -483,6 +587,69 @@ try {
     ...subscription,
     ...input,
   });
+  const configuredPrice = STRIPE_PRICES.completo.monthly;
+  try {
+    (STRIPE_PRICES.completo as any).monthly = "";
+    const unconfigured = await call(
+      "POST",
+      "/api/subscriptions/create-checkout-session",
+      { planCode: "completo", cycle: "monthly" },
+      token,
+    );
+    eq(unconfigured.status, 503);
+    eq(
+      unconfigured.body.message.includes("STRIPE_PRICE_COMPLETO_MONTHLY"),
+      true,
+    );
+    eq(checkoutInput, undefined);
+  } finally {
+    (STRIPE_PRICES.completo as any).monthly = configuredPrice;
+  }
+  (stripe.prices as any).retrieve = async () => {
+    throw Object.assign(new Error("No such price"), {
+      code: "resource_missing",
+    });
+  };
+  const missingPrice = await call(
+    "POST",
+    "/api/subscriptions/create-checkout-session",
+    { planCode: "completo", cycle: "monthly" },
+    token,
+  );
+  eq(missingPrice.status, 503);
+  eq(missingPrice.body.message.includes("STRIPE_PRICE_COMPLETO_MONTHLY"), true);
+  eq(checkoutInput, undefined);
+  for (const invalid of [
+    { currency: "usd" },
+    { active: false },
+    { livemode: true },
+    { unit_amount: 1 },
+    {
+      recurring: {
+        interval: "year",
+        interval_count: 1,
+        usage_type: "licensed",
+      },
+    },
+  ]) {
+    (stripe.prices as any).retrieve = async (id: string) => ({
+      ...(await validPrice(id)),
+      ...invalid,
+    });
+    eq(
+      (
+        await call(
+          "POST",
+          "/api/subscriptions/create-checkout-session",
+          { planCode: "completo", cycle: "monthly" },
+          token,
+        )
+      ).status,
+      503,
+    );
+    eq(checkoutInput, undefined);
+  }
+  (stripe.prices as any).retrieve = validPrice;
   const checkout = await call(
     "POST",
     "/api/subscriptions/create-checkout-session",

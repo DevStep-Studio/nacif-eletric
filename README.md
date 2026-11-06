@@ -114,3 +114,34 @@ Para corrigir dados antigos no banco selecionado, execute
 Esse SQL normaliza somente os status ativos reconhecidos e não reativa contas
 suspensas, inativas ou excluídas. Publique o backend atualizado e recarregue a API
 com `npm run start:api` antes de fazer login novamente.
+
+### Stripe retorna “No such price”
+
+Configure os sete `STRIPE_PRICE_*` em `backend/.env` com IDs existentes na mesma
+conta e no mesmo ambiente da `STRIPE_SECRET_KEY`. IDs de outra conta, de outro
+ambiente ou valores de exemplo não funcionam. O backend não usa mais IDs fixos
+nem busca preços nas variáveis `VITE_STRIPE_PRICE_*`.
+
+```bash
+npm --prefix backend run stripe:check
+```
+
+Esse diagnóstico consulta os preços sem criar produtos, clientes ou pagamentos.
+Ele verifica se estão ativos, em BRL e com os valores e ciclos do catálogo Nacif.
+Corrija as variáveis indicadas, publique as alterações e recarregue a API com
+`npm run start:api`. Referências: [preços](https://docs.stripe.com/api/prices/retrieve)
+e [ambientes Stripe](https://docs.stripe.com/keys#sandbox-versus-live-mode).
+
+### Erro ao carregar auditoria ou configurações do Super Admin
+
+Execute `npm --prefix backend run db:check` para listar todas as tabelas e colunas
+ausentes em relação ao Prisma. O diagnóstico é somente leitura e não mostra
+registros de usuários nem credenciais.
+
+Erros Prisma de tabela/coluna ausente retornam `DATABASE_SCHEMA_OUTDATED`, sem
+expor SQL ou dados internos. Para reconciliar `audit_logs` e `system_settings`,
+execute no banco da aplicação
+`backend/prisma/migrations/20261105040000_reconcile_admin_tables/migration.sql`.
+O SQL é aditivo e pode ser executado novamente. Se a falha tiver outra causa,
+consulte o log da API: o painel agora identifica a seção que falhou e mantém as
+outras seções carregadas, com aviso persistente e opção de tentar novamente.

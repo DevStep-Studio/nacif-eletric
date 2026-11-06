@@ -43,53 +43,18 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional().default(""),
   OPENAI_MODEL: z.string().default("gpt-5.5"),
   UPLOAD_DIR: z.string().default("./uploads"),
-  STRIPE_SECRET_KEY: z.string().default(""),
-  STRIPE_WEBHOOK_SECRET: z.string().default(""),
+  STRIPE_SECRET_KEY: z.string().trim().default(""),
+  STRIPE_WEBHOOK_SECRET: z.string().trim().default(""),
   STRIPE_PUBLISHABLE_KEY: z
     .string()
     .default(process.env.VITE_STRIPE_PUBLISHABLE_KEY || ""),
-  STRIPE_PRICE_ESTUDANTE_MONTHLY: z
-    .string()
-    .default(
-      process.env.VITE_STRIPE_PRICE_ESTUDANTE_MONTHLY ||
-        "price_1UVAQqJl6h9d8TBMRYFoOdBM",
-    ),
-  STRIPE_PRICE_ELETRICO_MONTHLY: z
-    .string()
-    .default(
-      process.env.VITE_STRIPE_PRICE_ELETRICO_MONTHLY ||
-        "price_1UVAS5Jl6h9d8TBMQLt9F7nB",
-    ),
-  STRIPE_PRICE_ELETRICO_ANNUAL: z
-    .string()
-    .default(
-      process.env.VITE_STRIPE_PRICE_ELETRICO_ANNUAL ||
-        "price_1UVAfiJl6h9d8TBMcF6J01KS",
-    ),
-  STRIPE_PRICE_SOLAR_MONTHLY: z
-    .string()
-    .default(
-      process.env.VITE_STRIPE_PRICE_SOLAR_MONTHLY ||
-        "price_1UVAX2Jl6h9d8TBMkWZsDn0s",
-    ),
-  STRIPE_PRICE_SOLAR_ANNUAL: z
-    .string()
-    .default(
-      process.env.VITE_STRIPE_PRICE_SOLAR_ANNUAL ||
-        "price_1UVAgGJl6h9d8TBMmK3sEsRZ",
-    ),
-  STRIPE_PRICE_COMPLETO_MONTHLY: z
-    .string()
-    .default(
-      process.env.VITE_STRIPE_PRICE_COMPLETO_MONTHLY ||
-        "price_1UVAYaJl6h9d8TBMc8YTZsHp",
-    ),
-  STRIPE_PRICE_COMPLETO_ANNUAL: z
-    .string()
-    .default(
-      process.env.VITE_STRIPE_PRICE_COMPLETO_ANNUAL ||
-        "price_1UVAgoJl6h9d8TBMubc39FAP",
-    ),
+  STRIPE_PRICE_ESTUDANTE_MONTHLY: z.string().trim().default(""),
+  STRIPE_PRICE_ELETRICO_MONTHLY: z.string().trim().default(""),
+  STRIPE_PRICE_ELETRICO_ANNUAL: z.string().trim().default(""),
+  STRIPE_PRICE_SOLAR_MONTHLY: z.string().trim().default(""),
+  STRIPE_PRICE_SOLAR_ANNUAL: z.string().trim().default(""),
+  STRIPE_PRICE_COMPLETO_MONTHLY: z.string().trim().default(""),
+  STRIPE_PRICE_COMPLETO_ANNUAL: z.string().trim().default(""),
 });
 
 export const env = envSchema.parse(process.env);

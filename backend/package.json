@@ -10,7 +10,9 @@
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
-    "test:integration": "tsx test/api-integration.ts"
+    "test:integration": "tsx test/api-integration.ts",
+    "stripe:check": "tsx scripts/check-stripe.ts",
+    "db:check": "tsx scripts/check-schema.ts"
   },
   "keywords": [],
   "author": "",
