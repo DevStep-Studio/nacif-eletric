@@ -75,6 +75,8 @@ try {
     message: "Servidor indisponível",
     status: 503,
   });
+  globalThis.fetch = async () => Response.json({ message: "Route GET:/api/subscriptions/plans not found" }, { status: 404 });
+  await assert.rejects(() => backend.subscriptions.getPlans(), { message: "O backend publicado não possui a rota de planos. Atualize o backend e reinicie nacif-electric-api no servidor.", status: 404 });
   console.log(
     "PASS: API client uses HTTP, JWT, remote plans, server checkout and propagated errors.",
   );

@@ -479,6 +479,9 @@ export const request = async (path, options = {}) => {
   const data = await readResponse(response);
 
   if (!response.ok) {
+    if (response.status === 404 && path === "/api/subscriptions/plans") {
+      throw createError("O backend publicado não possui a rota de planos. Atualize o backend e reinicie nacif-electric-api no servidor.", 404);
+    }
     throw createError(data?.message || data?.error || "Falha na comunicação com o servidor.", response.status);
   }
 

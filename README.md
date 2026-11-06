@@ -81,3 +81,23 @@ DATABASE_URL=mysql://usuario:senha@localhost:3306/nacif_test npm --prefix backen
 npm run build --ignore-scripts
 npm run preview
 ```
+
+### Backend publicado responde “Route GET:/api/subscriptions/plans not found”
+
+Essa rota está registrada no backend atual e não depende do banco ou da Stripe.
+Um `/api/health` com HTTP 200, acompanhado de 404 em `/api/subscriptions/plans`,
+indica uma instância antiga ou outro checkout sendo servido. No checkout do
+servidor de produção, publique o código atual e recarregue o processo:
+
+```bash
+git pull --ff-only
+npm run start:api
+curl --fail http://127.0.0.1:3001/api/subscriptions/plans
+curl --fail https://nacifenergy.com.br/api/subscriptions/plans
+```
+
+O comando `start:api` instala as dependências do backend, gera o Prisma Client e
+recarrega o PM2 usando `ecosystem.config.cjs`. Agora verifica também a rota de planos
+e retorna erro se a instância continuar desatualizada. Compilar apenas o frontend
+com `--ignore-scripts` não recarrega o backend. Se apenas o endereço público falhar,
+confira se o proxy de `/api` aponta para a mesma porta/processo testado localmente.
