@@ -108,21 +108,29 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       },
     });
 
-    await createNotificationsForUsers([user.id], {
-      title: "Central de notificações ativa",
-      description: "Alertas de projeto, conformidade NBR e avisos administrativos aparecerão aqui.",
-      category: "Sistema",
-      tone: "info",
-      href: "/settings",
-    });
+    // A conta já foi criada; notificações opcionais não devem impedir o login.
+    try {
+      await createNotificationsForUsers([user.id], {
+        title: "Central de notificações ativa",
+        description: "Alertas de projeto, conformidade NBR e avisos administrativos aparecerão aqui.",
+        category: "Sistema",
+        tone: "info",
+        href: "/settings",
+      });
 
-    await createNotificationsForUsers([user.id], {
-      title: "Monitor NBR 5410 configurado",
-      description: "O sistema vai destacar circuitos com queda de tensão, DR, DPS ou balanceamento pendente.",
-      category: "Conformidade",
-      tone: "warning",
-      href: "/circuit-editor",
-    });
+      await createNotificationsForUsers([user.id], {
+        title: "Monitor NBR 5410 configurado",
+        description: "O sistema vai destacar circuitos com queda de tensão, DR, DPS ou balanceamento pendente.",
+        category: "Conformidade",
+        tone: "warning",
+        href: "/circuit-editor",
+      });
+    } catch (error) {
+      request.log.warn(
+        { err: error, userId: user.id },
+        "Falha ao criar notificações de boas-vindas após cadastro concluído.",
+      );
+    }
 
     return {
       access_token: signAccessToken(app, user),

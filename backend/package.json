@@ -10,6 +10,7 @@
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
+    "test:auth-register": "tsx --test test/auth-register.ts",
     "test:integration": "tsx test/api-integration.ts",
     "stripe:check": "tsx scripts/check-stripe.ts",
     "db:check": "tsx scripts/check-schema.ts"
