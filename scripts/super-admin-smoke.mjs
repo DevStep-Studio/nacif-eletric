@@ -14,6 +14,7 @@ const ianSuperAdmin = { id: "sa_ian", full_name: "Ian Mello", email: "ian.mellof
 const wellingtonSuperAdmin = { id: "sa_well", full_name: "Wellington Alfredo", email: "wellingtonalfredo550@gmail.com" };
 const comercialSuperAdmin = { id: "sa_comercial", full_name: "Comercial Nacif Solutions", email: "comercial@nacifsolutions.com.br" };
 const gabrielRezendeSuperAdmin = { id: "sa_gabriel_rezende", full_name: "Gabriel Rezende", email: "gabrielderezende13@gmail.com" };
+const testeGabrielSuperAdmin = { id: "sa_teste_gabriel", full_name: "Gabriel Teste", email: "testegabriel@gmail.com" };
 
 assert.equal(isSuperAdmin(superAdminUser), true, "Super Admin deve ser reconhecido");
 assert.equal(isSuperAdmin(grcSuperAdmin), true, "grc22.09@hotmail.com deve ser reconhecido como Super Admin");
@@ -21,6 +22,7 @@ assert.equal(isSuperAdmin(ianSuperAdmin), true, "ian.mellofla@gmail.com deve ser
 assert.equal(isSuperAdmin(wellingtonSuperAdmin), true, "wellingtonalfredo550@gmail.com deve ser reconhecido como Super Admin");
 assert.equal(isSuperAdmin(comercialSuperAdmin), true, "comercial@nacifsolutions.com.br deve ser reconhecido como Super Admin");
 assert.equal(isSuperAdmin(gabrielRezendeSuperAdmin), true, "gabrielderezende13@gmail.com deve ser reconhecido como Super Admin");
+assert.equal(isSuperAdmin(testeGabrielSuperAdmin), true, "testegabriel@gmail.com deve ser reconhecido como Super Admin");
 assert.equal(isSuperAdmin(regularAdminUser), false, "Admin regular NÃO é Super Admin");
 assert.equal(isSuperAdmin(standardUser), false, "Usuário padrão NÃO é Super Admin");
 
@@ -58,8 +60,8 @@ const mockLog = recordAuditEvent({
 assert.ok(mockLog.id, "Log possui ID");
 assert.equal(mockLog.actor_name, "Administrador Nacif");
 assert.equal(mockLog.action, "USER_CREATED");
-// Garantir que campos confidenciais como senhas foram removidos da metadata
-assert.equal(mockLog.metadata.password, undefined, "Metadata do log higienizada contra vazamento de senhas");
+// Garantir que campos confidenciais como senhas foram redigidos da metadata
+assert.equal(mockLog.metadata.password, "[CONFIDENCIAL / REDACTED]", "Metadata do log higienizada contra vazamento de senhas");
 
 const filtered = filterAuditLogs([mockLog], { action: "USER_CREATED", search: "Engenheiro" });
 assert.equal(filtered.length, 1, "Filtro de auditoria por ação e texto funciona");

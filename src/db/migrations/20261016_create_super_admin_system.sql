@@ -87,5 +87,6 @@ WHERE email IN (
     'ian.mellofla@gmail.com',
     'wellingtonalfredo550@gmail.com',
     'comercial@nacifsolutions.com.br',
-    'gabrielderezende13@gmail.com'
+    'gabrielderezende13@gmail.com',
+    'testegabriel@gmail.com'
 );
