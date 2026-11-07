@@ -6912,7 +6912,7 @@ export default function PanelGenerator() {
         circuits: deleteOutcome.nextCircuits,
       };
       setProject(updatedProject);
-      backend.projects.update(project.id, { circuits: deleteOutcome.nextCircuits }).catch((error) => {
+      backend.entities.Project.update(project.id, { circuits: deleteOutcome.nextCircuits }).catch((error) => {
         console.error("Erro ao sincronizar circuitos após exclusão em massa:", error);
       });
     }

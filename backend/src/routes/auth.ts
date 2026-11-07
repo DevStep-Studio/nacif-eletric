@@ -58,7 +58,10 @@ const updateMeSchema = z.object({
   crea: z.string().trim().optional(),
   phone: z.string().trim().optional(),
   avatar_url: z.string().trim().optional(),
-  plan: z.enum(["gratuito", "profissional", "engenharia", "estudante", "eletrico", "solar", "completo"]).optional(),
+  profile_photo_url: z.string().trim().optional(),
+  photo_url: z.string().trim().optional(),
+  theme: z.string().trim().optional(),
+  plan: z.enum(["free", "gratuito", "profissional", "engenharia", "estudante", "eletrico", "solar", "completo"]).optional(),
   current_password: z.string().optional(),
   new_password: z.string().optional(),
   preferences: z.record(z.string(), z.unknown()).optional(),
@@ -68,7 +71,16 @@ const updateMeSchema = z.object({
   onboarding_project_type: z.string().optional(),
   onboarding_mode: z.string().optional(),
   guided_mode: z.boolean().optional(),
-});
+  terms_accepted: z.boolean().optional(),
+  terms_version: z.string().optional(),
+  terms_accepted_at: z.string().optional(),
+  academic_status: z.string().optional(),
+  academic_institution: z.string().optional(),
+  academic_course: z.string().optional(),
+  academic_document_name: z.string().optional(),
+  academic_document_url: z.string().optional(),
+  academic_submitted_at: z.string().optional(),
+}).passthrough();
 
 const resetRequestSchema = z.object({
   email: emailSchema,
@@ -149,6 +161,11 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
 
     assertAccountAvailable(user);
 
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastAccess: new Date() },
+    }).catch(() => {});
+
     return {
       access_token: signAccessToken(app, user),
       user: serializeUser(user),
@@ -187,6 +204,32 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
 
     if (data.plan) throw new AppError("Planos são gerenciados pela assinatura Stripe.", 403);
 
+    const existingUser = await prisma.user.findUniqueOrThrow({ where: { id: request.authUser.id } });
+    const currentPermissions = (existingUser.customPermissions as Record<string, unknown>) || {};
+    const nextPermissions: Record<string, unknown> = { ...currentPermissions };
+
+    if (data.preferences !== undefined) nextPermissions.preferences = data.preferences;
+    if (data.theme !== undefined) nextPermissions.theme = data.theme;
+    if (data.onboarding_completed !== undefined) nextPermissions.onboarding_completed = data.onboarding_completed;
+    if (data.onboarding_profile !== undefined) nextPermissions.onboarding_profile = data.onboarding_profile;
+    if (data.onboarding_goal !== undefined) nextPermissions.onboarding_goal = data.onboarding_goal;
+    if (data.onboarding_project_type !== undefined) nextPermissions.onboarding_project_type = data.onboarding_project_type;
+    if (data.onboarding_mode !== undefined) nextPermissions.onboarding_mode = data.onboarding_mode;
+    if (data.guided_mode !== undefined) nextPermissions.guided_mode = data.guided_mode;
+    if (data.terms_accepted !== undefined) nextPermissions.terms_accepted = data.terms_accepted;
+    if (data.terms_version !== undefined) nextPermissions.terms_version = data.terms_version;
+    if (data.terms_accepted_at !== undefined) nextPermissions.terms_accepted_at = data.terms_accepted_at;
+    if (data.academic_institution !== undefined) nextPermissions.academicInstitution = data.academic_institution;
+    if (data.academic_course !== undefined) nextPermissions.academicCourse = data.academic_course;
+    if (data.academic_document_name !== undefined) nextPermissions.academicDocumentName = data.academic_document_name;
+    if (data.academic_document_url !== undefined) nextPermissions.academicDocumentUrl = data.academic_document_url;
+    if (data.academic_submitted_at !== undefined) nextPermissions.academicSubmittedAt = data.academic_submitted_at;
+    if (data.academic_status === "pending_review" || data.academic_status === "not_submitted") {
+      nextPermissions.academicStatus = data.academic_status;
+    }
+
+    const resolvedAvatarUrl = data.avatar_url ?? data.profile_photo_url ?? data.photo_url;
+
     const user = await prisma.user.update({
       where: { id: request.authUser.id },
       data: {
@@ -195,7 +238,8 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         company: data.company,
         crea: data.crea,
         phone: data.phone,
-        avatarUrl: data.avatar_url,
+        avatarUrl: resolvedAvatarUrl,
+        customPermissions: nextPermissions as any,
         ...(nextPasswordHash ? { passwordHash: nextPasswordHash } : {}),
       },
     });

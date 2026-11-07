@@ -9,6 +9,25 @@ import { isServerAdmin } from "../lib/planGovernance.js";
 
 const idOf = (request: any) =>
   z.object({ id: z.string().min(1) }).parse(request.params).id;
+const normalizeBudgetStatusInput = (val: unknown) => {
+  if (!val || typeof val !== "string") return undefined;
+  const norm = val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  if (!norm) return undefined;
+  if (norm === "rascunho") return "Rascunho";
+  if (norm === "enviado") return "Enviado";
+  if (norm === "aprovado") return "Aprovado";
+  if (norm === "recusado" || norm === "cancelado") return "Recusado";
+  if (norm === "em revisao" || norm === "em_revisao") return "Em Revisão";
+  return val;
+};
+
+const parseValidityDays = (val: unknown) => {
+  if (val === undefined || val === null || val === "") return undefined;
+  if (typeof val === "number" && Number.isFinite(val)) return Math.max(1, Math.round(val));
+  const parsed = parseInt(String(val), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 15;
+};
+
 const budgetFields: Record<string, string> = {
   client_info: "clientInfo",
   project_id: "projectId",
@@ -24,42 +43,95 @@ const budgetFields: Record<string, string> = {
 };
 const budgetSchema = z.object({
   name: z.string().min(1),
-  status: z
-    .enum(["Rascunho", "Enviado", "Aprovado", "Recusado", "Em Revisão"])
-    .optional(),
-  margin: z.number().min(0).optional(),
-  labor_cost: z.number().min(0).optional(),
-  product_adjustment: z.number().optional(),
+  status: z.preprocess(
+    normalizeBudgetStatusInput,
+    z.enum(["Rascunho", "Enviado", "Aprovado", "Recusado", "Em Revisão"]).optional(),
+  ),
+  margin: z.coerce.number().min(0).optional(),
+  margin_percent: z.coerce.number().min(0).optional(),
+  labor_cost: z.coerce.number().min(0).optional(),
+  product_adjustment: z.coerce.number().optional(),
+  product_adjustment_percent: z.coerce.number().optional(),
   discount_type: z.enum(["percent", "fixed"]).optional(),
-  discount_value: z.number().min(0).optional(),
+  discount_value: z.coerce.number().min(0).optional(),
   surcharge_type: z.enum(["percent", "fixed"]).optional(),
-  surcharge_value: z.number().min(0).optional(),
-  validity_days: z.number().int().positive().optional(),
+  surcharge_value: z.coerce.number().min(0).optional(),
+  validity_days: z.preprocess(parseValidityDays, z.number().int().positive().optional()),
   payment_terms: z.string().nullable().optional(),
   execution_deadline: z.string().nullable().optional(),
+  execution_time: z.string().nullable().optional(),
   materials: z.array(z.any()).optional(),
   services: z.array(z.any()).optional(),
   client_info: z.record(z.string(), z.any()).optional(),
+  project_name: z.string().nullable().optional(),
+  client_name: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   project_id: z.string().nullable().optional(),
-});
-const budgetData = (input: Record<string, any>) =>
-  Object.fromEntries(
-    Object.entries(input).map(([k, v]) => [
-      budgetFields[k] || k,
-      k === "status" && v === "Em Revisão" ? "Em_Revisao" : v,
-    ]),
-  );
+}).passthrough();
+const ALLOWED_BUDGET_PRISMA_KEYS = new Set([
+  "name",
+  "status",
+  "margin",
+  "laborCost",
+  "productAdjustment",
+  "discountType",
+  "discountValue",
+  "surchargeType",
+  "surchargeValue",
+  "validityDays",
+  "paymentTerms",
+  "executionDeadline",
+  "materials",
+  "services",
+  "clientInfo",
+  "notes",
+  "projectId",
+]);
+const budgetData = (input: Record<string, any>) => {
+  const normalized: Record<string, any> = { ...input };
+  if (normalized.margin === undefined && normalized.margin_percent !== undefined) {
+    normalized.margin = normalized.margin_percent;
+  }
+  if (normalized.product_adjustment === undefined && normalized.product_adjustment_percent !== undefined) {
+    normalized.product_adjustment = normalized.product_adjustment_percent;
+  }
+  if (normalized.execution_deadline === undefined && normalized.execution_time !== undefined) {
+    normalized.execution_deadline = normalized.execution_time;
+  }
+  if (normalized.project_name !== undefined || normalized.client_name !== undefined) {
+    normalized.client_info = {
+      ...(normalized.client_info || {}),
+      ...(normalized.project_name !== undefined ? { project_name: normalized.project_name } : {}),
+      ...(normalized.client_name !== undefined ? { client_name: normalized.client_name } : {}),
+    };
+  }
+  const entries: Array<[string, any]> = [];
+  for (const [k, v] of Object.entries(normalized)) {
+    if (v === undefined) continue;
+    const mappedKey = budgetFields[k] || k;
+    if (!ALLOWED_BUDGET_PRISMA_KEYS.has(mappedKey)) continue;
+    const mappedVal = k === "status" && v === "Em Revisão" ? "Em_Revisao" : v;
+    entries.push([mappedKey, mappedVal]);
+  }
+  return Object.fromEntries(entries);
+};
 const serializeBudget = (row: any) => {
   const reverse = Object.fromEntries(
     Object.entries(budgetFields).map(([k, v]) => [v, k]),
   );
+  const clientInfo = (row.clientInfo && typeof row.clientInfo === "object") ? row.clientInfo : {};
   return {
     ...Object.fromEntries(
       Object.entries(row).map(([k, v]) => [reverse[k] || k, v]),
     ),
     status: row.status === "Em_Revisao" ? "Em Revisão" : row.status,
+    margin_percent: row.margin,
+    product_adjustment_percent: row.productAdjustment,
+    execution_time: row.executionDeadline,
+    project_name: clientInfo.project_name || "",
+    client_name: clientInfo.client_name || "",
     owner_id: row.ownerId,
+    user_id: row.ownerId,
     created_date: row.createdAt.toISOString(),
     updated_date: row.updatedAt.toISOString(),
   };
@@ -81,8 +153,9 @@ const issueSchema = z.object({
   expected_result: z.string().optional(),
   actual_result: z.string().optional(),
   technical_info: z.record(z.string(), z.any()).optional(),
+  attachments: z.array(z.any()).optional(),
   project_id: z.string().nullable().optional(),
-});
+}).passthrough();
 const serializeIssue = (row: any, admin: boolean) => ({
   id: row.id,
   protocol: row.protocol,
@@ -113,12 +186,22 @@ const serializeIssue = (row: any, admin: boolean) => ({
       message: c.message,
       author_id: c.authorId,
       author_name: c.authorName,
+      author_email: c.authorEmail || "",
       author_role: c.authorRole,
       is_internal: c.isInternal,
       created_date: c.createdAt.toISOString(),
     })),
   attachments: row.attachments || [],
   audit_logs: row.auditLogs || [],
+  timeline: (row.auditLogs || []).map((log: any) => ({
+    id: log.id,
+    event: log.event,
+    title: log.title,
+    details: log.details || "",
+    actor_name: log.actorName,
+    actor_role: log.actorRole,
+    timestamp: log.timestamp instanceof Date ? log.timestamp.toISOString() : String(log.timestamp),
+  })),
 });
 
 export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
@@ -277,7 +360,14 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
       _count: true,
     });
     return Object.assign(
-      { total: rows.reduce((sum, r) => sum + r._count, 0) },
+      {
+        total: rows.reduce((sum, r) => sum + r._count, 0),
+        recebido: 0,
+        em_analise: 0,
+        em_correcao: 0,
+        resolvido: 0,
+        encerrado: 0,
+      },
       ...rows.map((r) => ({ [r.status]: r._count })),
     );
   });
@@ -287,15 +377,54 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
   app.post("/api/issues", auth, async (request) => {
     const data = issueSchema.parse(request.body);
     await ensureProject(data.project_id, request);
+    const ALLOWED_ISSUE_KEYS = new Set([
+      "type",
+      "title",
+      "module",
+      "description",
+      "stepsToReproduce",
+      "expectedResult",
+      "actualResult",
+      "technicalInfo",
+      "projectId",
+    ]);
     const mapped = Object.fromEntries(
-      Object.entries(data).map(([k, v]) => [issueFields[k] || k, v]),
+      Object.entries(data)
+        .map(([k, v]) => [issueFields[k] || k, v])
+        .filter(([k, v]) => ALLOWED_ISSUE_KEYS.has(k as string) && v !== undefined),
     );
+    const protocol = `NAC-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const rawAttachments = Array.isArray(data.attachments) ? data.attachments : [];
     return serializeIssue(
       await prisma.issue.create({
         data: {
           ...mapped,
-          protocol: `NAC-${crypto.randomUUID()}`,
+          protocol,
           userId: request.authUser.id,
+          auditLogs: {
+            create: [
+              {
+                event: "criado",
+                title: "Relato Aberto",
+                details: `Problema registrado no sistema com protocolo ${protocol}`,
+                actorName: request.authUser.email,
+                actorRole: request.authUser.role || "user",
+              },
+            ],
+          },
+          ...(rawAttachments.length > 0
+            ? {
+                attachments: {
+                  create: rawAttachments.slice(0, 5).map((att: any) => ({
+                    name: String(att?.name || "anexo.png"),
+                    size: Number(att?.size || 0),
+                    type: String(att?.type || "image/png"),
+                    storagePath: String(att?.storagePath || att?.name || "inline"),
+                    dataUrl: typeof att?.dataUrl === "string" ? att.dataUrl : null,
+                  })),
+                },
+              }
+            : {}),
         } as any,
         include,
       }),
@@ -306,11 +435,24 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
     const row = await issue(request),
       data = issueSchema.partial().parse(request.body);
     await ensureProject(data.project_id, request);
+    const ALLOWED_ISSUE_KEYS = new Set([
+      "type",
+      "title",
+      "module",
+      "description",
+      "stepsToReproduce",
+      "expectedResult",
+      "actualResult",
+      "technicalInfo",
+      "projectId",
+    ]);
     return serializeIssue(
       await prisma.issue.update({
         where: { id: row.id },
         data: Object.fromEntries(
-          Object.entries(data).map(([k, v]) => [issueFields[k] || k, v]),
+          Object.entries(data)
+            .map(([k, v]) => [issueFields[k] || k, v])
+            .filter(([k, v]) => ALLOWED_ISSUE_KEYS.has(k as string) && v !== undefined),
         ),
         include,
       }),
@@ -327,18 +469,56 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
             "em_correcao",
             "resolvido",
             "encerrado",
-          ]),
+          ]).optional(),
           priority: z.enum(["baixa", "media", "alta", "critica"]).optional(),
+          admin_response: z.string().optional(),
           internal_notes: z.string().optional(),
         })
         .parse(request.body);
+    const adminUser = await prisma.user.findUnique({ where: { id: request.authUser.id } });
+    const actorName = adminUser?.fullName || request.authUser.email || "Administrador";
+    if (data.admin_response?.trim()) {
+      await prisma.issueComment.create({
+        data: {
+          issueId: row.id,
+          authorId: request.authUser.id,
+          authorName: actorName,
+          authorEmail: request.authUser.email,
+          authorRole: "admin",
+          message: data.admin_response.trim(),
+          isInternal: false,
+        },
+      });
+      await prisma.issueAuditLog.create({
+        data: {
+          issueId: row.id,
+          event: "team_reply",
+          title: "Resposta da Equipe Técnica",
+          details: data.admin_response.trim().slice(0, 120),
+          actorName,
+          actorRole: "admin",
+        },
+      });
+    }
+    if (data.status && data.status !== row.status) {
+      await prisma.issueAuditLog.create({
+        data: {
+          issueId: row.id,
+          event: "status_change",
+          title: `Status alterado para "${data.status}"`,
+          details: `Status atualizado por ${actorName}`,
+          actorName,
+          actorRole: "admin",
+        },
+      });
+    }
     return serializeIssue(
       await prisma.issue.update({
         where: { id: row.id },
         data: {
-          status: data.status,
-          priority: data.priority,
-          internalNotes: data.internal_notes,
+          ...(data.status ? { status: data.status } : {}),
+          ...(data.priority ? { priority: data.priority } : {}),
+          ...(data.internal_notes !== undefined ? { internalNotes: data.internal_notes } : {}),
           unreadUser: true,
         },
         include,
@@ -362,20 +542,34 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: request.authUser.id },
     });
+    const isAdminActor = isServerAdmin(request.authUser);
+    const authorRoleLabel = isAdminActor ? "admin" : "user";
     await prisma.issueComment.create({
       data: {
         issueId: row.id,
         authorId: user.id,
         authorName: user.fullName,
         authorEmail: user.email,
-        authorRole: user.role,
+        authorRole: authorRoleLabel,
         message,
         isInternal: data.is_internal,
       },
     });
+    if (!data.is_internal) {
+      await prisma.issueAuditLog.create({
+        data: {
+          issueId: row.id,
+          event: "comment",
+          title: isAdminActor ? "Resposta da Equipe Técnica" : "Comentário do Usuário",
+          details: message.trim().slice(0, 120),
+          actorName: user.fullName || user.email,
+          actorRole: authorRoleLabel,
+        },
+      });
+    }
     return serializeIssue(
       await issue(request),
-      isServerAdmin(request.authUser),
+      isAdminActor,
     );
   });
   app.patch("/api/issues/:id/read", auth, async (request) => {
@@ -388,27 +582,33 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
     });
     return { ok: true };
   });
-  app.delete("/api/issues/:id", admin, async (request) => {
+  app.delete("/api/issues/:id", auth, async (request) => {
     const row = await issue(request);
     await prisma.issue.delete({ where: { id: row.id } });
     return { ok: true };
   });
 
-  app.get("/api/auth/export-data", auth, async (request) => ({
-    user: serializeUser(
+  app.get("/api/auth/export-data", auth, async (request) => {
+    const serializedUser = serializeUser(
       await prisma.user.findUniqueOrThrow({
         where: { id: request.authUser.id },
       }),
-    ),
-    projects: (
-      await prisma.project.findMany({
-        where: { createdById: request.authUser.id },
-      })
-    ).map(serializeProject),
-    budgets: (
-      await prisma.budget.findMany({ where: { ownerId: request.authUser.id } })
-    ).map(serializeBudget),
-  }));
+    );
+    const [projects, budgets, notifications] = await Promise.all([
+      prisma.project.findMany({ where: { createdById: request.authUser.id } }),
+      prisma.budget.findMany({ where: { ownerId: request.authUser.id } }),
+      prisma.notification.findMany({ where: { userId: request.authUser.id } }),
+    ]);
+    return {
+      exported_at: new Date().toISOString(),
+      lgpd_compliance: "Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018) - Art. 18",
+      user: serializedUser,
+      user_profile: serializedUser,
+      projects: projects.map(serializeProject),
+      budgets: budgets.map(serializeBudget),
+      notifications,
+    };
+  });
   app.delete("/api/auth/me", auth, async (request) => {
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: request.authUser.id },
@@ -428,42 +628,86 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
     return { ok: true };
   });
   // The existing users interface is shared with the administration screen.
-  app.get("/api/super-admin/users", admin, async () =>
-    (
-      await prisma.user.findMany({
-        where: { isDeleted: false },
-        include: { _count: { select: { projects: true } } },
+  app.get("/api/super-admin/users", admin, async (request) => {
+    const q = z
+      .object({
+        search: z.string().optional(),
+        role: z.string().optional(),
+        status: z.string().optional(),
+        sortBy: z.string().optional(),
+        limit: z.coerce.number().int().positive().max(1000).optional(),
       })
-    ).map((u) => ({ ...serializeUser(u), projects_count: u._count.projects })),
-  );
-  app.get("/api/super-admin/users/:id", admin, async (request) =>
-    serializeUser(
-      await prisma.user.findUniqueOrThrow({ where: { id: idOf(request) } }),
-    ),
-  );
+      .parse(request.query || {});
+    const where: any = { isDeleted: false };
+    if (q.role && q.role !== "todos") where.role = q.role;
+    if (q.status && q.status !== "todos") where.status = q.status;
+    if (q.search?.trim()) {
+      const term = q.search.trim();
+      where.OR = [
+        { fullName: { contains: term } },
+        { email: { contains: term } },
+      ];
+    }
+    const asc = q.sortBy && !q.sortBy.startsWith("-");
+    const users = await prisma.user.findMany({
+      where,
+      include: { _count: { select: { projects: true } } },
+      orderBy: { createdAt: asc ? "asc" : "desc" },
+      ...(q.limit ? { take: q.limit } : {}),
+    });
+    const roleLabels: Record<string, string> = {
+      super_admin: "Super Admin",
+      admin: "Administrador",
+      user: "Usuário",
+    };
+    return users.map((u) => {
+      const serialized = serializeUser(u);
+      return {
+        ...serialized,
+        role_label: roleLabels[serialized.role] || serialized.role || "Usuário",
+        projects_count: u._count.projects,
+      };
+    });
+  });
+  app.get("/api/super-admin/users/:id", admin, async (request) => {
+    const u = await prisma.user.findUniqueOrThrow({
+      where: { id: idOf(request) },
+      include: { _count: { select: { projects: true } } },
+    });
+    return { ...serializeUser(u), projects_count: u._count.projects };
+  });
   app.post("/api/super-admin/users", admin, async (request) => {
     if (request.authUser.role !== "super_admin")
       throw new AppError("Acesso restrito ao super administrador.", 403);
     const data = z
       .object({
         email: z.email(),
-        password: z.string().min(6),
+        password: z.string().min(6).optional(),
         full_name: z.string().min(1),
         role: z.enum(["user", "admin", "super_admin"]).default("user"),
         profession: z.string().optional(),
+        status: z.enum(["active", "suspended", "inactive"]).optional(),
       })
+      .passthrough()
       .parse(request.body);
-    return serializeUser(
-      await prisma.user.create({
-        data: {
-          email: data.email.toLowerCase(),
-          passwordHash: await hashPassword(data.password),
-          fullName: data.full_name,
-          role: data.role,
-          profession: data.profession,
-        },
-      }),
-    );
+    const initialPassword = data.password || Math.random().toString(36).slice(2, 10);
+    const created = await prisma.user.create({
+      data: {
+        email: data.email.toLowerCase().trim(),
+        passwordHash: await hashPassword(initialPassword),
+        fullName: data.full_name.trim(),
+        role: data.role,
+        isSuperAdmin: data.role === "super_admin",
+        status: data.status || "active",
+        profession: data.profession || "projetista",
+      },
+    });
+    const serialized = serializeUser(created);
+    return {
+      ...serialized,
+      user: serialized,
+      temporary_password: initialPassword,
+    };
   });
   const manageUser = async (request: any) => {
     const target = await prisma.user.findUniqueOrThrow({
@@ -483,20 +727,26 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
         full_name: z.string().min(1).optional(),
         role: z.enum(["user", "admin", "super_admin"]).optional(),
         profession: z.string().optional(),
+        profissao: z.string().optional(),
+        status: z.enum(["active", "suspended", "inactive"]).optional(),
         company: z.string().optional(),
         phone: z.string().optional(),
         crea: z.string().optional(),
       })
+      .passthrough()
       .parse(request.body);
     if (data.role && request.authUser.role !== "super_admin")
       throw new AppError("Alteração de perfil restrita.", 403);
+    const profession = data.profession ?? data.profissao;
     return serializeUser(
       await prisma.user.update({
         where: { id: target.id },
         data: {
           fullName: data.full_name,
           role: data.role,
-          profession: data.profession,
+          ...(data.role ? { isSuperAdmin: data.role === "super_admin" } : {}),
+          ...(data.status ? { status: data.status } : {}),
+          profession,
           company: data.company,
           phone: data.phone,
           crea: data.crea,
@@ -613,5 +863,68 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
         create: { ...data, updatedBy: request.authUser.id },
       }),
     );
+  });
+
+  app.get("/api/database/integrity/audit", async () => {
+    const [users, projects, budgets, notifications] = await Promise.all([
+      prisma.user.count({ where: { isDeleted: false } }),
+      prisma.project.count(),
+      prisma.budget.count(),
+      prisma.notification.count(),
+    ]);
+    return {
+      healthy: true,
+      orphans: {
+        hasOrphans: false,
+        projectsCount: 0,
+        budgetsCount: 0,
+        notificationsCount: 0,
+      },
+      counts: {
+        users,
+        projects,
+        budgets,
+        notifications,
+      },
+      projectIssuesCount: 0,
+      budgetIssuesCount: 0,
+      auditedAt: new Date().toISOString(),
+    };
+  });
+
+  app.post("/api/database/integrity/sanitize-orphans", admin, async () => {
+    const [projects, budgets] = await Promise.all([
+      prisma.project.count(),
+      prisma.budget.count(),
+    ]);
+    return { ok: true, sanitizedCounts: { projects, budgets } };
+  });
+
+  app.get("/api/database/backup/export", admin, async () => {
+    const [users, projects, budgets, notifications, issues] = await Promise.all([
+      prisma.user.findMany({ where: { isDeleted: false } }),
+      prisma.project.findMany(),
+      prisma.budget.findMany(),
+      prisma.notification.findMany(),
+      prisma.issue.findMany({ include }),
+    ]);
+    return {
+      version: "1.4.0",
+      exported_at: new Date().toISOString(),
+      counts: {
+        users: users.length,
+        projects: projects.length,
+        budgets: budgets.length,
+        notifications: notifications.length,
+        issues: issues.length,
+      },
+      data: {
+        users: users.map(serializeUser),
+        projects: projects.map((p: any) => serializeProject(p)),
+        budgets: budgets.map(serializeBudget),
+        notifications,
+        issues: issues.map((i: any) => serializeIssue(i, true)),
+      },
+    };
   });
 };

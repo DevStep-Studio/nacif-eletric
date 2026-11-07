@@ -12,6 +12,18 @@ import { AppError } from "../lib/errors.js";
 import { serializeProject } from "../lib/serializers.js";
 import { createNotification } from "../lib/notifications.js";
 
+const normalizeProjectStatusInput = (val: unknown) => {
+  if (!val || typeof val !== "string") return undefined;
+  const norm = val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  if (!norm) return undefined;
+  if (norm === "rascunho") return "Rascunho";
+  if (norm === "em andamento" || norm === "em_andamento") return "Em Andamento";
+  if (norm === "concluido" || norm === "finalizado") return "Concluído";
+  if (norm === "aprovado") return "Aprovado";
+  if (norm === "arquivado") return "Rascunho";
+  return val;
+};
+
 const projectPayloadSchema = z.object({
   name: z.string().trim().min(1, "Nome do projeto é obrigatório."),
   client_name: z.string().trim().optional(),
@@ -19,19 +31,19 @@ const projectPayloadSchema = z.object({
   city: z.string().trim().optional(),
   project_type: z.string().trim().optional(),
   solar_config: z.unknown().optional(),
-  voltage: z.number().int().nullable().optional(),
+  voltage: z.coerce.number().int().nullable().optional(),
   supply_type: z.string().trim().optional(),
   circuits: z.array(z.unknown()).optional(),
-  total_demand_w: z.number().optional(),
-  panel_size: z.number().int().nullable().optional(),
+  total_demand_w: z.coerce.number().optional(),
+  panel_size: z.coerce.number().int().nullable().optional(),
   panel_boards: z.array(z.unknown()).optional(),
   panel_layout: z.unknown().optional(),
   diagram_layout: z.unknown().optional(),
   plant_design: z.unknown().optional(),
-  plant_points_count: z.number().int().optional(),
-  plant_routes_count: z.number().int().optional(),
+  plant_points_count: z.coerce.number().int().optional(),
+  plant_routes_count: z.coerce.number().int().optional(),
   plant_infra_type: z.string().trim().optional(),
-  status: z.enum(["Rascunho", "Em Andamento", "Concluído", "Aprovado"]).optional(),
+  status: z.preprocess(normalizeProjectStatusInput, z.enum(["Rascunho", "Em Andamento", "Concluído", "Aprovado"]).optional()),
   notes: z.string().optional(),
   materials: z.array(z.unknown()).optional(),
   manual_budget_items: z.array(z.unknown()).optional(),

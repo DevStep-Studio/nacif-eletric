@@ -12,14 +12,22 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).optional(),
 });
 
+const normalizeTone = (val: unknown) => {
+  if (!val || typeof val !== "string") return undefined;
+  const lower = val.toLowerCase().trim();
+  if (lower === "error" || lower === "danger") return "warning";
+  if (["info", "warning", "success"].includes(lower)) return lower;
+  return "info";
+};
+
 const createNotificationSchema = z.object({
   title: z.string().trim().min(1, "Título é obrigatório."),
   description: z.string().trim().min(1, "Descrição é obrigatória."),
   category: z.string().trim().optional(),
-  tone: z.enum(["info", "warning", "success"]).optional(),
+  tone: z.preprocess(normalizeTone, z.enum(["info", "warning", "success"]).optional()),
   href: z.string().trim().optional(),
-  audience: z.enum(["self", "all", "user"]).optional(),
-  user_id: z.string().trim().optional(),
+  audience: z.enum(["self", "all", "user", "admin"]).optional(),
+  user_id: z.string().trim().nullable().optional(),
 }).passthrough();
 
 export const registerNotificationRoutes = async (app: FastifyInstance) => {
@@ -37,12 +45,35 @@ export const registerNotificationRoutes = async (app: FastifyInstance) => {
 
   app.post("/api/notifications", { preHandler: [app.authenticate] }, async (request) => {
     const data = createNotificationSchema.parse(request.body);
-    const audience = data.audience ?? "self";
+    const audience = data.audience ?? (data.user_id && data.user_id !== request.authUser.id ? "user" : "self");
 
     if (audience === "all" || audience === "user") {
       if (request.authUser.role !== "admin" && (request.authUser.role as string) !== "super_admin") {
         throw new AppError("Apenas administradores podem enviar notificações para outros usuários.", 403);
       }
+    }
+
+    if (audience === "admin") {
+      const admins = await prisma.user.findMany({
+        where: {
+          isDeleted: false,
+          OR: [{ role: "admin" }, { role: "super_admin" }, { isSuperAdmin: true }],
+        },
+        select: { id: true },
+      });
+      if (admins.length > 0) {
+        await createNotificationsForUsers(
+          admins.map((adminUser) => adminUser.id),
+          {
+            title: data.title,
+            description: data.description,
+            category: data.category,
+            tone: data.tone,
+            href: data.href,
+          },
+        );
+      }
+      return { ok: true };
     }
 
     if (audience === "all") {

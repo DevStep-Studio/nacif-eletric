@@ -23,8 +23,20 @@ type SafeUser = {
   crea: string;
   phone: string;
   avatar_url: string;
+  profile_photo_url?: string;
+  photo_url?: string;
   created_date: string;
   updated_date: string;
+  last_access?: string | null;
+  theme?: string;
+  preferences?: Record<string, unknown>;
+  onboarding_completed?: boolean;
+  onboarding_profile?: string;
+  onboarding_goal?: string;
+  onboarding_project_type?: string;
+  onboarding_mode?: string;
+  guided_mode?: boolean;
+  custom_permissions?: Record<string, unknown>;
   subscription_start_date?: string | null;
   subscription_valid_until?: string | null;
   subscription_auto_renew?: boolean;
@@ -70,6 +82,8 @@ type SafeProject = {
   notes: string;
   materials: unknown[];
   manual_budget_items: unknown[];
+  owner_id: string;
+  user_id: string;
   created_by: string;
   created_date: string;
   updated_date: string;
@@ -103,8 +117,20 @@ export const serializeUser = (user: User): SafeUser => {
     crea: user.crea ?? "",
     phone: user.phone ?? "",
     avatar_url: user.avatarUrl ?? "",
+    profile_photo_url: user.avatarUrl ?? "",
+    photo_url: user.avatarUrl ?? "",
     created_date: user.createdAt.toISOString(),
     updated_date: user.updatedAt.toISOString(),
+    last_access: user.lastAccess ? user.lastAccess.toISOString() : user.updatedAt.toISOString(),
+    theme: permissions.theme || "light",
+    preferences: permissions.preferences || {},
+    onboarding_completed: Boolean(permissions.onboarding_completed ?? permissions.onboardingCompleted ?? false),
+    onboarding_profile: permissions.onboarding_profile ?? permissions.onboardingProfile ?? "",
+    onboarding_goal: permissions.onboarding_goal ?? permissions.onboardingGoal ?? "",
+    onboarding_project_type: permissions.onboarding_project_type ?? permissions.onboardingProjectType ?? "",
+    onboarding_mode: permissions.onboarding_mode ?? permissions.onboardingMode ?? "",
+    guided_mode: Boolean(permissions.guided_mode ?? permissions.guidedMode ?? false),
+    custom_permissions: permissions,
     subscription_status: permissions.subscriptionStatus || "active",
     subscription_cycle: permissions.subscriptionCycle || "monthly",
     subscription_start_date: permissions.subscriptionStartDate || null,
@@ -153,6 +179,8 @@ export const serializeProject = (
   notes: project.notes ?? "",
   materials: Array.isArray(project.materials) ? project.materials : [],
   manual_budget_items: Array.isArray(project.manualBudgetItems) ? project.manualBudgetItems : [],
+  owner_id: project.createdById,
+  user_id: project.createdById,
   created_by: project.createdBy?.email ?? "",
   created_date: project.createdAt.toISOString(),
   updated_date: project.updatedAt.toISOString(),

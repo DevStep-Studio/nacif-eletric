@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import AuthLayout from "@/components/AuthLayout";
-import GoogleIcon from "@/components/GoogleIcon";
 import { toast } from "@/components/ui/use-toast";
 import { PENDING_REGISTER_PROFESSION_KEY, PROFESSIONS, getDefaultAuthenticatedRoute, normalizeProfession } from "@/lib/professionalAccess";
 
@@ -102,22 +101,6 @@ export default function Register() {
     }
   };
 
-  const handleGoogle = () => {
-    if (isLocalAuthMode) {
-      setError("Login com Google não está habilitado neste backend.");
-      return;
-    }
-
-    const normalizedProfession = normalizeProfession(profession);
-    if (!normalizedProfession) {
-      setError("Selecione sua profissão antes de continuar com Google.");
-      return;
-    }
-
-    window.localStorage.setItem(PENDING_REGISTER_PROFESSION_KEY, normalizedProfession);
-    backend.auth.loginWithProvider("google", "/");
-  };
-
   if (showOtp) {
     return (
       <AuthLayout
@@ -190,28 +173,6 @@ export default function Register() {
         </p>
       }
     >
-      {!isLocalAuthMode && (
-        <>
-          <Button
-            variant="outline"
-            className="w-full h-[48px] rounded-[8px] border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 mb-5 shadow-none"
-            onClick={handleGoogle}
-          >
-            <GoogleIcon className="w-4 h-4 mr-2" />
-            Continuar com Google
-          </Button>
-
-          <div className="relative mb-5">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-[#FAFCFC] px-3 text-slate-400 font-medium">ou</span>
-            </div>
-          </div>
-        </>
-      )}
-
       {error && (
         <div role="alert" className="mb-5 rounded-[8px] border border-red-200/80 bg-red-50 p-3 text-xs font-semibold text-red-600 animate-in fade-in">
           {error}

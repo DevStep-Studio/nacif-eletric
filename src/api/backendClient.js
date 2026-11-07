@@ -1033,7 +1033,7 @@ const auth = {
     return request("/api/auth/export-data");
   },
 
-  loginWithProvider() {
+  async loginWithProvider() {
     throw createError("Login com provedor externo não está habilitado neste backend.", 501);
   },
 
@@ -2843,7 +2843,25 @@ const budgetEntity = {
 };
 
 const subscriptionEntity = {
-  async getPlans() { return request("/api/subscriptions/plans"); },
+  async getPlans() {
+    if (isLocalAuthMode) {
+      return {
+        plans: [
+          getPlanByCode("free"),
+          ...COMMERCIAL_PLANS,
+        ].map((p) => ({
+          ...p,
+          limits: Object.fromEntries(
+            Object.entries(p.limits || {}).map(([k, v]) => [
+              k,
+              v === Number.POSITIVE_INFINITY ? null : v,
+            ]),
+          ),
+        })),
+      };
+    }
+    return request("/api/subscriptions/plans");
+  },
   async consumeExportQuota({ projectId = null, format = "PDF", label = "Exportação Técnica" } = {}) {
     if (isLocalAuthMode) {
       const user = requireLocalUser();
@@ -3409,13 +3427,23 @@ const systemEntity = {
   },
 };
 
+const circuitEntity = {
+  async filter({ project_id } = {}) {
+    if (!project_id) return [];
+    const proj = await projectEntity.get(project_id);
+    return Array.isArray(proj?.circuits) ? proj.circuits : [];
+  },
+};
+
 export const backend = {
   auth,
+  projects: projectEntity,
   system: systemEntity,
   subscriptions: subscriptionEntity,
   database: databaseEntity,
   entities: {
     Project: projectEntity,
+    Circuit: circuitEntity,
     Budget: budgetEntity,
     User: userEntity,
     SuperAdmin: superAdminEntity,

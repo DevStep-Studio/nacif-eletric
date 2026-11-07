@@ -89,8 +89,15 @@ export const AuthProvider = ({ children }) => {
       });
       setIsLoadingPublicSettings(false);
 
-      const catalog = await backend.subscriptions.getPlans();
-      applyRemotePlanCatalog(catalog.plans);
+      try {
+        const catalog = await backend.subscriptions.getPlans();
+        if (catalog?.plans) {
+          applyRemotePlanCatalog(catalog.plans);
+        }
+      } catch (planErr) {
+        console.warn("Catálogo de planos remoto indisponível, utilizando catálogo local:", planErr);
+      }
+
       if (backend.auth.getToken?.()) {
         await checkUserAuth();
       } else {
