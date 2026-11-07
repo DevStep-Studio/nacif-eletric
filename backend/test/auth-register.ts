@@ -23,9 +23,11 @@ test("registration survives optional notification failures", async (t) => {
   replaceMethod(prisma.user, "count", async () => users.length);
   replaceMethod(prisma.user, "create", async ({ data }: any) => {
     if (failUserCreation) throw new Error("User persistence unavailable");
+    // Production may have a legacy NOT NULL column without a default.
+    assert.deepEqual(data.customPermissions, {}, "registration must initialize custom_permissions");
     const user = {
       ...data, id: `registration-${users.length}`, status: "active",
-      isDeleted: false, customPermissions: null,
+      isDeleted: false,
       createdAt: new Date(), updatedAt: new Date(),
     } as User;
     users.push(user);

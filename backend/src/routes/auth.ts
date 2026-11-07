@@ -105,6 +105,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         plan,
         isSuperAdmin: isSuperAdminEmail,
         profession: profession ?? "projetista",
+        customPermissions: {},
       },
     });
 
