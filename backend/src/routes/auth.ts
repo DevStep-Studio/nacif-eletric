@@ -34,6 +34,7 @@ const SUPER_ADMIN_EMAILS = [
   "wellingtonalfredo550@gmail.com",
   "comercial@nacifsolutions.com.br",
   "gabrielderezende13@gmail.com",
+  "testegabriel@gmail.com",
 ];
 
 const registerSchema = z.object({

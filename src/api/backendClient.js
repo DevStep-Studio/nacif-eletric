@@ -233,6 +233,18 @@ const INITIAL_SUPER_ADMINS = [
     status: "active",
     plan: "completo",
   },
+  {
+    id: "local_super_admin_testegabriel",
+    email: "testegabriel@gmail.com",
+    password: "admin",
+    full_name: "Gabriel Teste",
+    profession: "Engenheiro Eletricista",
+    profissao: "Engenheiro Eletricista",
+    role: "super_admin",
+    is_super_admin: true,
+    status: "active",
+    plan: "completo",
+  },
 ];
 
 const readLocalUsers = () => {
