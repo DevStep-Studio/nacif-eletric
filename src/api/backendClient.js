@@ -782,10 +782,27 @@ const auth = {
       return { ok: true, recoveryLink };
     }
 
-    return request("/api/auth/forgot-password", {
-      method: "POST",
-      body: { email },
-    });
+    try {
+      return await request("/api/auth/forgot-password", {
+        method: "POST",
+        body: { email },
+      });
+    } catch (err) {
+      // Se a rota nova /forgot-password não for encontrada (backend ainda não reiniciado/atualizado no servidor),
+      // faz fallback transparente para /reset-password-request, garantindo compatibilidade total.
+      const isNotFound =
+        err?.status === 404 ||
+        String(err?.message || "").toLowerCase().includes("not found");
+
+      if (isNotFound) {
+        return await request("/api/auth/reset-password-request", {
+          method: "POST",
+          body: { email },
+        });
+      }
+
+      throw err;
+    }
   },
 
   async forgotPassword(email) {

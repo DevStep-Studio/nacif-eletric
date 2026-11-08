@@ -66,9 +66,9 @@ export default function ForgotPassword() {
           </p>
           {recoveryLink && (
             <div className="rounded-[12px] border border-[#00d8b8]/30 bg-[#00d8b8]/5 p-4 text-left">
-              <p className="text-xs font-bold text-slate-900">Ambiente local detectado</p>
+              <p className="text-xs font-bold text-slate-900">Link direto de recuperação</p>
               <p className="mt-1 text-xs text-slate-600">
-                Para contas criadas neste navegador, use o link direto abaixo.
+                Se o e-mail não chegar em sua caixa de entrada ou se o serviço SMTP ainda estiver em configuração, você pode acessar diretamente pelo link abaixo:
               </p>
               <a 
                 href={recoveryLink} 
