@@ -13,16 +13,19 @@ export default function ForgotPassword() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [recoveryLink, setRecoveryLink] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setSent(false);
     setRecoveryLink("");
+    setEmailSent(false);
     setLoading(true);
     try {
-      const result = await backend.auth.resetPasswordRequest(email);
+      const result = await backend.auth.forgotPassword(email);
       setRecoveryLink(result?.recoveryLink || "");
+      setEmailSent(Boolean(result?.emailSent));
       setSent(true);
     } catch (err) {
       setError(err.message || "Não foi possível enviar a recuperação de senha.");

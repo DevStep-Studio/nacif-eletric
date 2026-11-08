@@ -5,6 +5,7 @@ import { env } from "../config/env.js";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../lib/errors.js";
 import { generateResetToken, hashPassword, signAccessToken, verifyPassword } from "../lib/auth.js";
+import { sendPasswordResetEmail } from "../lib/mailer.js";
 import { createNotificationsForUsers } from "../lib/notifications.js";
 import { serializeUser } from "../lib/serializers.js";
 
@@ -87,8 +88,10 @@ const resetRequestSchema = z.object({
 });
 
 const resetPasswordSchema = z.object({
-  resetToken: z.string().min(1).optional(),
-  reset_token: z.string().min(1).optional(),
+  token: z.string().trim().min(1).optional(),
+  resetToken: z.string().trim().min(1).optional(),
+  reset_token: z.string().trim().min(1).optional(),
+  password: passwordSchema.optional(),
   newPassword: passwordSchema.optional(),
   new_password: passwordSchema.optional(),
 });
@@ -247,72 +250,153 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     return serializeUser(user);
   });
 
-  app.post("/api/auth/reset-password-request", async (request) => {
-    const { email } = resetRequestSchema.parse(request.body);
-    const user = await prisma.user.findUnique({ where: { email } });
+  const handleForgotPassword = async (request: any, reply: any) => {
+    try {
+      const parsed = resetRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: "ValidationError",
+          message: parsed.error.issues[0]?.message || "Informe um e-mail válido.",
+        });
+      }
 
-    if (!user) {
-      return { ok: true };
-    }
+      const normalizedEmail = parsed.data.email.toLowerCase().trim();
+      const user = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
 
-    await prisma.passwordResetToken.updateMany({
-      where: {
-        userId: user.id,
-        usedAt: null,
-      },
-      data: {
-        usedAt: new Date(),
-      },
-    });
+      if (!user || user.isDeleted || user.status === "deleted") {
+        return {
+          ok: true,
+          emailSent: false,
+          message:
+            "Se existir uma conta com o e-mail informado, você receberá o link de redefinição em instantes.",
+        };
+      }
 
-    const token = generateResetToken();
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60);
-
-    await prisma.passwordResetToken.create({
-      data: {
-        token,
-        userId: user.id,
-        expiresAt,
-      },
-    });
-
-    return {
-      ok: true,
-      recoveryLink: `${env.FRONTEND_URL}/reset-password?token=${token}`,
-    };
-  });
-
-  app.post("/api/auth/reset-password", async (request) => {
-    const parsed = resetPasswordSchema.parse(request.body);
-    const token = parsed.resetToken ?? parsed.reset_token;
-    const newPassword = parsed.newPassword ?? parsed.new_password;
-
-    if (!token || !newPassword) {
-      throw new AppError("Token e nova senha são obrigatórios.", 400);
-    }
-
-    const reset = await prisma.passwordResetToken.findUnique({
-      where: { token },
-      include: { user: true },
-    });
-
-    if (!reset || reset.usedAt || reset.expiresAt.getTime() < Date.now()) {
-      throw new AppError("Link de redefinição inválido ou expirado.", 400);
-    }
-
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: reset.userId },
-        data: {
-          passwordHash: await hashPassword(newPassword),
+      await prisma.passwordResetToken.updateMany({
+        where: {
+          userId: user.id,
+          usedAt: null,
         },
-      }),
-      prisma.passwordResetToken.update({
-        where: { id: reset.id },
-        data: { usedAt: new Date() },
-      }),
-    ]);
+        data: {
+          usedAt: new Date(),
+        },
+      });
 
-    return { ok: true };
+      const token = generateResetToken();
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // Validade de 1 hora
+
+      await prisma.passwordResetToken.create({
+        data: {
+          token,
+          userId: user.id,
+          expiresAt,
+        },
+      });
+
+      const recoveryLink = `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
+      const emailResult = await sendPasswordResetEmail({
+        to: user.email,
+        userName: user.fullName,
+        resetLink: recoveryLink,
+      });
+
+      if (!emailResult.sent) {
+        console.error(
+          "[Auth ForgotPassword] E-mail de redefinição não pôde ser enviado via SMTP; token gerado com sucesso no banco:",
+          {
+            email: user.email,
+            userId: user.id,
+            smtpError: emailResult.error,
+          },
+        );
+      }
+
+      return {
+        ok: true,
+        emailSent: emailResult.sent,
+        message:
+          "Se existir uma conta com o e-mail informado, você receberá o link de redefinição em instantes.",
+        ...(env.NODE_ENV !== "production" || !emailResult.sent ? { recoveryLink } : {}),
+      };
+    } catch (error) {
+      console.error("[Auth ForgotPassword] Falha inesperada ao processar solicitação de recuperação de senha:", error);
+      return reply.status(200).send({
+        ok: true,
+        emailSent: false,
+        message:
+          "Não foi possível disparar o e-mail no momento, mas sua solicitação foi registrada. Verifique a configuração SMTP ou tente novamente em instantes.",
+      });
+    }
+  };
+
+  app.post("/api/auth/forgot-password", handleForgotPassword);
+  app.post("/api/auth/reset-password-request", handleForgotPassword);
+
+  app.post("/api/auth/reset-password", async (request, reply) => {
+    try {
+      const parsed = resetPasswordSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: "ValidationError",
+          message: parsed.error.issues[0]?.message || "Dados inválidos para redefinição de senha.",
+        });
+      }
+
+      const token = parsed.data.token ?? parsed.data.resetToken ?? parsed.data.reset_token;
+      const newPassword = parsed.data.password ?? parsed.data.newPassword ?? parsed.data.new_password;
+
+      if (!token || !newPassword) {
+        return reply.status(400).send({
+          error: "AppError",
+          message: "Token e nova senha são obrigatórios.",
+        });
+      }
+
+      const reset = await prisma.passwordResetToken.findUnique({
+        where: { token },
+        include: { user: true },
+      });
+
+      if (!reset || reset.usedAt || reset.expiresAt.getTime() < Date.now()) {
+        return reply.status(400).send({
+          error: "AppError",
+          message: "Link de redefinição inválido ou expirado.",
+        });
+      }
+
+      const passwordHash = await hashPassword(newPassword);
+
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: reset.userId },
+          data: {
+            passwordHash,
+          },
+        }),
+        prisma.passwordResetToken.update({
+          where: { id: reset.id },
+          data: { usedAt: new Date() },
+        }),
+      ]);
+
+      return {
+        ok: true,
+        message: "Senha redefinida com sucesso.",
+      };
+    } catch (error) {
+      console.error("[Auth ResetPassword] Erro ao redefinir a senha:", error);
+      if (error instanceof AppError) {
+        return reply.status(error.statusCode).send({
+          error: "AppError",
+          message: error.message,
+        });
+      }
+      return reply.status(400).send({
+        error: "ResetPasswordError",
+        message: "Não foi possível concluir a redefinição de senha. Tente novamente.",
+      });
+    }
   });
 };

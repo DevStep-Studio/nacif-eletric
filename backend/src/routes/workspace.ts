@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../lib/errors.js";
 import { serializeProject, serializeUser } from "../lib/serializers.js";
 import { generateResetToken, hashPassword } from "../lib/auth.js";
+import { sendPasswordResetEmail } from "../lib/mailer.js";
 import { isServerAdmin } from "../lib/planGovernance.js";
 
 const idOf = (request: any) =>
@@ -786,9 +787,16 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
           expiresAt: new Date(Date.now() + 3600000),
         },
       });
+      const recoveryLink = `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
+      const emailResult = await sendPasswordResetEmail({
+        to: target.email,
+        userName: target.fullName,
+        resetLink: recoveryLink,
+      });
       return {
         ok: true,
-        recoveryLink: `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`,
+        emailSent: emailResult.sent,
+        recoveryLink,
       };
     },
   );

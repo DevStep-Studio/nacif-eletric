@@ -58,6 +58,22 @@ const envSchema = z.object({
   STRIPE_PRICE_SOLAR_ANNUAL: z.string().trim().default(""),
   STRIPE_PRICE_COMPLETO_MONTHLY: z.string().trim().default(""),
   STRIPE_PRICE_COMPLETO_ANNUAL: z.string().trim().default(""),
+  SMTP_HOST: z.string().trim().default(""),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().trim().default(""),
+  SMTP_PASS: z.string().default(""),
+  SMTP_SECURE: z
+    .preprocess((val) => {
+      if (typeof val === "boolean") return val;
+      if (typeof val === "string") {
+        const normalized = val.trim().toLowerCase();
+        if (normalized === "true" || normalized === "1") return true;
+        if (normalized === "false" || normalized === "0") return false;
+      }
+      return Number(process.env.SMTP_PORT) === 465;
+    }, z.boolean())
+    .default(false),
+  SMTP_FROM: z.string().trim().default(""),
 });
 
 export const env = envSchema.parse(process.env);

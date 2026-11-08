@@ -245,7 +245,7 @@ const readLocalUsers = () => {
       const emailLower = String(u.email || "").toLowerCase().trim();
       // Garante que os administradores principais possuem papel super_admin e status ativo
       if (SUPER_ADMIN_EMAILS.includes(emailLower) &&
-          (u.role !== "super_admin" || !u.is_super_admin || u.status !== "active")) {
+        (u.role !== "super_admin" || !u.is_super_admin || u.status !== "active")) {
         modified = true;
         return { ...u, role: "super_admin", is_super_admin: true, status: "active" };
       }
@@ -770,20 +770,26 @@ const auth = {
       return { ok: true, recoveryLink };
     }
 
-    return request("/api/auth/reset-password-request", {
+    return request("/api/auth/forgot-password", {
       method: "POST",
       body: { email },
     });
   },
 
-  async resetPassword({ resetToken, newPassword }) {
+  async forgotPassword(email) {
+    return this.resetPasswordRequest(email);
+  },
+
+  async resetPassword({ token, resetToken, newPassword, password }) {
+    const resolvedToken = token ?? resetToken;
+    const resolvedPassword = newPassword ?? password;
     if (isLocalAuthMode) {
-      if (!newPassword || String(newPassword).length < 6) {
+      if (!resolvedPassword || String(resolvedPassword).length < 6) {
         throw createError("A nova senha deve conter no mínimo 6 caracteres.", 400);
       }
 
       const tokens = readLocalResetTokens();
-      const entry = tokens[resetToken];
+      const entry = tokens[resolvedToken];
 
       if (!entry) {
         throw createError("Link de redefinição inválido ou já utilizado.", 400);
@@ -792,7 +798,7 @@ const auth = {
       // Verificação de expiração estrita (1 hora)
       const tokenTime = Date.parse(entry.createdAt || 0);
       if (Date.now() - tokenTime > RESET_TOKEN_EXPIRATION_MS) {
-        delete tokens[resetToken];
+        delete tokens[resolvedToken];
         writeLocalResetTokens(tokens);
         throw createError("Link de redefinição expirado. Solicite um novo link.", 400);
       }
@@ -804,7 +810,7 @@ const auth = {
       }
 
       const timestamp = nowIso();
-      const hashedPassword = await hashPassword(newPassword);
+      const hashedPassword = await hashPassword(resolvedPassword);
 
       const nextUsers = [...users];
       nextUsers[userIndex] = {
@@ -816,7 +822,7 @@ const auth = {
       writeLocalUsers(nextUsers);
 
       // Invalidação imediata do token de uso único
-      delete tokens[resetToken];
+      delete tokens[resolvedToken];
       writeLocalResetTokens(tokens);
 
       recordAuditEvent({
@@ -831,7 +837,12 @@ const auth = {
 
     return request("/api/auth/reset-password", {
       method: "POST",
-      body: { resetToken, newPassword },
+      body: {
+        token: resolvedToken,
+        resetToken: resolvedToken,
+        password: resolvedPassword,
+        newPassword: resolvedPassword,
+      },
     });
   },
 
@@ -1046,7 +1057,7 @@ const auth = {
       try {
         window.localStorage.removeItem("voltai_active_project_id");
         window.sessionStorage.clear();
-      } catch {}
+      } catch { }
     }
 
     if (target !== false && typeof window !== "undefined") {
@@ -1418,7 +1429,7 @@ const projectEntity = {
       if (typeof window !== "undefined" && window.localStorage) {
         try {
           window.localStorage.removeItem(`voltai_plant_backup_${id}`);
-        } catch {}
+        } catch { }
       }
 
       recordAuditEvent({
