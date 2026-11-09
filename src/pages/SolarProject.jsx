@@ -435,74 +435,6 @@ export default function SolarProject() {
     }));
   };
 
-<<<<<<< HEAD
-  const reportProject = useMemo(() => {
-    if (!project) return null;
-    const currentResponsible = project.technical_responsible || {};
-    const estimatedMonthlyKwh =
-      visualSizing?.annualGenerationKwh > 0
-        ? Math.round(visualSizing.annualGenerationKwh / 12)
-        : null;
-    const resolvedConsumption = {
-      monthly_consumption_kwh:
-        project.consumption?.monthly_consumption_kwh ??
-        project.monthly_consumption_kwh ??
-        project.solar_config?.monthly_consumption_kwh ??
-        project.solar_config?.consumption?.monthly_consumption_kwh ??
-        config?.monthly_consumption_kwh ??
-        config?.consumption?.monthly_consumption_kwh ??
-        estimatedMonthlyKwh ??
-        500,
-      tariff_brl_kwh:
-        project.consumption?.tariff_brl_kwh ??
-        project.tariff_brl_kwh ??
-        project.solar_config?.tariff_brl_kwh ??
-        config?.tariff_brl_kwh ??
-        0.95,
-      distributor:
-        project.consumption?.distributor ??
-        project.distributor ??
-        project.solar_config?.distributor ??
-        config?.distributor ??
-        "",
-      consumer_unit:
-        project.consumption?.consumer_unit ??
-        project.consumer_unit ??
-        project.solar_config?.consumer_unit ??
-        config?.consumer_unit ??
-        "",
-      tariff_class:
-        project.consumption?.tariff_class ??
-        project.solar_config?.tariff_class ??
-        config?.tariff_class ??
-        "B1 - Residencial",
-    };
-    return {
-      ...project,
-      address: project.address || searchAddress || "Localização demarcada no mapa",
-      consumption: resolvedConsumption,
-      monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
-      tariff_brl_kwh: resolvedConsumption.tariff_brl_kwh,
-      solar_config: {
-        ...(project.solar_config || {}),
-        ...config,
-        module_wp: Number(config?.module_wp || project?.solar_config?.module_wp || 550),
-        inverter_kw: Number(config?.inverter_kw || project?.solar_config?.inverter_kw || Math.max(3, Math.round((visualSizing?.dcPowerKw || 5) * 0.85))),
-        consumption: resolvedConsumption,
-        monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
-        tariff_brl_kwh: resolvedConsumption.tariff_brl_kwh,
-      },
-      technical_responsible: {
-        ...currentResponsible,
-        name: currentResponsible.name || currentResponsible.full_name || user?.full_name || user?.name || "",
-        crea: currentResponsible.crea || user?.crea || "",
-        company: currentResponsible.company || user?.company || "",
-      },
-    };
-  }, [project, user, config, searchAddress, visualSizing]);
-
-=======
->>>>>>> b455b1b (fix: corrigir ordem de inicializacao do designer solar)
   const [roofHistoryState, setRoofHistoryState] = useState({ canUndo: false, canRedo: false });
   const roofHistoryRef = useRef([[]]);
   const roofHistoryIndexRef = useRef(0);
@@ -801,6 +733,10 @@ export default function SolarProject() {
   const reportProject = useMemo(() => {
     if (!project) return null;
     const currentResponsible = project.technical_responsible || {};
+    const estimatedMonthlyKwh =
+      visualSizing?.annualGenerationKwh > 0
+        ? Math.round(visualSizing.annualGenerationKwh / 12)
+        : null;
     const resolvedConsumption = {
       monthly_consumption_kwh:
         project.consumption?.monthly_consumption_kwh ??
@@ -809,12 +745,14 @@ export default function SolarProject() {
         project.solar_config?.consumption?.monthly_consumption_kwh ??
         config?.monthly_consumption_kwh ??
         config?.consumption?.monthly_consumption_kwh ??
-        null,
+        estimatedMonthlyKwh ??
+        500,
       tariff_brl_kwh:
         project.consumption?.tariff_brl_kwh ??
+        project.tariff_brl_kwh ??
         project.solar_config?.tariff_brl_kwh ??
         config?.tariff_brl_kwh ??
-        null,
+        0.95,
       distributor:
         project.consumption?.distributor ??
         project.distributor ??
@@ -835,13 +773,18 @@ export default function SolarProject() {
     };
     return {
       ...project,
+      address: project.address || searchAddress || "Localização demarcada no mapa",
       consumption: resolvedConsumption,
       monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
+      tariff_brl_kwh: resolvedConsumption.tariff_brl_kwh,
       solar_config: {
         ...(project.solar_config || {}),
         ...config,
+        module_wp: Number(config?.module_wp || project?.solar_config?.module_wp || 550),
+        inverter_kw: Number(config?.inverter_kw || project?.solar_config?.inverter_kw || Math.max(3, Math.round((visualSizing?.dcPowerKw || 5) * 0.85))),
         consumption: resolvedConsumption,
         monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
+        tariff_brl_kwh: resolvedConsumption.tariff_brl_kwh,
       },
       technical_responsible: {
         ...currentResponsible,
@@ -850,7 +793,7 @@ export default function SolarProject() {
         company: currentResponsible.company || user?.company || "",
       },
     };
-  }, [project, user, config]);
+  }, [project, user, config, searchAddress, visualSizing]);
 
   const reportValidation = useMemo(
     () => validateProjectDataForReports(reportProject, config, visualSizing),
