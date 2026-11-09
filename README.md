@@ -141,3 +141,21 @@ O SQL acrescenta os membros ausentes sem remover os legados, preserva registros,
 NULL e valores padrão, e amplia colunas CHAR/VARCHAR curtas. Pode ser executado
 novamente; não altera permissões dos usuários nem desativa o modo SQL estrito.
 Depois execute `npm --prefix backend run db:check` e tente o cadastro novamente.
+
+
+### phpMyAdmin mostra avisos `statement` / `parser` ao importar a correcao
+
+Avisos em `Display/Results.php` ao exibir `EXECUTE nacif_users_statement` podem
+ocorrer no tratamento dos resultados intermediarios. Nao confirmam, isoladamente,
+falha ou sucesso da alteracao. Selecione o banco da aplicacao e execute na aba SQL:
+
+```sql
+SELECT DATABASE() AS banco_atual;
+SHOW COLUMNS FROM users WHERE Field IN ('role', 'plan');
+```
+
+`role` deve aceitar `super_admin`, `admin` e `user`; `plan` deve aceitar os planos
+do Prisma. Se ainda faltarem valores, importe
+`backend/prisma/repair-user-enums-phpmyadmin.sql`. Essa alternativa preserva os
+dados e substitui os SELECTs preparados de confirmacao por `DO 0`, sem resultados
+intermediarios de EXECUTE. As migrations historicas permanecem inalteradas.
