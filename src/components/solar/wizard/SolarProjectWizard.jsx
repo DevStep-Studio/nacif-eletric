@@ -223,7 +223,7 @@ export default function SolarProjectWizard() {
       {/* Conteúdo da Etapa Atual */}
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         {stepKey === "localizacao" && <StepLocalizacao state={state} onChange={updateState} />}
-        {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} />}
+        {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} onNextStep={goNext} />}
         {stepKey === "consumo" && <StepConsumo state={state} onChange={updateState} />}
       </div>
 

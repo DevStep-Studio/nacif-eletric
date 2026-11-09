@@ -131,21 +131,40 @@ const num = (value, fallback = 0) => {
  * Estimativa preliminar (etapa 1), antes de qualquer telhado desenhado.
  */
 export function getPreliminarySizing(state) {
+  const effectiveWp = num(state.module_wp, 0) > 0 ? num(state.module_wp, 550) : 550;
+
   if (state.entry_method === "area") {
-    if (!state.available_area_m2 || num(state.available_area_m2, 0) <= 0) {
+    const hasRoof = normalizeRoofPolygon(state.roof_polygon).length >= 3 && state.roof_defined === true;
+    const areaVal = num(state.available_area_m2, 0) > 0
+      ? num(state.available_area_m2, 0)
+      : (hasRoof ? num(state.roof_area_m2, 0) : 0);
+
+    if (areaVal <= 0) {
       return { panelCount: 0, installedKwp: 0, areaM2: 0, effectiveArea: 0, moduleArea: 0 };
     }
-    return sizeFromAvailableArea(state.available_area_m2, { moduleWp: state.module_wp || 550 });
+
+    if (hasRoof) {
+      const layout = getRoofPhysicalLayout({ ...state, module_wp: effectiveWp });
+      return {
+        panelCount: layout.panelCount,
+        installedKwp: Math.round(((layout.panelCount * effectiveWp) / 1000) * 100) / 100,
+        areaM2: areaVal,
+        effectiveArea: areaVal,
+        moduleArea: Math.round(SOLAR_MODULE_WIDTH_M * SOLAR_MODULE_HEIGHT_M * 100) / 100,
+      };
+    }
+
+    return sizeFromAvailableArea(areaVal, { moduleWp: effectiveWp });
   }
   if (state.entry_method === "bill" && num(state.monthly_consumption_kwh, 0) > 0) {
     // Estimativa por consumo: kwh / (30 * 4.8 * 0.8)
     const neededKwp = (num(state.monthly_consumption_kwh, 0)) / (30 * 4.8 * 0.8);
-    return sizeFromDesiredPower(neededKwp, state.module_wp || 550);
+    return sizeFromDesiredPower(neededKwp, effectiveWp);
   }
   if (!state.desired_power_kwp || num(state.desired_power_kwp, 0) <= 0) {
     return { panelCount: 0, installedKwp: 0, areaM2: 0, moduleArea: 0 };
   }
-  return sizeFromDesiredPower(state.desired_power_kwp, state.module_wp || 550);
+  return sizeFromDesiredPower(state.desired_power_kwp, effectiveWp);
 }
 
 export function estimateRoofRectangleFromArea(areaM2) {
@@ -184,11 +203,23 @@ export function getEffectivePanelCount(state) {
 
 export function getInstantResults(state) {
   const { panelCount } = getEffectivePanelCount(state);
+  const effectiveWp = num(state.module_wp, 0) > 0 ? num(state.module_wp, 550) : 550;
+  const installedKwp = (panelCount * effectiveWp) / 1000;
+
+  const hasExplicitConsumption = num(state.monthly_consumption_kwh, 0) > 0;
+  const isAreaOrPower = state.entry_method === "area" || state.entry_method === "power";
+  const effectiveMonthlyConsumption = hasExplicitConsumption
+    ? num(state.monthly_consumption_kwh, 0)
+    : (isAreaOrPower && installedKwp > 0 ? Math.round(installedKwp * 4.8 * 30 * 0.8) : state.monthly_consumption_kwh);
+  const effectiveTariff = num(state.tariff_brl_kwh, 0) > 0
+    ? num(state.tariff_brl_kwh, 0)
+    : (isAreaOrPower && installedKwp > 0 ? 0.95 : state.tariff_brl_kwh);
+
   return computeInstantResults({
     panelCount,
-    moduleWp: state.module_wp,
-    monthlyConsumptionKwh: state.monthly_consumption_kwh,
-    tariffBrlPerKwh: state.tariff_brl_kwh,
+    moduleWp: effectiveWp,
+    monthlyConsumptionKwh: effectiveMonthlyConsumption,
+    tariffBrlPerKwh: effectiveTariff,
     investmentBrl: state.investment_brl,
   });
 }
@@ -211,8 +242,11 @@ export function getStepErrors(stepKey, state) {
     if (state.entry_method === "power" && num(state.desired_power_kwp, 0) <= 0) {
       errors.push("Informe a potência desejada.");
     }
-    if (state.entry_method === "area" && num(state.available_area_m2, 0) <= 0) {
-      errors.push("Informe a área disponível.");
+    const hasValidArea =
+      num(state.available_area_m2, 0) > 0 ||
+      (Boolean(state.roof_defined) && normalizeRoofPolygon(state.roof_polygon).length >= 3 && num(state.roof_area_m2, 0) > 0);
+    if (state.entry_method === "area" && !hasValidArea) {
+      errors.push("Informe a área disponível ou pré-selecione o telhado no mapa.");
     }
     if (state.entry_method === "bill" && !state.monthly_consumption_kwh && !state.desired_power_kwp && state.bill_reading_status !== "done") {
       errors.push("Envie a conta de energia ou informe a potência alvo para continuar.");

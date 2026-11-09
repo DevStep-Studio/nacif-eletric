@@ -177,6 +177,13 @@ export default function SolarProjectParametersModal({
         connection_point: state.connection_point || config.connection_point,
         connection_location: state.connection_location || config.connection_location,
         entry_standard_location: state.entry_standard_location || config.entry_standard_location,
+        roof_polygon: state.roof_polygon || config.roof_polygon || [],
+        roof_defined: state.roof_defined !== undefined ? state.roof_defined : Boolean(config.roof_defined),
+        roof_area_m2: Number(state.roof_area_m2) || Number(state.available_area_m2) || config.roof_area_m2 || 54,
+        roof_width_m: Number(state.roof_width_m) || config.roof_width_m || 9,
+        roof_height_m: Number(state.roof_height_m) || config.roof_height_m || 6,
+        roof_rotation_deg: state.roof_rotation_deg !== undefined ? Number(state.roof_rotation_deg) : (config.roof_rotation_deg || 0),
+        available_area_m2: Number(state.available_area_m2) || Number(state.roof_area_m2) || config.available_area_m2 || null,
       };
 
       const updatedProjectPayload = {
@@ -295,7 +302,7 @@ export default function SolarProjectParametersModal({
 
         {/* Conteúdo da Etapa Selecionada */}
         <div className="rounded-3xl border border-slate-200 bg-slate-50/50 p-5 shadow-sm mt-2">
-          {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} />}
+          {stepKey === "dados" && <StepDadosProjeto state={state} onChange={updateState} onNextStep={goNext} />}
           {stepKey === "localizacao" && <StepLocalizacao state={state} onChange={updateState} />}
           {stepKey === "consumo" && <StepConsumo state={state} onChange={updateState} />}
           {stepKey === "equipamentos" && <StepEquipamentos state={state} onChange={updateState} />}

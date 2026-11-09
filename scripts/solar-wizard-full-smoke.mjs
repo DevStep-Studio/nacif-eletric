@@ -95,7 +95,30 @@ assert.equal(sizingPower.installedKwp, 5.5, "Potência instalada = 5.5 kWp");
 
 const sizingArea = getPreliminarySizing({ entry_method: "area", available_area_m2: 60, module_wp: 550 });
 assert.ok(sizingArea.panelCount > 0, "Dimensionamento por área retorna quantidade positiva de módulos");
-console.log("✅ 3. Dimensionamento preliminar dinâmico OK");
+
+const preselectedRoofState = {
+  ...emptyState,
+  name: "Projeto Área Telhado Mapa",
+  entry_method: "area",
+  roof_defined: true,
+  roof_area_m2: 65,
+  available_area_m2: 65,
+  module_wp: 550,
+  roof_polygon: [
+    { lat: -23.55050, lng: -46.63335 },
+    { lat: -23.55050, lng: -46.63326 },
+    { lat: -23.55056, lng: -46.63326 },
+    { lat: -23.55056, lng: -46.63335 },
+  ],
+};
+assert.equal(getStepErrors("dados", preselectedRoofState).length, 0, "Telhado pré-selecionado no mapa na aba 'area' libera avanço para a próxima etapa");
+const sizingPreselectedRoof = getPreliminarySizing(preselectedRoofState);
+assert.ok(sizingPreselectedRoof.panelCount > 0, "Telhado pré-selecionado no mapa calcula módulos reais pelo layout físico");
+const instantPreselectedRoof = getInstantResults(preselectedRoofState);
+assert.equal(instantPreselectedRoof.panelCount, sizingPreselectedRoof.panelCount, "Resultados instantâneos sincronizados com módulos do telhado no mapa");
+assert.ok(instantPreselectedRoof.annualGenerationKwh > 0, "Geração estimada calculada em tempo real na aba área disponível");
+assert.ok(instantPreselectedRoof.annualSavingsBrl > 0, "Economia estimada calculada em tempo real na aba área disponível");
+console.log("✅ 3. Dimensionamento preliminar dinâmico e pré-seleção de telhado no mapa OK");
 
 // 4. Testes de Autonomia de Bateria
 const batteryAutonomy = getBatteryAutonomyHours({

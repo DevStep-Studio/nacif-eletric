@@ -1,27 +1,60 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle,
+  ArrowRight,
   BarChart3,
   BatteryCharging,
   Building2,
   CheckCircle2,
+  Compass,
+  Crosshair,
   FileText,
   Home,
   Loader2,
+  MapPin,
+  Maximize2,
+  MousePointerClick,
+  Pencil,
   PiggyBank,
+  RotateCcw,
+  RotateCw,
   Ruler,
+  Search,
   ShieldCheck,
   Sparkles,
+  Square,
   Sun,
+  Trash2,
   UploadCloud,
   Zap,
 } from "lucide-react";
+import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
+import {
+  DEFAULT_SOLAR_MAP_CENTER,
+  buildRoofPolygon,
+  getAzimuthWithCardinal,
+  getPolygonCentroid,
+  getRoofMetricsFromPolygon,
+  latLngToMeters,
+  metersToLatLng,
+  normalizeRoofPolygon,
+  normalizeRotationDeg,
+  rotateMeters,
+  serializeRoofPolygon,
+} from "@/lib/solarDesignerGeometry";
+import { searchAddressPrecise } from "@/lib/geocodingService";
 import { analyzeEnergyBillFile } from "@/lib/solarAiServices";
-import { getInstantResults, getPreliminarySizing } from "@/lib/solarWizardState";
+import {
+  estimateRoofRectangleFromArea,
+  getEffectivePanelCount,
+  getInstantResults,
+  getPreliminarySizing,
+  getRoofPhysicalLayout,
+} from "@/lib/solarWizardState";
 import { computeConsumptionMetrics } from "@/lib/solarConsumptionEngine";
 import PtBrNumericInput from "./PtBrNumericInput";
 import SolarConsumptionHistoryModal from "./SolarConsumptionHistoryModal";
@@ -56,7 +89,7 @@ const INSTALLATION_TYPES = [
   { value: "Rural", label: "Rural", icon: Sun },
 ];
 
-export default function StepDadosProjeto({ state, onChange }) {
+export default function StepDadosProjeto({ state, onChange, onNextStep }) {
   const fileInputRef = useRef(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [readingStage, setReadingStage] = useState("");
@@ -64,10 +97,336 @@ export default function StepDadosProjeto({ state, onChange }) {
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [batteryModalOpen, setBatteryModalOpen] = useState(false);
 
+  // Estados do Mapa de Pré-seleção do Telhado (aba Área disponível)
+  const [roofEditorMode, setRoofEditorMode] = useState("select");
+  const [fitRoofRequest, setFitRoofRequest] = useState(0);
+  const [viewportRequest, setViewportRequest] = useState(0);
+  const [mapSearchQuery, setMapSearchQuery] = useState("");
+  const [mapSearching, setMapSearching] = useState(false);
+  const [mapSearchResults, setMapSearchResults] = useState([]);
+
   const setField = (field, value) => onChange({ [field]: value });
+
+  const effectiveModuleWp = Number(state.module_wp) > 0 ? Number(state.module_wp) : 550;
+  const hasRoofPolygon = normalizeRoofPolygon(state.roof_polygon).length >= 3 && state.roof_defined !== false;
+
+  const roofLayout = useMemo(
+    () => getRoofPhysicalLayout({ ...state, module_wp: effectiveModuleWp }),
+    [state, effectiveModuleWp]
+  );
+  const effectivePanelsInfo = useMemo(
+    () => getEffectivePanelCount({ ...state, module_wp: effectiveModuleWp }),
+    [state, effectiveModuleWp]
+  );
+  const visiblePanels = useMemo(
+    () => (hasRoofPolygon ? roofLayout.panels.slice(0, effectivePanelsInfo.panelCount) : []),
+    [hasRoofPolygon, roofLayout.panels, effectivePanelsInfo.panelCount]
+  );
+  const azimuthInfo = useMemo(
+    () => getAzimuthWithCardinal(state.roof_rotation_deg || 0),
+    [state.roof_rotation_deg]
+  );
 
   const results = useMemo(() => getInstantResults(state), [state]);
   const preliminary = useMemo(() => getPreliminarySizing(state), [state]);
+
+  // Cria ou reposiciona um telhado retangular pré-selecionado no centro do mapa
+  const applyPreselectedRoofAtCenter = useCallback(
+    (targetCenter, targetAreaM2, customPatch = {}) => {
+      const safeArea = Math.max(12, Number(targetAreaM2) || Number(state.available_area_m2) || 60);
+      const { widthM, heightM } = estimateRoofRectangleFromArea(safeArea);
+      const center = {
+        lat: Number(targetCenter?.lat) || Number(state.map_center_lat) || DEFAULT_SOLAR_MAP_CENTER.lat,
+        lng: Number(targetCenter?.lng) || Number(state.map_center_lng) || DEFAULT_SOLAR_MAP_CENTER.lng,
+      };
+      const rotation = Number.isFinite(Number(state.roof_rotation_deg)) ? Number(state.roof_rotation_deg) : 0;
+      const poly = serializeRoofPolygon(buildRoofPolygon(center, widthM, heightM, rotation));
+      const metrics = getRoofMetricsFromPolygon(poly, { ...state, roof_rotation_deg: rotation });
+      const areaRounded = Math.round(metrics.areaM2 * 10) / 10;
+
+      const tempState = {
+        ...state,
+        ...customPatch,
+        entry_method: "area",
+        roof_defined: true,
+        roof_polygon: poly,
+        roof_width_m: Math.round(metrics.widthM * 10) / 10,
+        roof_height_m: Math.round(metrics.heightM * 10) / 10,
+        roof_area_m2: areaRounded,
+        available_area_m2: areaRounded,
+        roof_rotation_deg: Math.round(metrics.rotationDeg * 10) / 10,
+        module_wp: effectiveModuleWp,
+        map_center_lat: center.lat,
+        map_center_lng: center.lng,
+        map_zoom: Math.max(20, Number(state.map_zoom) || 20),
+      };
+
+      const layout = getRoofPhysicalLayout(tempState);
+      const installedKwp = (layout.panelCount * effectiveModuleWp) / 1000;
+      const estimatedMonthlyKwh = Math.max(150, Math.round(installedKwp * 4.8 * 30 * 0.8));
+
+      const patch = {
+        roof_defined: true,
+        roof_polygon: poly,
+        roof_width_m: tempState.roof_width_m,
+        roof_height_m: tempState.roof_height_m,
+        roof_area_m2: areaRounded,
+        available_area_m2: areaRounded,
+        roof_rotation_deg: tempState.roof_rotation_deg,
+        module_wp: effectiveModuleWp,
+        map_center_lat: center.lat,
+        map_center_lng: center.lng,
+        map_zoom: tempState.map_zoom,
+        ...customPatch,
+      };
+
+      if (!Number(state.monthly_consumption_kwh) || state.bill_reading_status !== "done") {
+        patch.monthly_consumption_kwh = estimatedMonthlyKwh;
+      }
+      if (!Number(state.tariff_brl_kwh)) {
+        patch.tariff_brl_kwh = 0.95;
+      }
+      if (!state.name?.trim()) {
+        const addrLabel = [state.address, state.number].filter(Boolean).join(", ") || state.city || "Unidade Consumidora";
+        patch.name = `Projeto Solar - ${addrLabel}`;
+      }
+
+      onChange(patch);
+      setRoofEditorMode("select");
+      setTimeout(() => setFitRoofRequest((n) => n + 1), 80);
+    },
+    [state, effectiveModuleWp, onChange]
+  );
+
+  // Ao entrar na aba "Área disponível", pré-seleciona automaticamente o telhado no endereço atual se ainda não houver polígono
+  useEffect(() => {
+    if (state.entry_method === "area" && !hasRoofPolygon) {
+      applyPreselectedRoofAtCenter(
+        { lat: state.map_center_lat, lng: state.map_center_lng },
+        Number(state.available_area_m2) || Number(state.roof_area_m2) || 60
+      );
+    }
+  }, [state.entry_method]);
+
+  // Atualiza polígono quando o usuário arrasta vértices, adiciona pontos ou desenha contorno no mapa
+  const handleRoofPolygonChange = useCallback(
+    (positions, extraPatch = {}) => {
+      const normalized = serializeRoofPolygon(normalizeRoofPolygon(positions));
+      if (normalized.length < 3) {
+        onChange({ roof_defined: false, roof_polygon: [], ...extraPatch });
+        return;
+      }
+      const metrics = getRoofMetricsFromPolygon(normalized, state);
+      const areaRounded = Math.max(4, Math.round(metrics.areaM2 * 10) / 10);
+
+      const nextState = {
+        ...state,
+        ...extraPatch,
+        roof_defined: true,
+        roof_polygon: normalized,
+        roof_width_m: Math.round(metrics.widthM * 10) / 10,
+        roof_height_m: Math.round(metrics.heightM * 10) / 10,
+        roof_area_m2: areaRounded,
+        available_area_m2: areaRounded,
+        roof_rotation_deg:
+          extraPatch.roof_rotation_deg !== undefined
+            ? extraPatch.roof_rotation_deg
+            : Math.round(metrics.rotationDeg * 10) / 10,
+        module_wp: effectiveModuleWp,
+        map_center_lat: metrics.center.lat,
+        map_center_lng: metrics.center.lng,
+      };
+
+      const layout = getRoofPhysicalLayout(nextState);
+      const installedKwp = (layout.panelCount * effectiveModuleWp) / 1000;
+      const estimatedMonthlyKwh = Math.max(150, Math.round(installedKwp * 4.8 * 30 * 0.8));
+
+      const patch = {
+        roof_defined: true,
+        roof_polygon: normalized,
+        roof_width_m: nextState.roof_width_m,
+        roof_height_m: nextState.roof_height_m,
+        roof_area_m2: areaRounded,
+        available_area_m2: areaRounded,
+        roof_rotation_deg: nextState.roof_rotation_deg,
+        module_wp: effectiveModuleWp,
+        map_center_lat: metrics.center.lat,
+        map_center_lng: metrics.center.lng,
+        ...extraPatch,
+      };
+
+      if (!Number(state.monthly_consumption_kwh) || state.bill_reading_status !== "done") {
+        patch.monthly_consumption_kwh = estimatedMonthlyKwh;
+      }
+      if (!Number(state.tariff_brl_kwh)) {
+        patch.tariff_brl_kwh = 0.95;
+      }
+
+      onChange(patch);
+    },
+    [state, effectiveModuleWp, onChange]
+  );
+
+  // Ao clicar em qualquer telhado na imagem de satélite (em modo 'select'), move o polígono pré-selecionado para aquele ponto
+  const handleMapClickMoveRoof = useCallback(
+    (latlng) => {
+      if (!latlng || roofEditorMode !== "select") return;
+      const currentPoly = normalizeRoofPolygon(state.roof_polygon);
+      if (currentPoly.length >= 3) {
+        const oldCenter = getPolygonCentroid(currentPoly);
+        if (oldCenter) {
+          const dLat = latlng.lat - oldCenter.lat;
+          const dLng = latlng.lng - oldCenter.lng;
+          const moved = serializeRoofPolygon(
+            currentPoly.map((pt) => ({
+              lat: pt.lat + dLat,
+              lng: pt.lng + dLng,
+            }))
+          );
+          handleRoofPolygonChange(moved);
+          return;
+        }
+      }
+      applyPreselectedRoofAtCenter(latlng, Number(state.available_area_m2) || 60);
+    },
+    [roofEditorMode, state.roof_polygon, state.available_area_m2, handleRoofPolygonChange, applyPreselectedRoofAtCenter]
+  );
+
+  // Rotaciona o polígono do telhado em torno do seu centroide (em graus)
+  const handleRotateRoofBy = useCallback(
+    (deltaDeg) => {
+      const currentPoly = normalizeRoofPolygon(state.roof_polygon);
+      if (currentPoly.length < 3) return;
+      const center = getPolygonCentroid(currentPoly);
+      if (!center) return;
+
+      const rotatedPoly = serializeRoofPolygon(
+        currentPoly.map((pt) => {
+          const local = latLngToMeters(pt, center);
+          const rot = rotateMeters(local.east, local.north, deltaDeg);
+          return metersToLatLng(center, rot.east, rot.north);
+        })
+      );
+      const nextRot = normalizeRotationDeg((Number(state.roof_rotation_deg) || 0) + deltaDeg);
+      handleRoofPolygonChange(rotatedPoly, { roof_rotation_deg: Math.round(nextRot * 10) / 10 });
+    },
+    [state.roof_polygon, state.roof_rotation_deg, handleRoofPolygonChange]
+  );
+
+  // Alinhamento direto à aresta clicada no mapa
+  const handleAlignToEdge = useCallback(
+    (azimuthDeg) => {
+      const nextRot = normalizeRotationDeg(azimuthDeg);
+      onChange({ roof_rotation_deg: Math.round(nextRot * 10) / 10 });
+    },
+    [onChange]
+  );
+
+  // Quando o usuário digita manualmente a área (m²), redimensiona proporcionalmente o polígono no mapa
+  const handleAvailableAreaInputChange = useCallback(
+    (newAreaVal) => {
+      const numericArea = Number(newAreaVal);
+      if (!Number.isFinite(numericArea) || numericArea < 4) {
+        setField("available_area_m2", newAreaVal);
+        return;
+      }
+
+      const currentPoly = normalizeRoofPolygon(state.roof_polygon);
+      if (currentPoly.length >= 3 && state.roof_defined !== false) {
+        const currentMetrics = getRoofMetricsFromPolygon(currentPoly, state);
+        const currentArea = Math.max(1, currentMetrics.areaM2 || 1);
+        const ratio = Math.sqrt(numericArea / currentArea);
+        if (Math.abs(ratio - 1) > 0.015) {
+          const center = getPolygonCentroid(currentPoly);
+          const scaledPoly = serializeRoofPolygon(
+            currentPoly.map((pt) => {
+              const local = latLngToMeters(pt, center);
+              return metersToLatLng(center, local.east * ratio, local.north * ratio);
+            })
+          );
+          handleRoofPolygonChange(scaledPoly, {
+            available_area_m2: numericArea,
+            roof_area_m2: numericArea,
+          });
+          return;
+        }
+      } else {
+        applyPreselectedRoofAtCenter(
+          { lat: state.map_center_lat, lng: state.map_center_lng },
+          numericArea,
+          { available_area_m2: numericArea }
+        );
+        return;
+      }
+
+      setField("available_area_m2", newAreaVal);
+    },
+    [state, handleRoofPolygonChange, applyPreselectedRoofAtCenter]
+  );
+
+  // Busca rápida de endereço direto na barra do mapa da aba Área Disponível
+  const handleQuickMapSearch = async (e) => {
+    if (e) e.preventDefault();
+    const q = mapSearchQuery.trim();
+    if (q.length < 3) return;
+    setMapSearching(true);
+    try {
+      const candidates = await searchAddressPrecise(q);
+      setMapSearchResults(candidates || []);
+      if (candidates && candidates.length > 0) {
+        const best = candidates[0];
+        applyPreselectedRoofAtCenter(
+          { lat: best.lat, lng: best.lng },
+          Number(state.available_area_m2) || 60,
+          {
+            map_center_lat: best.lat,
+            map_center_lng: best.lng,
+            map_zoom: Math.max(20, best.zoom || 20),
+            address: best.road || state.address,
+            number: best.number || state.number,
+            neighborhood: best.neighborhood || state.neighborhood,
+            city: best.city || state.city,
+            state: best.state || state.state,
+            zip_code: best.postcode || state.zip_code,
+          }
+        );
+        setViewportRequest((n) => n + 1);
+      }
+    } catch {
+      // ignora falha silenciosamente
+    } finally {
+      setMapSearching(false);
+    }
+  };
+
+  // Confirma o telhado pré-selecionado e avança imediatamente para a próxima etapa
+  const handleConfirmRoofAndAdvance = () => {
+    const patch = {};
+    if (!state.name?.trim()) {
+      const addrLabel = [state.address, state.number].filter(Boolean).join(", ") || state.city || "Unidade Consumidora";
+      patch.name = `Projeto Solar - ${addrLabel}`;
+    }
+    const effectiveArea = Number(state.available_area_m2) || Number(state.roof_area_m2) || 60;
+    if (Number(state.available_area_m2) <= 0) {
+      patch.available_area_m2 = effectiveArea;
+    }
+    if (!Number(state.module_wp)) {
+      patch.module_wp = 550;
+    }
+    if (!Number(state.monthly_consumption_kwh)) {
+      const kwp = Number(preliminary?.installedKwp || results?.installedKwp || 6.6);
+      patch.monthly_consumption_kwh = Math.max(150, Math.round(kwp * 4.8 * 30 * 0.8));
+    }
+    if (!Number(state.tariff_brl_kwh)) {
+      patch.tariff_brl_kwh = 0.95;
+    }
+    if (Object.keys(patch).length > 0) {
+      onChange(patch);
+    }
+    setTimeout(() => {
+      onNextStep?.();
+    }, 20);
+  };
 
   // Métricas dinâmicas centralizadas para o resumo
   const consumptionMetrics = useMemo(() => {
@@ -537,47 +896,363 @@ export default function StepDadosProjeto({ state, onChange }) {
       )}
 
       {state.entry_method === "area" && (
-        <div className="space-y-3.5 rounded-2xl border border-slate-200/90 bg-white p-4.5 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <div className="grid gap-3.5 sm:grid-cols-2">
+        <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-4.5 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          {/* Cabeçalho de Pré-seleção do Telhado no Mapa + Busca Rápida de Endereço */}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-slate-100 pb-3.5">
+            <div className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[#00d8b8]/15 text-[#009b84]">
+                  <MapPin className="h-3.5 w-3.5" />
+                </span>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                  Pré-seleção de Telhado no Mapa Satélite HD
+                </h4>
+                {hasRoofPolygon && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black text-emerald-800">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    Telhado demarcado ({Number(state.roof_area_m2 || state.available_area_m2 || 0).toFixed(1).replace(".", ",")} m²)
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] font-medium text-slate-500">
+                {[state.address, state.number, state.neighborhood, state.city, state.state].filter(Boolean).length > 0
+                  ? `Localização ativa: ${[state.address, state.number].filter(Boolean).join(", ")}${state.city ? ` — ${state.city}/${state.state}` : ""}. Clique no telhado ou arraste os vértices ciano para ajuste milimétrico.`
+                  : "Clique sobre o telhado desejado na imagem de satélite, arraste os vértices para ajustar as medidas ou desenhe o contorno exato."}
+              </p>
+            </div>
+
+            {/* Busca rápida de endereço direto no mapa */}
+            <div className="relative flex items-center gap-1.5 w-full lg:w-80">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={mapSearchQuery}
+                  onChange={(e) => {
+                    setMapSearchQuery(e.target.value);
+                    if (!e.target.value.trim()) setMapSearchResults([]);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleQuickMapSearch(e);
+                    }
+                  }}
+                  placeholder="Refinar endereço ou CEP no mapa..."
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-8 pr-3 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:border-[#00d8b8] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#00d8b8]/15"
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleQuickMapSearch}
+                disabled={mapSearching || mapSearchQuery.trim().length < 3}
+                className="h-9 rounded-xl bg-slate-900 hover:bg-slate-800 px-3 text-xs font-extrabold text-white shrink-0"
+              >
+                {mapSearching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Ir"}
+              </Button>
+
+              {mapSearchResults.length > 1 && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-[600] max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+                  {mapSearchResults.map((cand, idx) => (
+                    <button
+                      key={`${cand.lat}-${cand.lng}-${idx}`}
+                      type="button"
+                      onClick={() => {
+                        setMapSearchResults([]);
+                        setMapSearchQuery(cand.display_name || "");
+                        applyPreselectedRoofAtCenter(
+                          { lat: cand.lat, lng: cand.lng },
+                          Number(state.available_area_m2) || 60,
+                          {
+                            map_center_lat: cand.lat,
+                            map_center_lng: cand.lng,
+                            map_zoom: Math.max(20, cand.zoom || 20),
+                            address: cand.road || state.address,
+                            number: cand.number || state.number,
+                            neighborhood: cand.neighborhood || state.neighborhood,
+                            city: cand.city || state.city,
+                            state: cand.state || state.state,
+                            zip_code: cand.postcode || state.zip_code,
+                          }
+                        );
+                        setViewportRequest((n) => n + 1);
+                      }}
+                      className="flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-700 hover:bg-[#00d8b8]/10 hover:text-slate-950"
+                    >
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00d8b8]" />
+                      <span className="line-clamp-2">{cand.display_name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Barra de Ferramentas CAD de Precisão do Telhado */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/90 bg-slate-50/70 p-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setRoofEditorMode("select")}
+                className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-extrabold transition ${
+                  roofEditorMode === "select"
+                    ? "border-[#00d8b8] bg-[#00d8b8] text-slate-950 shadow-xs"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-[#00d8b8]/40 hover:bg-slate-50"
+                }`}
+                title="Arraste os vértices ou clique sobre um telhado para posicionar a área"
+              >
+                <MousePointerClick className="h-3.5 w-3.5" />
+                <span>Ajustar / Mover no Clique</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRoofEditorMode("draw-polygon")}
+                className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-extrabold transition ${
+                  roofEditorMode === "draw-polygon"
+                    ? "border-[#00d8b8] bg-[#00d8b8] text-slate-950 shadow-xs"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-[#00d8b8]/40 hover:bg-slate-50"
+                }`}
+                title="Desenhar contorno personalizado clicando nos cantos do telhado"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                <span>Desenhar Contorno</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyPreselectedRoofAtCenter(
+                    { lat: state.map_center_lat, lng: state.map_center_lng },
+                    Number(state.available_area_m2) || 60
+                  )
+                }
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-extrabold text-slate-700 hover:border-[#00d8b8]/40 hover:bg-slate-50 transition"
+                title="Gerar retângulo pré-selecionado no centro atual do mapa"
+              >
+                <Square className="h-3.5 w-3.5 text-[#00d8b8]" />
+                <span>Pré-selecionar Retângulo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRoofEditorMode(roofEditorMode === "measure" ? "select" : "measure")}
+                className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-extrabold transition ${
+                  roofEditorMode === "measure"
+                    ? "border-amber-400 bg-amber-400/20 text-amber-950"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                }`}
+                title="Medir distância em metros entre dois pontos do telhado"
+              >
+                <Ruler className="h-3.5 w-3.5 text-amber-600" />
+                <span>Régua</span>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5">
+                <button
+                  type="button"
+                  disabled={!hasRoofPolygon}
+                  onClick={() => handleRotateRoofBy(-15)}
+                  className="flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+                  title="Girar telhado -15°"
+                >
+                  <RotateCcw className="h-3 w-3 text-[#00d8b8]" />
+                  <span>-15°</span>
+                </button>
+                <span className="px-2 text-[10px] font-black text-slate-700 border-x border-slate-100 flex items-center gap-1">
+                  <Compass className="h-3 w-3 text-[#00d8b8]" />
+                  {azimuthInfo.formatted}
+                </span>
+                <button
+                  type="button"
+                  disabled={!hasRoofPolygon}
+                  onClick={() => handleRotateRoofBy(15)}
+                  className="flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+                  title="Girar telhado +15°"
+                >
+                  <RotateCw className="h-3 w-3 text-[#00d8b8]" />
+                  <span>+15°</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                disabled={!hasRoofPolygon}
+                onClick={() => setFitRoofRequest((n) => n + 1)}
+                className="flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-extrabold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                title="Enquadrar câmera no telhado selecionado"
+              >
+                <Maximize2 className="h-3.5 w-3.5 text-[#00d8b8]" />
+                <span className="hidden sm:inline">Enquadrar</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={!hasRoofPolygon}
+                onClick={() => {
+                  onChange({ roof_defined: false, roof_polygon: [] });
+                  setRoofEditorMode("draw-polygon");
+                }}
+                className="flex h-8 items-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 text-[11px] font-extrabold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                title="Limpar polígono e desenhar novamente"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Limpar</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Mapa Interativo Satélite com Polígono do Telhado, Cotas em Metros e Módulos Fotovoltaicos */}
+          <div className="relative h-[390px] sm:h-[430px] w-full overflow-hidden rounded-2xl border-2 border-[#00d8b8]/50 shadow-md">
+            <SolarDesignerMap
+              className="h-full w-full"
+              config={{
+                ...state,
+                module_wp: effectiveModuleWp,
+                map_zoom: Math.max(19, Number(state.map_zoom) || 20),
+              }}
+              sizing={{
+                panelCount: effectivePanelsInfo.panelCount,
+                dcPowerKw: (effectivePanelsInfo.panelCount * effectiveModuleWp) / 1000,
+              }}
+              editorMode={roofEditorMode}
+              fitRoofRequest={fitRoofRequest}
+              viewportRequest={viewportRequest}
+              panelPolygons={visiblePanels}
+              showBadges={false}
+              showMeasurements={true}
+              onEditorModeChange={setRoofEditorMode}
+              onRoofChange={handleRoofPolygonChange}
+              onAlignToEdge={handleAlignToEdge}
+              onMapClick={handleMapClickMoveRoof}
+              onFitRoof={() => setFitRoofRequest((n) => n + 1)}
+              onViewportChange={({ center, zoom }) =>
+                onChange({
+                  map_center_lat: center.lat,
+                  map_center_lng: center.lng,
+                  map_zoom: zoom,
+                })
+              }
+            />
+
+            {/* Dica Flutuante de Precisão no Topo Esquerdo do Mapa */}
+            <div className="pointer-events-none absolute top-3 left-3 z-[490] hidden sm:flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white/95 backdrop-blur-md px-3 py-1.5 text-[11px] font-bold text-slate-800 shadow-md">
+              <Crosshair className="h-3.5 w-3.5 text-[#00d8b8] shrink-0" />
+              <span>
+                {roofEditorMode === "draw-polygon"
+                  ? "Clique nos cantos do telhado no satélite para desenhar a água"
+                  : "Clique no telhado para posicionar ou arraste os pontos brancos/ciano"}
+              </span>
+            </div>
+          </div>
+
+          {/* Campos Numéricos Sincronizados + Orientação dos Módulos */}
+          <div className="grid gap-3.5 sm:grid-cols-3 pt-1">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-slate-700">
                 Área disponível do telhado (m²) <span className="text-[#00d8b8] font-bold">*</span>
               </Label>
               <PtBrNumericInput
                 value={state.available_area_m2}
-                onChange={(v) => setField("available_area_m2", v)}
+                onChange={handleAvailableAreaInputChange}
                 placeholder="Ex: 60"
                 suffix="m²"
                 min={4}
               />
             </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-slate-700">
                 Potência do módulo (Wp)
               </Label>
               <PtBrNumericInput
-                value={state.module_wp}
+                value={state.module_wp || 550}
                 onChange={(v) => setField("module_wp", v)}
                 placeholder="Ex: 550"
                 suffix="Wp"
                 min={100}
               />
             </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700">
+                Orientação dos módulos no telhado
+              </Label>
+              <div className="grid grid-cols-3 gap-1.5 h-11 rounded-xl border border-slate-200 bg-slate-50/70 p-1">
+                {[
+                  { id: "auto", label: "Auto" },
+                  { id: "vertical", label: "Retrato" },
+                  { id: "horizontal", label: "Paisagem" },
+                ].map((ori) => {
+                  const active = (state.module_orientation || "auto") === ori.id;
+                  return (
+                    <button
+                      key={ori.id}
+                      type="button"
+                      onClick={() => setField("module_orientation", ori.id)}
+                      className={`rounded-lg text-[11px] font-extrabold transition ${
+                        active
+                          ? "bg-[#00d8b8] text-slate-950 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-white/70"
+                      }`}
+                    >
+                      {ori.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-3.5 text-xs">
-            <div>
-              <span className="text-slate-400 font-bold uppercase text-[10px] block">Capacidade estimada</span>
-              <strong className="text-slate-900 font-black text-xs">
-                {preliminary?.panelCount > 0 ? `${preliminary.panelCount} módulos` : "—"}
-              </strong>
+          {/* Barra de Resumo Técnico do Telhado Pré-selecionado + Botão Direto de Avanço */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-[#00d8b8]/35 bg-[#00d8b8]/[0.06] p-3.5 text-xs">
+            <div className="flex flex-wrap items-center gap-5">
+              <div>
+                <span className="text-slate-500 font-bold uppercase text-[10px] block">
+                  Dimensões do Telhado
+                </span>
+                <strong className="text-slate-900 font-black text-xs">
+                  {hasRoofPolygon
+                    ? `${Number(state.roof_width_m || 0).toFixed(1).replace(".", ",")}m × ${Number(state.roof_height_m || 0).toFixed(1).replace(".", ",")}m (${Number(state.roof_area_m2 || state.available_area_m2 || 0).toFixed(1).replace(".", ",")} m²)`
+                    : "—"}
+                </strong>
+              </div>
+
+              <div>
+                <span className="text-slate-500 font-bold uppercase text-[10px] block">
+                  Capacidade estimada
+                </span>
+                <strong className="text-slate-900 font-black text-xs">
+                  {preliminary?.panelCount > 0 ? `${preliminary.panelCount} módulos` : "—"}
+                </strong>
+              </div>
+
+              <div>
+                <span className="text-slate-500 font-bold uppercase text-[10px] block">
+                  Potência pico
+                </span>
+                <strong className="text-[#008f7a] font-black text-xs">
+                  {Number(preliminary?.installedKwp || 0) > 0
+                    ? `${Number(preliminary.installedKwp).toFixed(2).replace(".", ",")} kWp`
+                    : "—"}
+                </strong>
+              </div>
             </div>
-            <div>
-              <span className="text-slate-400 font-bold uppercase text-[10px] block">Potência pico</span>
-              <strong className="text-slate-900 font-black text-xs">
-                {Number(preliminary?.installedKwp || 0) > 0 ? `${Number(preliminary.installedKwp).toFixed(2).replace(".", ",")} kWp` : "—"}
-              </strong>
-            </div>
+
+            {onNextStep && (
+              <Button
+                type="button"
+                onClick={handleConfirmRoofAndAdvance}
+                className="h-10 rounded-xl bg-[#00d8b8] hover:bg-[#00c4a7] px-4 text-xs font-black text-slate-950 shadow-sm transition flex items-center gap-1.5 shrink-0"
+              >
+                <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
+                <span>Confirmar Telhado e Avançar Etapa</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -675,7 +1350,7 @@ export default function StepDadosProjeto({ state, onChange }) {
 
           <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
             <p className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
-              <Sun className="h-3 w-3 text-[#00d8b8]" /> Módulos ({state.module_wp} Wp)
+              <Sun className="h-3 w-3 text-[#00d8b8]" /> Módulos ({state.module_wp || 550} Wp)
             </p>
             <p className="mt-1 text-base font-black text-foreground">
               {results?.panelCount > 0 ? `${results.panelCount} unidades` : "—"}
