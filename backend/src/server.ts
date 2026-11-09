@@ -32,6 +32,7 @@ import { env } from "./config/env.js";
 import { assertStartupEnvironment, assertDatabaseConnection } from "./config/startupValidation.js";
 import { prisma } from "./lib/prisma.js";
 import { buildApp } from "./app.js";
+import { bootstrapSuperAdmins } from "./lib/bootstrap.js";
 
 // Valida variáveis críticas de produção (.env, Stripe, Database) antes de inicializar
 assertStartupEnvironment();
@@ -39,6 +40,9 @@ assertStartupEnvironment();
 const start = async () => {
   // Valida a conectividade ativa com o MySQL antes de abrir a porta
   await assertDatabaseConnection(prisma);
+
+  // Garante o provisionamento automático dos super admins iniciais no banco de dados
+  await bootstrapSuperAdmins(prisma);
 
   const app = await buildApp();
 

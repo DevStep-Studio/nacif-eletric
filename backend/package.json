@@ -13,7 +13,8 @@
     "test:auth-register": "tsx --test test/auth-register.ts",
     "test:integration": "tsx test/api-integration.ts",
     "stripe:check": "tsx scripts/check-stripe.ts",
-    "db:check": "tsx scripts/check-schema.ts"
+    "db:check": "tsx scripts/check-schema.ts",
+    "seed:super-admins": "tsx scripts/seed-super-admins.ts"
   },
   "keywords": [],
   "author": "",
