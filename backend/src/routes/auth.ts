@@ -302,8 +302,16 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     return serializeUser(user);
   });
 
+  // ==========================================================================
+  // ROTA 1: SOLICITAÇÃO DE RECUPERAÇÃO DE SENHA (ESQUECI MINHA SENHA)
+  // Endpoints: POST /api/auth/forgot-password e POST /api/auth/reset-password-request
+  // ==========================================================================
   const handleForgotPassword = async (request: any, reply: any) => {
+    let userEmail: string | undefined;
+    let generatedRecoveryLink: string | undefined;
+
     try {
+      // 1. Validação de entrada: garante que o e-mail foi enviado e possui formato válido
       const parsed = resetRequestSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({
@@ -313,10 +321,15 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       }
 
       const normalizedEmail = parsed.data.email.toLowerCase().trim();
+      userEmail = normalizedEmail;
+
+      // 2. Consulta no banco de dados (Prisma) para checar se o usuário existe
       const user = await prisma.user.findUnique({
         where: { email: normalizedEmail },
       });
 
+      // 3. Regra de segurança (Timing Attack & Enumeração):
+      // Se o usuário não existir ou estiver deletado, retornamos 200 genérico para não vazar a existência do e-mail
       if (!user || user.isDeleted || user.status === "deleted") {
         return {
           ok: true,
@@ -326,19 +339,26 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         };
       }
 
-      await prisma.passwordResetToken.updateMany({
-        where: {
-          userId: user.id,
-          usedAt: null,
-        },
-        data: {
-          usedAt: new Date(),
-        },
-      });
+      // 4. Invalidação de tokens anteriores: inutiliza links de recuperação anteriores que não foram usados
+      try {
+        await prisma.passwordResetToken.updateMany({
+          where: {
+            userId: user.id,
+            usedAt: null,
+          },
+          data: {
+            usedAt: new Date(),
+          },
+        });
+      } catch (err) {
+        console.warn("[Auth ForgotPassword] Aviso ao invalidar tokens pendentes:", err);
+      }
 
+      // 5. Geração de Token Seguro: token criptográfico aleatório (32 bytes hex) com expiração de 1 hora
       const token = generateResetToken();
-      const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // Validade de 1 hora
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hora de validade
 
+      // 6. Persistência no banco de dados atrelado ao usuário
       await prisma.passwordResetToken.create({
         data: {
           token,
@@ -347,16 +367,21 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         },
       });
 
+      // 7. Construção do Link de Recuperação apontando para a tela do front-end
       const recoveryLink = `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
+      generatedRecoveryLink = recoveryLink;
+
+      // 8. Disparo do e-mail via SMTP com Nodemailer
       const emailResult = await sendPasswordResetEmail({
         to: user.email,
         userName: user.fullName,
         resetLink: recoveryLink,
       });
 
+      // Se o servidor SMTP falhou ou as chaves não estão configuradas:
       if (!emailResult.sent) {
         console.error(
-          "[Auth ForgotPassword] E-mail de redefinição não pôde ser enviado via SMTP; token gerado com sucesso no banco:",
+          "[Auth ForgotPassword] O token foi gerado com sucesso, mas o e-mail SMTP não pôde ser enviado:",
           {
             email: user.email,
             userId: user.id,
@@ -365,29 +390,43 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         );
       }
 
+      // 9. Retorno com status 200 de sucesso (sem erro 500)
       return {
         ok: true,
         emailSent: emailResult.sent,
         message:
           "Se existir uma conta com o e-mail informado, você receberá o link de redefinição em instantes.",
+        // Fornece o link de recuperação para auxílio imediato caso o SMTP ainda esteja em configuração
         ...(env.NODE_ENV !== "production" || !emailResult.sent ? { recoveryLink } : {}),
       };
     } catch (error) {
-      console.error("[Auth ForgotPassword] Falha inesperada ao processar solicitação de recuperação de senha:", error);
+      // 10. Prevenção de Erro 500: Qualquer falha inesperada é logada detalhadamente no console
+      console.error("[Auth ForgotPassword] Falha inesperada ao processar solicitação de recuperação de senha:", {
+        email: userEmail,
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
+
       return reply.status(200).send({
         ok: true,
         emailSent: false,
         message:
-          "Não foi possível disparar o e-mail no momento, mas sua solicitação foi registrada. Verifique a configuração SMTP ou tente novamente em instantes.",
+          "Se existir uma conta com o e-mail informado, você receberá o link de redefinição em instantes.",
+        ...(generatedRecoveryLink ? { recoveryLink: generatedRecoveryLink } : {}),
       });
     }
   };
 
+  // Registra as duas rotas (para máxima compatibilidade com versões do front-end)
   app.post("/api/auth/forgot-password", handleForgotPassword);
   app.post("/api/auth/reset-password-request", handleForgotPassword);
 
+  // ==========================================================================
+  // ROTA 2: REDEFINIÇÃO DE SENHA (RESET PASSWORD)
+  // Recebe token e nova senha, valida validade/expiração e atualiza o hash
+  // ==========================================================================
   app.post("/api/auth/reset-password", async (request, reply) => {
     try {
+      // 1. Validação dos dados de entrada
       const parsed = resetPasswordSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({
@@ -396,8 +435,8 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         });
       }
 
-      const token = parsed.data.token ?? parsed.data.resetToken ?? parsed.data.reset_token;
-      const newPassword = parsed.data.password ?? parsed.data.newPassword ?? parsed.data.new_password;
+      const token = (parsed.data.token ?? parsed.data.resetToken ?? parsed.data.reset_token)?.trim();
+      const newPassword = (parsed.data.password ?? parsed.data.newPassword ?? parsed.data.new_password)?.trim();
 
       if (!token || !newPassword) {
         return reply.status(400).send({
@@ -406,11 +445,20 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         });
       }
 
+      if (newPassword.length < 6) {
+        return reply.status(400).send({
+          error: "ValidationError",
+          message: "A nova senha deve ter no mínimo 6 caracteres.",
+        });
+      }
+
+      // 2. Localiza o token no banco de dados e traz os dados do usuário atrelado
       const reset = await prisma.passwordResetToken.findUnique({
         where: { token },
         include: { user: true },
       });
 
+      // 3. Valida se o token existe, se já não foi usado e se ainda não expirou
       if (!reset || reset.usedAt || reset.expiresAt.getTime() < Date.now()) {
         return reply.status(400).send({
           error: "AppError",
@@ -418,8 +466,17 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         });
       }
 
+      if (!reset.user || reset.user.isDeleted || reset.user.status === "deleted") {
+        return reply.status(400).send({
+          error: "AppError",
+          message: "Usuário associado ao link não foi encontrado ou está inativo.",
+        });
+      }
+
+      // 4. Gera o hash bcrypt seguro da nova senha
       const passwordHash = await hashPassword(newPassword);
 
+      // 5. Transação atômica do Prisma: atualiza a senha do usuário e queima o token (usedAt)
       await prisma.$transaction([
         prisma.user.update({
           where: { id: reset.userId },
@@ -435,19 +492,24 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
 
       return {
         ok: true,
-        message: "Senha redefinida com sucesso.",
+        message: "Senha redefinida com sucesso. Faça login com a sua nova senha.",
       };
     } catch (error) {
-      console.error("[Auth ResetPassword] Erro ao redefinir a senha:", error);
+      // 6. Prevenção de Erro 500: Erros são capturados e tratados com mensagens claras
+      console.error("[Auth ResetPassword] Erro ao redefinir a senha:", {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
+
       if (error instanceof AppError) {
         return reply.status(error.statusCode).send({
           error: "AppError",
           message: error.message,
         });
       }
+
       return reply.status(400).send({
         error: "ResetPasswordError",
-        message: "Não foi possível concluir a redefinição de senha. Tente novamente.",
+        message: "Não foi possível concluir a redefinição de senha. Verifique o link ou tente novamente.",
       });
     }
   });

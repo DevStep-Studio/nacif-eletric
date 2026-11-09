@@ -2,8 +2,12 @@ import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { env } from "../config/env.js";
 
+// Cache do transportador para reaproveitar conexões SMTP em vez de recriar a cada requisição
 let cachedTransporter: Transporter | null = null;
 
+/**
+ * Verifica se todas as variáveis essenciais de SMTP foram fornecidas no .env
+ */
 export const isSmtpConfigured = (): boolean => {
   return Boolean(
     env.SMTP_HOST &&
@@ -13,24 +17,34 @@ export const isSmtpConfigured = (): boolean => {
   );
 };
 
+/**
+ * Cria ou retorna a instância ativa do cliente SMTP (Nodemailer Transporter)
+ */
 export const getSmtpTransporter = (): Transporter | null => {
   if (!isSmtpConfigured()) {
     return null;
   }
 
   if (!cachedTransporter) {
-    cachedTransporter = nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_SECURE || env.SMTP_PORT === 465,
-      auth: {
-        user: env.SMTP_USER,
-        pass: env.SMTP_PASS,
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    });
+    try {
+      cachedTransporter = nodemailer.createTransport({
+        host: env.SMTP_HOST,
+        port: env.SMTP_PORT,
+        // Porta 465 geralmente exige SSL direto (secure: true). Porta 587 usa STARTTLS (secure: false).
+        secure: env.SMTP_SECURE || env.SMTP_PORT === 465,
+        auth: {
+          user: env.SMTP_USER,
+          pass: env.SMTP_PASS,
+        },
+        // Timeouts para evitar travamento da requisição caso o servidor SMTP esteja instável
+        connectionTimeout: 10000, // 10 segundos para estabelecer conexão TCP
+        greetingTimeout: 10000,   // 10 segundos para resposta inicial do servidor
+        socketTimeout: 15000,     // 15 segundos para tráfego de dados
+      });
+    } catch (err) {
+      console.error("[SMTP Mailer] Falha ao instanciar transportador Nodemailer:", err);
+      return null;
+    }
   }
 
   return cachedTransporter;
@@ -48,12 +62,17 @@ export interface SendEmailResult {
   error?: string;
 }
 
+/**
+ * Dispara o e-mail de recuperação de senha com layout HTML responsivo e versão em texto puro.
+ * NUNCA lança exceção não tratada: em caso de erro, captura e retorna { sent: false, error }.
+ */
 export const sendPasswordResetEmail = async ({
   to,
   userName,
   resetLink,
 }: SendPasswordResetEmailParams): Promise<SendEmailResult> => {
   try {
+    // 1. Checa se o SMTP está configurado
     if (!isSmtpConfigured()) {
       console.error(
         "[SMTP Mailer] Credenciais SMTP ausentes nas variáveis de ambiente (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS). E-mail não pôde ser disparado para:",
@@ -65,6 +84,7 @@ export const sendPasswordResetEmail = async ({
       };
     }
 
+    // 2. Obtém o transportador
     const transporter = getSmtpTransporter();
     if (!transporter) {
       console.error("[SMTP Mailer] Falha ao inicializar o transporter do Nodemailer.");
@@ -78,6 +98,7 @@ export const sendPasswordResetEmail = async ({
       env.SMTP_FROM || `"Nacif Energy" <${env.SMTP_USER}>`;
     const displayName = userName?.trim() || to.split("@")[0];
 
+    // 3. Monta o template de e-mail em HTML (estilizado na paleta do Nacif Energy)
     const html = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -125,6 +146,7 @@ export const sendPasswordResetEmail = async ({
 </html>
     `.trim();
 
+    // 4. Versão em texto puro para clientes de e-mail que não suportam HTML
     const text = [
       `Olá, ${displayName}!`,
       "",
@@ -135,6 +157,7 @@ export const sendPasswordResetEmail = async ({
       "Se você não solicitou esta alteração, ignore este e-mail.",
     ].join("\n");
 
+    // 5. Envio assíncrono via Nodemailer
     const info = await transporter.sendMail({
       from: senderAddress,
       to,
@@ -148,6 +171,7 @@ export const sendPasswordResetEmail = async ({
       messageId: info.messageId,
     };
   } catch (error) {
+    // 6. Tratamento de erro detalhado para não quebrar a aplicação
     console.error("[SMTP Mailer] Erro ao enviar e-mail de redefinição de senha via SMTP:", {
       recipient: to,
       smtpHost: env.SMTP_HOST,
