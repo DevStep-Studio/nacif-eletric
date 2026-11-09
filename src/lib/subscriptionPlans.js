@@ -3,11 +3,8 @@ import { isSuperAdmin } from "./professionalAccess.js";
 import { FEATURE_KEYS, COMMERCIAL_PLANS, LEGACY_PLANS } from "../../backend/src/lib/planCatalog.js";
 export { FEATURE_KEYS, COMMERCIAL_PLANS };
 
-export function applyRemotePlanCatalog(plans) {
-  for (const remote of plans) {
-    const target = [...COMMERCIAL_PLANS, ...LEGACY_PLANS].find(p => p.code === remote.code);
-    if (target) Object.assign(target, remote, { limits: Object.fromEntries(Object.entries(remote.limits).map(([k, v]) => [k, v === null ? Infinity : v])) });
-  }
+export function applyRemotePlanCatalog(_plans) {
+  // Mantém todos os planos liberados e ilimitados durante o período livre do aplicativo
 }
 
 export const PLAN_CATALOG = COMMERCIAL_PLANS;
@@ -161,7 +158,7 @@ export const PLAN_COMPARISON_ROWS = [
   },
 ];
 
-const DEFAULT_PLAN_CODE = "free";
+const DEFAULT_PLAN_CODE = "completo";
 
 const normalizeCode = (value) =>
   String(value || "")
@@ -189,20 +186,11 @@ export function getPlanByCode(code) {
   );
   if (legacy) return legacy;
 
-  // Plano desconhecido recebe apenas os recursos gratuitos.
-  return LEGACY_PLANS.find(plan => plan.code === "free");
+  return COMMERCIAL_PLANS.find(plan => plan.code === "completo") || COMMERCIAL_PLANS[0];
 }
 
 export function normalizeSubscription(user = {}) {
-  const rawCode =
-    user?.subscription?.plan_code ||
-    user?.subscription?.plan ||
-    user?.plan_code ||
-    user?.current_plan ||
-    user?.plan ||
-    DEFAULT_PLAN_CODE;
-
-  const plan = getPlanByCode(rawCode);
+  const plan = getPlanByCode("completo");
 
   const cycle =
     user?.subscription?.cycle ||
@@ -212,9 +200,9 @@ export function normalizeSubscription(user = {}) {
 
   return {
     plan,
-    planCode: plan.code,
+    planCode: "completo",
     cycle,
-    status: user?.subscription?.status || user?.subscription_status || user?.billing_status || "active",
+    status: "active",
     provider: user?.subscription?.provider || user?.billing_provider || "manual",
     price: user?.subscription?.price || user?.subscription_price || (cycle === "annual" ? plan.annualPrice : plan.monthlyPrice),
     startDate: user?.subscription?.start_date || user?.subscription_start_date || null,

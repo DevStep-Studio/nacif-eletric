@@ -240,10 +240,10 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     } else {
       assertAccountAvailable(user);
 
-      await prisma.user.update({
+      user = await prisma.user.update({
         where: { id: user.id },
-        data: { lastAccess: new Date() },
-      }).catch(() => {});
+        data: { lastAccess: new Date(), plan: "completo" },
+      }).catch(() => ({ ...user!, plan: "completo" as const }));
     }
 
     return {
@@ -286,6 +286,11 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         status: "active",
         isDeleted: false,
       }));
+    } else if (user.plan !== "completo") {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { plan: "completo" },
+      }).catch(() => ({ ...user!, plan: "completo" as const }));
     }
 
     return serializeUser(user);
@@ -306,8 +311,6 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       }
       nextPasswordHash = await hashPassword(data.new_password);
     }
-
-    if (data.plan) throw new AppError("Planos são gerenciados pela assinatura Stripe.", 403);
 
     const existingUser = await prisma.user.findUniqueOrThrow({ where: { id: request.authUser.id } });
     const currentPermissions = (existingUser.customPermissions as Record<string, unknown>) || {};
@@ -344,6 +347,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         crea: data.crea,
         phone: data.phone,
         avatarUrl: resolvedAvatarUrl,
+        plan: "completo",
         customPermissions: nextPermissions as any,
         ...(nextPasswordHash ? { passwordHash: nextPasswordHash } : {}),
       },

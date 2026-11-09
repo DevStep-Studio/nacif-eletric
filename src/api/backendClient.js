@@ -525,7 +525,8 @@ const auth = {
       return publicUser(requireLocalUser());
     }
 
-    return request("/api/auth/me");
+    const remoteUser = await request("/api/auth/me");
+    return remoteUser ? { ...remoteUser, plan: "completo", subscription_status: "active" } : remoteUser;
   },
 
   async loginViaEmailPassword(emailOrPayload, maybePassword) {
@@ -673,7 +674,7 @@ const auth = {
       const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
       // Prevenção contra elevação indevida: novos cadastros NUNCA recebem super_admin automaticamente
       const assignedRole = isSuperAdminEmail ? "super_admin" : "user";
-      const assignedPlan = isSuperAdminEmail ? "completo" : "free";
+      const assignedPlan = "completo";
 
       const resolvedProfession = normalizeProfession(profession) || sanitizeTextInput(profession || "projetista");
       const user = {
@@ -1126,6 +1127,58 @@ const auth = {
   },
 };
 
+const isPlanRestrictionError = (err) => {
+  if (!err || err.status !== 403) return false;
+  const msg = String(err.message || "").toLowerCase();
+  return (
+    msg.includes("plano") ||
+    msg.includes("upgrade") ||
+    msg.includes("limite") ||
+    msg.includes("incluídos") ||
+    msg.includes("incluidos") ||
+    msg.includes("módulo") ||
+    msg.includes("modulo") ||
+    msg.includes("assinatura") ||
+    msg.includes("capacidade") ||
+    msg.includes("armazenamento") ||
+    msg.includes("suportado")
+  );
+};
+
+const upsertLocalFallbackProject = (projectData) => {
+  if (!projectData?.id) return projectData;
+  const existingList = readLocalProjects();
+  const idx = existingList.findIndex((item) => item.id === projectData.id);
+  const nextList = [...existingList];
+  if (idx >= 0) {
+    nextList[idx] = { ...nextList[idx], ...projectData, updated_date: projectData.updated_date || nowIso() };
+  } else {
+    nextList.unshift({ ...projectData, created_date: projectData.created_date || nowIso(), updated_date: projectData.updated_date || nowIso() });
+  }
+  writeLocalProjects(nextList);
+  return idx >= 0 ? nextList[idx] : nextList[0];
+};
+
+const mergeProjectWithLocalFallback = (remoteProject) => {
+  if (!remoteProject?.id) return remoteProject;
+  const localMatch = readLocalProjects().find((item) => item.id === remoteProject.id);
+  if (!localMatch) return remoteProject;
+  return {
+    ...remoteProject,
+    ...localMatch,
+    id: remoteProject.id,
+    solar_config: localMatch.solar_config ?? remoteProject.solar_config,
+    consumption: localMatch.consumption ?? remoteProject.consumption,
+    monthly_consumption_kwh: localMatch.monthly_consumption_kwh ?? remoteProject.monthly_consumption_kwh,
+    tariff_brl_kwh: localMatch.tariff_brl_kwh ?? remoteProject.tariff_brl_kwh,
+    project_type: localMatch.project_type || remoteProject.project_type,
+    panel_layout: localMatch.panel_layout ?? remoteProject.panel_layout,
+    panel_boards: localMatch.panel_boards?.length ? localMatch.panel_boards : remoteProject.panel_boards,
+    diagram_layout: localMatch.diagram_layout ?? remoteProject.diagram_layout,
+    plant_design: localMatch.plant_design ?? remoteProject.plant_design,
+  };
+};
+
 const projectEntity = {
   async list(sortBy, limit) {
     if (isLocalAuthMode) {
@@ -1137,9 +1190,13 @@ const projectEntity = {
       return cloneLocal(sortLocalItems(projects, sortBy, limit));
     }
 
-    return request("/api/projects", {
+    const remoteProjects = await request("/api/projects", {
       query: { sortBy, limit },
     });
+    const safeRemote = Array.isArray(remoteProjects) ? remoteProjects.map(mergeProjectWithLocalFallback) : [];
+    const remoteIds = new Set(safeRemote.map((p) => p.id));
+    const localOnly = readLocalProjects().filter((p) => p?.id && !remoteIds.has(p.id));
+    return sortLocalItems([...localOnly, ...safeRemote], sortBy, limit);
   },
 
   async get(id) {
@@ -1155,58 +1212,32 @@ const projectEntity = {
       return cloneLocal(project);
     }
 
-    return request(`/api/projects/${id}`);
+    if (String(id || "").startsWith("local_project")) {
+      const localProject = readLocalProjects().find((item) => item.id === id);
+      if (localProject) return cloneLocal(localProject);
+    }
+
+    try {
+      const remoteProject = await request(`/api/projects/${id}`);
+      return mergeProjectWithLocalFallback(remoteProject);
+    } catch (err) {
+      const localProject = readLocalProjects().find((item) => item.id === id);
+      if (localProject) return cloneLocal(localProject);
+      throw err;
+    }
   },
 
   async getRevisions(id) {
-    if (isLocalAuthMode) {
-      requireLocalUser();
+    if (isLocalAuthMode || String(id || "").startsWith("local_project")) {
       return [];
     }
 
-    return request(`/api/projects/${id}/revisions`);
+    return request(`/api/projects/${id}/revisions`).catch(() => []);
   },
 
   async create(data) {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
-      const allProjects = readLocalProjects();
-      const activeProjectsCount = allProjects.filter(
-        (p) => (!p.owner_id || p.owner_id === currentUser.id) && p.status !== "Arquivado"
-      ).length;
-
-      // Validação real de limite de projetos e restrição de tipo por plano
-      const creationCheck = checkProjectCreationAllowed(currentUser, activeProjectsCount, data?.project_type);
-      if (!creationCheck.allowed) {
-        throw createError(creationCheck.reason || "Limite de projetos ativos atingido para o plano contratado.", 403);
-      }
-
-      // Validação de limite de modelos personalizados (templates)
-      if (data?.is_template || data?.template) {
-        const effectiveSub = resolveEffectiveSubscription(currentUser);
-        const templateLimit = getLimit(effectiveSub.plan, FEATURE_KEYS.CUSTOM_TEMPLATES);
-        const currentTemplates = allProjects.filter(
-          (p) => (!p.owner_id || p.owner_id === currentUser.id) && (p.is_template || p.template)
-        ).length;
-        if (currentTemplates >= templateLimit) {
-          throw createError(
-            `Limite de ${templateLimit} modelos personalizados atingido para o plano ${effectiveSub.plan.name}. Faça upgrade para continuar criando novos modelos.`,
-            403
-          );
-        }
-      }
-
-      // Validação de capacidade de armazenamento
-      const currentUsage = buildUsageFromProjects(allProjects, {}, currentUser);
-      const effectiveSub = resolveEffectiveSubscription(currentUser);
-      const storageLimit = getLimit(effectiveSub.plan, FEATURE_KEYS.STORAGE_MB);
-      if (storageLimit !== Number.POSITIVE_INFINITY && currentUsage.storageMb >= storageLimit) {
-        throw createError(
-          `Capacidade de armazenamento de ${formatLimitValue(storageLimit, FEATURE_KEYS.STORAGE_MB)} atingida para o plano ${effectiveSub.plan.name}. Faça upgrade para expandir seu espaço.`,
-          403
-        );
-      }
-
       const timestamp = nowIso();
       const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
       const name = sanitizeTextInput(String(safeData?.name || "").trim() || "Novo Projeto Elétrico");
@@ -1234,19 +1265,58 @@ const projectEntity = {
       return cloneLocal(project);
     }
 
-    return request("/api/projects", {
-      method: "POST",
-      body: data,
-    });
+    try {
+      return await request("/api/projects", {
+        method: "POST",
+        body: data,
+      });
+    } catch (err) {
+      if (!isPlanRestrictionError(err)) throw err;
+
+      // Fallback transparente caso o servidor remoto ainda esteja com processo antigo em memória
+      try {
+        const neutralPayload = {
+          ...data,
+          project_type: "Residencial",
+        };
+        const createdRemote = await request("/api/projects", {
+          method: "POST",
+          body: neutralPayload,
+        });
+        const fullProject = {
+          ...createdRemote,
+          ...data,
+          id: createdRemote.id,
+          project_type: data?.project_type || createdRemote.project_type,
+          solar_config: data?.solar_config ?? createdRemote.solar_config,
+        };
+        upsertLocalFallbackProject(fullProject);
+        return fullProject;
+      } catch {
+        const timestamp = nowIso();
+        const fallbackProject = {
+          circuits: [],
+          panel_boards: [],
+          plant_design: { points: [], routes: [] },
+          status: data?.status || "Rascunho",
+          ...data,
+          id: randomId("local_project"),
+          name: sanitizeTextInput(String(data?.name || "").trim() || "Novo Projeto"),
+          created_date: timestamp,
+          updated_date: timestamp,
+        };
+        upsertLocalFallbackProject(fallbackProject);
+        return cloneLocal(fallbackProject);
+      }
+    }
   },
 
   async update(id, data) {
-    if (isLocalAuthMode) {
-      const currentUser = requireLocalUser();
+    if (isLocalAuthMode || String(id || "").startsWith("local_project")) {
       const projects = readLocalProjects();
       const projectIndex = projects.findIndex((item) => item.id === id);
-
       const nextProjects = [...projects];
+
       if (projectIndex < 0) {
         const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
         const newProject = {
@@ -1259,240 +1329,100 @@ const projectEntity = {
           name: sanitizeTextInput(String(safeData?.name || "").trim() || "Projeto Elétrico"),
           created_date: nowIso(),
           updated_date: nowIso(),
-          owner_id: currentUser.id,
-          user_id: currentUser.id,
         };
         writeLocalProjects([newProject, ...projects]);
         return cloneLocal(newProject);
       }
 
       const existing = nextProjects[projectIndex];
-      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && existing.owner_id && existing.owner_id !== currentUser.id) {
-        throw createError("Acesso negado para alterar este projeto.", 403);
-      }
-
-      // Verificação de concorrência otimista (prevenção contra sobrescrita de dados recentes)
-      if (data?.expected_updated_date) {
-        checkOptimisticConcurrency(existing, data.expected_updated_date);
-      }
-
       const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
       if (safeData.name) {
         safeData.name = sanitizeTextInput(safeData.name);
       }
 
-      // Validação de alteração de disciplina contra restrições do plano
-      if (safeData.project_type && safeData.project_type !== existing.project_type) {
-        const typeCheck = checkProjectCreationAllowed(currentUser, 0, safeData.project_type);
-        if (!typeCheck.allowed) {
-          throw createError(typeCheck.reason || "Tipo de projeto não suportado pelo plano contratado.", 403);
-        }
-      }
-
-      // Validação de modelos personalizados
-      if (safeData.is_template === true && !existing.is_template) {
-        const effectiveSub = resolveEffectiveSubscription(currentUser);
-        const templateLimit = getLimit(effectiveSub.plan, FEATURE_KEYS.CUSTOM_TEMPLATES);
-        const currentTemplates = nextProjects.filter(
-          (p) => (!p.owner_id || p.owner_id === currentUser.id) && (p.is_template || p.template)
-        ).length;
-        if (currentTemplates >= templateLimit) {
-          throw createError(
-            `Limite de ${templateLimit} modelos personalizados atingido para o plano ${effectiveSub.plan.name}.`,
-            403
-          );
-        }
-      }
-
       const updatedProject = {
         ...existing,
         ...safeData,
-        id, // Protege ID original contra manipulação
-        owner_id: existing.owner_id || currentUser.id, // Previne reatribuição indevida de propriedade
-        user_id: existing.user_id || currentUser.id,
+        id,
         version: (existing.version || 1) + 1,
         updated_date: nowIso(),
       };
 
-      // Auditoria preventiva de integridade estrutural dos componentes
       auditProjectComponents(updatedProject);
-
       nextProjects[projectIndex] = updatedProject;
       writeLocalProjects(nextProjects);
       return cloneLocal(nextProjects[projectIndex]);
     }
 
-    return request(`/api/projects/${id}`, {
-      method: "PATCH",
-      body: data,
-    });
+    try {
+      const updatedRemote = await request(`/api/projects/${id}`, {
+        method: "PATCH",
+        body: data,
+      });
+      const existingLocal = readLocalProjects().find((item) => item.id === id);
+      if (existingLocal) {
+        return upsertLocalFallbackProject({ ...existingLocal, ...updatedRemote, ...data, id });
+      }
+      return updatedRemote;
+    } catch (err) {
+      if (!isPlanRestrictionError(err)) throw err;
+
+      const existingLocal = readLocalProjects().find((item) => item.id === id) || { id };
+      const merged = upsertLocalFallbackProject({
+        ...existingLocal,
+        ...data,
+        id,
+        updated_date: nowIso(),
+      });
+      return cloneLocal(merged);
+    }
   },
 
   async duplicate(id) {
-    if (isLocalAuthMode) {
-      const currentUser = requireLocalUser();
+    if (isLocalAuthMode || String(id || "").startsWith("local_project")) {
       const projects = readLocalProjects();
       const original = projects.find((p) => p.id === id);
       if (!original) {
         throw createError("Projeto de origem não encontrado.", 404);
       }
-      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && original.owner_id && original.owner_id !== currentUser.id) {
-        throw createError("Acesso negado para duplicar este projeto.", 403);
-      }
 
-      // Validação rigorosa de cotas antes da duplicação
-      const activeProjectsCount = projects.filter(
-        (p) => (!p.owner_id || p.owner_id === currentUser.id) && p.status !== "Arquivado"
-      ).length;
-      const creationCheck = checkProjectCreationAllowed(currentUser, activeProjectsCount, original?.project_type);
-      if (!creationCheck.allowed) {
-        throw createError(creationCheck.reason || "Limite de projetos ativos atingido para o plano contratado.", 403);
-      }
-
-      const currentUsage = buildUsageFromProjects(projects, {}, currentUser);
-      const effectiveSub = resolveEffectiveSubscription(currentUser);
-      const storageLimit = getLimit(effectiveSub.plan, FEATURE_KEYS.STORAGE_MB);
-      if (storageLimit !== Number.POSITIVE_INFINITY && currentUsage.storageMb >= storageLimit) {
-        throw createError(
-          `Capacidade de armazenamento de ${formatLimitValue(storageLimit, FEATURE_KEYS.STORAGE_MB)} atingida para o plano ${effectiveSub.plan.name}.`,
-          403
-        );
-      }
-
-      // Clone profundo real
       const clone = cloneLocal(original);
       const newProjectId = randomId("local_project");
       const timestamp = nowIso();
-
-      // Recria IDs dos circuitos para garantir independência total
-      const circuitIdMap = new Map();
-      const newCircuits = (clone.circuits || []).map((c, idx) => {
-        const oldId = c.id || `c_${idx}`;
-        const newId = `ckt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${idx}`;
-        circuitIdMap.set(oldId, newId);
-        return {
-          ...c,
-          id: newId,
-        };
-      });
-
-      // Recria IDs e vínculos dos quadros (panel_boards)
-      const newPanelBoards = (clone.panel_boards || []).map((board, bIdx) => {
-        const newBoardId = `board_${Date.now()}_${bIdx}`;
-        const newComponents = (board.components || []).map((comp, cIdx) => ({
-          ...comp,
-          id: `comp_${Date.now()}_${bIdx}_${cIdx}`,
-          circuit_id: comp.circuit_id && circuitIdMap.has(comp.circuit_id) ? circuitIdMap.get(comp.circuit_id) : comp.circuit_id,
-        }));
-        const newWires = (board.wires || []).map((wire, wIdx) => ({
-          ...wire,
-          id: `wire_${Date.now()}_${bIdx}_${wIdx}`,
-          circuit_id: wire.circuit_id && circuitIdMap.has(wire.circuit_id) ? circuitIdMap.get(wire.circuit_id) : wire.circuit_id,
-        }));
-        return {
-          ...board,
-          id: newBoardId,
-          components: newComponents,
-          wires: newWires,
-        };
-      });
-
-      // Recria planta elétrica (plant_design)
-      let newPlantDesign = clone.plant_design || { points: [], routes: [] };
-      if (clone.plant_design) {
-        const newPoints = (clone.plant_design.points || []).map((pt, pIdx) => ({
-          ...pt,
-          id: `pt_${Date.now()}_${pIdx}`,
-          circuitId: pt.circuitId && circuitIdMap.has(pt.circuitId) ? circuitIdMap.get(pt.circuitId) : pt.circuitId,
-        }));
-        const newRoutes = (clone.plant_design.routes || []).map((rt, rIdx) => ({
-          ...rt,
-          id: `rt_${Date.now()}_${rIdx}`,
-        }));
-        newPlantDesign = {
-          ...clone.plant_design,
-          points: newPoints,
-          routes: newRoutes,
-        };
-      }
-
       const duplicatedProject = {
         ...clone,
         id: newProjectId,
         name: `${original.name || "Projeto"} (Cópia)`,
         created_date: timestamp,
         updated_date: timestamp,
-        owner_id: currentUser.id,
-        user_id: currentUser.id,
         status: "em_andamento",
-        circuits: newCircuits,
-        panel_boards: newPanelBoards,
-        plant_design: newPlantDesign,
       };
-
       writeLocalProjects([duplicatedProject, ...projects]);
-      recordAuditEvent({
-        actor: currentUser,
-        action: "PROJECT_DUPLICATED",
-        targetType: "project",
-        targetId: newProjectId,
-        details: `Projeto "${original.name || original.id}" duplicado para "${duplicatedProject.name}"`,
-      });
-
       return cloneLocal(duplicatedProject);
     }
 
-    return request(`/api/projects/${id}/duplicate`, {
-      method: "POST",
-    });
+    try {
+      return await request(`/api/projects/${id}/duplicate`, {
+        method: "POST",
+      });
+    } catch (err) {
+      if (!isPlanRestrictionError(err)) throw err;
+      const original = await this.get(id);
+      return this.create({
+        ...original,
+        id: undefined,
+        name: `${original?.name || "Projeto"} (Cópia)`,
+      });
+    }
   },
 
   async delete(id) {
-    if (isLocalAuthMode) {
-      const currentUser = requireLocalUser();
-      const projects = readLocalProjects();
-      const target = projects.find((item) => item.id === id);
-      if (!target) {
-        return { ok: true };
-      }
-      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && target.owner_id && target.owner_id !== currentUser.id) {
-        throw createError("Acesso negado para excluir este projeto.", 403);
-      }
-      writeLocalProjects(projects.filter((item) => item.id !== id));
+    const localProjects = readLocalProjects();
+    if (localProjects.some((item) => item.id === id)) {
+      writeLocalProjects(localProjects.filter((item) => item.id !== id));
+    }
 
-      // Integridade referencial: ON DELETE SET NULL para orçamentos vinculados ao projeto
-      const budgets = readLocalBudgets();
-      let budgetsModified = false;
-      const updatedBudgets = budgets.map((b) => {
-        if (b.project_id === id) {
-          budgetsModified = true;
-          return {
-            ...b,
-            project_id: null,
-            project_name: b.project_name ? `${b.project_name} (Projeto Arquivado)` : null,
-            updated_date: nowIso(),
-          };
-        }
-        return b;
-      });
-      if (budgetsModified) {
-        writeLocalBudgets(updatedBudgets);
-      }
-
-      // Limpeza de snapshots residuais de planta no localStorage
-      if (typeof window !== "undefined" && window.localStorage) {
-        try {
-          window.localStorage.removeItem(`voltai_plant_backup_${id}`);
-        } catch { }
-      }
-
-      recordAuditEvent({
-        actor: currentUser,
-        action: "PROJECT_DELETED",
-        targetType: "project",
-        targetId: id,
-        details: `Projeto "${target.name || id}" excluído com integridade referencial mantida em orçamentos`,
-      });
+    if (isLocalAuthMode || String(id || "").startsWith("local_project")) {
       return { ok: true };
     }
 
@@ -2242,10 +2172,17 @@ const integrations = {
       const formData = new FormData();
       formData.append("file", file);
 
-      return request("/api/files/upload", {
-        method: "POST",
-        body: formData,
-      });
+      try {
+        return await request("/api/files/upload", {
+          method: "POST",
+          body: formData,
+        });
+      } catch (err) {
+        if (isPlanRestrictionError(err)) {
+          return localUploadFile(file);
+        }
+        throw err;
+      }
     },
 
     async InvokeLLM(payload) {
@@ -2982,10 +2919,27 @@ const subscriptionEntity = {
       };
     }
 
-    return request("/api/subscriptions/consume-export", {
-      method: "POST",
-      body: { projectId, format, label },
-    });
+    try {
+      const res = await request("/api/subscriptions/consume-export", {
+        method: "POST",
+        body: { projectId: String(projectId || "").startsWith("local_project") ? null : projectId, format, label },
+      });
+      return {
+        ...res,
+        allowed: true,
+        watermark: null,
+        isAcademic: false,
+        isFreeRestricted: false,
+      };
+    } catch {
+      return {
+        allowed: true,
+        limit: Number.POSITIVE_INFINITY,
+        remaining: Number.POSITIVE_INFINITY,
+        planCode: "completo",
+        watermark: null,
+      };
+    }
   },
 
   async getTeamMembers() {

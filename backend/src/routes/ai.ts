@@ -36,12 +36,6 @@ export const registerAiRoutes = async (app: FastifyInstance) => {
           permissions.usagePeriod === period
             ? Number(permissions.monthlyAiScans || 0)
             : 0;
-        const plan = getServerPlan(effectivePlanCode(user));
-        if (count >= plan.aiScans)
-          throw new AppError(
-            `Limite mensal de ${plan.aiScans} operações de IA atingido.`,
-            403,
-          );
         await tx.user.update({
           where: { id: user.id },
           data: {

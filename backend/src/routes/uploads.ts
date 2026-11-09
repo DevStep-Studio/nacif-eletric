@@ -28,14 +28,6 @@ export const registerUploadRoutes = async (app: FastifyInstance) => {
           const p = (user.customPermissions || {}) as Record<string, any>;
           const used =
             Number(p.storageUsedMb || 0) + saved.sizeBytes / (1024 * 1024);
-          if (
-            !isServerAdmin(user) &&
-            used > getServerPlan(effectivePlanCode(user)).storageMb
-          )
-            throw new AppError(
-              "Limite de armazenamento do plano atingido.",
-              403,
-            );
           await tx.user.update({
             where: { id: user.id },
             data: { customPermissions: { ...p, storageUsedMb: used } },
