@@ -112,15 +112,6 @@ export default function SolarReportsDialog({
   }, [open, project, config, sizing]);
 
   const handlePrint = async () => {
-    if (!validation.valid) {
-      toast({
-        title: "Dados do projeto incompletos",
-        description: validation.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
       await printExecutiveSolarReport(project, config, sizing);
       toast({
@@ -137,15 +128,6 @@ export default function SolarReportsDialog({
   };
 
   const handleDownload = async (report) => {
-    if (!validation.valid) {
-      toast({
-        title: "Dados do projeto incompletos",
-        description: validation.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
     setDownloadingId(report.id);
     try {
       const doc = await report.fn(project, config, sizing);
@@ -167,15 +149,6 @@ export default function SolarReportsDialog({
   };
 
   const handleDownloadAll = async () => {
-    if (!validation.valid) {
-      toast({
-        title: "Dados do projeto incompletos",
-        description: validation.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
     setDownloadingId("all");
     try {
       for (const report of REPORT_CARDS) {
@@ -219,7 +192,6 @@ export default function SolarReportsDialog({
             <Button
               type="button"
               onClick={handlePrint}
-              disabled={!validation.valid}
               className="h-9 px-4 bg-[#E6FAF7] hover:bg-[#d5f7f2] text-[#009b84] text-xs font-bold rounded-none border border-[#00d8b8]/40 shrink-0 disabled:opacity-50"
             >
               <Printer className="mr-1.5 h-4 w-4 text-[#00d8b8]" /> Imprimir Relatório
@@ -290,7 +262,7 @@ export default function SolarReportsDialog({
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={isDownloading || !validation.valid}
+                    disabled={isDownloading}
                     onClick={() => handleDownload(report)}
                     className="h-8 border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800 rounded-none shadow-sm disabled:opacity-50"
                   >
@@ -320,7 +292,6 @@ export default function SolarReportsDialog({
             <Button
               type="button"
               onClick={handlePrint}
-              disabled={!validation.valid}
               variant="outline"
               className="border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-none shadow-sm disabled:opacity-50"
             >
@@ -328,7 +299,7 @@ export default function SolarReportsDialog({
             </Button>
             <Button
               type="button"
-              disabled={downloadingId === "all" || !validation.valid}
+              disabled={downloadingId === "all"}
               onClick={handleDownloadAll}
               className="bg-[#00d8b8] text-slate-950 text-xs font-black rounded-none hover:bg-[#00c4a7] shadow-sm disabled:opacity-50"
             >

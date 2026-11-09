@@ -3264,7 +3264,7 @@ export default function PlantaIA() {
       });
       drawTitleBlock(doc, projectForSheet, "PROJETO EXECUTIVO - PLANTA BAIXA");
       const exportAuth = await authorizePlanExport({
-        projectId: activeProjectId,
+        projectId: selectedProject || projectForSheet?.id || null,
         format: "PDF",
         label: "Prancha A0 Planta Baixa",
       });

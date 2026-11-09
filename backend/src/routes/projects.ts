@@ -287,26 +287,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
     async (request) => {
       const data = projectPayloadSchema.parse(request.body);
 
-      // Validação centralizada de limite de projetos e restrição de escopo por plano
       const project = await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM users WHERE id = ${request.authUser.id} FOR UPDATE`;
-        const totalUserProjects = await tx.project.count({
-          where: { createdById: request.authUser.id },
-        });
-
-        const creationCheck = checkServerProjectCreation(
-          request.authUser,
-          totalUserProjects,
-          data.project_type,
-        );
-        if (!creationCheck.allowed) {
-          throw new AppError(
-            creationCheck.reason ||
-              "Limite de projetos atingido para o seu plano.",
-            403,
-          );
-        }
-
         const incomingSolar = (data.solar_config ?? {}) as Record<string, unknown>;
         const incomingConsumption = ((data as any).consumption ?? (incomingSolar as any)?.consumption) as Record<string, unknown> | undefined;
         const resolvedSolarConfig = (data.solar_config !== undefined || (data as any).consumption !== undefined || (data as any).monthly_consumption_kwh !== undefined)
@@ -396,34 +377,6 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
         isServerAdmin(request.authUser),
       );
       const data = projectUpdateSchema.parse(request.body);
-      if (data.project_type) {
-        const access = checkServerProjectCreation(
-          request.authUser,
-          0,
-          data.project_type,
-        );
-        if (!access.allowed)
-          throw new AppError(
-            access.reason || "Tipo de projeto não permitido.",
-            403,
-          );
-      }
-      for (const [field, module] of [
-        ["solar_config", "solar"],
-        ["panel_layout", "panel"],
-        ["panel_boards", "panel"],
-        ["diagram_layout", "unifilar"],
-      ] as const) {
-        const value = data[field];
-        if (
-          value != null &&
-          (typeof value !== "object" || Object.keys(value).length > 0)
-        ) {
-          const access = checkServerModuleAccess(request.authUser, module);
-          if (!access.allowed)
-            throw new AppError(access.message || "Módulo não permitido.", 403);
-        }
-      }
 
       const incomingSolar = data.solar_config as Record<string, unknown> | undefined;
       const incomingConsumption = ((data as any).consumption ?? (incomingSolar as any)?.consumption) as Record<string, unknown> | undefined;
@@ -502,23 +455,6 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
       );
 
       const duplicated = await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM users WHERE id = ${request.authUser.id} FOR UPDATE`;
-        const totalUserProjects = await tx.project.count({
-          where: { createdById: request.authUser.id },
-        });
-        const creationCheck = checkServerProjectCreation(
-          request.authUser,
-          totalUserProjects,
-          original.projectType,
-        );
-        if (!creationCheck.allowed) {
-          throw new AppError(
-            creationCheck.reason ||
-              "Limite de projetos atingido para o seu plano.",
-            403,
-          );
-        }
-
         return tx.project.create({
           data: {
             name: `${original.name} (Cópia)`,

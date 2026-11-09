@@ -942,6 +942,7 @@ export function generateCommercialProposalReport(project = {}, config = {}, sizi
 export async function generateExecutiveSolarPdf(project = {}, config = {}, sizing = {}) {
   const { azimuth, dcPowerKw, panelCount, usableArea, annualKwh, annualSavings, moduleWp, inverterKw, roofArea, roofPitch, breaker, investment, payback } = normalizeParams(project, config, sizing);
   const doc = new jsPDF("p", "mm", "a4");
+  const { layoutImage, stringsImage } = await resolveSolarReportImagesAsync({ project, config, sizing }).catch(() => ({ layoutImage: null, stringsImage: null }));
 
   // PÁGINA 1: Capa & Dados Técnicos e Financeiros
   addHeader(doc, "RELATÓRIO TÉCNICO EXECUTIVO SOLAR", project);
@@ -1012,6 +1013,34 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
     ["Total Gerador", `${panelCount} Módulos`, `${dcPowerKw.toFixed(2)} kWp`, "—", "26,50 A"],
   ];
   y = drawSimpleTable(doc, y, ["Circuito", "Módulos", "Potência CC", "Tensão Vmp", "Corrente Imp"], stringRows, [35, 40, 35, 36, 36]);
+
+  if (layoutImage || stringsImage) {
+    y += 2;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...BRAND_DARK);
+    doc.text("2.1 Implantação dos Módulos no Telhado e Topologia de Strings", 14, y);
+    y += 3.5;
+
+    const cardW = 89;
+    const cardH = 54;
+    if (layoutImage) {
+      try {
+        doc.addImage(layoutImage, "PNG", 14, y, cardW, cardH, undefined, "FAST");
+        doc.setDrawColor(180, 200, 225);
+        doc.setLineWidth(0.3);
+        doc.rect(14, y, cardW, cardH, "D");
+      } catch {}
+    }
+    if (stringsImage) {
+      try {
+        doc.addImage(stringsImage, "PNG", 107, y, cardW, cardH, undefined, "FAST");
+        doc.setDrawColor(180, 200, 225);
+        doc.setLineWidth(0.3);
+        doc.rect(107, y, cardW, cardH, "D");
+      } catch {}
+    }
+  }
 
   addFooter(doc, 1, 2);
 

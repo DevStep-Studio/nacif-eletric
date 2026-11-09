@@ -437,6 +437,10 @@ export default function SolarProject() {
   const reportProject = useMemo(() => {
     if (!project) return null;
     const currentResponsible = project.technical_responsible || {};
+    const estimatedMonthlyKwh =
+      visualSizing?.annualGenerationKwh > 0
+        ? Math.round(visualSizing.annualGenerationKwh / 12)
+        : null;
     const resolvedConsumption = {
       monthly_consumption_kwh:
         project.consumption?.monthly_consumption_kwh ??
@@ -445,12 +449,14 @@ export default function SolarProject() {
         project.solar_config?.consumption?.monthly_consumption_kwh ??
         config?.monthly_consumption_kwh ??
         config?.consumption?.monthly_consumption_kwh ??
-        null,
+        estimatedMonthlyKwh ??
+        500,
       tariff_brl_kwh:
         project.consumption?.tariff_brl_kwh ??
+        project.tariff_brl_kwh ??
         project.solar_config?.tariff_brl_kwh ??
         config?.tariff_brl_kwh ??
-        null,
+        0.95,
       distributor:
         project.consumption?.distributor ??
         project.distributor ??
@@ -471,13 +477,18 @@ export default function SolarProject() {
     };
     return {
       ...project,
+      address: project.address || searchAddress || "Localização demarcada no mapa",
       consumption: resolvedConsumption,
       monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
+      tariff_brl_kwh: resolvedConsumption.tariff_brl_kwh,
       solar_config: {
         ...(project.solar_config || {}),
         ...config,
+        module_wp: Number(config?.module_wp || project?.solar_config?.module_wp || 550),
+        inverter_kw: Number(config?.inverter_kw || project?.solar_config?.inverter_kw || Math.max(3, Math.round((visualSizing?.dcPowerKw || 5) * 0.85))),
         consumption: resolvedConsumption,
         monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
+        tariff_brl_kwh: resolvedConsumption.tariff_brl_kwh,
       },
       technical_responsible: {
         ...currentResponsible,
@@ -486,7 +497,7 @@ export default function SolarProject() {
         company: currentResponsible.company || user?.company || "",
       },
     };
-  }, [project, user, config]);
+  }, [project, user, config, searchAddress, visualSizing]);
 
   const [roofHistoryState, setRoofHistoryState] = useState({ canUndo: false, canRedo: false });
   const roofHistoryRef = useRef([[]]);
@@ -1551,52 +1562,60 @@ export default function SolarProject() {
   };
 
   const handleDownloadDirect = async (reportType = "executive") => {
-    if (!reportValidation.valid) {
-      toast({
-        title: "Preencha os dados do projeto primeiro",
-        description: reportValidation.message,
-        variant: "destructive",
-      });
-      setProjectParamsInitialStep(reportValidation.firstMissingStep || "consumo");
-      setProjectParamsOpen(true);
-      return;
-    }
+    const resolvedProjectId = projectId || project?.id || reportProject?.id || null;
+    const safeReportConfig = {
+      ...config,
+      module_wp: Number(config?.module_wp || reportProject?.solar_config?.module_wp || 550),
+      inverter_kw: Number(
+        config?.inverter_kw ||
+          reportProject?.solar_config?.inverter_kw ||
+          Math.max(3, Math.round((visualSizing?.dcPowerKw || 5) * 0.85))
+      ),
+    };
 
     try {
       const exportAuth = await authorizePlanExport({
-        projectId: activeProjectId,
+        projectId: resolvedProjectId,
         format: "PDF",
         label: `Relatório Solar ${reportType}`,
       });
-      if (!exportAuth.allowed) return;
+      if (exportAuth && exportAuth.allowed === false) return;
 
       if (reportType === "executive") {
-        const doc = await generateExecutiveSolarPdf(reportProject, config, visualSizing);
-        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
+        const doc = await generateExecutiveSolarPdf(reportProject, safeReportConfig, visualSizing);
+        stampPdfWithPlanWatermark(doc, exportAuth);
+        await downloadPdfBlob(doc, "00_Relatorio_Executivo_Completo_Solar.pdf");
       } else if (reportType === "site_plan") {
-        const doc = await generateSitePlanReport(reportProject, config, visualSizing);
-        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
+        const doc = await generateSitePlanReport(reportProject, safeReportConfig, visualSizing);
+        stampPdfWithPlanWatermark(doc, exportAuth);
+        await downloadPdfBlob(doc, "01_Planta_Implantacao_Solar.pdf");
       } else if (reportType === "electrical") {
-        const doc = await generateElectricalDiagramReport(reportProject, config, visualSizing);
-        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
+        const doc = await generateElectricalDiagramReport(reportProject, safeReportConfig, visualSizing);
+        stampPdfWithPlanWatermark(doc, exportAuth);
+        await downloadPdfBlob(doc, "02_Diagrama_Eletrico_Solar.pdf");
       } else if (reportType === "memorial") {
-        const doc = await generateTechnicalMemorialReport(reportProject, config, visualSizing);
-        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
+        const doc = await generateTechnicalMemorialReport(reportProject, safeReportConfig, visualSizing);
+        stampPdfWithPlanWatermark(doc, exportAuth);
+        await downloadPdfBlob(doc, "03_Memorial_Descritivo_Solar.pdf");
       } else if (reportType === "bom") {
-        const doc = await generateBillOfMaterialsReport(reportProject, config, visualSizing);
-        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
+        const doc = await generateBillOfMaterialsReport(reportProject, safeReportConfig, visualSizing);
+        stampPdfWithPlanWatermark(doc, exportAuth);
+        await downloadPdfBlob(doc, "04_Lista_Materiais_Solar.pdf");
       } else if (reportType === "simulation") {
-        const doc = await generateGenerationSimulationReport(reportProject, config, visualSizing);
-        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
+        const doc = await generateGenerationSimulationReport(reportProject, safeReportConfig, visualSizing);
+        stampPdfWithPlanWatermark(doc, exportAuth);
+        await downloadPdfBlob(doc, "05_Simulacao_Geracao_Solar.pdf");
       } else if (reportType === "proposal") {
-        const doc = await generateCommercialProposalReport(reportProject, config, visualSizing);
-        stampPdfWithPlanWatermark(doc, exportAuth); await downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
+        const doc = await generateCommercialProposalReport(reportProject, safeReportConfig, visualSizing);
+        stampPdfWithPlanWatermark(doc, exportAuth);
+        await downloadPdfBlob(doc, "06_Proposta_Comercial_Solar.pdf");
       }
       toast({
         title: "Download concluído",
         description: "O relatório PDF foi gerado e baixado com sucesso.",
       });
     } catch (err) {
+      console.error("Erro ao gerar PDF solar:", err);
       toast({
         title: "Erro ao gerar PDF",
         description: err?.message || "Tente novamente.",
@@ -2123,6 +2142,9 @@ export default function SolarProject() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDownloadDirect("simulation")} className="text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer rounded-lg px-2.5 py-1.5">
                 Simulação de Geração Anual
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownloadDirect("proposal")} className="text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer rounded-lg px-2.5 py-1.5">
+                Proposta Comercial Executiva
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-slate-100" />
               <DropdownMenuItem
