@@ -1,4 +1,4 @@
-import { authorizePlanExport, stampPdfWithPlanWatermark } from "@/lib/planEnforcement";
+import { authorizePlanExport, stampPdfWithPlanWatermark, stampSvgWithPlanWatermark } from "@/lib/planEnforcement";
 import { useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
 import ProfessionalBoardSheetSVG from "@/components/ProfessionalBoardSheetSVG";
@@ -2063,10 +2063,12 @@ export default function UnifilarDiagram() {
   };
 
   // Exportar SVG
-  const exportInteractiveSVG = () => {
+  const exportInteractiveSVG = async () => {
     const svg = svgRef.current;
     if (!svg) return;
-    const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
+    const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "unifilar", format: "SVG", label: "Diagrama Interativo" });
+    if (!auth.allowed) return;
+    const blob = new Blob([stampSvgWithPlanWatermark(new XMLSerializer().serializeToString(svg), auth)], { type: "image/svg+xml" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `diagrama_interativo_${project?.name || "projeto"}.svg`;
@@ -2127,7 +2129,7 @@ export default function UnifilarDiagram() {
   };
 
   // Visualizar / Imprimir Legado
-  const handlePrintLegacy = (size) => {
+  const handlePrintLegacy = async (size) => {
     let svgs = Array.from(document.querySelectorAll("#all-sheets-export-container svg"));
     if (svgs.length === 0) {
       const singleSvg = document.querySelector("#legacy-svg-container svg");
@@ -2135,8 +2137,11 @@ export default function UnifilarDiagram() {
     }
     if (svgs.length === 0) return;
 
+    const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "unifilar", format: "PRINT", label: "Diagrama Unifilar" });
+    if (!auth.allowed) return;
     const svgContents = svgs.map((svg) => new XMLSerializer().serializeToString(svg));
     openSVGPrint({
+      watermark: auth.watermark,
       svgContents,
       paperSize: size,
       projectName: project?.name,
@@ -2148,10 +2153,12 @@ export default function UnifilarDiagram() {
     });
   };
 
-  const exportLegacySVG = () => {
+  const exportLegacySVG = async () => {
     const svg = document.querySelector("#legacy-svg-container svg");
     if (!svg) return;
-    const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
+    const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "unifilar", format: "SVG", label: "Diagrama Unifilar" });
+    if (!auth.allowed) return;
+    const blob = new Blob([stampSvgWithPlanWatermark(new XMLSerializer().serializeToString(svg), auth)], { type: "image/svg+xml" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     const sheetSuffix = totalSheets > 1 ? `_folha_${safeSheetIndex + 1}` : "";

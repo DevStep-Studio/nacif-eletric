@@ -1,3 +1,4 @@
+import { authorizePlanExport, stampPdfWithPlanWatermark } from "@/lib/planEnforcement";
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -113,7 +114,9 @@ export default function SolarReportsDialog({
 
   const handlePrint = async () => {
     try {
-      await printExecutiveSolarReport(project, config, sizing);
+      const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "solar", format: "PRINT", label: "Relatório Solar" });
+      if (!auth.allowed) return;
+      await printExecutiveSolarReport(project, config, sizing, auth);
       toast({
         title: "Janela de impressão aberta",
         description: "O relatório executivo foi enviado para visualização e impressão.",
@@ -130,7 +133,10 @@ export default function SolarReportsDialog({
   const handleDownload = async (report) => {
     setDownloadingId(report.id);
     try {
+      const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "solar", label: report.title });
+      if (!auth.allowed) return;
       const doc = await report.fn(project, config, sizing);
+      stampPdfWithPlanWatermark(doc, auth);
       await downloadPdfBlob(doc, report.filename);
       toast({
         title: "Relatório gerado",
@@ -152,7 +158,10 @@ export default function SolarReportsDialog({
     setDownloadingId("all");
     try {
       for (const report of REPORT_CARDS) {
+        const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "solar", label: report.title });
+        if (!auth.allowed) return;
         const doc = await report.fn(project, config, sizing);
+        stampPdfWithPlanWatermark(doc, auth);
         await downloadPdfBlob(doc, report.filename);
         await new Promise((r) => setTimeout(r, 250));
       }

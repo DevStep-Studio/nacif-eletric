@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../lib/errors.js";
 import {
   effectivePlanCode,
+  checkServerModuleAccess,
   getCurrentUsagePeriod,
   getServerPlan,
   isServerAdmin,
@@ -29,6 +30,8 @@ export const registerAiRoutes = async (app: FastifyInstance) => {
           where: { id: request.authUser.id },
         });
         if (isServerAdmin(user)) return;
+        const access = checkServerModuleAccess(user, "scanner");
+        if (!access.allowed) throw new AppError(access.message || "IA não incluída no plano.", 403);
         const permissions =
           (user.customPermissions as Record<string, any>) || {};
         const period = getCurrentUsagePeriod();

@@ -1,4 +1,4 @@
-import { authorizePlanExport, stampPdfWithPlanWatermark } from "@/lib/planEnforcement";
+import { authorizePlanExport, stampPdfWithPlanWatermark, printPageWithPlanWatermark } from "@/lib/planEnforcement";
 import { Component, useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { backend, readLocalProjects, writeLocalProjects } from "@/api/backendClient";
 import { savePlantToIndexedDB, loadPlantFromIndexedDB } from "@/lib/plantPersistence";
@@ -3277,7 +3277,9 @@ export default function PlantaIA() {
     }
   };
 
-  const handlePrintFloorPlan = () => {
+  const handlePrintFloorPlan = async () => {
+    const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "plant", format: "PRINT", label: "Planta Elétrica" });
+    if (!auth.allowed) return;
     setSelectedElement(null);
     setActiveTool("");
     setArchitectureTool("");
@@ -3286,7 +3288,7 @@ export default function PlantaIA() {
     floorPlanCanvasRef.current?.resetViewForExport?.();
     setFitRequest((v) => v + 1);
     setTimeout(() => {
-      window.print();
+      printPageWithPlanWatermark(auth);
     }, 250);
   };
 

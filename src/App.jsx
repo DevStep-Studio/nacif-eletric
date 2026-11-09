@@ -220,7 +220,7 @@ const AuthenticatedApp = () => {
           <Route path="/solar-project-wizard" element={<ModuleAccessGate moduleKey="solar" moduleTitle="Projeto Solar"><NewProject /></ModuleAccessGate>} />
           <Route path="/projects/:projectId" element={<ProjectDetail />} />
           <Route path="/calculator" element={<Calculator />} />
-          <Route path="/ai-assistant" element={<AIAssistant />} />
+          <Route path="/ai-assistant" element={<ModuleAccessGate moduleKey="scanner" moduleTitle="Assistente IA"><AIAssistant /></ModuleAccessGate>} />
           <Route path="/nbr-library" element={<NBRLibrary />} />
           <Route path="/panel-generator" element={<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico" immersive><PanelGenerator /></ModuleAccessGate>} />
           <Route path="/panel" element={<ModuleAccessGate moduleKey="panel" moduleTitle="Quadro Elétrico" immersive><PanelGenerator /></ModuleAccessGate>} />

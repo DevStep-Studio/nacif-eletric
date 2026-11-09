@@ -1,5 +1,5 @@
 import { env } from "../config/env.js";
-import { COMMERCIAL_PLANS, LEGACY_PLANS } from "./planCatalog.js";
+import { COMMERCIAL_PLANS, LEGACY_PLANS, catalogModuleAccess } from "./planCatalog.js";
 export type ServerPlanCode =
   | "gratuito"
   | "free"
@@ -60,19 +60,8 @@ export const effectivePlanCode = (user?: {
   return "gratuito";
 };
 
-export const getServerPlan = (planCode?: string | null): PlanLimitDefinition => {
-  const base = SERVER_PLAN_MATRIX[planCode || "completo"] || SERVER_PLAN_MATRIX.completo || SERVER_PLAN_MATRIX.gratuito;
-  return {
-    ...base,
-    projects: Number.POSITIVE_INFINITY,
-    storageMb: Number.POSITIVE_INFINITY,
-    teamMembers: Number.POSITIVE_INFINITY,
-    exports: Number.POSITIVE_INFINITY,
-    aiScans: Number.POSITIVE_INFINITY,
-    customTemplates: Number.POSITIVE_INFINITY,
-    isAcademic: false,
-  };
-};
+export const getServerPlan = (planCode?: string | null): PlanLimitDefinition =>
+  SERVER_PLAN_MATRIX[planCode || "gratuito"] || SERVER_PLAN_MATRIX.gratuito;
 
 export const isServerAdmin = (user: {
   role?: string;
@@ -85,15 +74,44 @@ export const isServerAdmin = (user: {
   );
 };
 
-export const checkServerProjectCreation = (
-  _user?: { role?: string; isSuperAdmin?: boolean; plan?: string; customPermissions?: unknown },
-  _count = 0, _projectType?: string | null,
-): { allowed: boolean; reason?: string } => {
-  return { allowed: true };
+type AccessUser = { role?: string; isSuperAdmin?: boolean; plan?: string; customPermissions?: unknown };
+export const projectModule = (projectType?: string | null) => /solar|fotovolta/i.test(projectType || "") ? "solar" : "plant";
+
+export const checkServerProjectCreation = (user?: AccessUser, count = 0, projectType?: string | null): { allowed: boolean; reason?: string } => {
+  if (user && isServerAdmin(user)) return { allowed: true };
+  const access = checkServerModuleAccess(user, projectModule(projectType));
+  if (!access.allowed) return { allowed: false, reason: access.message || undefined };
+  const limit = getServerPlan(effectivePlanCode(user)).projects;
+  return count < limit ? { allowed: true } : { allowed: false, reason: `Seu plano permite ${limit} projetos ativos. Exclua um projeto ou altere seu plano.` };
 };
 
-export const checkServerModuleAccess = (
-  _user?: { role?: string; isSuperAdmin?: boolean; plan?: string; customPermissions?: unknown }, _moduleKey = "",
-): { allowed: boolean; isAcademic?: boolean; isFreeRestricted?: boolean; watermark?: string; message?: string } => {
-  return { allowed: true, isAcademic: false, isFreeRestricted: false };
+export const checkServerModuleAccess = (user?: AccessUser, moduleKey = "") => {
+  const permissions = (user?.customPermissions as Record<string, any>) || {};
+  return catalogModuleAccess(effectivePlanCode(user), moduleKey, {
+    isAdmin: user ? isServerAdmin(user) : false,
+    academicStatus: permissions.academicStatus,
+    academicValidUntil: permissions.academicValidUntil,
+  });
 };
+
+export function projectPayloadAccess(user: AccessUser, data: Record<string, any>, existingType?: string | null) {
+  const nextType = data.project_type ?? data.projectType ?? existingType;
+  const modules = new Set([projectModule(nextType)]);
+  if (existingType) modules.add(projectModule(existingType));
+  const populated = (value: any) => value != null && (typeof value === "object" ? Object.keys(value).length > 0 : Boolean(value));
+  if (populated(data.plant_design ?? data.plantDesign) || data.plant_points_count > 0 || data.plant_routes_count > 0) modules.add("plant");
+  const solar = data.solar_config ?? data.solarConfig;
+  const common = new Set(["consumption", "monthly_consumption_kwh", "tariff_brl_kwh", "distributor", "consumer_unit", "tariff_class", "contracted_demand_kw", "zip_code", "city", "state", "address", "latitude", "longitude"]);
+  if (solar && typeof solar === "object" && Object.keys(solar).some(key => !common.has(key))) modules.add("solar");
+  // Solar projects contain their own inverter/protection circuits. General electrical
+  // design remains gated separately, including when changing an existing project's type.
+  if (projectModule(nextType) !== "solar") {
+    if (populated(data.panel_layout ?? data.panelLayout) || populated(data.panel_boards ?? data.panelBoards)) modules.add("panel");
+    if (populated(data.diagram_layout ?? data.diagramLayout)) modules.add("unifilar");
+  }
+  for (const module of modules) {
+    const result = checkServerModuleAccess(user, module);
+    if (!result.allowed) return result;
+  }
+  return checkServerModuleAccess(user, projectModule(nextType));
+}

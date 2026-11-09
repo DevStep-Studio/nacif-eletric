@@ -1,6 +1,6 @@
 import { isSuperAdmin } from "./professionalAccess.js";
 
-import { FEATURE_KEYS, COMMERCIAL_PLANS, LEGACY_PLANS } from "../../backend/src/lib/planCatalog.js";
+import { FEATURE_KEYS, COMMERCIAL_PLANS, LEGACY_PLANS, catalogModuleAccess, planComparisonValue } from "../../backend/src/lib/planCatalog.js";
 export { FEATURE_KEYS, COMMERCIAL_PLANS };
 
 export function applyRemotePlanCatalog(_plans) {
@@ -9,6 +9,7 @@ export function applyRemotePlanCatalog(_plans) {
     const plan = ALL_PLANS.find(p => p.code === remote.code);
     if (plan && remote.limits) Object.assign(plan, { ...remote, limits: Object.fromEntries(Object.entries(remote.limits).map(([key, value]) => [key, value === null ? Infinity : value])) });
   }
+  refreshPlanComparisonRows();
 }
 
 export const PLAN_CATALOG = COMMERCIAL_PLANS;
@@ -162,6 +163,11 @@ export const PLAN_COMPARISON_ROWS = [
   },
 ];
 
+function refreshPlanComparisonRows() {
+  for (const row of PLAN_COMPARISON_ROWS) row.values = Object.fromEntries(COMMERCIAL_PLANS.map(plan => [plan.code, planComparisonValue(plan, row.key)]));
+}
+refreshPlanComparisonRows();
+
 const DEFAULT_PLAN_CODE = "free";
 
 const normalizeCode = (value) =>
@@ -197,9 +203,9 @@ export function normalizeSubscription(user = {}) {
   const provider = user?.subscription?.provider || user?.billing_provider || "none";
   const storedStatus = user?.subscription_status || user?.subscription?.status || "none";
   const renewalDate = user?.subscription?.renewal_date || user?.renewal_date || user?.subscription_valid_until || null;
-  const hasPaidSubscription = user?.has_paid_subscription ?? (
-    provider === "asaas" && ["active", "cancelled"].includes(storedStatus) && Date.parse(renewalDate) > Date.now()
-  );
+  const startDate = user?.subscription?.start_date || user?.subscription_start_date || null;
+  const currentPeriodPaid = provider === "asaas" && Date.parse(renewalDate) > Date.now() && (!startDate || Date.parse(startDate) <= Date.now());
+  const hasPaidSubscription = currentPeriodPaid && (user?.has_paid_subscription ?? ["active", "cancelled"].includes(storedStatus));
   const plan = getPlanByCode(hasPaidSubscription ? user?.subscription_plan || user?.plan || user?.subscription?.planCode : "free");
   const billingConfigured = provider === "asaas" || Boolean(user?.asaas_subscription_id);
   const cycle = hasPaidSubscription ? user?.subscription?.cycle || user?.subscription_cycle || user?.billing_cycle || "monthly" : null;
@@ -208,7 +214,7 @@ export function normalizeSubscription(user = {}) {
     plan,
     planCode: plan.code,
     cycle,
-    status: hasPaidSubscription || billingConfigured ? storedStatus : "none",
+    status: hasPaidSubscription ? storedStatus : billingConfigured ? storedStatus === "active" ? "expired" : storedStatus : "none",
     provider,
     hasPaidSubscription,
     price: hasPaidSubscription ? user?.subscription?.price ?? user?.subscription_price ?? (cycle === "annual" ? plan.annualPrice : plan.monthlyPrice) : 0,
@@ -254,17 +260,13 @@ export function resolveEffectiveSubscription(user = {}) {
   return { ...sub, isAdmin, isInactive: !sub.hasPaidSubscription };
 }
 
-export function checkFeatureQuotaAllowed(_user = {}, _featureKey = "", currentUsage = 0, increment = 1) {
+export function checkFeatureQuotaAllowed(user = {}, featureKey = "", currentUsage = 0, increment = 1) {
+  const subscription = resolveEffectiveSubscription(user);
   const nextUsage = Number(currentUsage) + Number(increment);
-  return {
-    allowed: true,
-    currentUsage: Number(currentUsage),
-    nextUsage,
-    limit: Infinity,
-    remaining: Infinity,
-    planCode: "completo",
-    reason: null,
-  };
+  const limit = subscription.isAdmin ? Infinity : getLimit(subscription.plan, featureKey);
+  return { allowed: nextUsage <= limit, currentUsage: Number(currentUsage), nextUsage, limit,
+    remaining: limit === Infinity ? Infinity : Math.max(0, limit - nextUsage), planCode: subscription.isAdmin ? "completo" : subscription.planCode,
+    reason: nextUsage <= limit ? null : "Limite do plano atingido. Consulte os planos disponíveis." };
 }
 
 export function buildUsageFromProjects(projects = [], overrides = {}, maybeUser = null) {
@@ -427,26 +429,19 @@ export function isAcademicValid(user = {}) {
 /**
  * Camada centralizada de autorização por módulo e recurso baseada no plano contratado.
  */
-export function canAccessModule(_user = {}, _moduleKey = "") {
-  return {
-    allowed: true,
-    level: "full",
-    isAcademic: false,
-    isFreeRestricted: false,
-    watermark: null,
-    message: null,
-    requiredPlans: ["completo"],
-  };
+export function canAccessModule(user = {}, moduleKey = "") {
+  const sub = resolveEffectiveSubscription(user);
+  return catalogModuleAccess(sub.planCode, moduleKey, { isAdmin: sub.isAdmin,
+    academicStatus: user?.academic_status, academicValidUntil: user?.academic_valid_until });
 }
 
-export function checkProjectCreationAllowed(_user = {}, currentProjectCount = 0, _projectType = "") {
-  return {
-    allowed: true,
-    currentCount: Number(currentProjectCount),
-    limit: Infinity,
-    planCode: "completo",
-    reason: null,
-  };
+export function checkProjectCreationAllowed(user = {}, currentProjectCount = 0, projectType = "") {
+  const sub = resolveEffectiveSubscription(user);
+  const access = canAccessModule(user, /solar|fotovolta/i.test(projectType) ? "solar" : "plant");
+  const limit = sub.isAdmin ? Infinity : getLimit(sub.plan, FEATURE_KEYS.PROJECTS);
+  return { allowed: access.allowed && currentProjectCount < limit, currentCount: Number(currentProjectCount),
+    limit, planCode: sub.isAdmin ? "completo" : sub.planCode,
+    reason: !access.allowed ? access.message : currentProjectCount >= limit ? `Seu plano permite ${limit} projetos ativos. Exclua um projeto ou altere seu plano.` : null };
 }
 
 /**

@@ -29,6 +29,7 @@ import {
   getEnvironmentMetadata,
 } from "../lib/infrastructureHealth.js";
 import {
+  canAccessModule,
   checkProjectCreationAllowed,
   checkFeatureQuotaAllowed,
   resolveEffectiveSubscription,
@@ -2869,9 +2870,13 @@ const subscriptionEntity = {
     }
     return request("/api/subscriptions/plans");
   },
-  async consumeExportQuota({ projectId = null, format = "PDF", label = "Exportação Técnica" } = {}) {
+  async consumeExportQuota({ projectId = null, format = "PDF", label = "Exportação Técnica", moduleKey } = {}) {
     if (isLocalAuthMode) {
       const user = requireLocalUser();
+      const project = projectId ? readLocalProjects().find(p => p.id === projectId) : null;
+      const key = moduleKey || (/solar|fotovolta/i.test(project?.project_type || "") ? "solar" : "budget");
+      const access = canAccessModule(user, key);
+      if (!access.allowed) return { allowed: false, reason: access.message };
       const currentPeriod = getCurrentUsagePeriod();
       const currentExports = user.usage_period === currentPeriod ? Number(user.monthly_exports_count || 0) : 0;
       const quotaCheck = checkFeatureQuotaAllowed(user, FEATURE_KEYS.EXPORTS, currentExports, 1);
@@ -2924,27 +2929,10 @@ const subscriptionEntity = {
       };
     }
 
-    try {
-      const res = await request("/api/subscriptions/consume-export", {
-        method: "POST",
-        body: { projectId: String(projectId || "").startsWith("local_project") ? null : projectId, format, label },
-      });
-      return {
-        ...res,
-        allowed: true,
-        watermark: null,
-        isAcademic: false,
-        isFreeRestricted: false,
-      };
-    } catch {
-      return {
-        allowed: true,
-        limit: Number.POSITIVE_INFINITY,
-        remaining: Number.POSITIVE_INFINITY,
-        planCode: "completo",
-        watermark: null,
-      };
-    }
+    return request("/api/subscriptions/consume-export", {
+      method: "POST",
+      body: { projectId: String(projectId || "").startsWith("local_project") ? null : projectId, format, label, moduleKey },
+    });
   },
 
   async getTeamMembers() {

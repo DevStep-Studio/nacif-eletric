@@ -1,3 +1,4 @@
+import { authorizePlanExport } from "@/lib/planEnforcement";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
@@ -516,9 +517,11 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
     }
   };
 
-  const handlePrint = (size) => {
-
+  const handlePrint = async (size) => {
+    const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "budget", format: "PRINT", label: "Lista de Materiais" });
+    if (!auth.allowed) return;
     openHTMLPrint({
+      watermark: auth.watermark,
       paperSize: size,
       projectName: project?.name,
       documentTitle: `Lista de Materiais — ${project?.name || "Projeto"}`,

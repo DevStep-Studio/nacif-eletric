@@ -24,20 +24,20 @@ export const COMMERCIAL_PLANS = [
     highlightBadge: null,
     isAcademic: true,
     limits: {
-      [FEATURE_KEYS.PROJECTS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.STORAGE_MB]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.TEAM_MEMBERS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.EXPORTS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.AI_SCANS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.CUSTOM_TEMPLATES]: Number.POSITIVE_INFINITY,
+      [FEATURE_KEYS.PROJECTS]: 5,
+      [FEATURE_KEYS.STORAGE_MB]: 1000,
+      [FEATURE_KEYS.TEAM_MEMBERS]: 1,
+      [FEATURE_KEYS.EXPORTS]: 20,
+      [FEATURE_KEYS.AI_SCANS]: 20,
+      [FEATURE_KEYS.CUSTOM_TEMPLATES]: 0,
     },
     modules: {
-      plant: "full",
-      panel: "full",
-      unifilar: "full",
-      solar: "full",
-      solar_3d: "full",
-      team: true,
+      plant: "academic",
+      panel: "academic",
+      unifilar: "academic",
+      solar: "academic",
+      solar_3d: "academic",
+      team: false,
       calculator: "full",
       nbr_library: "full",
       budget: "full",
@@ -77,19 +77,19 @@ export const COMMERCIAL_PLANS = [
     highlightBadge: null,
     isAcademic: false,
     limits: {
-      [FEATURE_KEYS.PROJECTS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.STORAGE_MB]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.TEAM_MEMBERS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.EXPORTS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.AI_SCANS]: Number.POSITIVE_INFINITY,
+      [FEATURE_KEYS.PROJECTS]: 30,
+      [FEATURE_KEYS.STORAGE_MB]: 5000,
+      [FEATURE_KEYS.TEAM_MEMBERS]: 3,
+      [FEATURE_KEYS.EXPORTS]: 100,
+      [FEATURE_KEYS.AI_SCANS]: 100,
       [FEATURE_KEYS.CUSTOM_TEMPLATES]: Number.POSITIVE_INFINITY,
     },
     modules: {
       plant: "full",
       panel: "full",
       unifilar: "full",
-      solar: "full",
-      solar_3d: "full",
+      solar: false,
+      solar_3d: false,
       team: true,
       calculator: "full",
       nbr_library: "full",
@@ -128,17 +128,17 @@ export const COMMERCIAL_PLANS = [
     highlightBadge: null,
     isAcademic: false,
     limits: {
-      [FEATURE_KEYS.PROJECTS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.STORAGE_MB]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.TEAM_MEMBERS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.EXPORTS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.AI_SCANS]: Number.POSITIVE_INFINITY,
+      [FEATURE_KEYS.PROJECTS]: 30,
+      [FEATURE_KEYS.STORAGE_MB]: 5000,
+      [FEATURE_KEYS.TEAM_MEMBERS]: 3,
+      [FEATURE_KEYS.EXPORTS]: 100,
+      [FEATURE_KEYS.AI_SCANS]: 100,
       [FEATURE_KEYS.CUSTOM_TEMPLATES]: Number.POSITIVE_INFINITY,
     },
     modules: {
-      plant: "full",
-      panel: "full",
-      unifilar: "full",
+      plant: "restricted",
+      panel: "restricted",
+      unifilar: "restricted",
       solar: "full",
       solar_3d: "full",
       team: true,
@@ -181,10 +181,10 @@ export const COMMERCIAL_PLANS = [
     isAcademic: false,
     limits: {
       [FEATURE_KEYS.PROJECTS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.STORAGE_MB]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.TEAM_MEMBERS]: Number.POSITIVE_INFINITY,
+      [FEATURE_KEYS.STORAGE_MB]: 50000,
+      [FEATURE_KEYS.TEAM_MEMBERS]: 15,
       [FEATURE_KEYS.EXPORTS]: Number.POSITIVE_INFINITY,
-      [FEATURE_KEYS.AI_SCANS]: Number.POSITIVE_INFINITY,
+      [FEATURE_KEYS.AI_SCANS]: 500,
       [FEATURE_KEYS.CUSTOM_TEMPLATES]: Number.POSITIVE_INFINITY,
     },
     modules: {
@@ -238,15 +238,15 @@ export const LEGACY_PLANS = [
       [FEATURE_KEYS.CUSTOM_TEMPLATES]: 0,
     },
     modules: {
-      plant: "full",
-      panel: "full",
-      unifilar: "full",
+      plant: "preview",
+      panel: "restricted",
+      unifilar: "restricted",
       solar: false,
       solar_3d: false,
       team: false,
       calculator: "full",
       nbr_library: "full",
-      budget: "full",
+      budget: "preview",
     },
     features: [
       "Projetos iniciais",
@@ -336,3 +336,42 @@ export const LEGACY_PLANS = [
     limitations: [],
   },
 ];
+
+// Shared by the API and UI. Unknown plans/modules never unlock commercial access.
+export const MODULE_ALIASES = {
+  circuit_editor: "plant", phase_balance: "calculator", electrical_tools: "calculator",
+  memorial: "unifilar", solar_project: "solar", ai_assistant: "scanner", components: "nbr_library",
+};
+export function getCatalogPlan(code) {
+  return [...COMMERCIAL_PLANS, ...LEGACY_PLANS].find(plan => plan.code === code || plan.legacyCodes?.includes(code)) || LEGACY_PLANS[0];
+}
+export function catalogModuleLevel(plan, key) {
+  const moduleKey = MODULE_ALIASES[key] || key;
+  return moduleKey === "scanner" ? plan?.limits?.aiScans > 0 ? "full" : false : plan?.modules?.[moduleKey] || false;
+}
+export function catalogModuleAccess(code, key, options = {}) {
+  if (options.isAdmin) return { allowed: true, level: "full", isAcademic: false, isFreeRestricted: false, watermark: null, message: null, requiredPlans: [] };
+  const plan = getCatalogPlan(code);
+  const academicValid = options.academicStatus === "approved" && Date.parse(options.academicValidUntil) > (options.now ?? Date.now());
+  const level = catalogModuleLevel(plan, key);
+  const academicBlocked = plan.isAcademic && !academicValid;
+  const allowed = Boolean(level && level !== "restricted" && !academicBlocked);
+  const isFreeRestricted = plan.code === "free";
+  return {
+    allowed, level: allowed ? level : "restricted", isAcademic: !!plan.isAcademic, isFreeRestricted,
+    watermark: plan.isAcademic ? "Versão Acadêmica — Uso Educacional" : isFreeRestricted ? "Versão de Avaliação Gratuita" : null,
+    message: allowed ? null : academicBlocked ? "Atualize seu comprovante acadêmico para utilizar os recursos do plano Estudante." : "Seu plano não inclui este módulo. Consulte os planos disponíveis.",
+    requiredPlans: COMMERCIAL_PLANS.filter(p => { const value = catalogModuleLevel(p, key); return value && value !== "restricted"; }).map(p => p.code),
+  };
+}
+export function planComparisonValue(plan, key) {
+  const limits = { projects: "projects", storage: "storageMb", members: "teamMembers", exports: "exports", ai: "aiScans" };
+  if (limits[key]) {
+    const value = plan.limits[limits[key]];
+    if (value === Infinity) return "Ilimitado";
+    return key === "storage" ? value >= 1000 ? `${value / 1000} GB` : `${value} MB` : String(value);
+  }
+  if (key === "team") return plan.modules.team ? "Sim" : "Não";
+  const level = catalogModuleLevel(plan, key);
+  return level === "academic" ? "Acadêmico" : level === "restricted" ? "Restrito" : level ? "Completo" : "Não incluído";
+}

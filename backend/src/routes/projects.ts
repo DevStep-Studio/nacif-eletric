@@ -1,7 +1,6 @@
 import {
-  checkServerModuleAccess,
   checkServerProjectCreation,
-  getServerPlan,
+  projectPayloadAccess,
   isServerAdmin,
 } from "../lib/planGovernance.js";
 import type { FastifyInstance } from "fastify";
@@ -10,7 +9,25 @@ import { Prisma, type ProjectRevision } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../lib/errors.js";
 import { serializeProject } from "../lib/serializers.js";
+import { assertStorageQuota } from "../lib/planStorage.js";
+import { assertAccountAvailable } from "../lib/accountAccess.js";
 import { createNotification } from "../lib/notifications.js";
+
+const lockActor = async (tx: Prisma.TransactionClient, id: string) => {
+  await tx.$queryRaw`SELECT id FROM users WHERE id = ${id} FOR UPDATE`;
+  const user = await tx.user.findUnique({ where: { id } });
+  assertAccountAvailable(user);
+  return user;
+};
+const assertPayload = (user: Parameters<typeof projectPayloadAccess>[0], data: Record<string, any>, existingType?: string | null) => {
+  const access = projectPayloadAccess(user, data, existingType);
+  if (!access.allowed) throw new AppError(access.message || "Módulo não incluído no plano.", 403);
+};
+const assertCreation = async (tx: Prisma.TransactionClient, user: Awaited<ReturnType<typeof lockActor>>, type?: string | null) => {
+  const count = await tx.project.count({ where: { createdById: user.id } });
+  const access = checkServerProjectCreation(user, count, type);
+  if (!access.allowed) throw new AppError(access.reason || "Limite de projetos atingido.", 403);
+};
 
 const normalizeProjectStatusInput = (val: unknown) => {
   if (!val || typeof val !== "string") return undefined;
@@ -162,23 +179,25 @@ const buildRevisionSnapshot = (project: {
 
 const createProjectRevision = async ({
   project,
+  client = prisma,
   actorUserId,
   actorEmail,
   action,
   summary,
 }: {
   project: Awaited<ReturnType<typeof ensureProjectAccess>>;
+  client?: Prisma.TransactionClient | typeof prisma;
   actorUserId: string;
   actorEmail: string;
   action: "create" | "update" | "delete";
   summary?: string;
 }) => {
-  const currentMax = await prisma.projectRevision.aggregate({
+  const currentMax = await client.projectRevision.aggregate({
     where: { projectId: project.id },
     _max: { version: true },
   });
 
-  return prisma.projectRevision.create({
+  return client.projectRevision.create({
     data: {
       projectId: project.id,
       version: (currentMax._max.version ?? 0) + 1,
@@ -288,6 +307,9 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
       const data = projectPayloadSchema.parse(request.body);
 
       const project = await prisma.$transaction(async (tx) => {
+        const actor = await lockActor(tx, request.authUser.id);
+        await assertCreation(tx, actor, data.project_type);
+        assertPayload(actor, data);
         const incomingSolar = (data.solar_config ?? {}) as Record<string, unknown>;
         const incomingConsumption = ((data as any).consumption ?? (incomingSolar as any)?.consumption) as Record<string, unknown> | undefined;
         const resolvedSolarConfig = (data.solar_config !== undefined || (data as any).consumption !== undefined || (data as any).monthly_consumption_kwh !== undefined)
@@ -299,7 +321,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
             }
           : (data.solar_config ?? null);
 
-        return tx.project.create({
+        const created = await tx.project.create({
           data: {
             name: data.name,
             clientName: data.client_name ?? "",
@@ -336,15 +358,19 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
           },
           include: { createdBy: { select: { email: true } } },
         });
-      });
-
       await createProjectRevision({
-        project,
+        project: created,
+        client: tx,
         actorUserId: request.authUser.id,
         actorEmail: request.authUser.email,
         action: "create",
         summary: "Projeto criado",
       });
+        await assertStorageQuota(tx, actor);
+        return created;
+      });
+
+
 
       await createNotification({
         userId: request.authUser.id,
@@ -378,12 +404,18 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
       );
       const data = projectUpdateSchema.parse(request.body);
 
+      const project = await prisma.$transaction(async tx => {
+        const actor = await lockActor(tx, request.authUser.id);
+        await tx.$queryRaw`SELECT id FROM projects WHERE id = ${id} FOR UPDATE`;
+        const current = await tx.project.findUniqueOrThrow({ where: { id } });
+        if (!isServerAdmin(actor) && current.createdById !== actor.id) throw new AppError("Projeto não pertence à conta.", 403);
+        assertPayload(actor, data, current.projectType);
       const incomingSolar = data.solar_config as Record<string, unknown> | undefined;
       const incomingConsumption = ((data as any).consumption ?? (incomingSolar as any)?.consumption) as Record<string, unknown> | undefined;
       let nextSolarConfig = incomingSolar;
       if (incomingSolar !== undefined || incomingConsumption !== undefined || (data as any).monthly_consumption_kwh !== undefined) {
         nextSolarConfig = {
-          ...(typeof existingProject.solarConfig === "object" && existingProject.solarConfig !== null ? (existingProject.solarConfig as any) : {}),
+          ...(typeof current.solarConfig === "object" && current.solarConfig !== null ? (current.solarConfig as any) : {}),
           ...(typeof incomingSolar === "object" && incomingSolar !== null ? incomingSolar : {}),
           ...(incomingConsumption ? { consumption: incomingConsumption } : {}),
           ...((data as any).monthly_consumption_kwh != null ? { monthly_consumption_kwh: Number((data as any).monthly_consumption_kwh) } : {}),
@@ -391,7 +423,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
         };
       }
 
-      const project = await prisma.project.update({
+        const updated = await tx.project.update({
         where: { id },
         data: {
           name: data.name,
@@ -423,14 +455,19 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
         },
         include: { createdBy: { select: { email: true } } },
       });
-
       await createProjectRevision({
-        project,
+        project: updated,
+        client: tx,
         actorUserId: request.authUser.id,
         actorEmail: request.authUser.email,
         action: "update",
         summary: "Projeto atualizado",
       });
+        await assertStorageQuota(tx, actor);
+        return updated;
+      });
+
+
 
       await notifyProjectState({
         userId: request.authUser.id,
@@ -455,7 +492,10 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
       );
 
       const duplicated = await prisma.$transaction(async (tx) => {
-        return tx.project.create({
+        const actor = await lockActor(tx, request.authUser.id);
+        await assertCreation(tx, actor, original.projectType);
+        assertPayload(actor, original);
+        const created = await tx.project.create({
           data: {
             name: `${original.name} (Cópia)`,
             clientName: original.clientName,
@@ -491,15 +531,19 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
           },
           include: { createdBy: { select: { email: true } } },
         });
-      });
-
       await createProjectRevision({
-        project: duplicated,
+        project: created,
+        client: tx,
         actorUserId: request.authUser.id,
         actorEmail: request.authUser.email,
         action: "create",
         summary: "Projeto duplicado",
       });
+        await assertStorageQuota(tx, actor);
+        return created;
+      });
+
+
 
       return serializeProject(duplicated);
     },

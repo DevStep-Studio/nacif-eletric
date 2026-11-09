@@ -1086,7 +1086,7 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
 /**
  * 8. Impressão Direta do Relatório Executivo Integrado (window.print)
  */
-export async function printExecutiveSolarReport(project = {}, config = {}, sizing = {}) {
+export async function printExecutiveSolarReport(project = {}, config = {}, sizing = {}, exportAuth = {}) {
   const { azimuth, dcPowerKw, panelCount, annualKwh, annualSavings, moduleWp, inverterKw, roofArea, usableArea, roofPitch, breaker, investment, payback } = normalizeParams(project, config, sizing);
   const { layoutImage, stringsImage } = await resolveSolarReportImagesAsync({ project, config, sizing });
 
@@ -1133,6 +1133,7 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
       </style>
     </head>
     <body>
+      ${exportAuth.watermark ? `<div style="position:fixed;bottom:3mm;left:0;width:100%;text-align:center;color:#777;font-size:10px;z-index:9999">${String(exportAuth.watermark).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>` : ""}
       <div class="header">
         <div class="logo-box">
           <img src="${NACIF_SYMBOL_BASE64}" class="logo-img" alt="Nacif Energy" />

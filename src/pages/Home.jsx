@@ -1,3 +1,4 @@
+import { authorizePlanExport } from "@/lib/planEnforcement";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -116,11 +117,13 @@ const getPeriodDateRangeText = (period) => {
 };
 
 // Exportador real de dados para planilha CSV (formato compatível com Excel brasileiro)
-const exportDashboardCSV = (projectList, periodLabel = "Geral") => {
+const exportDashboardCSV = async (projectList, periodLabel = "Geral") => {
   if (!projectList || projectList.length === 0) {
     alert("Nenhum projeto disponível para exportação.");
     return;
   }
+  const auth = await authorizePlanExport({ moduleKey: "budget", format: "CSV", label: "Relatório de Projetos" });
+  if (!auth.allowed) return;
 
   const headers = [
     "Nome do Projeto",

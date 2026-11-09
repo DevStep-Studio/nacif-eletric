@@ -4,9 +4,10 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../lib/errors.js";
 import { serializeUser } from "../lib/serializers.js";
+import { projectStorageMb } from "../lib/planStorage.js";
 import { env } from "../config/env.js";
 import { COMMERCIAL_PLANS, LEGACY_PLANS } from "../lib/planCatalog.js";
-import { effectivePlanCode, getServerPlan, getCurrentUsagePeriod, isServerAdmin } from "../lib/planGovernance.js";
+import { effectivePlanCode, getServerPlan, getCurrentUsagePeriod, isServerAdmin, checkServerModuleAccess, projectModule } from "../lib/planGovernance.js";
 import { asaasRequest, validateAsaasWebhook } from "../lib/asaas.js";
 import { checkoutSchema, changeSchema, withBillingAccount, startCheckout,
   reconcileSubscription, cancelSubscription, changeSubscription, billingDetails, permissionData as permissions } from "../lib/asaasBilling.js";
@@ -84,27 +85,26 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
         }),
         exports: p.usagePeriod === period ? p.monthlyExports || 0 : 0,
         aiScans: p.usagePeriod === period ? p.monthlyAiScans || 0 : 0,
-        storageMb: p.storageUsedMb || 0,
+        storageMb: Number(p.storageUsedMb || 0) + await projectStorageMb(prisma, user.id),
         teamMembers: (p.teamMembers || []).length + 1,
       },
     };
   });
   app.post("/api/subscriptions/consume-export", auth, async (request) => {
-    const { projectId } = z
-      .object({ projectId: z.string().nullable().optional() })
+    const { projectId, moduleKey } = z
+      .object({ projectId: z.string().nullable().optional(), moduleKey: z.enum(["plant", "panel", "unifilar", "solar", "budget", "calculator", "nbr_library"]).optional() })
       .parse(request.body || {});
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${request.authUser.id} FOR UPDATE`;
       const user = await tx.user.findUniqueOrThrow({
         where: { id: request.authUser.id },
       });
-      if (
-        projectId &&
-        !(await tx.project.findFirst({
-          where: { id: projectId, createdById: user.id },
-        }))
-      )
-        throw new AppError("Projeto não encontrado.", 404);
+      const project = projectId ? await tx.project.findFirst({ where: { id: projectId, ...(isServerAdmin(user) ? {} : { createdById: user.id }) } }) : null;
+      if (projectId && !project) throw new AppError("Projeto não encontrado.", 404);
+      for (const key of new Set([moduleKey || (project ? projectModule(project.projectType) : "budget"), ...(project ? [projectModule(project.projectType)] : [])])) {
+        const access = checkServerModuleAccess(user, key);
+        if (!access.allowed) throw new AppError(access.message || "Exportação não incluída no plano.", 403);
+      }
       const p = permissions(user),
         period = getCurrentUsagePeriod(),
         plan = getServerPlan(effectivePlanCode(user));
@@ -175,6 +175,8 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
       const user = await tx.user.findUniqueOrThrow({
         where: { id: request.authUser.id },
       });
+      const access = checkServerModuleAccess(user, "team");
+      if (!access.allowed) throw new AppError(access.message || "Seu plano não inclui equipes.", 403);
       const p = permissions(user),
         members = p.teamMembers || [];
       if (

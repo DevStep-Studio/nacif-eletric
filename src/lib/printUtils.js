@@ -5,6 +5,8 @@
  */
 import { DEFAULT_LOGO_URL, WEG_BLUE } from "./brandingDefaults.js";
 
+const printWatermark = (label) => label ? `<div style="position:fixed;bottom:2mm;left:0;width:100%;text-align:center;font:10px sans-serif;color:#777;z-index:9999">${String(label).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>` : "";
+
 // Dimensões ISO 216 / ABNT NBR 10068 em mm (orientação Paisagem / Landscape)
 export const PAPER_SIZES = {
   A4: { w: 297, h: 210, name: "A4" },
@@ -232,7 +234,7 @@ function prepareSVG(svgContent) {
 /**
  * Impressão / Plotagem de Pranchas CAD e Diagramas SVG (Individual ou Múltiplas Folhas)
  */
-export function openSVGPrint({ svgContent, svgContents, paperSize = "A4", projectName = "", logoUrl = "", projectInfo = {} }) {
+export function openSVGPrint({ svgContent, svgContents, paperSize = "A4", projectName = "", logoUrl = "", projectInfo = {}, watermark = null }) {
   const cfg = getSheetConfig(paperSize);
   const rawList = Array.isArray(svgContents) && svgContents.length > 0 ? svgContents : (svgContent ? [svgContent] : []);
   const totalPages = rawList.length || 1;
@@ -520,6 +522,7 @@ export function openSVGPrint({ svgContent, svgContents, paperSize = "A4", projec
   </style>
 </head>
 <body>
+${printWatermark(watermark)}
   <div class="print-toolbar">
     <span>📐 Formato ${cfg.name} (${cfg.w} × ${cfg.h} mm) · ${totalPages} Folha(s)</span>
     <button class="print-btn" onclick="window.print()">
@@ -554,6 +557,7 @@ export function openHTMLPrint({
   subtitle = "",
   logoUrl = "",
   projectInfo = {},
+  watermark = null,
 }) {
   const cfg = getSheetConfig(paperSize);
   const docTitle = documentTitle || (projectName ? `Orçamento — ${projectName}` : "Orçamento Técnico");
@@ -1024,6 +1028,7 @@ export function openHTMLPrint({
   </style>
 </head>
 <body>
+${printWatermark(watermark)}
   <div class="print-toolbar">
     <span>📐 Formato ${cfg.name} (${cfg.w} × ${cfg.h} mm) · ${totalPages} Folha(s)</span>
     <button class="print-btn" onclick="window.print()">

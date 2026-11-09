@@ -1,3 +1,4 @@
+import { authorizePlanExport, stampSvgWithPlanWatermark, printPageWithPlanWatermark } from "@/lib/planEnforcement";
 /**
  * PanelGenerator.jsx — Editor e Construtor de Quadro Elétrico Tridimensional e Interativo
  * Visual: Alta Fidelidade Realista (baseado na referência fornecida)
@@ -6434,10 +6435,12 @@ export default function PanelGenerator() {
   };
 
   // EXPORTAR SVG
-  const handleExportSvg = () => {
+  const handleExportSvg = async () => {
     if (!svgRef.current) return;
+    const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "panel", format: "SVG", label: "Quadro Elétrico" });
+    if (!auth.allowed) return;
     const svgStr = new XMLSerializer().serializeToString(svgRef.current);
-    const blob = new Blob([svgStr], { type: "image/svg+xml" });
+    const blob = new Blob([stampSvgWithPlanWatermark(svgStr, auth)], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -6447,7 +6450,9 @@ export default function PanelGenerator() {
   };
 
   // IMPRIMIR QUADRO
-  const handlePrintBoard = () => {
+  const handlePrintBoard = async () => {
+    const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "panel", format: "PRINT", label: "Quadro Elétrico" });
+    if (!auth.allowed) return;
     setSelectedComponentId("");
     setSelectedWireId("");
     setSelectedTextWireId("");
@@ -6456,7 +6461,7 @@ export default function PanelGenerator() {
     setWiringStart("");
     setWiringMode(false);
     setTimeout(() => {
-      window.print();
+      printPageWithPlanWatermark(auth);
     }, 200);
   };
 

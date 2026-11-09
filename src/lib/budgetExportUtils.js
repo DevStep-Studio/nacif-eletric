@@ -502,6 +502,7 @@ export function downloadBudgetCSV({
   materials = [],
   services = [],
   totals = {},
+  exportAuth = null,
 } = {}) {
   const projectName = budgetName || budget.name || budget.project_name || project.name || "Projeto Elétrico";
   const rows = [
@@ -556,6 +557,7 @@ export function downloadBudgetCSV({
   rows.push(["", "", "", "", "", "", `Margem BDI (${totals.marginPct ?? totals.margin ?? 0}%):`, (Number(totals.marginAmount || 0)).toFixed(2).replace(".", ",")]);
   rows.push(["", "", "", "", "", "", "TOTAL DO ORÇAMENTO:", (Number(totals.total || 0)).toFixed(2).replace(".", ",")]);
 
+  if (exportAuth?.watermark) rows.unshift([exportAuth.watermark]);
   const csvContent = "\uFEFF" + rows.map((r) => r.join(";")).join("\r\n");
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);

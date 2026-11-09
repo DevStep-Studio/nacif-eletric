@@ -1,3 +1,4 @@
+import { authorizePlanExport, stampSvgWithPlanWatermark } from "@/lib/planEnforcement";
 import { useState, useEffect, useRef } from "react";
 import { backend } from "@/api/backendClient";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -32,10 +33,13 @@ function DiagramSVG({ project }) {
   const rows = Math.ceil(circuits.length / circuitsPerRow);
   const H = 340 + rows * 120;
 
-  const downloadSVG = () => {
+  const downloadSVG = async () => {
     const svg = svgRef.current;
+    if (!svg) return;
+    const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "unifilar", format: "SVG", label: "Diagrama Unifilar" });
+    if (!auth.allowed) return;
     const data = new XMLSerializer().serializeToString(svg);
-    const blob = new Blob([data], { type: "image/svg+xml" });
+    const blob = new Blob([stampSvgWithPlanWatermark(data, auth)], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `diagrama_${project.name}.svg`; a.click();

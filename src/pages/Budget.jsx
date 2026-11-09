@@ -590,9 +590,12 @@ export default function BudgetPage() {
   };
 
   // Ações de Impressão e Exportação
-  const handlePrint = (size) => {
+  const handlePrint = async (size) => {
     try {
+      const auth = await authorizePlanExport({ projectId: project?.id, moduleKey: "budget", format: "PRINT", label: "Orçamento" });
+      if (!auth.allowed) return;
       openHTMLPrint({
+        watermark: auth.watermark,
         paperSize: size,
         projectName: project?.name,
         documentTitle: budgetName || `Orçamento — ${project?.name || "Projeto"}`,
@@ -687,6 +690,7 @@ export default function BudgetPage() {
       if (!exportAuth.allowed) return;
 
       downloadBudgetCSV({
+        exportAuth,
         project,
         budgetName,
         materials,
