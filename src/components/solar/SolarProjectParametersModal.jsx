@@ -143,10 +143,26 @@ export default function SolarProjectParametersModal({
   const handleSave = async () => {
     setSaving(true);
     try {
+      const updatedConsumption = {
+        monthly_consumption_kwh: Number(state.monthly_consumption_kwh) || null,
+        tariff_brl_kwh: Number(state.tariff_brl_kwh) || null,
+        contracted_demand_kw: Number(state.contracted_demand_kw) || null,
+        tariff_class: state.tariff_class || "B1 - Residencial",
+        distributor: state.distributor || config.distributor || "",
+        consumer_unit: state.consumer_unit || config.consumer_unit || "",
+      };
+
       const updatedConfigPatch = {
         map_center_lat: state.map_center_lat,
         map_center_lng: state.map_center_lng,
         map_zoom: state.map_zoom || 19,
+        monthly_consumption_kwh: updatedConsumption.monthly_consumption_kwh,
+        tariff_brl_kwh: updatedConsumption.tariff_brl_kwh,
+        contracted_demand_kw: updatedConsumption.contracted_demand_kw,
+        distributor: updatedConsumption.distributor,
+        consumer_unit: updatedConsumption.consumer_unit,
+        tariff_class: updatedConsumption.tariff_class,
+        consumption: updatedConsumption,
         inverter_kw: Number(state.inverter_kw) || config.inverter_kw,
         inverter_quantity: Number(state.inverter_quantity) || 1,
         inverter_manufacturer: state.inverter_manufacturer || config.inverter_manufacturer,
@@ -161,8 +177,6 @@ export default function SolarProjectParametersModal({
         connection_point: state.connection_point || config.connection_point,
         connection_location: state.connection_location || config.connection_location,
         entry_standard_location: state.entry_standard_location || config.entry_standard_location,
-        distributor: state.distributor || config.distributor,
-        consumer_unit: state.consumer_unit || config.consumer_unit,
       };
 
       const updatedProjectPayload = {
@@ -179,14 +193,9 @@ export default function SolarProjectParametersModal({
         system_mode: state.system_mode,
         has_battery: state.has_battery,
         battery_config: state.has_battery ? state.battery_config : null,
-        consumption: {
-          monthly_consumption_kwh: Number(state.monthly_consumption_kwh) || null,
-          tariff_brl_kwh: Number(state.tariff_brl_kwh) || null,
-          contracted_demand_kw: Number(state.contracted_demand_kw) || null,
-          tariff_class: state.tariff_class,
-          distributor: state.distributor,
-          consumer_unit: state.consumer_unit,
-        },
+        monthly_consumption_kwh: updatedConsumption.monthly_consumption_kwh,
+        tariff_brl_kwh: updatedConsumption.tariff_brl_kwh,
+        consumption: updatedConsumption,
         solar_config: {
           ...(project?.solar_config || {}),
           ...updatedConfigPatch,

@@ -116,12 +116,12 @@ const mockSizing = {
   acCurrent: 22.7,
 };
 
-const r1 = generateSitePlanReport(mockProject, testConfigWithoutObstacles, mockSizing);
-const r2 = generateElectricalDiagramReport(mockProject, testConfigWithoutObstacles, mockSizing);
-const r3 = generateTechnicalMemorialReport(mockProject, testConfigWithoutObstacles, mockSizing);
-const r4 = generateBillOfMaterialsReport(mockProject, testConfigWithoutObstacles, mockSizing);
-const r5 = generateGenerationSimulationReport(mockProject, testConfigWithoutObstacles, mockSizing);
-const r6 = generateCommercialProposalReport(mockProject, testConfigWithoutObstacles, mockSizing);
+const r1 = await generateSitePlanReport(mockProject, testConfigWithoutObstacles, mockSizing);
+const r2 = await generateElectricalDiagramReport(mockProject, testConfigWithoutObstacles, mockSizing);
+const r3 = await generateTechnicalMemorialReport(mockProject, testConfigWithoutObstacles, mockSizing);
+const r4 = await generateBillOfMaterialsReport(mockProject, testConfigWithoutObstacles, mockSizing);
+const r5 = await generateGenerationSimulationReport(mockProject, testConfigWithoutObstacles, mockSizing);
+const r6 = await generateCommercialProposalReport(mockProject, testConfigWithoutObstacles, mockSizing);
 const memorialData = buildTechnicalMemorialData(mockProject, {
   ...testConfigWithoutObstacles,
   module_wp: 550,

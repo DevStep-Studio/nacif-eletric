@@ -66,6 +66,9 @@ type SafeProject = {
   city: string;
   project_type: string;
   solar_config: unknown;
+  consumption?: unknown;
+  monthly_consumption_kwh?: number | null;
+  tariff_brl_kwh?: number | null;
   voltage: number | null;
   supply_type: string;
   circuits: unknown[];
@@ -156,33 +159,59 @@ export const serializeUser = (user: User): SafeUser => {
 
 export const serializeProject = (
   project: Project & { createdBy?: { email: string } | null },
-): SafeProject => ({
-  id: project.id,
-  name: project.name,
-  client_name: project.clientName ?? "",
-  address: project.address ?? "",
-  city: (project as any).city ?? "",
-  project_type: project.projectType ?? "Instalações Elétricas",
-  solar_config: project.solarConfig ?? null,
-  voltage: project.voltage,
-  supply_type: project.supplyType ?? "",
-  circuits: Array.isArray(project.circuits) ? project.circuits : [],
-  total_demand_w: project.totalDemandW,
-  panel_size: project.panelSize,
-  panel_boards: Array.isArray(project.panelBoards) ? project.panelBoards : [],
-  panel_layout: project.panelLayout ?? null,
-  diagram_layout: project.diagramLayout ?? null,
-  plant_design: project.plantDesign ?? null,
-  plant_points_count: project.plantPointsCount ?? 0,
-  plant_routes_count: project.plantRoutesCount ?? 0,
-  plant_infra_type: project.plantInfraType ?? "",
-  status: projectStatusLabelMap[project.status],
-  notes: project.notes ?? "",
-  materials: Array.isArray(project.materials) ? project.materials : [],
-  manual_budget_items: Array.isArray(project.manualBudgetItems) ? project.manualBudgetItems : [],
-  owner_id: project.createdById,
-  user_id: project.createdById,
-  created_by: project.createdBy?.email ?? "",
-  created_date: project.createdAt.toISOString(),
-  updated_date: project.updatedAt.toISOString(),
-});
+): SafeProject => {
+  const solarConfig = (project.solarConfig as Record<string, any> | null) ?? null;
+  const consumption =
+    (solarConfig?.consumption as Record<string, any> | undefined) ??
+    (solarConfig?.monthly_consumption_kwh
+      ? {
+          monthly_consumption_kwh: solarConfig.monthly_consumption_kwh,
+          tariff_brl_kwh: solarConfig?.tariff_brl_kwh ?? null,
+          distributor: solarConfig?.distributor ?? "",
+          consumer_unit: solarConfig?.consumer_unit ?? "",
+          tariff_class: solarConfig?.tariff_class ?? "B1 - Residencial",
+        }
+      : null);
+  const monthlyConsumptionKwh =
+    (solarConfig?.monthly_consumption_kwh as number | undefined) ??
+    (consumption?.monthly_consumption_kwh as number | undefined) ??
+    null;
+  const tariffBrlKwh =
+    (solarConfig?.tariff_brl_kwh as number | undefined) ??
+    (consumption?.tariff_brl_kwh as number | undefined) ??
+    null;
+
+  return {
+    id: project.id,
+    name: project.name,
+    client_name: project.clientName ?? "",
+    address: project.address ?? "",
+    city: (project as any).city ?? "",
+    project_type: project.projectType ?? "Instalações Elétricas",
+    solar_config: solarConfig,
+    consumption,
+    monthly_consumption_kwh: monthlyConsumptionKwh,
+    tariff_brl_kwh: tariffBrlKwh,
+    voltage: project.voltage,
+    supply_type: project.supplyType ?? "",
+    circuits: Array.isArray(project.circuits) ? project.circuits : [],
+    total_demand_w: project.totalDemandW,
+    panel_size: project.panelSize,
+    panel_boards: Array.isArray(project.panelBoards) ? project.panelBoards : [],
+    panel_layout: project.panelLayout ?? null,
+    diagram_layout: project.diagramLayout ?? null,
+    plant_design: project.plantDesign ?? null,
+    plant_points_count: project.plantPointsCount ?? 0,
+    plant_routes_count: project.plantRoutesCount ?? 0,
+    plant_infra_type: project.plantInfraType ?? "",
+    status: projectStatusLabelMap[project.status],
+    notes: project.notes ?? "",
+    materials: Array.isArray(project.materials) ? project.materials : [],
+    manual_budget_items: Array.isArray(project.manualBudgetItems) ? project.manualBudgetItems : [],
+    owner_id: project.createdById,
+    user_id: project.createdById,
+    created_by: project.createdBy?.email ?? "",
+    created_date: project.createdAt.toISOString(),
+    updated_date: project.updatedAt.toISOString(),
+  };
+};

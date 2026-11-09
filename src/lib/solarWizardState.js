@@ -277,7 +277,10 @@ export function validateProjectDataForReports(project = {}, config = {}, sizing 
   const monthlyConsumption = Number(
     project?.consumption?.monthly_consumption_kwh ||
     project?.monthly_consumption_kwh ||
+    project?.solar_config?.monthly_consumption_kwh ||
+    project?.solar_config?.consumption?.monthly_consumption_kwh ||
     config?.monthly_consumption_kwh ||
+    config?.consumption?.monthly_consumption_kwh ||
     0
   );
   const desiredPower = Number(
@@ -286,13 +289,6 @@ export function validateProjectDataForReports(project = {}, config = {}, sizing 
     config?.desired_power_kwp ||
     0
   );
-  if (monthlyConsumption <= 0 && desiredPower <= 0) {
-    missing.push("Consumo de energia (kWh/mês)");
-    if (!firstMissingStep) firstMissingStep = "consumo";
-  }
-
-  // 4. Módulos Fotovoltaicos
-  const moduleWp = Number(config?.module_wp || project?.solar_config?.module_wp || 0);
   const panelCount = Number(
     sizing?.panelCount ||
     sizing?.totalPanels ||
@@ -300,6 +296,17 @@ export function validateProjectDataForReports(project = {}, config = {}, sizing 
     project?.solar_config?.requested_panel_count ||
     0
   );
+  const hasSizingGeneration =
+    (sizing?.annualGenerationKwh && sizing.annualGenerationKwh > 0) ||
+    (sizing?.dcPowerKw && sizing.dcPowerKw > 0);
+
+  if (monthlyConsumption <= 0 && desiredPower <= 0 && (!panelCount || !hasSizingGeneration)) {
+    missing.push("Consumo de energia (kWh/mês)");
+    if (!firstMissingStep) firstMissingStep = "consumo";
+  }
+
+  // 4. Módulos Fotovoltaicos
+  const moduleWp = Number(config?.module_wp || project?.solar_config?.module_wp || 0);
   if (moduleWp <= 0) {
     missing.push("Potência dos módulos (Wp)");
     if (!firstMissingStep) firstMissingStep = "equipamentos";

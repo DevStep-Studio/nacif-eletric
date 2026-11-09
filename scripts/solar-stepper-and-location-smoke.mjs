@@ -162,12 +162,12 @@ const pdfGenerators = [
   { name: "Proposta Comercial", fn: generateCommercialProposalReport },
 ];
 
-pdfGenerators.forEach(({ name, fn }) => {
-  const doc = fn(mockProject, mockConfig, mockSizing);
+for (const { name, fn } of pdfGenerators) {
+  const doc = await fn(mockProject, mockConfig, mockSizing);
   assert.ok(doc, `Gerador de ${name} deve retornar uma instância válida`);
   const blob = doc.output("blob");
   assert.ok(blob.size > 1000, `PDF de ${name} deve conter dados (tamanho: ${blob.size} bytes)`);
-});
+}
 console.log(`   ✓ Todos os ${pdfGenerators.length} relatórios PDF foram gerados com sucesso.`);
 
 console.log("\n========================================================");

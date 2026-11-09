@@ -307,6 +307,17 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
           );
         }
 
+        const incomingSolar = (data.solar_config ?? {}) as Record<string, unknown>;
+        const incomingConsumption = ((data as any).consumption ?? (incomingSolar as any)?.consumption) as Record<string, unknown> | undefined;
+        const resolvedSolarConfig = (data.solar_config !== undefined || (data as any).consumption !== undefined || (data as any).monthly_consumption_kwh !== undefined)
+          ? {
+              ...(typeof incomingSolar === "object" && incomingSolar !== null ? incomingSolar : {}),
+              ...(incomingConsumption ? { consumption: incomingConsumption } : {}),
+              ...((data as any).monthly_consumption_kwh != null ? { monthly_consumption_kwh: Number((data as any).monthly_consumption_kwh) } : {}),
+              ...((data as any).tariff_brl_kwh != null ? { tariff_brl_kwh: Number((data as any).tariff_brl_kwh) } : {}),
+            }
+          : (data.solar_config ?? null);
+
         return tx.project.create({
           data: {
             name: data.name,
@@ -314,7 +325,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
             address: data.address ?? "",
             city: data.city ?? "",
             projectType: data.project_type ?? "Instalações Elétricas",
-            solarConfig: (data.solar_config ?? null) as
+            solarConfig: resolvedSolarConfig as
               | Prisma.InputJsonValue
               | Prisma.NullableJsonNullValueInput,
             voltage: data.voltage ?? null,
@@ -379,7 +390,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
     { preHandler: [app.authenticate] },
     async (request) => {
       const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
-      await ensureProjectAccess(
+      const existingProject = await ensureProjectAccess(
         id,
         request.authUser.id,
         isServerAdmin(request.authUser),
@@ -414,6 +425,19 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
         }
       }
 
+      const incomingSolar = data.solar_config as Record<string, unknown> | undefined;
+      const incomingConsumption = ((data as any).consumption ?? (incomingSolar as any)?.consumption) as Record<string, unknown> | undefined;
+      let nextSolarConfig = incomingSolar;
+      if (incomingSolar !== undefined || incomingConsumption !== undefined || (data as any).monthly_consumption_kwh !== undefined) {
+        nextSolarConfig = {
+          ...(typeof existingProject.solarConfig === "object" && existingProject.solarConfig !== null ? (existingProject.solarConfig as any) : {}),
+          ...(typeof incomingSolar === "object" && incomingSolar !== null ? incomingSolar : {}),
+          ...(incomingConsumption ? { consumption: incomingConsumption } : {}),
+          ...((data as any).monthly_consumption_kwh != null ? { monthly_consumption_kwh: Number((data as any).monthly_consumption_kwh) } : {}),
+          ...((data as any).tariff_brl_kwh != null ? { tariff_brl_kwh: Number((data as any).tariff_brl_kwh) } : {}),
+        };
+      }
+
       const project = await prisma.project.update({
         where: { id },
         data: {
@@ -422,7 +446,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
           address: data.address,
           city: data.city,
           projectType: data.project_type,
-          solarConfig: data.solar_config as Prisma.InputJsonValue | undefined,
+          solarConfig: nextSolarConfig as Prisma.InputJsonValue | undefined,
           voltage: data.voltage,
           supplyType: data.supply_type,
           circuits: data.circuits as Prisma.InputJsonValue | undefined,

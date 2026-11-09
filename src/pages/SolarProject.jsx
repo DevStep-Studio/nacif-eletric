@@ -140,6 +140,18 @@ const defaultSolarConfig = {
   ac_supply_type: "Bifásico",
   consumer_unit: "",
   distributor: "",
+  monthly_consumption_kwh: null,
+  tariff_brl_kwh: null,
+  tariff_class: "B1 - Residencial",
+  contracted_demand_kw: null,
+  consumption: {
+    monthly_consumption_kwh: null,
+    tariff_brl_kwh: null,
+    distributor: "",
+    consumer_unit: "",
+    tariff_class: "B1 - Residencial",
+    contracted_demand_kw: null,
+  },
   inverter_quantity: 1,
   inverter_manufacturer: "Growatt",
   inverter_model: "MIN 5000TL-X",
@@ -228,6 +240,32 @@ function normalizeSolarConfig(config = {}) {
     layout_strategy: merged.layout_strategy || "max_generation",
     ac_voltage: asNumber(merged.ac_voltage, defaultSolarConfig.ac_voltage),
     ac_supply_type: merged.ac_supply_type || defaultSolarConfig.ac_supply_type,
+    monthly_consumption_kwh: merged.monthly_consumption_kwh != null && merged.monthly_consumption_kwh !== ""
+      ? Number(merged.monthly_consumption_kwh)
+      : (merged.consumption?.monthly_consumption_kwh ? Number(merged.consumption.monthly_consumption_kwh) : null),
+    tariff_brl_kwh: merged.tariff_brl_kwh != null && merged.tariff_brl_kwh !== ""
+      ? Number(merged.tariff_brl_kwh)
+      : (merged.consumption?.tariff_brl_kwh ? Number(merged.consumption.tariff_brl_kwh) : null),
+    distributor: merged.distributor || merged.consumption?.distributor || "",
+    consumer_unit: merged.consumer_unit || merged.consumption?.consumer_unit || "",
+    tariff_class: merged.tariff_class || merged.consumption?.tariff_class || "B1 - Residencial",
+    contracted_demand_kw: merged.contracted_demand_kw != null && merged.contracted_demand_kw !== ""
+      ? Number(merged.contracted_demand_kw)
+      : (merged.consumption?.contracted_demand_kw ? Number(merged.consumption.contracted_demand_kw) : null),
+    consumption: {
+      monthly_consumption_kwh: merged.monthly_consumption_kwh != null && merged.monthly_consumption_kwh !== ""
+        ? Number(merged.monthly_consumption_kwh)
+        : (merged.consumption?.monthly_consumption_kwh ? Number(merged.consumption.monthly_consumption_kwh) : null),
+      tariff_brl_kwh: merged.tariff_brl_kwh != null && merged.tariff_brl_kwh !== ""
+        ? Number(merged.tariff_brl_kwh)
+        : (merged.consumption?.tariff_brl_kwh ? Number(merged.consumption.tariff_brl_kwh) : null),
+      distributor: merged.distributor || merged.consumption?.distributor || "",
+      consumer_unit: merged.consumer_unit || merged.consumption?.consumer_unit || "",
+      tariff_class: merged.tariff_class || merged.consumption?.tariff_class || "B1 - Residencial",
+      contracted_demand_kw: merged.contracted_demand_kw != null && merged.contracted_demand_kw !== ""
+        ? Number(merged.contracted_demand_kw)
+        : (merged.consumption?.contracted_demand_kw ? Number(merged.consumption.contracted_demand_kw) : null),
+    },
     layout_note: merged.layout_note || "",
   };
 }
@@ -399,8 +437,48 @@ export default function SolarProject() {
   const reportProject = useMemo(() => {
     if (!project) return null;
     const currentResponsible = project.technical_responsible || {};
+    const resolvedConsumption = {
+      monthly_consumption_kwh:
+        project.consumption?.monthly_consumption_kwh ??
+        project.monthly_consumption_kwh ??
+        project.solar_config?.monthly_consumption_kwh ??
+        project.solar_config?.consumption?.monthly_consumption_kwh ??
+        config?.monthly_consumption_kwh ??
+        config?.consumption?.monthly_consumption_kwh ??
+        null,
+      tariff_brl_kwh:
+        project.consumption?.tariff_brl_kwh ??
+        project.solar_config?.tariff_brl_kwh ??
+        config?.tariff_brl_kwh ??
+        null,
+      distributor:
+        project.consumption?.distributor ??
+        project.distributor ??
+        project.solar_config?.distributor ??
+        config?.distributor ??
+        "",
+      consumer_unit:
+        project.consumption?.consumer_unit ??
+        project.consumer_unit ??
+        project.solar_config?.consumer_unit ??
+        config?.consumer_unit ??
+        "",
+      tariff_class:
+        project.consumption?.tariff_class ??
+        project.solar_config?.tariff_class ??
+        config?.tariff_class ??
+        "B1 - Residencial",
+    };
     return {
       ...project,
+      consumption: resolvedConsumption,
+      monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
+      solar_config: {
+        ...(project.solar_config || {}),
+        ...config,
+        consumption: resolvedConsumption,
+        monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
+      },
       technical_responsible: {
         ...currentResponsible,
         name: currentResponsible.name || currentResponsible.full_name || user?.full_name || user?.name || "",
@@ -408,7 +486,7 @@ export default function SolarProject() {
         company: currentResponsible.company || user?.company || "",
       },
     };
-  }, [project, user]);
+  }, [project, user, config]);
 
   const [roofHistoryState, setRoofHistoryState] = useState({ canUndo: false, canRedo: false });
   const roofHistoryRef = useRef([[]]);
@@ -480,6 +558,15 @@ export default function SolarProject() {
       if (targetProject) {
         const normalizedConfig = normalizeSolarConfig({
           ...(targetProject?.solar_config || {}),
+          monthly_consumption_kwh:
+            targetProject?.solar_config?.monthly_consumption_kwh ??
+            targetProject?.consumption?.monthly_consumption_kwh ??
+            targetProject?.monthly_consumption_kwh ??
+            null,
+          tariff_brl_kwh:
+            targetProject?.solar_config?.tariff_brl_kwh ??
+            targetProject?.consumption?.tariff_brl_kwh ??
+            null,
           consumer_unit: targetProject?.solar_config?.consumer_unit
             || targetProject?.consumption?.consumer_unit
             || targetProject?.energy_bill?.installation_code
@@ -3605,7 +3692,14 @@ export default function SolarProject() {
                 panel_layout: solarSync.project.panel_layout,
               };
               const updated = await backend.entities.Project.update(activeId, payloadWithSync);
-              setProject(updated);
+              setProject({
+                ...(project || {}),
+                ...payloadWithSync,
+                ...(updated || {}),
+                consumption: updatedProjectPayload.consumption || updated?.consumption,
+                monthly_consumption_kwh: updatedProjectPayload.monthly_consumption_kwh || updated?.monthly_consumption_kwh,
+                solar_config: nextConfig,
+              });
             } catch (err) {
               console.error("Erro ao salvar projeto:", err);
             }
