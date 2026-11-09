@@ -5,8 +5,6 @@ import {
   ShieldCheck,
   GraduationCap,
   ArrowRight,
-  ArrowLeft,
-  AlertTriangle,
   CheckCircle2,
   Sparkles,
   SunMedium,
@@ -187,8 +185,21 @@ const MODULE_DEFINITIONS = {
  * Se o usuário possuir acesso, renderiza os filhos (com identificação acadêmica quando aplicável).
  * Se o recurso for restrito pelo plano atual, renderiza a tela contextual premium com identidade Nacif Energy.
  */
-export default function ModuleAccessGate({
-  children,
-}) {
-  return <>{children}</>;
+export default function ModuleAccessGate({ children, moduleKey, moduleTitle }) {
+  const { user } = useAuth();
+  const access = useMemo(() => canAccessModule(user, moduleKey), [user, moduleKey]);
+  const subscription = normalizeSubscription(user);
+  if (access.allowed) return <>{children}</>;
+  const definition = MODULE_DEFINITIONS[moduleKey];
+  return <section className="mx-auto max-w-2xl rounded-2xl border bg-white p-6 sm:p-10 text-slate-900">
+    <img src={brandLogoEnergy} alt="Nacif Energy" className="mb-6 h-10 w-auto" />
+    <Badge variant="outline"><Lock className="mr-1 h-3 w-3" />Assinatura necessária</Badge>
+    <h1 className="mt-4 text-2xl font-bold">{definition?.title || moduleTitle || "Recurso profissional"}</h1>
+    <p className="mt-3 text-slate-600">{definition?.tagline || access.message}</p>
+    <p className="mt-3 text-sm">Seu plano atual: {subscription.plan.name}.</p>
+    <ul className="my-5 space-y-2 text-sm">{definition?.features?.map(feature => <li key={feature} className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-teal-600" />{feature}</li>)}</ul>
+    <p className="mb-5 flex gap-2 text-sm text-slate-600"><ShieldCheck className="h-4 w-4 shrink-0" />Seus projetos continuam preservados.</p>
+    {subscription.plan.isAcademic && <p className="mb-3 flex gap-2 text-sm"><GraduationCap className="h-4 w-4" />Confira seu comprovante acadêmico e pagamento.</p>}
+    <Button asChild><Link to="/subscription">Ver planos e pagamentos<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
+  </section>;
 }

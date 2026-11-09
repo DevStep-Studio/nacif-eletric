@@ -42,34 +42,26 @@ para a origem exata do frontend, inclusive a porta em desenvolvimento.
 Sessões antigas com token `local:` são descartadas. Faça login com uma conta do
 backend; usuários e projetos do navegador não são migrados automaticamente.
 
-### Planos e Stripe
+### Planos e Asaas
 
-O catálogo está em `backend/src/lib/planCatalog.js` e é servido por
-`GET /api/subscriptions/plans`. O frontend carrega preços, recursos e limites dessa
-rota; `null` em um limite significa ilimitado. Códigos legados permanecem compatíveis.
+O catálogo e seus preços continuam em `backend/src/lib/planCatalog.js`. A aplicação
+aceita cartão recorrente, Pix e boleto pela fatura hospedada do Asaas. Pix e boleto
+exigem pagamento manual a cada ciclo. Nenhum dado de cartão passa pelo backend.
+Planos só são liberados após confirmação financeira; callbacks do navegador não
+ativam acesso. Estudante exige comprovante aprovado e permite apenas ciclo mensal.
 
-Configure no **backend** `STRIPE_SECRET_KEY`, os sete `STRIPE_PRICE_*` e
-`STRIPE_WEBHOOK_SECRET`. Aponte o webhook para `/api/subscriptions/webhook` com eventos
-`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
-`customer.subscription.created`, `customer.subscription.updated`,
-`customer.subscription.deleted`, `invoice.paid` e `invoice.payment_failed`.
+Configure `ASAAS_ENVIRONMENT`, `ASAAS_API_KEY` e `ASAAS_WEBHOOK_TOKEN` em
+`backend/.env`. Siga [o guia de configuração e publicação](docs/asaas.md), incluindo
+a alteração de banco e o webhook `/api/subscriptions/webhook/asaas`.
 
-O checkout usa apenas código de plano e ciclo. Planos pagos são liberados após
-confirmação da Stripe, com estado persistido no MySQL. Trocas de uma assinatura
-existente usam o portal Stripe; habilite os produtos/preços e alterações no portal.
-O cancelamento interrompe a renovação e conserva o período pago. Estudante exige
-comprovante aprovado e permite apenas cobrança mensal.
-
-A tabela `stripe_events` impede o processamento duplicado de webhooks. Em uma
-instalação existente, aplique a migration
-`backend/prisma/migrations/20261105000000_stripe_events/migration.sql` após backup,
-ou use o procedimento de sincronização Prisma já adotado pelo ambiente. O histórico
-antigo não contém uma migration inicial completa: não execute `migrate deploy` em
-um banco novo sem estabelecer o baseline. Para banco novo, use `prisma:push`.
+Não existem assinantes Stripe a migrar. As dependências Stripe foram removidas;
+o histórico e a tabela antiga de eventos são preservados. Novos usuários começam
+no plano gratuito; o login não promove mais contas para o plano Completo.
 
 ### 3. Testes Automatizados
 ```bash
 node scripts/api-client-integration.mjs
+npm --prefix backend run test:billing
 npm --prefix backend run typecheck
 # Use exclusivamente um banco descartável cujo nome termine em _test:
 DATABASE_URL=mysql://usuario:senha@localhost:3306/nacif_test npm --prefix backend run prisma:push
@@ -84,7 +76,7 @@ npm run preview
 
 ### Backend publicado responde “Route GET:/api/subscriptions/plans not found”
 
-Essa rota está registrada no backend atual e não depende do banco ou da Stripe.
+Essa rota está registrada no backend atual e não depende do banco ou do Asaas.
 Um `/api/health` com HTTP 200, acompanhado de 404 em `/api/subscriptions/plans`,
 indica uma instância antiga ou outro checkout sendo servido. No checkout do
 servidor de produção, publique o código atual e recarregue o processo:
@@ -115,22 +107,12 @@ Esse SQL normaliza somente os status ativos reconhecidos e não reativa contas
 suspensas, inativas ou excluídas. Publique o backend atualizado e recarregue a API
 com `npm run start:api` antes de fazer login novamente.
 
-### Stripe retorna “No such price”
+### Pagamento Asaas indisponível
 
-Configure os sete `STRIPE_PRICE_*` em `backend/.env` com IDs existentes na mesma
-conta e no mesmo ambiente da `STRIPE_SECRET_KEY`. IDs de outra conta, de outro
-ambiente ou valores de exemplo não funcionam. O backend não usa mais IDs fixos
-nem busca preços nas variáveis `VITE_STRIPE_PRICE_*`.
-
-```bash
-npm --prefix backend run stripe:check
-```
-
-Esse diagnóstico consulta os preços sem criar produtos, clientes ou pagamentos.
-Ele verifica se estão ativos, em BRL e com os valores e ciclos do catálogo Nacif.
-Corrija as variáveis indicadas, publique as alterações e recarregue a API com
-`npm run start:api`. Referências: [preços](https://docs.stripe.com/api/prices/retrieve)
-e [ambientes Stripe](https://docs.stripe.com/keys#sandbox-versus-live-mode).
+Execute `npm --prefix backend run asaas:check`. O diagnóstico é somente leitura e
+verifica o acesso à API, as tabelas de cobrança e os eventos do webhook. Chaves de
+sandbox e produção são independentes. Veja [docs/asaas.md](docs/asaas.md) para
+configuração, token do webhook e recuperação de tentativas interrompidas.
 
 ### Erro ao carregar auditoria ou configurações do Super Admin
 

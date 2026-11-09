@@ -29,11 +29,11 @@ globalThis.fetch = async (url, options) => {
       plans: [{ code: "completo", limits: { projects: null } }],
     });
   if (path === "/api/auth/me")
-    return Response.json({ id: "server-user", plan: "completo" });
+    return Response.json({ id: "server-user", plan: "gratuito", subscription_status: "pending" });
   if (path.includes("/verify-checkout-session"))
     return Response.json({ paid: false });
   if (path.includes("/create-checkout-session"))
-    return Response.json({ url: "https://checkout.stripe.com/test" });
+    return Response.json({ url: "https://sandbox.asaas.com/i/test" });
   if (path === "/api/projects")
     return Response.json([{ id: "server-project" }]);
   return Response.json({ error: "Servidor indisponível" }, { status: 503 });
@@ -42,14 +42,17 @@ try {
   const { backend, isLocalAuthMode } = await server.ssrLoadModule(
     "/src/api/backendClient.js",
   );
-  const billing = await server.ssrLoadModule("/src/lib/stripeConfig.js");
+  const billing = await server.ssrLoadModule("/src/lib/billingApi.js");
   const plans = await server.ssrLoadModule("/src/lib/subscriptionPlans.js");
   assert.equal(isLocalAuthMode, false);
   assert.equal(backend.auth.getToken(), null);
   assert.equal(entries.has("voltai_access_token"), false);
   await backend.auth.loginViaEmailPassword("user@example.com", "password");
   assert.equal(backend.auth.getToken(), "signed-jwt");
-  assert.equal((await backend.auth.me()).id, "server-user");
+  const me = await backend.auth.me();
+  assert.equal(me.id, "server-user");
+  assert.equal(me.plan, "gratuito");
+  assert.equal(me.subscription_status, "pending");
   assert.equal(calls.at(-1).headers.get("Authorization"), "Bearer signed-jwt");
   assert.equal((await backend.entities.Project.list())[0].id, "server-project");
   const catalog = await backend.subscriptions.getPlans();
@@ -59,16 +62,20 @@ try {
   await billing.createCheckoutSession({
     planCode: "completo",
     cycle: "annual",
+    billingType: "PIX",
+    billingDetails: { cpfCnpj: "52998224725" },
     priceId: "forged",
     userId: "other",
   });
   assert.deepEqual(JSON.parse(calls.at(-1).body), {
     planCode: "completo",
     cycle: "annual",
+    billingType: "PIX",
+    billingDetails: { cpfCnpj: "52998224725" },
   });
   assert.equal(calls.at(-1).headers.get("Authorization"), "Bearer signed-jwt");
   assert.equal(
-    (await billing.verifyCheckoutSession({ sessionId: "cs_test" })).paid,
+    (await billing.verifyCheckoutSession({ subscriptionId: "local-subscription" })).paid,
     false,
   );
   await assert.rejects(() => backend.subscriptions.cancel({}), {

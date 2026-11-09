@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { checkHealth } from "./start-backend-prod.mjs";
 const originalFetch = globalThis.fetch;
 const catalog = { plans: ["free", "estudante", "eletrico", "solar", "completo"].map(code => ({ code })) };
-const health = { ok: true, service: "nacif-electric-backend", stripeConfigured: false };
+const health = { ok: true, service: "nacif-electric-backend", asaasConfigured: false };
 let plansStatus = 200;
 let body = catalog;
 let serviceHealth = health;

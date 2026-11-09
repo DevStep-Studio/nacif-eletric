@@ -116,9 +116,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const checkUserAuth = async () => {
+  const checkUserAuth = async ({ silent = false } = {}) => {
     try {
-      setIsLoadingAuth(true);
+      if (!silent) setIsLoadingAuth(true);
       setAuthError(null);
       const currentUser = await backend.auth.me();
       const resolvedUser = await resolvePendingProfession(currentUser);

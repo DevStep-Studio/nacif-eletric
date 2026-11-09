@@ -283,7 +283,7 @@ export default function AdminSubscriptionManager() {
                         )}
                       </TableCell>
                       <TableCell className="py-3 text-right">
-                        <span className="text-xs text-slate-500">Gerenciado pela Stripe</span>
+                        <span className="text-xs text-slate-500">Gerenciado pela Asaas</span>
                       </TableCell>
                     </TableRow>
                   );

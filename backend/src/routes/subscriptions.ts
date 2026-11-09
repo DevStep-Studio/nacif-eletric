@@ -1,250 +1,69 @@
-import { getCheckoutPrice } from "../lib/stripePrices.js";
 import { assertAccountAvailable } from "../lib/accountAccess.js";
 import type { FastifyInstance } from "fastify";
-import type Stripe from "stripe";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../lib/errors.js";
 import { serializeUser } from "../lib/serializers.js";
 import { env } from "../config/env.js";
-import {
-  stripe,
-  isStripeConfigured,
-  STRIPE_PRICES,
-  getOrCreateStripeCustomer,
-} from "../lib/stripe.js";
 import { COMMERCIAL_PLANS, LEGACY_PLANS } from "../lib/planCatalog.js";
-import {
-  effectivePlanCode,
-  getServerPlan,
-  getCurrentUsagePeriod,
-  isServerAdmin,
-} from "../lib/planGovernance.js";
+import { effectivePlanCode, getServerPlan, getCurrentUsagePeriod, isServerAdmin } from "../lib/planGovernance.js";
+import { asaasRequest, validateAsaasWebhook } from "../lib/asaas.js";
+import { checkoutSchema, changeSchema, withBillingAccount, startCheckout,
+  reconcileSubscription, cancelSubscription, changeSubscription, billingDetails, permissionData as permissions } from "../lib/asaasBilling.js";
 
-const changeSchema = z.object({
-  planCode: z.enum(["estudante", "eletrico", "solar", "completo"]),
-  cycle: z.enum(["monthly", "annual"]).default("monthly"),
-});
-const permissions = (user: {
-  customPermissions: unknown;
-}): Record<string, any> =>
-  (user.customPermissions as Record<string, any>) || {};
-const requireStripe = () => {
-  if (!isStripeConfigured)
-    throw new AppError("Stripe não configurada no servidor.", 503);
-};
 const getUser = async (id: string) => {
   const user = await prisma.user.findUnique({ where: { id } });
   assertAccountAvailable(user);
   return user;
 };
-const planFromPrice = (price: string) => {
-  for (const [plan, cycles] of Object.entries(STRIPE_PRICES)) {
-    for (const [cycle, configured] of Object.entries(cycles))
-      if (price === configured) return { plan, cycle };
-  }
-  throw new AppError(
-    "Preço da assinatura não pertence ao catálogo configurado.",
-    400,
-  );
-};
-const subscriptionPatch = (sub: Stripe.Subscription) => {
-  const { plan, cycle } = planFromPrice(sub.items.data[0]?.price.id || "");
-  const active = sub.status === "active" || sub.status === "trialing";
-  return {
-    plan: active ? plan : "gratuito",
-    details: {
-      billingProvider: "stripe",
-      stripeCustomerId:
-        typeof sub.customer === "string" ? sub.customer : sub.customer.id,
-      stripeSubscriptionId: sub.id,
-      subscriptionStatus: sub.status === "canceled" ? "cancelled" : sub.status,
-      subscriptionCycle: cycle,
-      subscriptionStartDate: new Date(
-        sub.current_period_start * 1000,
-      ).toISOString(),
-      subscriptionRenewalDate: new Date(
-        sub.current_period_end * 1000,
-      ).toISOString(),
-      autoRenew: !sub.cancel_at_period_end,
-    },
-  };
-};
-const saveSubscription = async (id: string, sub: Stripe.Subscription) => {
-  const user = await getUser(id);
-  const customerId =
-    typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-  if (permissions(user).stripeCustomerId !== customerId)
-    throw new AppError("Assinatura pertence a outra conta.", 403);
-  const patch = subscriptionPatch(sub);
-  return prisma.user.update({
-    where: { id },
-    data: {
-      plan: patch.plan as any,
-      customPermissions: { ...permissions(user), ...patch.details },
-    },
-  });
-};
-
 export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
   const auth = { preHandler: [app.authenticate] };
   const admin = { preHandler: [app.requireAdmin] };
   app.get("/api/subscriptions/plans", async () => ({
-    plans: [
-      ...LEGACY_PLANS.filter((p) => p.code === "free"),
-      ...COMMERCIAL_PLANS,
-    ].map((p) => ({
-      ...p,
-      limits: Object.fromEntries(
-        Object.entries(p.limits).map(([k, v]) => [
-          k,
-          v === Infinity ? null : v,
-        ]),
-      ),
+    plans: [...LEGACY_PLANS.filter(p => p.code === "free"), ...COMMERCIAL_PLANS].map(p => ({
+      ...p, limits: Object.fromEntries(Object.entries(p.limits).map(([k,v]) => [k, v === Infinity ? null : v])),
     })),
   }));
-
-  const checkout = async (request: any) => {
-    requireStripe();
-    const { planCode, cycle } = changeSchema.parse(request.body);
-    if (planCode === "estudante" && cycle !== "monthly")
-      throw new AppError(
-        "Plano Estudante permite apenas cobrança mensal.",
-        400,
-      );
-    const user = await getUser(request.authUser.id);
-    const current = permissions(user);
-    if (
-      current.stripeSubscriptionId &&
-      ["active", "trialing", "past_due"].includes(current.subscriptionStatus)
-    ) {
-      const session = await stripe.billingPortal.sessions.create({
-        customer: current.stripeCustomerId,
-        return_url: `${env.FRONTEND_URL}/subscription?portal_return=true`,
-      });
-      return { url: session.url };
-    }
-    if (planCode === "estudante" && (current.academicStatus !== "approved" || current.academicValidUntil && Date.parse(current.academicValidUntil) <= Date.now()))
-      throw new AppError(
-        "A contratação acadêmica exige comprovante aprovado.",
-        403,
-      );
-    const priceId = await getCheckoutPrice(planCode, cycle);
-    const customer = await getOrCreateStripeCustomer(user);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { customPermissions: { ...current, stripeCustomerId: customer } },
+  app.post("/api/subscriptions/create-checkout-session", auth, async request => {
+    const input = checkoutSchema.parse(request.body);
+    return withBillingAccount(request.authUser.id, account => startCheckout(account, input));
+  });
+  app.post("/api/subscriptions/change-plan", auth, async request => {
+    const input = changeSchema.parse(request.body);
+    return withBillingAccount(request.authUser.id, account => changeSubscription(account, input));
+  });
+  app.post("/api/subscriptions/cancel", auth, async request => {
+    const { reason } = z.object({ reason: z.string().max(500).default("") }).parse(request.body || {});
+    await withBillingAccount(request.authUser.id, account => cancelSubscription(account, reason));
+    return serializeUser(await getUser(request.authUser.id));
+  });
+  app.get("/api/subscriptions/billing", auth, request => billingDetails(request.authUser.id));
+  app.post("/api/subscriptions/sync", auth, async request => {
+    await withBillingAccount(request.authUser.id, async account => {
+      const records = await prisma.billingSubscription.findMany({ where: { accountId: account.id, status: { not: "failed" } } });
+      for (const local of records) await reconcileSubscription(account, local);
     });
-    const session = await stripe.checkout.sessions.create(
-      {
-        mode: "subscription",
-        customer,
-        client_reference_id: user.id,
-        line_items: [{ price: priceId, quantity: 1 }],
-        metadata: { userId: user.id, planCode, cycle },
-        subscription_data: { metadata: { userId: user.id, planCode, cycle } },
-        success_url: `${env.FRONTEND_URL}/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${env.FRONTEND_URL}/subscription?checkout=cancelled`,
-      },
-      {
-        idempotencyKey: `checkout:${user.id}:${planCode}:${cycle}:${Math.floor(Date.now() / 300000)}`,
-      },
-    );
-    return { url: session.url, sessionId: session.id };
-  };
-  const portal = async (request: any) => {
-    requireStripe();
-    const user = await getUser(request.authUser.id);
-    const customer = permissions(user).stripeCustomerId;
-    if (!customer)
-      throw new AppError("Conta ainda não possui assinatura Stripe.", 404);
-    return stripe.billingPortal.sessions.create({
-      customer,
-      return_url: `${env.FRONTEND_URL}/subscription?portal_return=true`,
-    });
-  };
-  const verify = async (request: any) => {
-    requireStripe();
-    const { sessionId } = z
-      .object({ sessionId: z.string().min(1) })
-      .parse(request.body);
-    const user = await getUser(request.authUser.id);
-    const session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ["subscription"],
-    });
-    const customer =
-      typeof session.customer === "string"
-        ? session.customer
-        : session.customer?.id;
-    if (
-      session.client_reference_id !== user.id ||
-      customer !== permissions(user).stripeCustomerId
-    )
-      throw new AppError("Sessão pertence a outra conta.", 403);
-    const sub = session.subscription as Stripe.Subscription | null;
-    const paid =
-      session.payment_status === "paid" &&
-      !!sub &&
-      ["active", "trialing"].includes(sub.status);
-    if (paid) await saveSubscription(user.id, sub!);
-    return {
-      success: paid,
-      paid,
-      ...(paid ? subscriptionPatch(sub!).details : {}),
-      plan: paid ? subscriptionPatch(sub!).plan : null,
-    };
-  };
-  const sync = async (request: any) => {
-    requireStripe();
-    const user = await getUser(request.authUser.id);
-    const id = permissions(user).stripeSubscriptionId;
-    if (!id) return { synced: false, hasActiveSubscription: false };
-    const sub = await stripe.subscriptions.retrieve(id);
-    const updated = await saveSubscription(user.id, sub);
-    return {
-      synced: true,
-      hasActiveSubscription: updated.plan !== "gratuito",
-      plan: updated.plan,
-      ...subscriptionPatch(sub).details,
-    };
-  };
-  for (const [suffix, handler] of [
-    ["create-checkout-session", checkout],
-    ["create-portal-session", portal],
-    ["verify-checkout-session", verify],
-    ["sync-stripe-subscription", sync],
-  ] as const) {
-    for (const path of [
-      `/${suffix}`,
-      `/api/${suffix}`,
-      `/api/subscriptions/${suffix === "sync-stripe-subscription" ? "sync-stripe" : suffix}`,
-    ])
-      app.post(path, auth, handler);
-  }
-  app.post("/api/subscriptions/change-plan", auth, checkout);
-  app.post("/api/subscriptions/cancel", auth, async (request) => {
-    requireStripe();
-    const user = await getUser(request.authUser.id);
-    const id = permissions(user).stripeSubscriptionId;
-    if (!id) throw new AppError("Nenhuma assinatura ativa.", 404);
-    const existing = await stripe.subscriptions.retrieve(id);
-    const customer =
-      typeof existing.customer === "string"
-        ? existing.customer
-        : existing.customer.id;
-    if (customer !== permissions(user).stripeCustomerId)
-      throw new AppError("Assinatura pertence a outra conta.", 403);
-    const sub = await stripe.subscriptions.update(id, {
-      cancel_at_period_end: true,
-    });
-    return serializeUser(await saveSubscription(user.id, sub));
+    return { user: serializeUser(await getUser(request.authUser.id)), ...await billingDetails(request.authUser.id) };
+  });
+  app.post("/api/subscriptions/verify-checkout-session", auth, async request => {
+    const { subscriptionId } = z.object({ subscriptionId: z.string().min(1) }).parse(request.body);
+    const local = await prisma.billingSubscription.findUnique({ where: { id: subscriptionId } });
+    const account = local && await prisma.billingAccount.findUnique({ where: { id: local.accountId } });
+    if (!local || !account || account.userId !== request.authUser.id || account.environment !== env.ASAAS_ENVIRONMENT)
+      throw new AppError("Contratação não encontrada para esta conta.", 404);
+    await withBillingAccount(request.authUser.id, account => reconcileSubscription(account, local));
+    const paid = Boolean(await prisma.billingPayment.findFirst({ where: { subscriptionId: local.id,
+      status: { in: ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"] }, periodStart: { lte: new Date() }, periodEnd: { gt: new Date() } } }));
+    return { paid, user: serializeUser(await getUser(request.authUser.id)) };
   });
   app.get("/api/subscriptions/status", auth, async (request) => {
     const user = await getUser(request.authUser.id);
-    const p = permissions(user);
+    const serialized = serializeUser(user);
+    const p: Record<string, any> = { ...permissions(user), subscriptionStatus: serialized.subscription_status, subscriptionCycle: serialized.subscription_cycle, subscriptionStartDate: serialized.subscription_start_date, subscriptionRenewalDate: serialized.subscription_valid_until };
     const period = getCurrentUsagePeriod();
     return {
       ...serializeUser(user),
+      billing: await billingDetails(user.id),
       plan: effectivePlanCode(user),
       status: p.subscriptionStatus || "active",
       cycle: p.subscriptionCycle || "monthly",
@@ -429,7 +248,7 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     (await prisma.user.findMany()).map(serializeUser),
   );
   app.patch("/api/subscriptions/admin/users/:id/plan", admin, async () => {
-    throw new AppError("Planos pagos são gerenciados pela Stripe.", 403);
+    throw new AppError("Planos pagos são gerenciados pelo Asaas.", 403);
   });
   app.post(
     "/api/subscriptions/admin/academic/:id/decide",
@@ -457,108 +276,32 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
       );
     },
   );
-  const webhook = async (request: any, reply: any) => {
-    if (!env.STRIPE_WEBHOOK_SECRET || !isStripeConfigured)
-      throw new AppError("Webhook Stripe não configurado.", 503);
-    let event: Stripe.Event;
-    try {
-      event = stripe.webhooks.constructEvent(
-        request.rawBody,
-        request.headers["stripe-signature"],
-        env.STRIPE_WEBHOOK_SECRET,
-      );
-    } catch {
-      throw new AppError("Assinatura do webhook inválida.", 400);
+  app.post("/api/subscriptions/webhook/asaas", async request => {
+    validateAsaasWebhook(request.headers["asaas-access-token"]);
+    const event = z.object({ id: z.string().min(1).max(160), event: z.string().min(1),
+      payment: z.object({ id: z.string(), subscription: z.string().optional() }).passthrough().optional(),
+      subscription: z.object({ id: z.string(), externalReference: z.string().optional() }).passthrough().optional(),
+    }).passthrough().parse(request.body);
+    const eventId = `${env.ASAAS_ENVIRONMENT}:${event.id}`;
+    if (await prisma.billingEvent.findUnique({ where: { id: eventId } })) return { received: true };
+    const remoteId = event.payment?.subscription || event.subscription?.id;
+    if (!remoteId || !/^(PAYMENT_|SUBSCRIPTION_)/.test(event.event)) return { received: true };
+    // Look up by remote ID first; externalReference recovers the creation/webhook race.
+    let candidates = await prisma.billingSubscription.findMany({ where: { remoteId } });
+    if (!candidates.length) {
+      const remote = await asaasRequest(`/subscriptions/${encodeURIComponent(remoteId)}`);
+      if (remote.externalReference) {
+        const intent = await prisma.billingSubscription.findUnique({ where: { id: remote.externalReference } });
+        if (intent) candidates = [intent];
+      }
     }
-    if (await prisma.stripeEvent.findUnique({ where: { id: event.id } }))
+    for (const local of candidates) {
+      const account = await prisma.billingAccount.findUnique({ where: { id: local.accountId } });
+      if (!account || account.environment !== env.ASAAS_ENVIRONMENT) continue;
+      await withBillingAccount(account.userId, account => reconcileSubscription(account, local, event), true);
       return { received: true };
-    let sub: Stripe.Subscription | undefined;
-    if (
-      [
-        "checkout.session.completed",
-        "checkout.session.async_payment_succeeded",
-      ].includes(event.type)
-    ) {
-      const session = event.data.object as Stripe.Checkout.Session;
-      if (session.payment_status === "paid" && session.subscription)
-        sub = await stripe.subscriptions.retrieve(
-          typeof session.subscription === "string"
-            ? session.subscription
-            : session.subscription.id,
-        );
-    } else if (event.type.startsWith("customer.subscription.")) {
-      // Read current state to tolerate out-of-order deliveries.
-      sub = await stripe.subscriptions.retrieve(
-        (event.data.object as Stripe.Subscription).id,
-      );
-    } else if (
-      ["invoice.paid", "invoice.payment_failed"].includes(event.type)
-    ) {
-      const invoice = event.data.object as Stripe.Invoice;
-      if (invoice.subscription)
-        sub = await stripe.subscriptions.retrieve(
-          typeof invoice.subscription === "string"
-            ? invoice.subscription
-            : invoice.subscription.id,
-        );
     }
-    try {
-      await prisma.$transaction(async (tx) => {
-        if (sub) {
-          const customer =
-            typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-          const candidates = await tx.user.findMany({
-            where: {
-              isDeleted: false,
-              customPermissions: {
-                path: "$.stripeCustomerId",
-                equals: customer,
-              },
-            },
-          });
-          const user = candidates.find(
-            (u) => !sub!.metadata.userId || u.id === sub!.metadata.userId,
-          );
-          if (!user)
-            throw new AppError(
-              "Usuário da assinatura não encontrado; reenvio necessário.",
-              503,
-            );
-          await tx.$queryRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
-          const fresh = await tx.user.findUniqueOrThrow({
-            where: { id: user.id },
-          });
-          const current = permissions(fresh);
-          if (
-            current.stripeSubscriptionId &&
-            current.stripeSubscriptionId !== sub.id &&
-            !["canceled", "cancelled", "incomplete_expired"].includes(
-              current.subscriptionStatus,
-            )
-          ) {
-            await tx.stripeEvent.create({
-              data: { id: event.id, type: event.type },
-            });
-            return;
-          }
-          const patch = subscriptionPatch(sub);
-          await tx.user.update({
-            where: { id: user.id },
-            data: {
-              plan: patch.plan as any,
-              customPermissions: { ...permissions(fresh), ...patch.details },
-            },
-          });
-        }
-        await tx.stripeEvent.create({
-          data: { id: event.id, type: event.type },
-        });
-      });
-    } catch (error: any) {
-      if (error.code !== "P2002") throw error;
-    }
-    return reply.send({ received: true });
-  };
-  for (const path of ["/webhook", "/api/webhook", "/api/subscriptions/webhook"])
-    app.post(path, webhook);
+    // Other sales made directly in the merchant's Asaas account are unrelated to this app.
+    return { received: true };
+  });
 };

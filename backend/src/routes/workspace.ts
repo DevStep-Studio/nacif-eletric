@@ -8,6 +8,19 @@ import { generateResetToken, hashPassword } from "../lib/auth.js";
 import { sendPasswordResetEmail } from "../lib/mailer.js";
 import { isServerAdmin } from "../lib/planGovernance.js";
 
+// Serialize account deletion with billing claims, including creation still in flight.
+const deleteUserSafely = (userId: string) => prisma.$transaction(async tx => {
+  await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+  const accounts = await tx.billingAccount.findMany({ where: { userId } });
+  if (accounts.some(a => a.lockUntil && a.lockUntil.getTime() > Date.now()))
+    throw new AppError("Uma operação de cobrança está em andamento. Aguarde antes de excluir a conta.", 409);
+  const renewable = await tx.billingSubscription.findFirst({ where: {
+    accountId: { in: accounts.map(a => a.id) }, status: { notIn: ["cancelled", "failed"] },
+  } });
+  if (renewable) throw new AppError("Cancele a assinatura e suas cobranças antes de excluir a conta.", 409);
+  await tx.user.update({ where: { id: userId }, data: { isDeleted: true, deletedAt: new Date(), status: "deleted" } });
+});
+
 const idOf = (request: any) =>
   z.object({ id: z.string().min(1) }).parse(request.params).id;
 const normalizeBudgetStatusInput = (val: unknown) => {
@@ -611,21 +624,7 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
     };
   });
   app.delete("/api/auth/me", auth, async (request) => {
-    const user = await prisma.user.findUniqueOrThrow({
-      where: { id: request.authUser.id },
-    });
-    if (
-      (user.customPermissions as any)?.stripeSubscriptionId &&
-      (user.customPermissions as any)?.autoRenew
-    )
-      throw new AppError(
-        "Cancele a renovação da assinatura antes de excluir sua conta.",
-        409,
-      );
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { isDeleted: true, deletedAt: new Date(), status: "deleted" },
-    });
+    await deleteUserSafely(request.authUser.id);
     return { ok: true };
   });
   // The existing users interface is shared with the administration screen.
@@ -766,12 +765,7 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
   });
   app.delete("/api/super-admin/users/:id", admin, async (request) => {
     const target = await manageUser(request);
-    if ((target.customPermissions as any)?.autoRenew)
-      throw new AppError("Cancele a renovação antes de excluir a conta.", 409);
-    await prisma.user.update({
-      where: { id: target.id },
-      data: { isDeleted: true, deletedAt: new Date(), status: "deleted" },
-    });
+    await deleteUserSafely(target.id);
     return { ok: true };
   });
   app.post(

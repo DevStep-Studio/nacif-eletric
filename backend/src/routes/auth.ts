@@ -111,7 +111,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
     const usersCount = await prisma.user.count();
     const role: "super_admin" | "admin" | "user" = isSuperAdminEmail ? "super_admin" : (usersCount === 0 ? "admin" : "user");
-    const plan: "completo" = "completo";
+    const plan = role === "user" ? "gratuito" : "completo";
 
     const user = await prisma.user.create({
       data: {
@@ -242,8 +242,8 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
 
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { lastAccess: new Date(), plan: "completo" },
-      }).catch(() => ({ ...user!, plan: "completo" as const }));
+        data: { lastAccess: new Date() },
+      }).catch(() => user!);
     }
 
     return {
@@ -286,11 +286,6 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         status: "active",
         isDeleted: false,
       }));
-    } else if (user.plan !== "completo") {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { plan: "completo" },
-      }).catch(() => ({ ...user!, plan: "completo" as const }));
     }
 
     return serializeUser(user);
@@ -298,6 +293,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
 
   app.patch("/api/auth/me", { preHandler: [app.authenticate] }, async (request) => {
     const data = updateMeSchema.parse(request.body);
+    if (data.plan !== undefined) throw new AppError("Planos são gerenciados exclusivamente pela confirmação do Asaas.", 403);
     const profession = data.profession ?? data.profissao;
     let nextPasswordHash: string | undefined;
 
@@ -347,7 +343,6 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         crea: data.crea,
         phone: data.phone,
         avatarUrl: resolvedAvatarUrl,
-        plan: "completo",
         customPermissions: nextPermissions as any,
         ...(nextPasswordHash ? { passwordHash: nextPasswordHash } : {}),
       },

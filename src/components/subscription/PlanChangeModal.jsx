@@ -31,7 +31,7 @@ export default function PlanChangeModal({
       const result = await backend.subscriptions.changePlan({ planCode: targetPlan.code, cycle: targetPlan.hasAnnualOption ? cycle : "monthly" });
       if (result?.url) { window.location.assign(result.url); return; }
 
-      if (onSuccess) onSuccess(targetPlan);
+      if (onSuccess) onSuccess(targetPlan, result);
       onClose();
     } catch (err) {
       setErrorMessage(err.message || "Não foi possível atualizar o plano. Tente novamente.");
@@ -100,6 +100,7 @@ export default function PlanChangeModal({
           )}
         </div>
 
+        <p className="mt-4 text-sm text-slate-600">A alteração vale a partir do próximo ciclo pago, sem cobrança proporcional. Seu acesso atual continua até o fim do período contratado.</p>
         <div className="mt-4 space-y-2">
           <p className="text-xs font-extrabold uppercase tracking-[0.06em] text-[#667085]">
             O que você terá acesso:

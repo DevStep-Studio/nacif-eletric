@@ -67,7 +67,7 @@ export const buildApp = async () => {
 
   const app = Fastify({
     bodyLimit: 30 * 1024 * 1024,
-    logger: true,
+    logger: { redact: ["req.headers.authorization", "req.headers[\"asaas-access-token\"]"] },
     trustProxy: true, // Essencial para proxies reversos, Cloudflare e Nginx
     ajv: {
       customOptions: {
@@ -75,26 +75,6 @@ export const buildApp = async () => {
       },
     },
   });
-
-  // Preserva o rawBody (Buffer) para validação criptográfica de assinaturas de Webhook do Stripe
-  app.addContentTypeParser(
-    ["application/json", "application/json; charset=utf-8"],
-    { parseAs: "buffer" },
-    (req, body: Buffer, done) => {
-      try {
-        (req as any).rawBody = body;
-        if (!body || body.length === 0) {
-          done(null, {});
-          return;
-        }
-        const json = JSON.parse(body.toString("utf-8"));
-        done(null, json);
-      } catch (err: any) {
-        err.statusCode = 400;
-        done(err, undefined);
-      }
-    },
-  );
 
   await app.register(sensible);
   await app.register(cors, {
@@ -110,7 +90,6 @@ export const buildApp = async () => {
     allowedHeaders: [
       "Authorization",
       "Content-Type",
-      "stripe-signature",
       "x-requested-with",
       "Accept",
       "Origin",

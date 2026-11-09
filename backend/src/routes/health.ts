@@ -1,11 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import { isStripeConfigured } from "../lib/stripe.js";
+import { asaasConfigured } from "../lib/asaas.js";
 
 export const registerHealthRoutes = async (app: FastifyInstance) => {
   const healthHandler = async () => ({
     ok: true,
     service: "nacif-electric-backend",
-    stripeConfigured: isStripeConfigured,
+    asaasConfigured: asaasConfigured(),
     timestamp: new Date().toISOString(),
   });
 

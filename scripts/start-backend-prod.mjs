@@ -51,7 +51,7 @@ async function main() {
     return;
   }
 
-  console.log("[deploy-backend] Preparando dependências e Prisma Client do backend Stripe...");
+  console.log("[deploy-backend] Preparando dependências e Prisma Client do backend Asaas...");
   try {
     execSync("npm install --include=dev --no-audit --no-fund", {
       cwd: backendDir,
@@ -130,7 +130,7 @@ async function main() {
     lastReason = health.reason;
     if (health.ok) {
       console.log(
-        `[deploy-backend] Backend API e catálogo de planos ativos em 127.0.0.1:${Number(process.env.PORT || 3001)} (stripeConfigured=${Boolean(health.data?.stripeConfigured)})`,
+        `[deploy-backend] Backend API e catálogo de planos ativos em 127.0.0.1:${Number(process.env.PORT || 3001)} (asaasConfigured=${Boolean(health.data?.asaasConfigured)})`,
       );
       return;
     }

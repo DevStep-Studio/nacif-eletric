@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, ArrowLeft, Plus, Sun, Zap, Lock } from "lucide-react";
+import { AlertCircle, ArrowLeft, Plus, Sun, Zap } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { checkProjectCreationAllowed, resolveEffectiveSubscription } from "@/lib/subscriptionPlans";
 import PageHeader from "@/components/PageHeader";
@@ -44,6 +44,8 @@ export default function NewProject() {
       return;
     }
 
+    const access = checkProjectCreationAllowed(user, projectsCount, form.project_type);
+    if (!access.allowed) { setErrorMsg(access.reason); return; }
     setSaving(true);
     setErrorMsg("");
     try {

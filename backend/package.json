@@ -13,9 +13,11 @@
     "test:auth-register": "tsx --test test/auth-register.ts",
     "test:auth-reset": "tsx --test test/auth-password-reset.ts",
     "test:integration": "tsx test/api-integration.ts",
-    "stripe:check": "tsx scripts/check-stripe.ts",
     "db:check": "tsx scripts/check-schema.ts",
-    "seed:super-admins": "tsx scripts/seed-super-admins.ts"
+    "seed:super-admins": "tsx scripts/seed-super-admins.ts",
+    "test:billing": "tsx --test test/asaas-billing.ts",
+    "asaas:check": "tsx scripts/check-asaas.ts",
+    "test:billing:mysql": "tsx test/asaas-mysql.ts"
   },
   "keywords": [],
   "author": "",
@@ -34,7 +36,6 @@
     "fastify-plugin": "^6.0.0",
     "nodemailer": "^10.4.0",
     "openai": "^6.42.0",
-    "stripe": "^17.7.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {

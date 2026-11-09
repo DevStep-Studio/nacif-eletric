@@ -1,5 +1,5 @@
 import { normalizeAccountStatus } from "./accountAccess.js";
-import { effectivePlanCode } from "./planGovernance.js";
+import { effectivePlanCode, paidEntitlement } from "./planGovernance.js";
 import type { Project, ProjectStatus, User, UserPlan, UserRole } from "@prisma/client";
 
 const projectStatusLabelMap: Record<ProjectStatus, "Rascunho" | "Em Andamento" | "Concluído" | "Aprovado"> = {
@@ -41,8 +41,10 @@ type SafeUser = {
   subscription_valid_until?: string | null;
   subscription_auto_renew?: boolean;
   billing_provider?: string;
-  stripe_customer_id?: string | null;
-  stripe_subscription_id?: string | null;
+  billing_type?: string | null;
+  subscription_price?: number;
+  asaas_customer_id?: string | null;
+  asaas_subscription_id?: string | null;
   team_members_count?: number;
   academic_document_url?: string;
   academic_document_name?: string;
@@ -106,7 +108,9 @@ export const SUPER_ADMIN_EMAILS = [
 export const serializeUser = (user: User): SafeUser => {
   const normalizedEmail = (user.email || "").toLowerCase().trim();
   const isSuper = user.role === "super_admin" || Boolean(user.isSuperAdmin) || SUPER_ADMIN_EMAILS.includes(normalizedEmail);
-  const permissions = (user.customPermissions as Record<string, any>) || {};
+  const stored = (user.customPermissions as Record<string, any>) || {};
+  const entitlement = paidEntitlement(user);
+  const permissions: Record<string, any> = entitlement ? { ...stored, subscriptionStartDate: entitlement.start, subscriptionRenewalDate: entitlement.end, subscriptionCycle: entitlement.cycle, subscriptionPrice: entitlement.price, subscriptionStatus: stored.autoRenew ? "active" : "cancelled" } : { ...stored, subscriptionStartDate: null, subscriptionRenewalDate: null, subscriptionStatus: stored.billingProvider === "asaas" && stored.subscriptionStatus === "active" ? "expired" : stored.subscriptionStatus || "pending" };
 
   return {
     id: user.id,
@@ -142,8 +146,10 @@ export const serializeUser = (user: User): SafeUser => {
     subscription_valid_until: permissions.subscriptionRenewalDate || null,
     subscription_auto_renew: permissions.autoRenew ?? false,
     billing_provider: permissions.billingProvider || "manual",
-    stripe_customer_id: permissions.stripeCustomerId || null,
-    stripe_subscription_id: permissions.stripeSubscriptionId || null,
+    billing_type: permissions.billingType || null,
+    subscription_price: permissions.subscriptionPrice || 0,
+    asaas_customer_id: permissions.asaasCustomerId || null,
+    asaas_subscription_id: permissions.asaasSubscriptionId || null,
     academic_status: permissions.academicStatus || (user.plan === "estudante" ? "approved" : "not_submitted"),
     academic_institution: permissions.academicInstitution || "",
     academic_course: permissions.academicCourse || "",

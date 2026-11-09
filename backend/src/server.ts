@@ -34,7 +34,7 @@ import { prisma } from "./lib/prisma.js";
 import { buildApp } from "./app.js";
 import { bootstrapSuperAdmins } from "./lib/bootstrap.js";
 
-// Valida variáveis críticas de produção (.env, Stripe, Database) antes de inicializar
+// Valida variáveis críticas de produção (.env, Asaas, Database) antes de inicializar
 assertStartupEnvironment();
 
 const start = async () => {
@@ -52,7 +52,7 @@ const start = async () => {
       port: env.PORT,
     });
     console.log(`🚀 [SERVER] Nacif Electric API escutando em ${address}`);
-    console.log(`📡 [SERVER] Ambiente: ${env.NODE_ENV.toUpperCase()} | Live Mode: ${env.STRIPE_SECRET_KEY.startsWith("sk_live_") ? "ATIVO" : "INATIVO"}`);
+    console.log(`📡 [SERVER] Ambiente: ${env.NODE_ENV.toUpperCase()} | Live Mode: ${env.ASAAS_ENVIRONMENT === "production" ? "ATIVO" : "INATIVO"}`);
   } catch (error) {
     app.log.error(error);
     process.exit(1);

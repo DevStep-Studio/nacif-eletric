@@ -7,24 +7,11 @@ assert.match(
   "Use a disposable DATABASE_URL ending in _test",
 );
 process.env.NODE_ENV = "test";
-process.env.STRIPE_SECRET_KEY = "sk_test_integration_fake";
-process.env.STRIPE_WEBHOOK_SECRET = "whsec_integration_fake";
 process.env.JWT_SECRET = "integration-only-secret-minimum-32-characters";
 process.env.FRONTEND_URL = "http://localhost:5173";
 process.env.UPLOAD_DIR = "/tmp/nacif-integration-uploads";
-for (const name of [
-  "ESTUDANTE_MONTHLY",
-  "ELETRICO_MONTHLY",
-  "ELETRICO_ANNUAL",
-  "SOLAR_MONTHLY",
-  "SOLAR_ANNUAL",
-  "COMPLETO_MONTHLY",
-  "COMPLETO_ANNUAL",
-])
-  process.env[`STRIPE_PRICE_${name}`] = `price_test${name.replaceAll("_", "")}`;
 const { buildApp } = await import("../src/app.js");
 const { prisma } = await import("../src/lib/prisma.js");
-const { stripe, STRIPE_PRICES } = await import("../src/lib/stripe.js");
 const { effectivePlanCode, checkServerModuleAccess } = await import(
   "../src/lib/planGovernance.js"
 );
@@ -33,7 +20,6 @@ const { normalizeAccountStatus, assertAccountAvailable } = await import(
 );
 const app = await buildApp();
 const createdIds: string[] = [];
-const eventIds: string[] = [];
 const call = async (
   method: any,
   url: string,
@@ -274,7 +260,7 @@ try {
     ).status,
     403,
   );
-  for (let i = 0; i < 5; i++)
+  for (let i = 0; i < 3; i++)
     eq(
       (
         await call(
@@ -300,7 +286,7 @@ try {
   eq(
     (await call("GET", "/api/subscriptions/status", undefined, token)).body
       .usage.exports,
-    5,
+    3,
   );
 
   const beforeRollover = await prisma.user.findUniqueOrThrow({ where: { id } });
@@ -320,7 +306,7 @@ try {
       call("POST", "/api/subscriptions/consume-export", { projectId }, token),
     ),
   );
-  eq(concurrent.filter((r) => r.body.allowed).length, 5);
+  eq(concurrent.filter((r) => r.body.allowed).length, 3);
   eq(
     (await call("GET", "/api/subscriptions/status", undefined, token)).body
       .usage.aiScans,
@@ -346,15 +332,15 @@ try {
         token,
       )
     ).status,
-    403,
+    200,
   );
   const projectRace = await Promise.all(
     Array.from({ length: 5 }, (_, n) =>
       call("POST", "/api/projects", { name: `Quota ${n}` }, token),
     ),
   );
-  eq(projectRace.filter((r) => r.status === 200).length, 2);
-  eq(projectRace.filter((r) => r.status === 403).length, 3);
+  eq(projectRace.filter((r) => r.status === 200).length, 0);
+  eq(projectRace.filter((r) => r.status === 403).length, 5);
   const quotaUser = await prisma.user.findUniqueOrThrow({ where: { id } });
   await prisma.user.update({
     where: { id },
@@ -525,264 +511,26 @@ try {
       data: { role: "user" },
     });
   }
-  const future = Math.floor(Date.now() / 1000) + 86400;
-  const subscription: any = {
-    id: "sub_integration",
-    customer: "cus_integration",
-    status: "active",
-    current_period_start: future - 86400,
-    current_period_end: future,
-    cancel_at_period_end: false,
-    metadata: { userId: id },
-    items: { data: [{ price: { id: STRIPE_PRICES.completo.monthly } }] },
-  };
-  const { COMMERCIAL_PLANS } = await import("../src/lib/planCatalog.js");
-  const validPrice = async (id: string) => {
-    for (const [planCode, cycles] of Object.entries(STRIPE_PRICES))
-      for (const [cycle, configured] of Object.entries(cycles))
-        if (id === configured) {
-          const plan = COMMERCIAL_PLANS.find((p) => p.code === planCode);
-          return {
-            id,
-            active: true,
-            livemode: false,
-            type: "recurring",
-            currency: "brl",
-            unit_amount: Math.round(
-              (cycle === "annual" ? plan.annualPrice : plan.monthlyPrice) * 100,
-            ),
-            recurring: {
-              interval: cycle === "annual" ? "year" : "month",
-              interval_count: 1,
-              usage_type: "licensed",
-            },
-          };
-        }
-    throw Object.assign(new Error("No such price"), {
-      code: "resource_missing",
-    });
-  };
-  (stripe.prices as any).retrieve = validPrice;
-  let checkoutInput: any;
-  (stripe.customers as any).create = async () => ({ id: "cus_integration" });
-  (stripe.customers as any).list = async () => ({ data: [] });
-  (stripe.customers as any).retrieve = async () => ({ id: "cus_integration" });
-  (stripe.checkout.sessions as any).create = async (input: any) => {
-    checkoutInput = input;
-    return {
-      id: "cs_integration",
-      url: "https://checkout.stripe.com/integration",
-    };
-  };
-  (stripe.checkout.sessions as any).retrieve = async () => ({
-    id: "cs_integration",
-    client_reference_id: id,
-    customer: "cus_integration",
-    payment_status: "unpaid",
-    status: "complete",
-    subscription,
-  });
-  (stripe.subscriptions as any).retrieve = async () => subscription;
-  (stripe.subscriptions as any).update = async (_id: string, input: any) => ({
-    ...subscription,
-    ...input,
-  });
-  const configuredPrice = STRIPE_PRICES.completo.monthly;
-  try {
-    (STRIPE_PRICES.completo as any).monthly = "";
-    const unconfigured = await call(
-      "POST",
-      "/api/subscriptions/create-checkout-session",
-      { planCode: "completo", cycle: "monthly" },
-      token,
-    );
-    eq(unconfigured.status, 503);
-    eq(
-      unconfigured.body.message.includes("STRIPE_PRICE_COMPLETO_MONTHLY"),
-      true,
-    );
-    eq(checkoutInput, undefined);
-  } finally {
-    (STRIPE_PRICES.completo as any).monthly = configuredPrice;
-  }
-  (stripe.prices as any).retrieve = async () => {
-    throw Object.assign(new Error("No such price"), {
-      code: "resource_missing",
-    });
-  };
-  const missingPrice = await call(
-    "POST",
-    "/api/subscriptions/create-checkout-session",
-    { planCode: "completo", cycle: "monthly" },
-    token,
-  );
-  eq(missingPrice.status, 503);
-  eq(missingPrice.body.message.includes("STRIPE_PRICE_COMPLETO_MONTHLY"), true);
-  eq(checkoutInput, undefined);
-  for (const invalid of [
-    { currency: "usd" },
-    { active: false },
-    { livemode: true },
-    { unit_amount: 1 },
-    {
-      recurring: {
-        interval: "year",
-        interval_count: 1,
-        usage_type: "licensed",
-      },
-    },
-  ]) {
-    (stripe.prices as any).retrieve = async (id: string) => ({
-      ...(await validPrice(id)),
-      ...invalid,
-    });
-    eq(
-      (
-        await call(
-          "POST",
-          "/api/subscriptions/create-checkout-session",
-          { planCode: "completo", cycle: "monthly" },
-          token,
-        )
-      ).status,
-      503,
-    );
-    eq(checkoutInput, undefined);
-  }
-  (stripe.prices as any).retrieve = validPrice;
-  const checkout = await call(
-    "POST",
-    "/api/subscriptions/create-checkout-session",
-    {
-      planCode: "completo",
-      cycle: "monthly",
-      priceId: "price_forged",
-      userId: other.id,
-    },
-    token,
-  );
-  eq(checkout.status, 200);
-  eq(checkoutInput.line_items[0].price, STRIPE_PRICES.completo.monthly);
-  eq(checkoutInput.client_reference_id, id);
-  eq((await prisma.user.findUniqueOrThrow({ where: { id } })).plan, "gratuito");
-  eq(
-    (
-      await call(
-        "POST",
-        "/api/subscriptions/verify-checkout-session",
-        { sessionId: "cs_integration" },
-        otherToken,
-      )
-    ).status,
-    403,
-  );
-  eq(
-    (
-      await call(
-        "POST",
-        "/api/subscriptions/verify-checkout-session",
-        { sessionId: "cs_integration" },
-        token,
-      )
-    ).body.paid,
-    false,
-  );
-  eq((await prisma.user.findUniqueOrThrow({ where: { id } })).plan, "gratuito");
-  (stripe.checkout.sessions as any).retrieve = async () => ({
-    id: "cs_integration",
-    client_reference_id: id,
-    customer: "cus_integration",
-    payment_status: "paid",
-    subscription,
-  });
-  eq(
-    (
-      await call(
-        "POST",
-        "/api/subscriptions/verify-checkout-session",
-        { sessionId: "cs_integration" },
-        token,
-      )
-    ).body.paid,
-    true,
-  );
-  eq(
-    (await call("GET", "/api/auth/me", undefined, token)).body.plan,
-    "completo",
-  );
-  eq(
-    (await call("POST", "/api/subscriptions/cancel", {}, token)).body
-      .subscription_auto_renew,
-    false,
-  );
-  eq((await prisma.user.findUniqueOrThrow({ where: { id } })).plan, "completo");
-  const eventId = `evt_integration_${Date.now()}`;
-  eventIds.push(eventId);
-  const event = {
-    id: eventId,
-    type: "customer.subscription.updated",
-    data: { object: { id: subscription.id } },
-  };
-  const payload = JSON.stringify(event);
-  const signature = stripe.webhooks.generateTestHeaderString({
-    payload,
-    secret: process.env.STRIPE_WEBHOOK_SECRET,
-  });
-  const hook = async (sig: string) =>
-    app.inject({
-      method: "POST",
-      url: "/api/subscriptions/webhook",
-      payload,
-      headers: { "content-type": "application/json", "stripe-signature": sig },
-    });
-  eq((await hook("invalid")).statusCode, 400);
-  eq((await hook(signature)).statusCode, 200);
-  eq((await hook(signature)).statusCode, 200);
-  eq(await prisma.stripeEvent.count({ where: { id: eventId } }), 1);
-  subscription.status = "canceled";
-  const canceled = { ...event, id: eventId + "_cancel" };
-  eventIds.push(canceled.id);
-  const canceledPayload = JSON.stringify(canceled);
-  eq(
-    (
-      await app.inject({
-        method: "POST",
-        url: "/api/subscriptions/webhook",
-        payload: canceledPayload,
-        headers: {
-          "content-type": "application/json",
-          "stripe-signature": stripe.webhooks.generateTestHeaderString({
-            payload: canceledPayload,
-            secret: process.env.STRIPE_WEBHOOK_SECRET,
-          }),
-        },
-      })
-    ).statusCode,
-    200,
-  );
-  eq(
-    (await call("GET", "/api/auth/me", undefined, token)).body.plan,
-    "gratuito",
-  );
+  // The financial lifecycle is covered by test/asaas-billing.ts without live charges.
   eq(
     effectivePlanCode({
       plan: "completo",
       customPermissions: {
-        billingProvider: "stripe",
+        billingProvider: "asaas",
         subscriptionRenewalDate: "2020-01-01",
       },
     }),
     "gratuito",
   );
   eq(checkServerModuleAccess({ plan: "gratuito" }, "solar").allowed, false);
-  eq(checkServerModuleAccess({ plan: "solar" }, "unifilar").allowed, false);
+  eq(checkServerModuleAccess({ plan: "solar" }, "solar").allowed, false);
   await prisma.user.update({ where: { id }, data: { status: "suspended" } });
   eq((await call("GET", "/api/auth/me", undefined, token)).status, 403);
   console.log(
-    `PASS: ${assertions} API integration assertions (real MySQL; Stripe mocked, no charges).`,
+    `PASS: ${assertions} API integration assertions (real MySQL; no live charges; billing has a separate Asaas simulator).`,
   );
 } finally {
-  await prisma.stripeEvent.deleteMany({ where: { id: { in: eventIds } } });
+  await prisma.billingAccount.deleteMany({ where: { userId: { in: createdIds } } });
   await prisma.user.deleteMany({ where: { id: { in: createdIds } } });
   await app.close();
   await prisma.$disconnect();

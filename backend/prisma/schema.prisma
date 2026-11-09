@@ -327,3 +327,69 @@ model StripeEvent {
   processedAt DateTime @default(now()) @map("processed_at")
   @@map("stripe_events")
 }
+
+// Operational billing records are independent from legacy Stripe history.
+model BillingAccount {
+  id                   String   @id @default(cuid())
+  userId               String   @map("user_id")
+  environment          String
+  customerId           String?  @map("customer_id")
+  customerAttempted    Boolean  @default(false) @map("customer_attempted")
+  lockToken            String?  @map("lock_token")
+  lockUntil            DateTime? @map("lock_until")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, environment])
+  @@map("billing_accounts")
+}
+
+model BillingSubscription {
+  id                   String   @id @default(cuid())
+  accountId            String   @map("account_id")
+  remoteId             String?  @map("remote_id")
+  planCode             String   @map("plan_code")
+  cycle                String
+  billingType          String   @map("billing_type")
+  value                Decimal  @db.Decimal(10, 2)
+  status               String   @default("creating")
+  createAttempted      Boolean  @default(false) @map("create_attempted")
+  scheduleAligned      Boolean  @default(false) @map("schedule_aligned")
+  nextDueDate          String   @map("next_due_date")
+  pendingChange        Json?    @map("pending_change")
+  cancelRequested      Boolean  @default(false) @map("cancel_requested")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([remoteId])
+  @@index([accountId, createdAt])
+  @@map("billing_subscriptions")
+}
+
+model BillingPayment {
+  id                   String   @id
+  remoteId             String   @map("remote_id")
+  subscriptionId       String   @map("subscription_id")
+  status               String
+  planCode             String   @map("plan_code")
+  cycle                String
+  value                Decimal  @db.Decimal(10, 2)
+  dueDate              String   @map("due_date")
+  invoiceUrl           String?  @map("invoice_url")
+  paidAt               DateTime? @map("paid_at")
+  periodStart          DateTime? @map("period_start")
+  periodEnd            DateTime? @map("period_end")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([subscriptionId, dueDate])
+  @@map("billing_payments")
+}
+
+model BillingEvent {
+  id                   String   @id
+  environment          String
+  type                 String
+  processedAt          DateTime @default(now()) @map("processed_at")
+
+  @@map("billing_events")
+}

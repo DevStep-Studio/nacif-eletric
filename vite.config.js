@@ -14,26 +14,6 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/create-checkout-session': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '/create-portal-session': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '/verify-checkout-session': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '/sync-stripe-subscription': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '/webhook': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,

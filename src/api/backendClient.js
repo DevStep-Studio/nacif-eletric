@@ -526,7 +526,7 @@ const auth = {
     }
 
     const remoteUser = await request("/api/auth/me");
-    return remoteUser ? { ...remoteUser, plan: "completo", subscription_status: "active" } : remoteUser;
+    return remoteUser;
   },
 
   async loginViaEmailPassword(emailOrPayload, maybePassword) {
@@ -935,8 +935,8 @@ const auth = {
         "subscription_cancelled_at",
         "subscription_cancel_reason",
         "billing_provider",
-        "stripe_customer_id",
-        "stripe_subscription_id",
+        "asaas_customer_id",
+        "asaas_subscription_id",
         "academic_institution",
         "academic_course",
         "academic_document_name",
@@ -3107,59 +3107,6 @@ const subscriptionEntity = {
       method: "POST",
       body: { planCode, cycle },
     });
-  },
-
-  async syncFromStripe(stripeData = {}) {
-    if (!stripeData) return null;
-    const targetPlan = stripeData.plan ? getPlanByCode(stripeData.plan) : null;
-    if (!targetPlan) return null;
-
-    if (isLocalAuthMode) {
-      const user = getLocalUserFromToken();
-      if (!user) return null;
-
-      const resolvedCycle = targetPlan.code === "estudante" ? "monthly" : (stripeData.cycle || "monthly");
-      const resolvedPrice =
-        stripeData.price ||
-        (resolvedCycle === "annual" && targetPlan.annualPrice !== null
-          ? targetPlan.annualPrice
-          : targetPlan.monthlyPrice);
-
-      const patch = {
-        plan: targetPlan.code,
-        billing_provider: "stripe",
-        subscription_status: stripeData.status || "active",
-        subscription_cycle: resolvedCycle,
-        subscription_price: resolvedPrice,
-        subscription_auto_renew: stripeData.autoRenew ?? true,
-      };
-
-      if (stripeData.startDate) {
-        patch.subscription_start_date = stripeData.startDate;
-      } else if (!user.subscription_start_date) {
-        patch.subscription_start_date = nowIso();
-      }
-
-      if (stripeData.renewalDate) {
-        patch.subscription_valid_until = stripeData.renewalDate;
-      }
-
-      if (stripeData.stripeCustomerId) {
-        patch.stripe_customer_id = stripeData.stripeCustomerId;
-      }
-
-      if (stripeData.stripeSubscriptionId) {
-        patch.stripe_subscription_id = stripeData.stripeSubscriptionId;
-      }
-
-      const updated = await auth.updateMe(patch);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("voltai:user-updated"));
-      }
-      return updated;
-    }
-
-    return auth.me();
   },
 
   async submitAcademicVerification({ institution, course, documentName, documentUrl }) {

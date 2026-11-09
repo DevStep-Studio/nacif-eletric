@@ -24,18 +24,8 @@ export default function CancelSubscriptionPage() {
   }, [user]);
 
   const handleConfirmCancel = async () => {
-    // Call backend if available or simulate cancelation
-    try {
-      if (backend?.subscriptions?.cancel) {
-        await backend.subscriptions.cancel({ reason });
-      }
-      if (user && backend?.auth?.updateMe) {
-        await backend.auth.updateMe({ plan: "free", subscription_status: "cancelled" });
-        await checkUserAuth();
-      }
-    } catch (e) {
-      console.warn("Cancel subscription fallback:", e);
-    }
+    await backend.subscriptions.cancel({ reason });
+    await checkUserAuth({ silent: true });
     setCancelled(true);
   };
 
