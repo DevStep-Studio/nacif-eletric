@@ -57,3 +57,4 @@ export async function bootstrapSuperAdmins(prisma: PrismaClient): Promise<void> 
     console.warn("[BOOTSTRAP] Aviso ao provisionar super admins iniciais no banco:", error);
   }
 }
+
