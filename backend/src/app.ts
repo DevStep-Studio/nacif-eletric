@@ -33,6 +33,10 @@ export const buildApp = async () => {
     "http://127.0.0.1:4173",
     "https://nacifenergy.com.br",
     "http://nacifenergy.com.br",
+    "https://app.nacifenergy.com.br",
+    "http://app.nacifenergy.com.br",
+    "https://www.nacifenergy.com.br",
+    "http://www.nacifenergy.com.br",
   ].filter(Boolean));
 
   const isAllowedOrigin = (origin?: string) => {
@@ -42,6 +46,20 @@ export const buildApp = async () => {
 
     if (allowedOrigins.has(origin)) {
       return true;
+    }
+
+    try {
+      const parsedOrigin = new URL(origin);
+      if (
+        parsedOrigin.hostname === "nacifenergy.com.br" ||
+        parsedOrigin.hostname.endsWith(".nacifenergy.com.br") ||
+        parsedOrigin.hostname === "localhost" ||
+        parsedOrigin.hostname === "127.0.0.1"
+      ) {
+        return true;
+      }
+    } catch {
+      // url parse fallback
     }
 
     return false;

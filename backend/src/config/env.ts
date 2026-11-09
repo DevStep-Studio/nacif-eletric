@@ -33,8 +33,20 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3001),
   FRONTEND_URL: z
     .string()
-    .url()
-    .default(process.env.VITE_APP_URL || "https://nacifenergy.com.br").transform(value => value.replace(/\/+$/, "")),
+    .default(
+      process.env.FRONTEND_URL ||
+        process.env.APP_URL ||
+        process.env.VITE_APP_URL ||
+        "https://nacifenergy.com.br",
+    )
+    .transform((value) => {
+      let trimmed = (value || "").trim();
+      if (!trimmed) return "https://nacifenergy.com.br";
+      if (!/^https?:\/\//i.test(trimmed)) {
+        trimmed = `https://${trimmed}`;
+      }
+      return trimmed.replace(/\/+$/, "");
+    }),
   DATABASE_URL: z
     .string()
     .min(1)
