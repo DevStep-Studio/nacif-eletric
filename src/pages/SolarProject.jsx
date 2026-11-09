@@ -387,6 +387,7 @@ export default function SolarProject() {
 
   // Seleções do Inspector Contextual
   const [selectedEntity, setSelectedEntity] = useState({ type: "none", id: null }); // type: "none" | "roof" | "module" | "string" | "obstacle"
+  const selectedModuleIdx = selectedEntity?.type === "module" ? Number(selectedEntity.id) : null;
   const [activeInspectorTab, setActiveInspectorTab] = useState("layout"); // "layout" | "electrical" | "mounting" | "advanced"
 
   // Estado de Auto FV Preview
@@ -434,6 +435,7 @@ export default function SolarProject() {
     }));
   };
 
+<<<<<<< HEAD
   const reportProject = useMemo(() => {
     if (!project) return null;
     const currentResponsible = project.technical_responsible || {};
@@ -499,6 +501,8 @@ export default function SolarProject() {
     };
   }, [project, user, config, searchAddress, visualSizing]);
 
+=======
+>>>>>>> b455b1b (fix: corrigir ordem de inicializacao do designer solar)
   const [roofHistoryState, setRoofHistoryState] = useState({ canUndo: false, canRedo: false });
   const roofHistoryRef = useRef([[]]);
   const roofHistoryIndexRef = useRef(0);
@@ -792,6 +796,61 @@ export default function SolarProject() {
     technicalAnalysis,
     areas: multiAreaLayouts,
   }), [totalPanelCount, totalDcPowerKw, aggregateMetrics, acCurrent, breaker, annualGenerationKwh, annualSavingsBrl, paybackYears, strings, technicalAnalysis, multiAreaLayouts, selectedArea]);
+
+  // Relatórios podem usar o dimensionamento; inicialize-os somente após visualSizing.
+  const reportProject = useMemo(() => {
+    if (!project) return null;
+    const currentResponsible = project.technical_responsible || {};
+    const resolvedConsumption = {
+      monthly_consumption_kwh:
+        project.consumption?.monthly_consumption_kwh ??
+        project.monthly_consumption_kwh ??
+        project.solar_config?.monthly_consumption_kwh ??
+        project.solar_config?.consumption?.monthly_consumption_kwh ??
+        config?.monthly_consumption_kwh ??
+        config?.consumption?.monthly_consumption_kwh ??
+        null,
+      tariff_brl_kwh:
+        project.consumption?.tariff_brl_kwh ??
+        project.solar_config?.tariff_brl_kwh ??
+        config?.tariff_brl_kwh ??
+        null,
+      distributor:
+        project.consumption?.distributor ??
+        project.distributor ??
+        project.solar_config?.distributor ??
+        config?.distributor ??
+        "",
+      consumer_unit:
+        project.consumption?.consumer_unit ??
+        project.consumer_unit ??
+        project.solar_config?.consumer_unit ??
+        config?.consumer_unit ??
+        "",
+      tariff_class:
+        project.consumption?.tariff_class ??
+        project.solar_config?.tariff_class ??
+        config?.tariff_class ??
+        "B1 - Residencial",
+    };
+    return {
+      ...project,
+      consumption: resolvedConsumption,
+      monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
+      solar_config: {
+        ...(project.solar_config || {}),
+        ...config,
+        consumption: resolvedConsumption,
+        monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
+      },
+      technical_responsible: {
+        ...currentResponsible,
+        name: currentResponsible.name || currentResponsible.full_name || user?.full_name || user?.name || "",
+        crea: currentResponsible.crea || user?.crea || "",
+        company: currentResponsible.company || user?.company || "",
+      },
+    };
+  }, [project, user, config]);
 
   const reportValidation = useMemo(
     () => validateProjectDataForReports(reportProject, config, visualSizing),
@@ -1826,7 +1885,6 @@ export default function SolarProject() {
     ? (config?.obstacles || []).find((o) => o.id === selectedEntity.id)
     : null;
 
-  const selectedModuleIdx = selectedEntity?.type === "module" ? Number(selectedEntity.id) : null;
   const selectedString = selectedEntity?.type === "string"
     ? strings.find((s) => s.id === selectedEntity.id)
     : null;

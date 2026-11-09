@@ -40,7 +40,8 @@
     "test:solar-visual": "node scripts/solar-visual-improvements-smoke.mjs",
     "test:device-restriction": "node scripts/device-restriction-smoke.mjs",
     "typecheck": "tsc -p ./jsconfig.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:solar-render": "node scripts/solar-render-smoke.mjs"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.20.0",

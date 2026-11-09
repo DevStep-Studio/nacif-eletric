@@ -60,4 +60,10 @@ export default [
       "react-hooks/rules-of-hooks": "error",
     },
   },
+  {
+    files: ["src/pages/SolarProject.jsx"],
+    rules: {
+      "no-use-before-define": ["error", { functions: false, classes: true, variables: true }],
+    },
+  },
 ];
