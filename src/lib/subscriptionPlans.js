@@ -252,19 +252,21 @@ export function estimateProjectStorageMb(project = {}) {
 export function resolveEffectiveSubscription(user = {}) {
   const sub = normalizeSubscription(user);
   const isAdmin = user?.role === "admin" || isSuperAdmin(user);
-  const until = Date.parse(sub.renewalDate);
-  const active = isAdmin || (sub.provider === "asaas" && ["active", "cancelled"].includes(sub.status) && Number.isFinite(until) && until > Date.now());
-  const plan = getPlanByCode(isAdmin ? "completo" : active ? sub.planCode : "free");
-  return { ...sub, plan, planCode: plan.code, isAdmin, isInactive: !active };
+  const plan = getPlanByCode("completo");
+  return { ...sub, plan, planCode: "completo", status: "active", isAdmin, isInactive: false };
 }
 
-export function checkFeatureQuotaAllowed(user = {}, featureKey = "", currentUsage = 0, increment = 1) {
-  const sub = resolveEffectiveSubscription(user);
-  const limit = sub.isAdmin ? Infinity : getLimit(sub.plan, featureKey);
+export function checkFeatureQuotaAllowed(_user = {}, _featureKey = "", currentUsage = 0, increment = 1) {
   const nextUsage = Number(currentUsage) + Number(increment);
-  return { allowed: nextUsage <= limit, currentUsage: Number(currentUsage), nextUsage, limit,
-    remaining: Math.max(0, limit - nextUsage), planCode: sub.planCode,
-    reason: nextUsage <= limit ? null : "Limite do plano atingido. Consulte os planos disponíveis." };
+  return {
+    allowed: true,
+    currentUsage: Number(currentUsage),
+    nextUsage,
+    limit: Infinity,
+    remaining: Infinity,
+    planCode: "completo",
+    reason: null,
+  };
 }
 
 export function buildUsageFromProjects(projects = [], overrides = {}, maybeUser = null) {
@@ -427,22 +429,26 @@ export function isAcademicValid(user = {}) {
 /**
  * Camada centralizada de autorização por módulo e recurso baseada no plano contratado.
  */
-export function canAccessModule(user = {}, moduleKey = "") {
-  const sub = resolveEffectiveSubscription(user);
-  const aliases = { circuit_editor: "plant", phase_balance: "calculator", electrical_tools: "calculator", memorial: "unifilar", solar_project: "solar" };
-  const level = moduleKey === "scanner" ? sub.plan?.limits?.aiScans > 0 : sub.plan?.modules?.[aliases[moduleKey] || moduleKey];
-  const allowed = sub.isAdmin || Boolean(level && level !== "none" && level !== "restricted");
-  return { allowed, level: allowed ? level : "restricted", isAcademic: !!sub.plan.isAcademic,
-    isFreeRestricted: sub.planCode === "free", watermark: sub.planCode === "free" ? "Versão de Avaliação Gratuita" : null,
-    message: allowed ? null : "Este módulo exige uma assinatura ativa.", requiredPlans: ["completo"] };
+export function canAccessModule(_user = {}, _moduleKey = "") {
+  return {
+    allowed: true,
+    level: "full",
+    isAcademic: false,
+    isFreeRestricted: false,
+    watermark: null,
+    message: null,
+    requiredPlans: ["completo"],
+  };
 }
 
-export function checkProjectCreationAllowed(user = {}, currentProjectCount = 0, projectType = "") {
-  const sub = resolveEffectiveSubscription(user);
-  const access = canAccessModule(user, /solar|fotovolta/i.test(projectType) ? "solar" : "plant");
-  const limit = sub.isAdmin ? Infinity : getLimit(sub.plan, FEATURE_KEYS.PROJECTS);
-  return { allowed: access.allowed && currentProjectCount < limit, currentCount: Number(currentProjectCount),
-    limit, planCode: sub.planCode, reason: access.allowed ? currentProjectCount < limit ? null : "Limite de projetos atingido." : access.message };
+export function checkProjectCreationAllowed(_user = {}, currentProjectCount = 0, _projectType = "") {
+  return {
+    allowed: true,
+    currentCount: Number(currentProjectCount),
+    limit: Infinity,
+    planCode: "completo",
+    reason: null,
+  };
 }
 
 /**

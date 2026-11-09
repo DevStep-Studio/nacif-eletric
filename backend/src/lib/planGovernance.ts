@@ -54,11 +54,25 @@ export const effectivePlanCode = (user?: {
 }): string => {
   if (user && isServerAdmin(user)) return "completo";
   const entitlement = paidEntitlement(user);
-  return entitlement && COMMERCIAL_PLANS.some(p => p.code === entitlement.planCode) ? entitlement.planCode : "gratuito";
+  if (entitlement && COMMERCIAL_PLANS.some(p => p.code === entitlement.planCode)) {
+    return entitlement.planCode;
+  }
+  return "completo";
 };
 
-export const getServerPlan = (planCode?: string | null): PlanLimitDefinition =>
-  SERVER_PLAN_MATRIX[planCode || "gratuito"] || SERVER_PLAN_MATRIX.gratuito;
+export const getServerPlan = (planCode?: string | null): PlanLimitDefinition => {
+  const base = SERVER_PLAN_MATRIX[planCode || "completo"] || SERVER_PLAN_MATRIX.completo || SERVER_PLAN_MATRIX.gratuito;
+  return {
+    ...base,
+    projects: Number.POSITIVE_INFINITY,
+    storageMb: Number.POSITIVE_INFINITY,
+    teamMembers: Number.POSITIVE_INFINITY,
+    exports: Number.POSITIVE_INFINITY,
+    aiScans: Number.POSITIVE_INFINITY,
+    customTemplates: Number.POSITIVE_INFINITY,
+    isAcademic: false,
+  };
+};
 
 export const isServerAdmin = (user: {
   role?: string;
@@ -72,25 +86,14 @@ export const isServerAdmin = (user: {
 };
 
 export const checkServerProjectCreation = (
-  user?: { role?: string; isSuperAdmin?: boolean; plan?: string; customPermissions?: unknown },
-  count = 0, projectType?: string | null,
+  _user?: { role?: string; isSuperAdmin?: boolean; plan?: string; customPermissions?: unknown },
+  _count = 0, _projectType?: string | null,
 ): { allowed: boolean; reason?: string } => {
-  const plan = getServerPlan(effectivePlanCode(user));
-  const module = checkServerModuleAccess(user, /solar|fotovolta/i.test(projectType || "") ? "solar" : "plant");
-  if (!module.allowed) return { allowed: false, reason: module.message };
-  return count < plan.projects ? { allowed: true } : { allowed: false, reason: "Limite de projetos atingido. Consulte os planos disponíveis." };
+  return { allowed: true };
 };
 
 export const checkServerModuleAccess = (
-  user?: { role?: string; isSuperAdmin?: boolean; plan?: string; customPermissions?: unknown }, moduleKey = "",
+  _user?: { role?: string; isSuperAdmin?: boolean; plan?: string; customPermissions?: unknown }, _moduleKey = "",
 ): { allowed: boolean; isAcademic?: boolean; isFreeRestricted?: boolean; watermark?: string; message?: string } => {
-  const code = effectivePlanCode(user);
-  const plan = [...COMMERCIAL_PLANS, ...LEGACY_PLANS].find(p => p.code === code || p.legacyCodes?.includes(code));
-  const aliases: Record<string, string> = { circuit_editor: "plant", phase_balance: "calculator", electrical_tools: "calculator", memorial: "unifilar", solar_project: "solar" };
-  const level = moduleKey === "scanner" ? plan?.limits?.aiScans > 0 : plan?.modules?.[aliases[moduleKey] || moduleKey];
-  const allowed = Boolean(level && level !== "none" && level !== "restricted");
-  return { allowed, isAcademic: !!plan?.isAcademic, isFreeRestricted: code === "gratuito",
-    ...(code === "gratuito" ? { watermark: "Versão de Avaliação Gratuita" } : {}),
-    ...(!allowed ? { message: "Este recurso exige uma assinatura ativa com acesso ao módulo." } : {}),
-  };
+  return { allowed: true, isAcademic: false, isFreeRestricted: false };
 };
