@@ -4,6 +4,6 @@
   "branch": "main",
   "production_path": "/home/nacifenergy/htdocs/nacifenergy.com.br",
   "build_output": "dist",
-  "pm2_process": null,
+  "pm2_process": "nacif-electric-api",
   "deploy_script": "npm run build"
 }

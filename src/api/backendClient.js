@@ -783,19 +783,18 @@ const auth = {
     }
 
     try {
-      return await request("/api/auth/forgot-password", {
+      return await request("/api/auth/reset-password-request", {
         method: "POST",
         body: { email },
       });
     } catch (err) {
-      // Se a rota nova /forgot-password não for encontrada (backend ainda não reiniciado/atualizado no servidor),
-      // faz fallback transparente para /reset-password-request, garantindo compatibilidade total.
+      // Fallback para /forgot-password caso o endpoint seja exclusivo da nova versão
       const isNotFound =
         err?.status === 404 ||
         String(err?.message || "").toLowerCase().includes("not found");
 
       if (isNotFound) {
-        return await request("/api/auth/reset-password-request", {
+        return await request("/api/auth/forgot-password", {
           method: "POST",
           body: { email },
         });
