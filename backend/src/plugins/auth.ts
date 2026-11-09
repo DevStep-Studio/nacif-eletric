@@ -1,5 +1,6 @@
 import { assertAccountAvailable } from "../lib/accountAccess.js";
 import { effectivePlanCode } from "../lib/planGovernance.js";
+import { SUPER_ADMIN_EMAILS } from "../lib/serializers.js";
 import { prisma } from "../lib/prisma.js";
 import fp from "fastify-plugin";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -25,11 +26,17 @@ export const authPlugin = fp(async (app) => {
 
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
     assertAccountAvailable(user);
+    const normalizedEmail = (user.email || payload.email || "").toLowerCase().trim();
+    const isSuper =
+      user.role === "super_admin" ||
+      Boolean(user.isSuperAdmin) ||
+      SUPER_ADMIN_EMAILS.includes(normalizedEmail);
+
     request.authUser = {
       id: payload.sub,
       email: payload.email,
-      role: user.role,
-      plan: effectivePlanCode(user),
+      role: isSuper ? "super_admin" : user.role,
+      plan: isSuper ? "completo" : effectivePlanCode(user),
       customPermissions: user.customPermissions,
     };
   });

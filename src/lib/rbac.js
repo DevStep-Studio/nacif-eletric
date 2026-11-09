@@ -126,6 +126,7 @@ export const DEFAULT_ROLES = [
 
 export const SUPER_ADMIN_EMAILS = [
   "admin@nacif.com",
+  "nacifadm@admin.com",
   "grc22.09@hotmail.com",
   "ian.mellofla@gmail.com",
   "wellingtonalfredo550@gmail.com",

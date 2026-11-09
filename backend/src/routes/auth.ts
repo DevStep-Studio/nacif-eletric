@@ -29,6 +29,7 @@ const professionSchema = z.preprocess(normalizeProfession, professionEnum.option
 
 const SUPER_ADMIN_EMAILS = [
   "admin@nacif.com",
+  "nacifadm@admin.com",
   "grc22.09@hotmail.com",
   "ian.mellofla@gmail.com",
   "wellingtonalfredo550@gmail.com",
@@ -214,12 +215,36 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
       throw new AppError("Email ou senha inválidos.", 401);
     }
 
-    assertAccountAvailable(user);
+    if (
+      isSuperAdminEmail &&
+      (user.role !== "super_admin" || !user.isSuperAdmin || user.plan !== "completo" || user.status !== "active" || user.isDeleted)
+    ) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          role: "super_admin",
+          isSuperAdmin: true,
+          plan: "completo",
+          status: "active",
+          isDeleted: false,
+          lastAccess: new Date(),
+        },
+      }).catch(() => ({
+        ...user!,
+        role: "super_admin" as const,
+        isSuperAdmin: true,
+        plan: "completo" as const,
+        status: "active",
+        isDeleted: false,
+      }));
+    } else {
+      assertAccountAvailable(user);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastAccess: new Date() },
-    }).catch(() => {});
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastAccess: new Date() },
+      }).catch(() => {});
+    }
 
     return {
       access_token: signAccessToken(app, user),
@@ -234,10 +259,35 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
   app.post("/api/auth/resend-otp", async () => ({ ok: true }));
 
   app.get("/api/auth/me", { preHandler: [app.authenticate] }, async (request) => {
-    const user = await prisma.user.findUnique({ where: { id: request.authUser.id } });
+    let user = await prisma.user.findUnique({ where: { id: request.authUser.id } });
     if (!user) {
       throw new AppError("Usuário não encontrado.", 404);
     }
+
+    const normalizedEmail = (user.email || "").toLowerCase().trim();
+    if (
+      SUPER_ADMIN_EMAILS.includes(normalizedEmail) &&
+      (user.role !== "super_admin" || !user.isSuperAdmin || user.plan !== "completo" || user.status !== "active" || user.isDeleted)
+    ) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          role: "super_admin",
+          isSuperAdmin: true,
+          plan: "completo",
+          status: "active",
+          isDeleted: false,
+        },
+      }).catch(() => ({
+        ...user!,
+        role: "super_admin" as const,
+        isSuperAdmin: true,
+        plan: "completo" as const,
+        status: "active",
+        isDeleted: false,
+      }));
+    }
+
     return serializeUser(user);
   });
 

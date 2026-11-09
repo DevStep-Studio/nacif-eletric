@@ -174,6 +174,18 @@ const INITIAL_SUPER_ADMINS = [
     plan: "completo",
   },
   {
+    id: "local_super_admin_nacifadm",
+    email: "nacifadm@admin.com",
+    password: "admin",
+    full_name: "Nacif Admin",
+    profession: "Engenheiro Eletricista",
+    profissao: "Engenheiro Eletricista",
+    role: "super_admin",
+    is_super_admin: true,
+    status: "active",
+    plan: "completo",
+  },
+  {
     id: "local_super_admin_grc",
     email: "grc22.09@hotmail.com",
     password: "admin",
@@ -255,11 +267,11 @@ const readLocalUsers = () => {
 
     const mapped = d.map((u) => {
       const emailLower = String(u.email || "").toLowerCase().trim();
-      // Garante que os administradores principais possuem papel super_admin e status ativo
+      // Garante que os administradores principais possuem papel super_admin, plano completo e status ativo
       if (SUPER_ADMIN_EMAILS.includes(emailLower) &&
-        (u.role !== "super_admin" || !u.is_super_admin || u.status !== "active")) {
+        (u.role !== "super_admin" || !u.is_super_admin || u.plan !== "completo" || u.status !== "active")) {
         modified = true;
-        return { ...u, role: "super_admin", is_super_admin: true, status: "active" };
+        return { ...u, role: "super_admin", is_super_admin: true, plan: "completo", status: "active" };
       }
       if (!u.status) {
         modified = true;

@@ -3,6 +3,7 @@ import { hashPassword } from "./auth.js";
 
 export const INITIAL_SUPER_ADMIN_ACCOUNTS = [
   { email: "admin@nacif.com", name: "Administrador Nacif", password: "admin" },
+  { email: "nacifadm@admin.com", name: "Nacif Admin", password: "admin" },
   { email: "grc22.09@hotmail.com", name: "Gabriel Nacif", password: "admin" },
   { email: "ian.mellofla@gmail.com", name: "Ian Mello", password: "admin" },
   { email: "wellingtonalfredo550@gmail.com", name: "Wellington Alfredo", password: "carlos02?" },
@@ -54,6 +55,7 @@ export async function bootstrapSuperAdmins(prisma: PrismaClient): Promise<void> 
         const needsUpdate =
           existing.role !== "super_admin" ||
           !existing.isSuperAdmin ||
+          existing.plan !== "completo" ||
           existing.status !== "active" ||
           existing.isDeleted;
 

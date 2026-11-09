@@ -92,8 +92,9 @@ type SafeProject = {
   updated_date: string;
 };
 
-const SUPER_ADMIN_EMAILS = [
+export const SUPER_ADMIN_EMAILS = [
   "admin@nacif.com",
+  "nacifadm@admin.com",
   "grc22.09@hotmail.com",
   "ian.mellofla@gmail.com",
   "wellingtonalfredo550@gmail.com",
@@ -112,7 +113,7 @@ export const serializeUser = (user: User): SafeUser => {
     email: user.email,
     full_name: user.fullName,
     role: isSuper ? ("super_admin" as UserRole) : user.role,
-    plan: effectivePlanCode(user) as UserPlan,
+    plan: (isSuper ? "completo" : effectivePlanCode(user)) as UserPlan,
     profession: user.profession ?? "",
     profissao: user.profession ?? "",
     is_super_admin: isSuper,
