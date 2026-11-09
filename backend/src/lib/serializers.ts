@@ -1,5 +1,5 @@
 import { normalizeAccountStatus } from "./accountAccess.js";
-import { effectivePlanCode, paidEntitlement } from "./planGovernance.js";
+import { paidEntitlement } from "./planGovernance.js";
 import type { Project, ProjectStatus, User, UserPlan, UserRole } from "@prisma/client";
 
 const projectStatusLabelMap: Record<ProjectStatus, "Rascunho" | "Em Andamento" | "Concluído" | "Aprovado"> = {
@@ -50,7 +50,9 @@ type SafeUser = {
   academic_document_name?: string;
   academic_valid_until?: string | null;
   subscription_status?: string;
-  subscription_cycle?: string;
+  subscription_cycle?: string | null;
+  subscription_plan?: string | null;
+  has_paid_subscription?: boolean;
   academic_status?: string;
   academic_institution?: string;
   academic_course?: string;
@@ -110,14 +112,28 @@ export const serializeUser = (user: User): SafeUser => {
   const isSuper = user.role === "super_admin" || Boolean(user.isSuperAdmin) || SUPER_ADMIN_EMAILS.includes(normalizedEmail);
   const stored = (user.customPermissions as Record<string, any>) || {};
   const entitlement = paidEntitlement(user);
-  const permissions: Record<string, any> = entitlement ? { ...stored, subscriptionStartDate: entitlement.start, subscriptionRenewalDate: entitlement.end, subscriptionCycle: entitlement.cycle, subscriptionPrice: entitlement.price, subscriptionStatus: stored.autoRenew ? "active" : "cancelled" } : { ...stored, subscriptionStartDate: null, subscriptionRenewalDate: null, subscriptionStatus: stored.billingProvider === "asaas" && stored.subscriptionStatus === "active" ? "expired" : stored.subscriptionStatus || "pending" };
+  const hasBilling = Boolean(stored.billingProvider === "asaas" || stored.asaasSubscriptionId);
+  const subscriptionStatus = entitlement
+    ? stored.autoRenew ? "active" : "cancelled"
+    : hasBilling ? stored.subscriptionStatus === "active" ? "expired" : stored.subscriptionStatus || "pending" : "none";
+  const permissions: Record<string, any> = {
+    ...stored,
+    subscriptionStartDate: entitlement?.start || null,
+    subscriptionRenewalDate: entitlement?.end || null,
+    subscriptionCycle: entitlement?.cycle || (hasBilling ? stored.subscriptionCycle || null : null),
+    subscriptionPrice: entitlement?.price || 0,
+    subscriptionStatus,
+    autoRenew: hasBilling ? stored.autoRenew ?? false : false,
+  };
 
   return {
     id: user.id,
     email: user.email,
     full_name: user.fullName,
     role: isSuper ? ("super_admin" as UserRole) : user.role,
-    plan: (isSuper ? "completo" : effectivePlanCode(user)) as UserPlan,
+    plan: (entitlement?.planCode || "gratuito") as UserPlan,
+    subscription_plan: entitlement?.planCode || null,
+    has_paid_subscription: Boolean(entitlement),
     profession: user.profession ?? "",
     profissao: user.profession ?? "",
     is_super_admin: isSuper,
@@ -140,12 +156,12 @@ export const serializeUser = (user: User): SafeUser => {
     onboarding_mode: permissions.onboarding_mode ?? permissions.onboardingMode ?? "",
     guided_mode: Boolean(permissions.guided_mode ?? permissions.guidedMode ?? false),
     custom_permissions: permissions,
-    subscription_status: permissions.subscriptionStatus || "active",
-    subscription_cycle: permissions.subscriptionCycle || "monthly",
+    subscription_status: permissions.subscriptionStatus,
+    subscription_cycle: permissions.subscriptionCycle,
     subscription_start_date: permissions.subscriptionStartDate || null,
     subscription_valid_until: permissions.subscriptionRenewalDate || null,
     subscription_auto_renew: permissions.autoRenew ?? false,
-    billing_provider: permissions.billingProvider || "manual",
+    billing_provider: hasBilling ? "asaas" : "none",
     billing_type: permissions.billingType || null,
     subscription_price: permissions.subscriptionPrice || 0,
     asaas_customer_id: permissions.asaasCustomerId || null,

@@ -21,7 +21,7 @@ export default function ManageSubscriptionModal({ isOpen, onClose, subscription,
       <DialogHeader><DialogTitle>Gerenciar assinatura</DialogTitle><DialogDescription>Detalhes e cobranças da sua assinatura no Asaas.</DialogDescription></DialogHeader>
       <div className="space-y-4 text-sm">
         <div className="rounded-xl border p-4 space-y-2">
-          <p className="font-bold">{record ? getPlanByCode(record.planCode).name : subscription?.plan?.name}</p>
+          <p className="font-bold">{record ? getPlanByCode(record.planCode).name : "Sem assinatura"}</p>
           <p>Situação: {({ active: "Ativa", pending: "Aguardando pagamento", past_due: "Pagamento atrasado", cancelled: "Cancelada", cancelling: "Cancelamento em andamento", creating: "Preparando contratação", failed: "Contratação não concluída" })[record?.status] || "Sem assinatura paga"}</p>
           <p>Forma de pagamento: {BILLING_TYPE_LABELS[record?.billingType] || "Não definida"}</p>
           {record && <p>Valor contratado: {Number(record.value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} / {record.cycle === "annual" ? "ano" : "mês"}</p>}

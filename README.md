@@ -159,3 +159,20 @@ do Prisma. Se ainda faltarem valores, importe
 `backend/prisma/repair-user-enums-phpmyadmin.sql`. Essa alternativa preserva os
 dados e substitui os SELECTs preparados de confirmacao por `DO 0`, sem resultados
 intermediarios de EXECUTE. As migrations historicas permanecem inalteradas.
+
+
+### Contas novas sem assinatura
+
+O cadastro publico cria usuarios comuns com `plan=gratuito`, inclusive quando o
+banco ainda nao tem usuarios. Cadastros administrativos explicitamente reconhecidos
+continuam com suas permissoes, mas essas permissoes nao representam assinatura paga.
+
+As respostas de cadastro, login e perfil indicam `subscription_status=none`,
+`subscription_plan=null`, `has_paid_subscription=false`, preco zero, ciclo e datas
+nulos, e renovacao desativada enquanto nao houver contratacao. A interface mostra
+**Sem assinatura**. O plano comercial so e informado quando existir um periodo pago
+confirmado no Asaas. Rotulos antigos de plano Completo, sozinhos, nao ativam assinatura.
+Nao e necessaria nova migration para essa correcao; publique backend e frontend.
+
+Validacao: `npm --prefix backend run test:auth-register`,
+`npm --prefix backend run test:billing` e `npm run test:subscription-state`.

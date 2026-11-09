@@ -273,9 +273,9 @@ const readLocalUsers = () => {
         modified = true;
         return { ...u, role: "super_admin", is_super_admin: true, plan: "completo", status: "active" };
       }
-      if (!u.status || u.plan !== "completo") {
+      if (!u.status) {
         modified = true;
-        return { ...u, status: u.status || "active", plan: "completo" };
+        return { ...u, status: "active" };
       }
       return u;
     });
@@ -674,7 +674,7 @@ const auth = {
       const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
       // Prevenção contra elevação indevida: novos cadastros NUNCA recebem super_admin automaticamente
       const assignedRole = isSuperAdminEmail ? "super_admin" : "user";
-      const assignedPlan = "completo";
+      const assignedPlan = "gratuito";
 
       const resolvedProfession = normalizeProfession(profession) || sanitizeTextInput(profession || "projetista");
       const user = {
@@ -689,6 +689,11 @@ const auth = {
         is_super_admin: isSuperAdminEmail,
         status: "active",
         plan: assignedPlan,
+        subscription_plan: null,
+        has_paid_subscription: false,
+        subscription_status: "none",
+        billing_provider: "none",
+        subscription_auto_renew: false,
         storage_used_mb: 0,
         monthly_exports_count: 0,
         monthly_ai_scans_count: 0,

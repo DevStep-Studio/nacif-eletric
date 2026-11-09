@@ -57,7 +57,7 @@ export const effectivePlanCode = (user?: {
   if (entitlement && COMMERCIAL_PLANS.some(p => p.code === entitlement.planCode)) {
     return entitlement.planCode;
   }
-  return "completo";
+  return "gratuito";
 };
 
 export const getServerPlan = (planCode?: string | null): PlanLimitDefinition => {

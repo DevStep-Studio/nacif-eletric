@@ -109,9 +109,8 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     }
 
     const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
-    const usersCount = await prisma.user.count();
-    const role: "super_admin" | "admin" | "user" = isSuperAdminEmail ? "super_admin" : (usersCount === 0 ? "admin" : "user");
-    const plan = role === "user" ? "gratuito" : "completo";
+    const role: "super_admin" | "user" = isSuperAdminEmail ? "super_admin" : "user";
+    const plan = "gratuito" as const;
 
     const user = await prisma.user.create({
       data: {

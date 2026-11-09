@@ -64,9 +64,9 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
     return {
       ...serializeUser(user),
       billing: await billingDetails(user.id),
-      plan: effectivePlanCode(user),
-      status: p.subscriptionStatus || "active",
-      cycle: p.subscriptionCycle || "monthly",
+      plan: serialized.plan,
+      status: serialized.subscription_status,
+      cycle: serialized.subscription_cycle,
       startDate: p.subscriptionStartDate || null,
       academicStatus: p.academicStatus || "not_submitted",
       academicInstitution: p.academicInstitution || "",
@@ -74,7 +74,7 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
       modules: [...COMMERCIAL_PLANS, ...LEGACY_PLANS].find(plan => plan.code === effectivePlanCode(user) || plan.legacyCodes?.includes(effectivePlanCode(user)))?.modules || {},
       renewalDate: p.subscriptionRenewalDate || null,
       validUntil: p.subscriptionRenewalDate || null,
-      autoRenew: p.autoRenew ?? false,
+      autoRenew: serialized.subscription_auto_renew ?? false,
       limits: JSON.parse(
         JSON.stringify(getServerPlan(effectivePlanCode(user))),
       ),

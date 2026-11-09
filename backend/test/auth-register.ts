@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { User } from "@prisma/client";
 import { buildApp } from "../src/app.js";
+import { serializeUser } from "../src/lib/serializers.js";
+import { effectivePlanCode } from "../src/lib/planGovernance.js";
 import { prisma } from "../src/lib/prisma.js";
 
 // Exercise real HTTP handlers, hashing, JWT and validation without a live database.
@@ -42,7 +44,7 @@ test("registration survives optional notification failures", async (t) => {
   });
   const register = (email: string, password = "test-secret-123") => app.inject({
     method: "POST", url: "/api/auth/register",
-    payload: { email, password, profession: "Projetista", terms_accepted: true },
+    payload: { email, password, profession: "Projetista", terms_accepted: true, plan: "completo", role: "admin", subscription_status: "active" },
   });
   try {
     for (const failure of [0, 1, 2]) {
@@ -54,6 +56,18 @@ test("registration survives optional notification failures", async (t) => {
         assert.equal(response.statusCode, 200);
         const { user, access_token } = response.json();
         assert.equal(user.profession, "projetista");
+        assert.equal(user.role, "user", "even the first public signup must be an ordinary user");
+        assert.equal(users.at(-1)!.plan, "gratuito", "persist no paid plan on signup");
+        assert.equal(user.plan, "gratuito");
+        assert.equal(user.subscription_plan, null);
+        assert.equal(user.has_paid_subscription, false);
+        assert.equal(user.subscription_status, "none");
+        assert.equal(user.billing_provider, "none");
+        assert.equal(user.subscription_price, 0);
+        assert.equal(user.subscription_cycle, null);
+        assert.equal(user.subscription_start_date, null);
+        assert.equal(user.subscription_valid_until, null);
+        assert.equal(user.subscription_auto_renew, false);
         assert.equal(user.email, email);
         assert.equal(user.passwordHash, undefined);
         assert.equal(app.jwt.verify<{ sub: string }>(access_token).sub, user.id);
@@ -63,15 +77,40 @@ test("registration survives optional notification failures", async (t) => {
           payload: { email, password: "test-secret-123" },
         });
         assert.equal(login.statusCode, 200);
+        assert.equal(login.json().user.plan, "gratuito");
+        assert.equal(login.json().user.subscription_status, "none");
         const me = await app.inject({
           method: "GET", url: "/api/auth/me",
           headers: { authorization: `Bearer ${access_token}` },
         });
         assert.equal(me.statusCode, 200);
         assert.equal(me.json().id, user.id);
+        assert.equal(me.json().plan, "gratuito");
+        assert.equal(me.json().has_paid_subscription, false);
         assert.equal((await register(email)).statusCode, 409);
       });
     }
+    await t.test("legacy full-plan labels and administrator roles are not paid subscriptions", () => {
+      const regular = { ...users[0], plan: "completo", customPermissions: {
+        subscriptionStatus: "active", autoRenew: true, subscriptionPrice: 210,
+        subscriptionCycle: "annual", subscriptionRenewalDate: "2099-01-01",
+      } } as User;
+      assert.equal(serializeUser(regular).plan, "gratuito");
+      assert.equal(serializeUser(regular).subscription_status, "none");
+      assert.equal(serializeUser(regular).subscription_price, 0);
+      assert.equal(serializeUser(regular).subscription_auto_renew, false);
+      assert.equal(serializeUser(regular).subscription_cycle, null);
+      assert.equal(serializeUser(regular).subscription_valid_until, null);
+      for (const role of ["admin", "super_admin"] as const) {
+        const admin = { ...regular, role };
+        assert.equal(effectivePlanCode(admin), "completo", "administrative access is preserved");
+        const serialized = serializeUser(admin);
+        assert.equal(serialized.role, role);
+        assert.equal(serialized.plan, "gratuito");
+        assert.equal(serialized.subscription_plan, null);
+        assert.equal(serialized.has_paid_subscription, false);
+      }
+    });
     await t.test("invalid input creates no account", async () => {
       const before = users.length;
       assert.equal((await register("invalid")).statusCode, 400);

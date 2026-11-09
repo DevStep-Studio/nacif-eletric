@@ -1,6 +1,6 @@
 export function createBillingProvider(user = {}) {
   const provider = user?.subscription?.provider || user?.billing_provider || "manual";
-  const isConfigured = Boolean(provider && provider !== "manual");
+  const isConfigured = provider === "asaas";
 
   return {
     provider,

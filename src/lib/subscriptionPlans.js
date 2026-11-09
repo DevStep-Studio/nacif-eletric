@@ -194,32 +194,31 @@ export function getPlanByCode(code) {
 }
 
 export function normalizeSubscription(user = {}) {
-  const plan = getPlanByCode(user?.plan || user?.subscription?.planCode || "free");
-
-  const cycle =
-    user?.subscription?.cycle ||
-    user?.subscription_cycle ||
-    user?.billing_cycle ||
-    "monthly";
+  const provider = user?.subscription?.provider || user?.billing_provider || "none";
+  const storedStatus = user?.subscription_status || user?.subscription?.status || "none";
+  const renewalDate = user?.subscription?.renewal_date || user?.renewal_date || user?.subscription_valid_until || null;
+  const hasPaidSubscription = user?.has_paid_subscription ?? (
+    provider === "asaas" && ["active", "cancelled"].includes(storedStatus) && Date.parse(renewalDate) > Date.now()
+  );
+  const plan = getPlanByCode(hasPaidSubscription ? user?.subscription_plan || user?.plan || user?.subscription?.planCode : "free");
+  const billingConfigured = provider === "asaas" || Boolean(user?.asaas_subscription_id);
+  const cycle = hasPaidSubscription ? user?.subscription?.cycle || user?.subscription_cycle || user?.billing_cycle || "monthly" : null;
 
   return {
     plan,
     planCode: plan.code,
     cycle,
-    status: user?.subscription_status || user?.subscription?.status || "pending",
-    provider: user?.subscription?.provider || user?.billing_provider || "manual",
-    price: user?.subscription?.price || user?.subscription_price || (cycle === "annual" ? plan.annualPrice : plan.monthlyPrice),
-    startDate: user?.subscription?.start_date || user?.subscription_start_date || null,
-    renewalDate: user?.subscription?.renewal_date || user?.renewal_date || user?.subscription_valid_until || null,
-    autoRenew: user?.subscription?.auto_renew ?? user?.subscription_auto_renew ?? false,
+    status: hasPaidSubscription || billingConfigured ? storedStatus : "none",
+    provider,
+    hasPaidSubscription,
+    price: hasPaidSubscription ? user?.subscription?.price ?? user?.subscription_price ?? (cycle === "annual" ? plan.annualPrice : plan.monthlyPrice) : 0,
+    startDate: hasPaidSubscription ? user?.subscription?.start_date || user?.subscription_start_date || null : null,
+    renewalDate: hasPaidSubscription ? renewalDate : null,
+    autoRenew: billingConfigured ? user?.subscription?.auto_renew ?? user?.subscription_auto_renew ?? false : false,
     asaasCustomerId: user?.asaas_customer_id || user?.subscription?.asaas_customer_id || null,
     asaasSubscriptionId: user?.asaas_subscription_id || user?.subscription?.asaas_subscription_id || null,
     billingType: user?.billing_type || null,
-    billingConfigured: Boolean(
-      (user?.billing_provider && user.billing_provider !== "manual") ||
-      user?.asaas_customer_id ||
-      user?.asaas_subscription_id
-    ),
+    billingConfigured,
     academicStatus: user?.academic_status || "not_submitted",
     academicInstitution: user?.academic_institution || "",
     academicCourse: user?.academic_course || "",
@@ -252,8 +251,7 @@ export function estimateProjectStorageMb(project = {}) {
 export function resolveEffectiveSubscription(user = {}) {
   const sub = normalizeSubscription(user);
   const isAdmin = user?.role === "admin" || isSuperAdmin(user);
-  const plan = getPlanByCode("completo");
-  return { ...sub, plan, planCode: "completo", status: "active", isAdmin, isInactive: false };
+  return { ...sub, isAdmin, isInactive: !sub.hasPaidSubscription };
 }
 
 export function checkFeatureQuotaAllowed(_user = {}, _featureKey = "", currentUsage = 0, increment = 1) {
