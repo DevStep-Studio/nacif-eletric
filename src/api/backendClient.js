@@ -273,9 +273,9 @@ const readLocalUsers = () => {
         modified = true;
         return { ...u, role: "super_admin", is_super_admin: true, plan: "completo", status: "active" };
       }
-      if (!u.status) {
+      if (!u.status || u.plan !== "completo") {
         modified = true;
-        return { ...u, status: "active" };
+        return { ...u, status: u.status || "active", plan: "completo" };
       }
       return u;
     });

@@ -73,6 +73,12 @@ export async function bootstrapSuperAdmins(prisma: PrismaClient): Promise<void> 
         }
       }
     }
+
+    // Durante a fase de testes com acesso 100% liberado, garante que todos os usuários tenham o plano 'completo'
+    await prisma.user.updateMany({
+      where: { NOT: { plan: "completo" } },
+      data: { plan: "completo" },
+    }).catch(() => {});
   } catch (error) {
     console.warn("[BOOTSTRAP] Aviso ao provisionar super admins iniciais no banco:", error);
   }
