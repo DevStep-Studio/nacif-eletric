@@ -127,3 +127,17 @@ execute no banco da aplicação
 O SQL é aditivo e pode ser executado novamente. Se a falha tiver outra causa,
 consulte o log da API: o painel agora identifica a seção que falhou e mantém as
 outras seções carregadas, com aviso persistente e opção de tentar novamente.
+
+### Cadastro falha com `Data truncated for column 'role'` (MySQL 1265)
+
+O banco pode ter um ENUM antigo em `users.role`, sem os valores `super_admin`,
+`admin` e `user`, ou uma coluna de texto curta demais. `users.plan` também precisa
+aceitar os planos atuais. O diagnóstico `npm --prefix backend run db:check` agora
+verifica esses tipos e valores, além da existência das colunas.
+
+Selecione o banco apontado pela `DATABASE_URL` e importe
+`backend/prisma/migrations/20261109020000_reconcile_user_role_plan_enums/migration.sql`.
+O SQL acrescenta os membros ausentes sem remover os legados, preserva registros,
+NULL e valores padrão, e amplia colunas CHAR/VARCHAR curtas. Pode ser executado
+novamente; não altera permissões dos usuários nem desativa o modo SQL estrito.
+Depois execute `npm --prefix backend run db:check` e tente o cadastro novamente.
