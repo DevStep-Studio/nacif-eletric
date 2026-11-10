@@ -499,6 +499,7 @@ export const request = async (path, options = {}) => {
       method: options.method || "GET",
       headers,
       credentials: "include",
+      cache: "no-store",
       body: options.body instanceof FormData || options.body === undefined ? options.body : JSON.stringify(options.body),
     });
   } catch {
@@ -1158,20 +1159,36 @@ const ownLocalProject = (id) => {
   if (!project) throw createError("Projeto não encontrado.", 404);
   return project;
 };
+const remoteProjectSession = async () => {
+  const token = getStoredToken();
+  const user = await auth.me();
+  if (!user?.id || token !== getStoredToken()) throw createError("A sessão mudou. Recarregue os projetos.", 401);
+  return { user, token };
+};
+const ownsRemoteProject = (project, user) => project?.owner_id === user.id && (!project.user_id || project.user_id === user.id);
 const projectEntity = {
   async list(sortBy, limit) {
     if (isLocalAuthMode) {
       const user = requireLocalUser();
       return cloneLocal(sortLocalItems(readLocalProjects().filter(item => item.owner_id === user.id), sortBy, limit));
     }
-    return request("/api/projects", { query: { sortBy, limit } });
+    const { user, token } = await remoteProjectSession();
+    const projects = await request("/api/projects", { query: { sortBy, limit } });
+    if (token !== getStoredToken()) throw createError("A sessão mudou. Recarregue os projetos.", 401);
+    return Array.isArray(projects) ? projects.filter(project => ownsRemoteProject(project, user)) : [];
+
   },
   async get(id) {
     if (isLocalAuthMode) return cloneLocal(ownLocalProject(id));
-    return request(`/api/projects/${id}`);
+    const { user, token } = await remoteProjectSession();
+    const project = await request(`/api/projects/${id}`);
+    if (token !== getStoredToken()) throw createError("A sessão mudou. Recarregue os projetos.", 401);
+    if (!ownsRemoteProject(project, user)) throw createError("Você não tem acesso a este projeto.", 403);
+    return project;
   },
   async getRevisions(id) {
     if (isLocalAuthMode) { ownLocalProject(id); return []; }
+    await this.get(id);
     return request(`/api/projects/${id}/revisions`);
   },
   async create(data) {
@@ -1216,6 +1233,7 @@ const projectEntity = {
       writeLocalProjects(readLocalProjects().map(item => item.id === id ? updated : item));
       return cloneLocal(updated);
     }
+    await this.get(id);
     return request(`/api/projects/${id}`, { method: "PATCH", body: data });
   },
   async duplicate(id) {
@@ -1223,6 +1241,7 @@ const projectEntity = {
       const original = ownLocalProject(id);
       return this.create({ ...cloneLocal(original), name: `${original.name || "Projeto"} (Cópia)`, status: "em_andamento" });
     }
+    await this.get(id);
     return request(`/api/projects/${id}/duplicate`, { method: "POST" });
   },
   async delete(id) {
@@ -1231,6 +1250,7 @@ const projectEntity = {
       writeLocalProjects(readLocalProjects().filter(item => item.id !== id));
       return { ok: true };
     }
+    await this.get(id);
     return request(`/api/projects/${id}`, { method: "DELETE" });
   },
 };

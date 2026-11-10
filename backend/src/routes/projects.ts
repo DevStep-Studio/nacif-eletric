@@ -235,6 +235,13 @@ const notifyProjectState = async ({
 };
 
 export const registerProjectRoutes = async (app: FastifyInstance) => {
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (request.url.split("?")[0].startsWith("/api/projects")) {
+      reply.header("Cache-Control", "private, no-store");
+      reply.header("Vary", "Authorization, Cookie");
+    }
+    return payload;
+  });
   app.get(
     "/api/projects",
     { preHandler: [app.authenticate] },

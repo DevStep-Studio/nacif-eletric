@@ -35,7 +35,7 @@ globalThis.fetch = async (url, options) => {
   if (path.includes("/create-checkout-session"))
     return Response.json({ url: "https://sandbox.asaas.com/i/test" });
   if (path === "/api/projects" && (!options.method || options.method === "GET"))
-    return Response.json([{ id: "server-project" }]);
+    return Response.json([{ id: "server-project", owner_id: "server-user" }, { id: "foreign", owner_id: "other" }, { id: "legacy" }]);
   return Response.json({ error: "Servidor indisponível" }, { status: 503 });
 };
 try {
@@ -87,7 +87,7 @@ try {
     message: "Servidor indisponível",
     status: 503,
   });
-  assert.deepEqual(await backend.entities.Project.list(), [{ id: "server-project" }]);
+  assert.deepEqual(await backend.entities.Project.list(), [{ id: "server-project", owner_id: "server-user" }]);
   for (const operation of [
     () => backend.entities.Project.get("foreign-project"),
     () => backend.entities.Project.get("local_project_legacy"),

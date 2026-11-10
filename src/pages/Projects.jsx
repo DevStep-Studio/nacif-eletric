@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -128,6 +128,7 @@ const getProjectActions = (project) => [
 export default function Projects() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const loadVersion = useRef(0);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -140,12 +141,15 @@ export default function Projects() {
   const [projectToDelete, setProjectToDelete] = useState(null);
 
   const load = async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError(false);
     try {
       const data = await backend.entities.Project.list("-updated_date", 100);
-      setProjects(Array.isArray(data) ? data : []);
+      if (version !== loadVersion.current) return;
+      setProjects(Array.isArray(data) ? data.filter(project => project.owner_id === user?.id) : []);
     } catch (err) {
+      if (version !== loadVersion.current) return;
       console.error("Falha ao carregar projetos:", err);
       if (err?.status === 401) {
         window.location.href = "/login";
@@ -153,13 +157,18 @@ export default function Projects() {
       setProjects([]);
       setError(true);
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    setProjects([]);
+    setSelectedIds([]);
+    setEditingProject(null);
+    setProjectToDelete(null);
+    if (user?.id) load();
+    return () => { loadVersion.current++; };
+  }, [user?.id]);
 
   const handleDuplicate = async (id) => {
     setDuplicating(true);
