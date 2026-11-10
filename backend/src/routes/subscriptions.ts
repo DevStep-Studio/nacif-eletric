@@ -99,7 +99,7 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
       const user = await tx.user.findUniqueOrThrow({
         where: { id: request.authUser.id },
       });
-      const project = projectId ? await tx.project.findFirst({ where: { id: projectId, ...(isServerAdmin(user) ? {} : { createdById: user.id }) } }) : null;
+      const project = projectId ? await tx.project.findFirst({ where: { id: projectId, createdById: user.id } }) : null;
       if (projectId && !project) throw new AppError("Projeto não encontrado.", 404);
       for (const key of new Set([moduleKey || (project ? projectModule(project.projectType) : "budget"), ...(project ? [projectModule(project.projectType)] : [])])) {
         const access = checkServerModuleAccess(user, key);

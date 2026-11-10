@@ -461,6 +461,18 @@ try {
     where: { id: other.id },
     data: { role: "super_admin" },
   });
+  for (const role of ["user", "admin", "super_admin"] as const) {
+    await prisma.user.update({ where: { id: other.id }, data: { role } });
+    eq((await call("GET", "/api/projects", undefined, otherToken)).body.length, 0);
+    for (const [method, url, payload] of [
+      ["GET", `/api/projects/${projectId}`, undefined],
+      ["GET", `/api/projects/${projectId}/revisions`, undefined],
+      ["PATCH", `/api/projects/${projectId}`, { name: "Foreign edit" }],
+      ["POST", `/api/projects/${projectId}/duplicate`, {}],
+      ["DELETE", `/api/projects/${projectId}`, undefined],
+    ] as const) eq((await call(method, url, payload, otherToken)).status, 403);
+    eq((await call("POST", "/api/subscriptions/consume-export", { projectId }, otherToken)).status, 404);
+  }
   const auditId = `audit-integration-${Date.now()}`;
   await prisma.auditLog.create({
     data: {

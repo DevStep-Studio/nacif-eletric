@@ -44,6 +44,12 @@ try {
   assert.equal(user.has_paid_subscription, false);
   assert.equal((await backend.auth.me()).plan, "gratuito", "local reload must not promote the account");
   assert.equal(normalizeSubscription(await backend.auth.me()).status, "none");
+  const project = await backend.entities.Project.create({ name: "Private" });
+  await backend.auth.register({ email: "second-user@example.com", password: "test-password-123", profession: "engenheiro" });
+  assert.deepEqual(await backend.entities.Project.list(), []);
+  for (const op of [() => backend.entities.Project.get(project.id), () => backend.entities.Project.update(project.id, { name: "Hijack" }), () => backend.entities.Project.duplicate(project.id), () => backend.entities.Project.delete(project.id)]) {
+    await assert.rejects(op, { status: 404 });
+  }
   console.log("PASS: novas contas e perfis antigos sem assinatura, recarga local sem promoção e assinatura paga preservada.");
 } finally {
   if (originalWindow === undefined) delete globalThis.window;

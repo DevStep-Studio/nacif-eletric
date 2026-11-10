@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { applyRemotePlanCatalog } from '@/lib/subscriptionPlans';
 import { backend } from '@/api/backendClient';
 import { PENDING_REGISTER_PROFESSION_KEY, normalizeProfession } from '@/lib/professionalAccess';
+import { queryClientInstance } from '@/lib/query-client';
 
 const AuthContext = createContext(null);
 
@@ -20,11 +21,15 @@ export const AuthProvider = ({ children }) => {
     const handleStorage = (e) => {
       if (e.key === "voltai_access_token" || e.key === "voltai_token") {
         if (!e.newValue) {
+          queryClientInstance.clear();
           setUser(null);
           setIsAuthenticated(false);
           setIsLoadingAuth(false);
           setAuthChecked(true);
         } else {
+          queryClientInstance.clear();
+          setUser(null);
+          setIsAuthenticated(false);
           checkUserAuth();
         }
       }
@@ -35,6 +40,7 @@ export const AuthProvider = ({ children }) => {
         try {
           const currentUser = await backend.auth.me();
           if (currentUser) {
+            if (user?.id !== currentUser.id) queryClientInstance.clear();
             setUser(currentUser);
           }
         } catch {
@@ -122,6 +128,7 @@ export const AuthProvider = ({ children }) => {
       setAuthError(null);
       const currentUser = await backend.auth.me();
       const resolvedUser = await resolvePendingProfession(currentUser);
+      if (user?.id !== resolvedUser?.id) queryClientInstance.clear();
       setUser(resolvedUser);
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
@@ -141,6 +148,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = (shouldRedirect = true) => {
+    queryClientInstance.clear();
     setUser(null);
     setIsAuthenticated(false);
     backend.auth.logout(shouldRedirect ? "/login" : false);

@@ -1151,96 +1151,29 @@ const isPlanRestrictionError = (err) => {
   );
 };
 
-const upsertLocalFallbackProject = (projectData) => {
-  if (!projectData?.id) return projectData;
-  const existingList = readLocalProjects();
-  const idx = existingList.findIndex((item) => item.id === projectData.id);
-  const nextList = [...existingList];
-  if (idx >= 0) {
-    nextList[idx] = { ...nextList[idx], ...projectData, updated_date: projectData.updated_date || nowIso() };
-  } else {
-    nextList.unshift({ ...projectData, created_date: projectData.created_date || nowIso(), updated_date: projectData.updated_date || nowIso() });
-  }
-  writeLocalProjects(nextList);
-  return idx >= 0 ? nextList[idx] : nextList[0];
+// Local test mode also isolates ownership; legacy ownerless records are never shared.
+const ownLocalProject = (id) => {
+  const user = requireLocalUser();
+  const project = readLocalProjects().find(item => item.id === id && item.owner_id === user.id);
+  if (!project) throw createError("Projeto não encontrado.", 404);
+  return project;
 };
-
-const mergeProjectWithLocalFallback = (remoteProject) => {
-  if (!remoteProject?.id) return remoteProject;
-  const localMatch = readLocalProjects().find((item) => item.id === remoteProject.id);
-  if (!localMatch) return remoteProject;
-  return {
-    ...remoteProject,
-    ...localMatch,
-    id: remoteProject.id,
-    solar_config: localMatch.solar_config ?? remoteProject.solar_config,
-    consumption: localMatch.consumption ?? remoteProject.consumption,
-    monthly_consumption_kwh: localMatch.monthly_consumption_kwh ?? remoteProject.monthly_consumption_kwh,
-    tariff_brl_kwh: localMatch.tariff_brl_kwh ?? remoteProject.tariff_brl_kwh,
-    project_type: localMatch.project_type || remoteProject.project_type,
-    panel_layout: localMatch.panel_layout ?? remoteProject.panel_layout,
-    panel_boards: localMatch.panel_boards?.length ? localMatch.panel_boards : remoteProject.panel_boards,
-    diagram_layout: localMatch.diagram_layout ?? remoteProject.diagram_layout,
-    plant_design: localMatch.plant_design ?? remoteProject.plant_design,
-  };
-};
-
 const projectEntity = {
   async list(sortBy, limit) {
     if (isLocalAuthMode) {
-      const currentUser = requireLocalUser();
-      let projects = readLocalProjects();
-      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin") {
-        projects = projects.filter((p) => !p.owner_id || p.owner_id === currentUser.id);
-      }
-      return cloneLocal(sortLocalItems(projects, sortBy, limit));
+      const user = requireLocalUser();
+      return cloneLocal(sortLocalItems(readLocalProjects().filter(item => item.owner_id === user.id), sortBy, limit));
     }
-
-    const remoteProjects = await request("/api/projects", {
-      query: { sortBy, limit },
-    });
-    const safeRemote = Array.isArray(remoteProjects) ? remoteProjects.map(mergeProjectWithLocalFallback) : [];
-    const remoteIds = new Set(safeRemote.map((p) => p.id));
-    const localOnly = readLocalProjects().filter((p) => p?.id && !remoteIds.has(p.id));
-    return sortLocalItems([...localOnly, ...safeRemote], sortBy, limit);
+    return request("/api/projects", { query: { sortBy, limit } });
   },
-
   async get(id) {
-    if (isLocalAuthMode) {
-      const currentUser = requireLocalUser();
-      const project = readLocalProjects().find((item) => item.id === id);
-      if (!project) {
-        throw createError("Projeto nao encontrado.", 404);
-      }
-      if (!isSuperAdmin(currentUser) && currentUser.role !== "admin" && project.owner_id && project.owner_id !== currentUser.id) {
-        throw createError("Acesso negado a este projeto.", 403);
-      }
-      return cloneLocal(project);
-    }
-
-    if (String(id || "").startsWith("local_project")) {
-      const localProject = readLocalProjects().find((item) => item.id === id);
-      if (localProject) return cloneLocal(localProject);
-    }
-
-    try {
-      const remoteProject = await request(`/api/projects/${id}`);
-      return mergeProjectWithLocalFallback(remoteProject);
-    } catch (err) {
-      const localProject = readLocalProjects().find((item) => item.id === id);
-      if (localProject) return cloneLocal(localProject);
-      throw err;
-    }
+    if (isLocalAuthMode) return cloneLocal(ownLocalProject(id));
+    return request(`/api/projects/${id}`);
   },
-
   async getRevisions(id) {
-    if (isLocalAuthMode || String(id || "").startsWith("local_project")) {
-      return [];
-    }
-
-    return request(`/api/projects/${id}/revisions`).catch(() => []);
+    if (isLocalAuthMode) { ownLocalProject(id); return []; }
+    return request(`/api/projects/${id}/revisions`);
   },
-
   async create(data) {
     if (isLocalAuthMode) {
       const currentUser = requireLocalUser();
@@ -1271,170 +1204,34 @@ const projectEntity = {
       return cloneLocal(project);
     }
 
-    try {
-      return await request("/api/projects", {
-        method: "POST",
-        body: data,
-      });
-    } catch (err) {
-      if (!isPlanRestrictionError(err)) throw err;
-
-      // Fallback transparente caso o servidor remoto ainda esteja com processo antigo em memória
-      try {
-        const neutralPayload = {
-          ...data,
-          project_type: "Residencial",
-        };
-        const createdRemote = await request("/api/projects", {
-          method: "POST",
-          body: neutralPayload,
-        });
-        const fullProject = {
-          ...createdRemote,
-          ...data,
-          id: createdRemote.id,
-          project_type: data?.project_type || createdRemote.project_type,
-          solar_config: data?.solar_config ?? createdRemote.solar_config,
-        };
-        upsertLocalFallbackProject(fullProject);
-        return fullProject;
-      } catch {
-        const timestamp = nowIso();
-        const fallbackProject = {
-          circuits: [],
-          panel_boards: [],
-          plant_design: { points: [], routes: [] },
-          status: data?.status || "Rascunho",
-          ...data,
-          id: randomId("local_project"),
-          name: sanitizeTextInput(String(data?.name || "").trim() || "Novo Projeto"),
-          created_date: timestamp,
-          updated_date: timestamp,
-        };
-        upsertLocalFallbackProject(fallbackProject);
-        return cloneLocal(fallbackProject);
-      }
-    }
+    return request("/api/projects", { method: "POST", body: data });
   },
-
   async update(id, data) {
-    if (isLocalAuthMode || String(id || "").startsWith("local_project")) {
-      const projects = readLocalProjects();
-      const projectIndex = projects.findIndex((item) => item.id === id);
-      const nextProjects = [...projects];
-
-      if (projectIndex < 0) {
-        const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
-        const newProject = {
-          circuits: [],
-          panel_boards: [],
-          plant_design: { points: [], routes: [] },
-          status: safeData?.status || "em_andamento",
-          ...safeData,
-          id,
-          name: sanitizeTextInput(String(safeData?.name || "").trim() || "Projeto Elétrico"),
-          created_date: nowIso(),
-          updated_date: nowIso(),
-        };
-        writeLocalProjects([newProject, ...projects]);
-        return cloneLocal(newProject);
-      }
-
-      const existing = nextProjects[projectIndex];
-      const { owner_id: _ignoredOwner, user_id: _ignoredUser, id: _ignoredId, ...safeData } = data || {};
-      if (safeData.name) {
-        safeData.name = sanitizeTextInput(safeData.name);
-      }
-
-      const updatedProject = {
-        ...existing,
-        ...safeData,
-        id,
-        version: (existing.version || 1) + 1,
-        updated_date: nowIso(),
-      };
-
-      auditProjectComponents(updatedProject);
-      nextProjects[projectIndex] = updatedProject;
-      writeLocalProjects(nextProjects);
-      return cloneLocal(nextProjects[projectIndex]);
+    if (isLocalAuthMode) {
+      const existing = ownLocalProject(id);
+      const { owner_id: _owner, user_id: _user, id: _id, ...safeData } = data || {};
+      if (safeData.name) safeData.name = sanitizeTextInput(safeData.name);
+      const updated = { ...existing, ...safeData, id, version: (existing.version || 1)+1, updated_date: nowIso() };
+      auditProjectComponents(updated);
+      writeLocalProjects(readLocalProjects().map(item => item.id === id ? updated : item));
+      return cloneLocal(updated);
     }
-
-    try {
-      const updatedRemote = await request(`/api/projects/${id}`, {
-        method: "PATCH",
-        body: data,
-      });
-      const existingLocal = readLocalProjects().find((item) => item.id === id);
-      if (existingLocal) {
-        return upsertLocalFallbackProject({ ...existingLocal, ...updatedRemote, ...data, id });
-      }
-      return updatedRemote;
-    } catch (err) {
-      if (!isPlanRestrictionError(err)) throw err;
-
-      const existingLocal = readLocalProjects().find((item) => item.id === id) || { id };
-      const merged = upsertLocalFallbackProject({
-        ...existingLocal,
-        ...data,
-        id,
-        updated_date: nowIso(),
-      });
-      return cloneLocal(merged);
-    }
+    return request(`/api/projects/${id}`, { method: "PATCH", body: data });
   },
-
   async duplicate(id) {
-    if (isLocalAuthMode || String(id || "").startsWith("local_project")) {
-      const projects = readLocalProjects();
-      const original = projects.find((p) => p.id === id);
-      if (!original) {
-        throw createError("Projeto de origem não encontrado.", 404);
-      }
-
-      const clone = cloneLocal(original);
-      const newProjectId = randomId("local_project");
-      const timestamp = nowIso();
-      const duplicatedProject = {
-        ...clone,
-        id: newProjectId,
-        name: `${original.name || "Projeto"} (Cópia)`,
-        created_date: timestamp,
-        updated_date: timestamp,
-        status: "em_andamento",
-      };
-      writeLocalProjects([duplicatedProject, ...projects]);
-      return cloneLocal(duplicatedProject);
+    if (isLocalAuthMode) {
+      const original = ownLocalProject(id);
+      return this.create({ ...cloneLocal(original), name: `${original.name || "Projeto"} (Cópia)`, status: "em_andamento" });
     }
-
-    try {
-      return await request(`/api/projects/${id}/duplicate`, {
-        method: "POST",
-      });
-    } catch (err) {
-      if (!isPlanRestrictionError(err)) throw err;
-      const original = await this.get(id);
-      return this.create({
-        ...original,
-        id: undefined,
-        name: `${original?.name || "Projeto"} (Cópia)`,
-      });
-    }
+    return request(`/api/projects/${id}/duplicate`, { method: "POST" });
   },
-
   async delete(id) {
-    const localProjects = readLocalProjects();
-    if (localProjects.some((item) => item.id === id)) {
-      writeLocalProjects(localProjects.filter((item) => item.id !== id));
-    }
-
-    if (isLocalAuthMode || String(id || "").startsWith("local_project")) {
+    if (isLocalAuthMode) {
+      ownLocalProject(id);
+      writeLocalProjects(readLocalProjects().filter(item => item.id !== id));
       return { ok: true };
     }
-
-    return request(`/api/projects/${id}`, {
-      method: "DELETE",
-    });
+    return request(`/api/projects/${id}`, { method: "DELETE" });
   },
 };
 

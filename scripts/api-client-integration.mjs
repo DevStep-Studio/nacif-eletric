@@ -34,7 +34,7 @@ globalThis.fetch = async (url, options) => {
     return Response.json({ paid: false });
   if (path.includes("/create-checkout-session"))
     return Response.json({ url: "https://sandbox.asaas.com/i/test" });
-  if (path === "/api/projects")
+  if (path === "/api/projects" && (!options.method || options.method === "GET"))
     return Response.json([{ id: "server-project" }]);
   return Response.json({ error: "Servidor indisponível" }, { status: 503 });
 };
@@ -42,6 +42,11 @@ try {
   const { backend, isLocalAuthMode } = await server.ssrLoadModule(
     "/src/api/backendClient.js",
   );
+  entries.set("voltai_local_projects", JSON.stringify([
+    { id: "foreign-project", owner_id: "other", name: "Foreign data" },
+    { id: "server-project", owner_id: "other", name: "Stale data" },
+    { id: "local_project_legacy", name: "Ownerless data" },
+  ]));
   const billing = await server.ssrLoadModule("/src/lib/billingApi.js");
   const plans = await server.ssrLoadModule("/src/lib/subscriptionPlans.js");
   assert.equal(isLocalAuthMode, false);
@@ -82,6 +87,14 @@ try {
     message: "Servidor indisponível",
     status: 503,
   });
+  assert.deepEqual(await backend.entities.Project.list(), [{ id: "server-project" }]);
+  for (const operation of [
+    () => backend.entities.Project.get("foreign-project"),
+    () => backend.entities.Project.get("local_project_legacy"),
+    () => backend.entities.Project.update("server-project", { name: "Unpersisted" }),
+    () => backend.entities.Project.create({ name: "Blocked", project_type: "Solar" }),
+    () => backend.entities.Project.duplicate("server-project"),
+  ]) await assert.rejects(operation, { status: 503 });
   const enforcement = await server.ssrLoadModule("/src/lib/planEnforcement.js");
   assert.equal((await enforcement.authorizePlanExport({ moduleKey: "panel" })).allowed, false, "HTTP failure must block export");
   globalThis.fetch = async () => Response.json({ allowed: false, reason: "Cota esgotada" });

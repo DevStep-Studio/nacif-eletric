@@ -1,7 +1,6 @@
 import {
   checkServerProjectCreation,
   projectPayloadAccess,
-  isServerAdmin,
 } from "../lib/planGovernance.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -100,7 +99,6 @@ const mapStatus = (
 const ensureProjectAccess = async (
   projectId: string,
   userId: string,
-  isAdmin: boolean,
 ) => {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -111,7 +109,7 @@ const ensureProjectAccess = async (
     throw new AppError("Projeto não encontrado.", 404);
   }
 
-  if (!isAdmin && project.createdById !== userId) {
+  if (project.createdById !== userId) {
     throw new AppError("Você não tem acesso a este projeto.", 403);
   }
 
@@ -242,9 +240,8 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
     { preHandler: [app.authenticate] },
     async (request) => {
       const query = listQuerySchema.parse(request.query);
-      const isAdmin = isServerAdmin(request.authUser);
       const projects = await prisma.project.findMany({
-        where: isAdmin ? undefined : { createdById: request.authUser.id },
+        where: { createdById: request.authUser.id },
         include: { createdBy: { select: { email: true } } },
         orderBy: query.sortBy
           ? (sortMap[query.sortBy] ?? { createdAt: "desc" })
@@ -264,7 +261,6 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
       const project = await ensureProjectAccess(
         id,
         request.authUser.id,
-        isServerAdmin(request.authUser),
       );
       return serializeProject(project);
     },
@@ -278,7 +274,6 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
       await ensureProjectAccess(
         id,
         request.authUser.id,
-        isServerAdmin(request.authUser),
       );
 
       const revisions = await prisma.projectRevision.findMany({
@@ -400,7 +395,6 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
       const existingProject = await ensureProjectAccess(
         id,
         request.authUser.id,
-        isServerAdmin(request.authUser),
       );
       const data = projectUpdateSchema.parse(request.body);
 
@@ -408,7 +402,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
         const actor = await lockActor(tx, request.authUser.id);
         await tx.$queryRaw`SELECT id FROM projects WHERE id = ${id} FOR UPDATE`;
         const current = await tx.project.findUniqueOrThrow({ where: { id } });
-        if (!isServerAdmin(actor) && current.createdById !== actor.id) throw new AppError("Projeto não pertence à conta.", 403);
+        if (current.createdById !== actor.id) throw new AppError("Projeto não pertence à conta.", 403);
         assertPayload(actor, data, current.projectType);
       const incomingSolar = data.solar_config as Record<string, unknown> | undefined;
       const incomingConsumption = ((data as any).consumption ?? (incomingSolar as any)?.consumption) as Record<string, unknown> | undefined;
@@ -488,7 +482,6 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
       const original = await ensureProjectAccess(
         id,
         request.authUser.id,
-        isServerAdmin(request.authUser),
       );
 
       const duplicated = await prisma.$transaction(async (tx) => {
@@ -557,7 +550,6 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
       const project = await ensureProjectAccess(
         id,
         request.authUser.id,
-        isServerAdmin(request.authUser),
       );
       await createProjectRevision({
         project,

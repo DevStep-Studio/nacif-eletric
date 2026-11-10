@@ -31,3 +31,9 @@ Falhas de autorização ou indisponibilidade da API bloqueiam exportações. Exp
 A suíte MySQL exige banco com sufixo `_test` e verifica também concorrência, mudança de plano, módulos, armazenamento e cotas reais sem cobrança ou chamada ao provedor de IA.
 
 Publicar frontend e backend juntos. Esta alteração não exige migration de banco.
+
+## Isolamento dos projetos por conta
+
+As rotas de projetos (lista, detalhes, revisões, alteração, duplicação e exclusão) e a autorização de exportação exigem que o usuário autenticado seja o criador. Os papéis admin e super_admin não ampliam o escopo da área Meus Projetos.
+
+Em produção, o frontend usa exclusivamente os projetos retornados pela API. Registros antigos no localStorage não são mesclados nem usados como fallback de leitura ou escrita. Eles não são apagados automaticamente. No modo local de testes, projetos sem proprietário ou de outro usuário também são inacessíveis. O cache de consultas é limpo ao sair ou trocar de conta.
