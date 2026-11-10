@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "vite";
 const server = await createServer({
   optimizeDeps: { noDiscovery: true, include: [] },
-  server: { middlewareMode: true },
+  server: { middlewareMode: true, hmr: false, ws: false },
   appType: "custom",
 });
 const entries = new Map([["voltai_access_token", "local:old-session:123"]]);
@@ -95,6 +95,18 @@ try {
     () => backend.entities.Project.create({ name: "Blocked", project_type: "Solar" }),
     () => backend.entities.Project.duplicate("server-project"),
   ]) await assert.rejects(operation, { status: 503 });
+  const fixtureFetch = globalThis.fetch;
+  globalThis.fetch = async url => new URL(url, window.location.origin).pathname === "/api/auth/me"
+    ? Response.json({ id: "server-user" })
+    : Response.json({ id: "foreign-project", owner_id: "other" });
+  for (const operation of [
+    () => backend.entities.Project.get("foreign-project"),
+    () => backend.entities.Project.getRevisions("foreign-project"),
+    () => backend.entities.Project.update("foreign-project", { name: "Hijack" }),
+    () => backend.entities.Project.delete("foreign-project"),
+    () => backend.entities.Project.duplicate("foreign-project"),
+  ]) await assert.rejects(operation, { status: 403 });
+  globalThis.fetch = fixtureFetch;
   const enforcement = await server.ssrLoadModule("/src/lib/planEnforcement.js");
   assert.equal((await enforcement.authorizePlanExport({ moduleKey: "panel" })).allowed, false, "HTTP failure must block export");
   globalThis.fetch = async () => Response.json({ allowed: false, reason: "Cota esgotada" });

@@ -37,3 +37,9 @@ Publicar frontend e backend juntos. Esta alteração não exige migration de ban
 As rotas de projetos (lista, detalhes, revisões, alteração, duplicação e exclusão) e a autorização de exportação exigem que o usuário autenticado seja o criador. Os papéis admin e super_admin não ampliam o escopo da área Meus Projetos.
 
 Em produção, o frontend usa exclusivamente os projetos retornados pela API. Registros antigos no localStorage não são mesclados nem usados como fallback de leitura ou escrita. Eles não são apagados automaticamente. No modo local de testes, projetos sem proprietário ou de outro usuário também são inacessíveis. O cache de consultas é limpo ao sair ou trocar de conta.
+
+### Publicação da correção de isolamento
+
+Publicar o frontend e reiniciar o backend é obrigatório: alterar somente os arquivos não atualiza um processo Node já iniciado. Na pasta do projeto no servidor, executar `npm run build` (o postbuild prepara e recarrega a API); confirmar nos logs que o backend iniciou corretamente. Em instalações PM2, pode-se verificar com `pm2 status nacif-electric-api`.
+
+A resposta autenticada de `/api/projects` deve conter `X-Project-Isolation: owner-v2` e `Cache-Control: private, no-store`. Sem esse marcador, a requisição está chegando a uma versão antiga ou a outro backend/proxy. O frontend valida `owner_id` com o ID retornado por `/api/auth/me`, ignora registros sem proprietário e impede que uma resposta iniciada na sessão anterior seja exibida.

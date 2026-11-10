@@ -238,6 +238,7 @@ export const registerProjectRoutes = async (app: FastifyInstance) => {
   app.addHook("onSend", async (request, reply, payload) => {
     if (request.url.split("?")[0].startsWith("/api/projects")) {
       reply.header("Cache-Control", "private, no-store");
+      reply.header("X-Project-Isolation", "owner-v2");
       reply.header("Vary", "Authorization, Cookie");
     }
     return payload;
