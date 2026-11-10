@@ -82,6 +82,21 @@ try {
     message: "Servidor indisponível",
     status: 503,
   });
+  const enforcement = await server.ssrLoadModule("/src/lib/planEnforcement.js");
+  assert.equal((await enforcement.authorizePlanExport({ moduleKey: "panel" })).allowed, false, "HTTP failure must block export");
+  globalThis.fetch = async () => Response.json({ allowed: false, reason: "Cota esgotada" });
+  assert.equal((await backend.subscriptions.consumeExportQuota({ moduleKey: "panel" })).allowed, false);
+  assert.equal((await enforcement.authorizePlanExport({ moduleKey: "panel" })).allowed, false);
+  globalThis.fetch = async () => Response.json({ allowed: true, watermark: "Uso acadêmico" });
+  const authorization = await enforcement.authorizePlanExport({ moduleKey: "plant" });
+  assert.equal(authorization.allowed, true);
+  assert.equal(authorization.watermark, "Uso acadêmico");
+  assert.match(enforcement.stampSvgWithPlanWatermark('<svg></svg>', authorization), /Uso acadêmico/);
+  const pages = [];
+  const doc = { internal: { pageSize: { getWidth: () => 210, getHeight: () => 297 }, getCurrentPageInfo: () => ({ pageNumber: 2 }) },
+    getNumberOfPages: () => 2, setPage: page => pages.push(page), setFontSize() {}, setTextColor() {}, text: text => assert.equal(text, authorization.watermark) };
+  enforcement.stampPdfWithPlanWatermark(doc, authorization);
+  assert.deepEqual(pages, [1, 2, 2], "watermark all pages and restore selection");
   globalThis.fetch = async () => Response.json({ message: "Route GET:/api/subscriptions/plans not found" }, { status: 404 });
   await assert.rejects(() => backend.subscriptions.getPlans(), { message: "O backend publicado não possui a rota de planos. Atualize o backend e reinicie nacif-electric-api no servidor.", status: 404 });
   console.log(

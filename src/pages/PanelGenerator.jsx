@@ -45,7 +45,6 @@ import {
 } from "@/lib/orthogonalRouter";
 import {
   normalizeAABB,
-  computeRailComponentBoxes,
   queryMarqueeSelection,
   executeBatchDelete,
 } from "@/lib/marqueeSelection";

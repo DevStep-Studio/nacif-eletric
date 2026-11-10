@@ -332,7 +332,7 @@ try {
         token,
       )
     ).status,
-    200,
+    403,
   );
   const projectRace = await Promise.all(
     Array.from({ length: 5 }, (_, n) =>
@@ -524,6 +524,26 @@ try {
   );
   eq(checkServerModuleAccess({ plan: "gratuito" }, "solar").allowed, false);
   eq(checkServerModuleAccess({ plan: "solar" }, "solar").allowed, false);
+  // Exercise actual paid entitlements through HTTP and MySQL row locks.
+  const { env } = await import("../src/config/env.js");
+  const paidPermissions = (planCode: string) => ({
+    billingProvider: "asaas", billingEnvironment: env.ASAAS_ENVIRONMENT,
+    billingEntitlements: [{ planCode, start: new Date(Date.now()-86400000).toISOString(), end: new Date(Date.now()+86400000).toISOString() }],
+    usagePeriod: new Date().toISOString().slice(0,7), monthlyExports: 99, monthlyAiScans: 100,
+  });
+  await prisma.user.update({ where: { id }, data: { customPermissions: paidPermissions("solar") } });
+  const solar = await call("POST", "/api/projects", { name: "Paid solar", project_type: "Solar" }, token);
+  eq(solar.status, 200);
+  eq((await call("POST", "/api/subscriptions/consume-export", { moduleKey: "panel" }, token)).status, 403);
+  const paidRace = await Promise.all(Array.from({ length: 6 }, () => call("POST", "/api/subscriptions/consume-export", { moduleKey: "solar", projectId: solar.body.id }, token)));
+  eq(paidRace.filter(result => result.body.allowed === true).length, 1);
+  eq((await call("POST", "/api/ai/invoke", { prompt: "Should never reach the provider" }, token)).status, 403);
+  for (let n=0; n<2; n++) eq((await call("POST", "/api/subscriptions/invite-member", { email: `member${n}@example.com` }, token)).status, 200);
+  eq((await call("POST", "/api/subscriptions/invite-member", { email: "overflow@example.com" }, token)).status, 403);
+  await prisma.user.update({ where: { id }, data: { customPermissions: paidPermissions("eletrico") } });
+  eq((await call("PATCH", `/api/projects/${solar.body.id}`, { name: "Forbidden solar edit" }, token)).status, 403);
+  eq((await call("POST", "/api/subscriptions/consume-export", { moduleKey: "budget", projectId: solar.body.id }, token)).status, 403);
+  eq((await call("GET", `/api/projects/${solar.body.id}`, undefined, token)).status, 200);
   await prisma.user.update({ where: { id }, data: { status: "suspended" } });
   eq((await call("GET", "/api/auth/me", undefined, token)).status, 403);
   console.log(
