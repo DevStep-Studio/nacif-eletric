@@ -71,6 +71,18 @@ export default function OnboardingModal({ user, open, onComplete }) {
     }
   }, [user?.profession, user?.profissao]);
 
+  const handleDismiss = async () => {
+    onComplete?.();
+    try {
+      await backend.auth.updateMe({
+        onboarding_completed: true,
+      });
+      window.dispatchEvent(new Event("voltai:user-updated"));
+    } catch (err) {
+      console.error("Erro ao dispensar onboarding:", err);
+    }
+  };
+
   const handleFinish = async () => {
     setSaving(true);
     try {
@@ -99,8 +111,12 @@ export default function OnboardingModal({ user, open, onComplete }) {
   };
 
   return (
-    <Dialog open={open}>
-      <DialogContent className="max-w-xl overflow-hidden rounded-[16px] border-[#E4E7EC] bg-white p-0 shadow-2xl sm:max-w-xl">
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleDismiss(); }}>
+      <DialogContent
+        closeOnClick={handleDismiss}
+        closeClassName="right-3.5 top-3.5 h-8 w-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200/80 transition-all shadow-sm"
+        className="max-w-xl overflow-hidden rounded-[16px] border-[#E4E7EC] bg-white p-0 shadow-2xl sm:max-w-xl"
+      >
         {/* Barra de Progresso Superior do Onboarding */}
         <div className="h-1.5 w-full bg-[#EAECF0]">
           <div

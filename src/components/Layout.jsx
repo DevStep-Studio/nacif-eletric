@@ -313,9 +313,21 @@ export default function Layout() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   useEffect(() => {
     if (activeUser && activeUser.onboarding_completed === false) {
-      setOnboardingOpen(true);
+      const dismissed = typeof window !== "undefined" && window.sessionStorage.getItem("onboarding_dismissed") === "true";
+      if (!dismissed) {
+        setOnboardingOpen(true);
+      }
+    } else {
+      setOnboardingOpen(false);
     }
   }, [activeUser]);
+
+  const handleCloseOnboarding = () => {
+    setOnboardingOpen(false);
+    try {
+      window.sessionStorage.setItem("onboarding_dismissed", "true");
+    } catch {}
+  };
 
   // Breadcrumb Title Generation
   const breadcrumbInfo = useMemo(() => {
@@ -373,7 +385,7 @@ export default function Layout() {
       <OnboardingModal
         user={activeUser}
         open={onboardingOpen}
-        onComplete={() => setOnboardingOpen(false)}
+        onComplete={handleCloseOnboarding}
       />
 
       {/* Modal de Ferramentas & Biblioteca */}
