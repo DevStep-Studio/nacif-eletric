@@ -1155,9 +1155,11 @@ const isPlanRestrictionError = (err) => {
 // Local test mode also isolates ownership; legacy ownerless records are never shared.
 const ownLocalProject = (id) => {
   const user = requireLocalUser();
-  const project = readLocalProjects().find(item => item.id === id && item.owner_id === user.id);
-  if (!project) throw createError("Projeto não encontrado.", 404);
-  return project;
+  const allProjects = readLocalProjects();
+  const exists = allProjects.find(item => item.id === id);
+  if (!exists) throw createError("Projeto não encontrado.", 404);
+  if (exists.owner_id !== user.id) throw createError("Você não tem acesso a este projeto.", 403);
+  return exists;
 };
 const remoteProjectSession = async () => {
   const token = getStoredToken();

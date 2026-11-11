@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, ShieldCheck, AlertTriangle, Sparkles } from "lucide-react";
+import { CheckCircle2, ShieldCheck, AlertTriangle, Sparkles, Lock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +22,10 @@ export default function PlanChangeModal({
   const isUpgrade = targetPlan.monthlyPrice > (currentPlan?.monthlyPrice || 0);
   const isDowngrade = targetPlan.monthlyPrice < (currentPlan?.monthlyPrice || 0);
   const annualSavings = calculateAnnualSavings(targetPlan);
+  const isPendingRelease = Boolean(targetPlan.isPendingRelease || targetPlan.code === "estudante");
 
   const handleConfirm = async () => {
+    if (isPendingRelease) return;
     setLoading(true);
     setErrorMessage("");
 
@@ -93,10 +95,17 @@ export default function PlanChangeModal({
             </div>
           )}
 
-          {targetPlan.isAcademic && (
+          {targetPlan.isAcademic && !isPendingRelease && (
             <p className="mt-3 text-xs font-semibold text-blue-700">
               * Válido mediante comprovação de matrícula acadêmica para uso educacional.
             </p>
+          )}
+
+          {isPendingRelease && (
+            <div className="mt-3 flex items-center gap-2 rounded-[8px] bg-amber-50 p-2.5 text-xs font-semibold text-amber-800 border border-amber-200">
+              <Lock className="h-4 w-4 shrink-0 text-amber-600" />
+              <span>O plano Estudante está temporariamente em aguardo e será liberado nas próximas atualizações do app.</span>
+            </div>
           )}
         </div>
 
@@ -137,11 +146,15 @@ export default function PlanChangeModal({
           </Button>
           <Button
             type="button"
-            disabled={loading}
+            disabled={loading || isPendingRelease}
             onClick={handleConfirm}
-            className="h-10 flex-1 rounded-[8px] bg-[#00d8b8] font-extrabold text-[#0f172a] hover:bg-[#00bda1]"
+            className={`h-10 flex-1 rounded-[8px] font-extrabold ${
+              isPendingRelease
+                ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                : "bg-[#00d8b8] text-[#0f172a] hover:bg-[#00bda1]"
+            }`}
           >
-            {loading ? "Processando..." : isUpgrade ? "Confirmar Upgrade" : "Confirmar Alteração"}
+            {loading ? "Processando..." : isPendingRelease ? "Em aguardo" : isUpgrade ? "Confirmar Upgrade" : "Confirmar Alteração"}
           </Button>
         </div>
       </DialogContent>

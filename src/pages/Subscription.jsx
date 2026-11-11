@@ -9,6 +9,8 @@ import {
   Sparkles,
   Settings,
   Loader2,
+  Clock,
+  Lock,
 } from "lucide-react";
 import { backend } from "@/api/backendClient";
 import { useAuth } from "@/lib/AuthContext";
@@ -181,6 +183,10 @@ export default function Subscription() {
   const handleSubscription = planCode => {
     const target = catalog.find(plan => plan.code === planCode);
     if (!target) return;
+    if (target.isPendingRelease || target.code === "estudante") {
+      setBillingMessage("O plano Estudante está temporariamente em aguardo e será liberado nas próximas atualizações do aplicativo.");
+      return;
+    }
     setSelectedTargetPlan(target);
     const current = billingData.subscription;
     if (current && !["cancelled", "failed"].includes(current.status)) {
@@ -441,6 +447,8 @@ export default function Subscription() {
           {catalog.map((plan) => {
             const isCurrent = plan.code === subscription.planCode && (plan.code === "estudante" || cycle === subscription.cycle);
             const isCompleto = plan.code === "completo";
+            const isEstudante = plan.code === "estudante" || Boolean(plan.isPendingRelease);
+            const isPendingRelease = Boolean(plan.isPendingRelease || (isEstudante && !isCurrent));
             const annualSavings = calculateAnnualSavings(plan);
             const isSubscribingThis = subscribingPriceId === plan.code;
 
@@ -455,6 +463,8 @@ export default function Subscription() {
                     ? "border-[#00d8b8] bg-gradient-to-b from-white via-white to-[#F0FDFA]/40 shadow-[0_12px_32px_-10px_rgba(0,216,184,0.18)] ring-1 ring-[#00d8b8]"
                     : isCurrent
                     ? "border-teal-300 bg-[#F7FBFE] shadow-xs"
+                    : isPendingRelease
+                    ? "border-amber-200/90 bg-gradient-to-b from-amber-50/25 via-white to-slate-50/50 shadow-xs"
                     : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
                 }`}
               >
@@ -471,6 +481,11 @@ export default function Subscription() {
                         <Sparkles className="h-3 w-3 text-[#009b84]" />
                         Mais Completo
                       </span>
+                    ) : isPendingRelease ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
+                        <Clock className="h-3 w-3 text-amber-600" />
+                        Em aguardo • Futuras atualizações
+                      </span>
                     ) : (
                       <span />
                     )}
@@ -486,7 +501,20 @@ export default function Subscription() {
 
                   {/* Preço */}
                   <div className="mt-4 pb-5 border-b border-slate-100">
-                    {cycle === "annual" && plan.hasAnnualOption ? (
+                    {isPendingRelease ? (
+                      <div>
+                        <div className="flex items-baseline gap-1 opacity-80">
+                          <span className="text-3xl font-extrabold text-slate-800 tracking-tight">
+                            R$ {plan.monthlyPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-500">/mês</span>
+                        </div>
+                        <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-amber-200/70 bg-amber-50/80 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                          <Lock className="h-3 w-3 shrink-0 text-amber-600" />
+                          <span>Bloqueado temporariamente para próximas atualizações</span>
+                        </div>
+                      </div>
+                    ) : cycle === "annual" && plan.hasAnnualOption ? (
                       <div>
                         <div className="flex items-baseline gap-1">
                           <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -519,8 +547,9 @@ export default function Subscription() {
                   <div className="mt-5">
                     <Button
                       type="button"
-                      disabled={isCurrent || subscribingPriceId !== null}
+                      disabled={isCurrent || subscribingPriceId !== null || isPendingRelease}
                       onClick={() => {
+                        if (isPendingRelease) return;
                         if (plan.isAcademic && (!activeUser?.academic_status || activeUser?.academic_status === "not_submitted" || activeUser?.academic_status === "rejected" || activeUser?.academic_status === "expired" || (activeUser?.academic_valid_until && Date.parse(activeUser.academic_valid_until) <= Date.now()))) {
                           setIsAcademicModalOpen(true);
                           return;
@@ -530,6 +559,8 @@ export default function Subscription() {
                       className={`h-11 w-full rounded-xl font-bold text-xs transition-all ${
                         isCurrent
                           ? "bg-slate-100 text-slate-400 hover:bg-slate-100 cursor-default border border-slate-200"
+                          : isPendingRelease
+                          ? "bg-slate-100/90 text-slate-500 hover:bg-slate-100 cursor-not-allowed border border-slate-200 shadow-none font-semibold"
                           : isCompleto
                           ? "bg-[#00d8b8] text-slate-950 font-extrabold hover:bg-[#00bda1] shadow-xs hover:shadow"
                           : "bg-slate-900 text-white hover:bg-slate-800"
@@ -542,6 +573,11 @@ export default function Subscription() {
                         </span>
                       ) : isCurrent ? (
                         "Plano em uso"
+                      ) : isPendingRelease ? (
+                        <span className="flex items-center justify-center gap-1.5">
+                          <Lock className="h-3.5 w-3.5 text-amber-600" />
+                          Em aguardo • Próximas atualizações
+                        </span>
                       ) : plan.isAcademic ? (
                         "Contratar com documento"
                       ) : (
@@ -598,7 +634,12 @@ export default function Subscription() {
                 Recurso
               </TableHead>
               <TableHead className="px-5 text-xs font-extrabold uppercase tracking-[0.06em] text-[#667085]">
-                Estudante
+                <div className="flex items-center gap-1.5">
+                  <span>Estudante</span>
+                  <span className="rounded-[4px] border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 tracking-normal normal-case">
+                    Em breve
+                  </span>
+                </div>
               </TableHead>
               <TableHead className="px-5 text-xs font-extrabold uppercase tracking-[0.06em] text-[#667085]">
                 Elétrico

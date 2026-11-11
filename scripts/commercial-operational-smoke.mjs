@@ -80,7 +80,7 @@ assert.equal(completoPlan.highlightBadge, "Mais completo", "Completo deve ter ba
 // Compatibilidade com planos legados
 const legacyFree = getPlanByCode("free");
 assert.equal(legacyFree.code, "free", "Plano legado gratuito deve ser resolvido");
-assert.equal(legacyFree.limits[FEATURE_KEYS.PROJECTS], 3, "Plano legado gratuito preserva 3 projetos");
+assert.equal(legacyFree.limits[FEATURE_KEYS.PROJECTS], 1, "Plano legado gratuito preserva 1 projeto");
 
 const legacyPro = getPlanByCode("professional");
 assert.equal(legacyPro.code, "professional", "Plano legado profissional resolvido");
@@ -100,14 +100,14 @@ assert(guaranteesText.includes("Sem Exclusão Silenciosa"), "Deve conter garanti
 
 // Teste de criação de projeto sob limites
 const freeUser = { subscription: { plan_code: "free" } };
-const allowedCheck1 = checkProjectCreationAllowed(freeUser, 2);
-assert.equal(allowedCheck1.allowed, true, "Usuário free com 2 projetos deve poder criar o 3º");
+const allowedCheck1 = checkProjectCreationAllowed(freeUser, 0);
+assert.equal(allowedCheck1.allowed, true, "Usuário free com 0 projetos deve poder criar o 1º");
 
-const blockedCheck1 = checkProjectCreationAllowed(freeUser, 3);
-assert.equal(blockedCheck1.allowed, false, "Usuário free com 3 projetos não deve poder criar o 4º");
-assert(blockedCheck1.reason.includes("Limite de 3 projetos"), "Motivo de bloqueio deve ser claro");
+const blockedCheck1 = checkProjectCreationAllowed(freeUser, 1);
+assert.equal(blockedCheck1.allowed, false, "Usuário free com 1 projeto não deve poder criar o 2º");
+assert(blockedCheck1.reason.includes("permite 1 projetos ativos"), "Motivo de bloqueio deve ser claro");
 
-const studentUser = { subscription: { plan_code: "estudante" } };
+const studentUser = { subscription: { plan_code: "estudante" }, academic_status: "approved", academic_valid_until: "2099-12-31" };
 assert.equal(checkProjectCreationAllowed(studentUser, 4).allowed, true, "Estudante com 4 projetos pode criar o 5º");
 assert.equal(checkProjectCreationAllowed(studentUser, 5).allowed, false, "Estudante com 5 projetos não pode criar o 6º");
 

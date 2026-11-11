@@ -23,6 +23,8 @@ export const COMMERCIAL_PLANS = [
     recommended: false,
     highlightBadge: null,
     isAcademic: true,
+    isPendingRelease: true,
+    pendingNotice: "Em aguardo para desbloqueio em futuras atualizações do app.",
     limits: {
       [FEATURE_KEYS.PROJECTS]: 5,
       [FEATURE_KEYS.STORAGE_MB]: 1000,
@@ -352,7 +354,7 @@ export function catalogModuleLevel(plan, key) {
 export function catalogModuleAccess(code, key, options = {}) {
   if (options.isAdmin) return { allowed: true, level: "full", isAcademic: false, isFreeRestricted: false, watermark: null, message: null, requiredPlans: [] };
   const plan = getCatalogPlan(code);
-  const academicValid = options.academicStatus === "approved" && Date.parse(options.academicValidUntil) > (options.now ?? Date.now());
+  const academicValid = Boolean(options.academicStatus && options.academicStatus !== "expired" && options.academicStatus !== "rejected" && (!options.academicValidUntil || Date.parse(options.academicValidUntil) > (options.now ?? Date.now())));
   const level = catalogModuleLevel(plan, key);
   const academicBlocked = plan.isAcademic && !academicValid;
   const allowed = Boolean(level && level !== "restricted" && !academicBlocked);

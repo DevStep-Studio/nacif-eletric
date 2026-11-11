@@ -406,11 +406,15 @@ export default function AdminSubscriptionManager() {
               >
                 <div className="flex items-center justify-between">
                   <h4 className="font-extrabold text-[#101828]">{plan.name}</h4>
-                  {plan.highlightBadge && (
+                  {plan.highlightBadge ? (
                     <Badge className="bg-[#E8FCF8] text-[#0f4f49] hover:bg-[#E8FCF8] text-[10px]">
                       {plan.highlightBadge}
                     </Badge>
-                  )}
+                  ) : plan.isPendingRelease ? (
+                    <Badge className="bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-50 text-[10px]">
+                      Em aguardo
+                    </Badge>
+                  ) : null}
                 </div>
                 <p className="mt-2 text-xl font-extrabold text-[#101828]">
                   R$ {plan.monthlyPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}

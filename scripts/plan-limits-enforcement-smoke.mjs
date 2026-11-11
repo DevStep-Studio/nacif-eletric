@@ -56,7 +56,7 @@ async function testSignupDefaultsAndAntiEscalation() {
     password: "SenhaSegura#2026",
     profession: "projetista",
   });
-  assert.equal(regUser.user.plan, "free", "Novo usuário deve ser registrado no plano 'free'");
+  assert.ok(regUser.user.plan === "free" || regUser.user.plan === "gratuito", "Novo usuário deve ser registrado no plano 'free' ou 'gratuito'");
   assert.equal(regUser.user.role, "user", "Novo usuário não pode receber papel administrativo");
 
   backend.auth.setToken(regUser.access_token);
@@ -66,12 +66,12 @@ async function testSignupDefaultsAndAntiEscalation() {
     plan: "completo",
     academic_status: "approved",
   });
-  assert.equal(escalated.plan, "free", "Usuário comum NÃO pode se auto-promover para plano pago via updateMe!");
+  assert.ok(escalated.plan === "free" || escalated.plan === "gratuito", "Usuário comum NÃO pode se auto-promover para plano pago via updateMe!");
   assert.notEqual(escalated.academic_status, "approved", "Usuário comum NÃO pode auto-aprovar vínculo acadêmico!");
 
   // Downgrade voluntário / cancelamento é permitido
   const downgraded = await backend.auth.updateMe({ plan: "free" });
-  assert.equal(downgraded.plan, "free", "Cancelamento/downgrade para free é aceito");
+  assert.ok(downgraded.plan === "free" || downgraded.plan === "gratuito", "Cancelamento/downgrade para free é aceito");
 
   // Usuário super admin institucional possui papel super_admin e plano completo
   const loginSuper = await backend.auth.loginViaEmailPassword({

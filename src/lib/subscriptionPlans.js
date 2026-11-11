@@ -205,8 +205,13 @@ export function normalizeSubscription(user = {}) {
   const renewalDate = user?.subscription?.renewal_date || user?.renewal_date || user?.subscription_valid_until || null;
   const startDate = user?.subscription?.start_date || user?.subscription_start_date || null;
   const currentPeriodPaid = provider === "asaas" && Date.parse(renewalDate) > Date.now() && (!startDate || Date.parse(startDate) <= Date.now());
-  const hasPaidSubscription = currentPeriodPaid && (user?.has_paid_subscription ?? ["active", "cancelled"].includes(storedStatus));
-  const plan = getPlanByCode(hasPaidSubscription ? user?.subscription_plan || user?.plan || user?.subscription?.planCode : "free");
+  const explicitPlanCode = user?.subscription_plan || user?.plan || user?.subscription?.planCode || user?.subscription?.plan_code || user?.plan_code;
+  const isTerminatedStatus = ["cancelled", "expired", "past_due"].includes(storedStatus);
+  const hasPaidSubscription = Boolean(
+    (currentPeriodPaid && (user?.has_paid_subscription ?? !isTerminatedStatus)) ||
+    (explicitPlanCode && explicitPlanCode !== "free" && provider !== "asaas" && !isTerminatedStatus)
+  );
+  const plan = getPlanByCode(hasPaidSubscription && explicitPlanCode ? explicitPlanCode : "free");
   const billingConfigured = provider === "asaas" || Boolean(user?.asaas_subscription_id);
   const cycle = hasPaidSubscription ? user?.subscription?.cycle || user?.subscription_cycle || user?.billing_cycle || "monthly" : null;
 

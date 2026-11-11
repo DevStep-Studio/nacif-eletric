@@ -54,8 +54,10 @@ export function addCycle(date: Date, cycle: string): Date {
 }
 export function planPrice(planCode: string, cycle: string) {
   const plan = COMMERCIAL_PLANS.find(p => p.code === planCode);
-  if (!plan || !["monthly", "annual"].includes(cycle) || cycle === "annual" && !plan.hasAnnualOption)
+  if (!plan || !["monthly", "annual"].includes(cycle) || (cycle === "annual" && !plan.hasAnnualOption))
     throw new AppError("Plano ou ciclo de cobrança inválido.", 400);
+  if (plan.isPendingRelease || planCode === "estudante")
+    throw new AppError("O plano Estudante está temporariamente em aguardo para futuras atualizações do app.", 400);
   return { plan, value: cycle === "annual" ? plan.annualPrice : plan.monthlyPrice };
 }
 async function academicCheck(userId: string, code: string) {
