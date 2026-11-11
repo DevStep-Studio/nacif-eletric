@@ -13,13 +13,13 @@
 
   # 1.1 PROXY REVERSO PARA BACKEND API (Se mod_proxy estiver habilitado)
   <IfModule mod_proxy.c>
-    RewriteRule ^(create-checkout-session|create-portal-session|verify-checkout-session|api/.*|webhook)$ http://127.0.0.1:3001/$1 [P,L]
+    RewriteRule ^(api/.*|webhook)$ http://127.0.0.1:3001/$1 [P,L]
   </IfModule>
 
   # 2. ROTEAMENTO SPA (SINGLE PAGE APPLICATION FALLBACK)
   # Evita erro 404 ao recarregar páginas internas (/projects, /planta-ia, etc.)
-  # Não reescreve rotas de API / Stripe para evitar erro 405 Method Not Allowed em requisições POST
-  RewriteCond %{REQUEST_URI} !^/(create-checkout-session|create-portal-session|verify-checkout-session|api/|webhook) [NC]
+  # Não reescreve rotas de API para evitar erro 405 Method Not Allowed em requisições POST
+  RewriteCond %{REQUEST_URI} !^/(api/|webhook) [NC]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^ index.html [L]
@@ -44,8 +44,8 @@
   # Restrição de permissões de hardware desnecessárias
   Header always set Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=(self)"
 
-  # Content-Security-Policy (CSP) equilibrada para React, Google Fonts, Leaflet e Stripe
-  Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.googleapis.com https://*.google.com; connect-src 'self' https://* http://* wss://*; frame-src 'self' https://js.stripe.com; object-src 'none';"
+  # Content-Security-Policy (CSP) equilibrada para React, Google Fonts e Leaflet
+  Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.googleapis.com https://*.google.com; connect-src 'self' https://* http://* wss://*; frame-src 'self'; object-src 'none';"
 
   # Controle de Cache: index.html nunca deve ser cacheado para garantir atualizações imediatas
   <FilesMatch "^(index\.html)?$">

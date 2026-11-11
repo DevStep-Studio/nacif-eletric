@@ -321,14 +321,6 @@ model AppSetting {
   @@map("app_settings")
 }
 
-model StripeEvent {
-  id String @id
-  type String
-  processedAt DateTime @default(now()) @map("processed_at")
-  @@map("stripe_events")
-}
-
-// Operational billing records are independent from legacy Stripe history.
 model BillingAccount {
   id                   String   @id @default(cuid())
   userId               String   @map("user_id")
