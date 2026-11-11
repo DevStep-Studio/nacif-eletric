@@ -852,28 +852,327 @@ export function generateTechnicalMemorialReport(project = {}, config = {}, sizin
 }
 
 /**
+ * Classifica automaticamente um item da Lista de Materiais (BOM) entre:
+ * - "ESCOPO_01_CC": Equipamentos de Energia Solar (Kit Gerador / Lado CC - NBR 16690)
+ * - "ESCOPO_02_CA": Materiais Elétricos de Infraestrutura (Lado CA - NBR 5410)
+ */
+export function classifySolarBomScope(item = {}) {
+  if (item.scope === "ESCOPO_01_CC" || item.scope === "ESCOPO_02_CA") {
+    return item.scope;
+  }
+  const text = String(item.description || item.name || item.category || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  // ESCOPO 02: MATERIAIS ELÉTRICOS (Infraestrutura / Lado CA - NBR 5410)
+  if (
+    text.includes("disjuntor") ||
+    text.includes("termomagnetico") ||
+    text.includes("dps") ||
+    text.includes("surto") ||
+    text.includes("750v") ||
+    text.includes("saida ca") ||
+    text.includes("cabo de cobre flexivel") ||
+    text.includes("eletroduto") ||
+    text.includes("corrugado") ||
+    text.includes("abracadeira") ||
+    text.includes("quadro de protecao") ||
+    text.includes("string box ca") ||
+    text.includes("qdc")
+  ) {
+    return "ESCOPO_02_CA";
+  }
+
+  // ESCOPO 01: ENERGIA SOLAR (Kit Gerador / Lado CC - NBR 16690)
+  return "ESCOPO_01_CC";
+}
+
+/**
+ * Separa o array de itens da BOM nas duas categorias normativas (CC vs CA)
+ * e calcula isoladamente `total_orcamento_integrador` somando apenas o ESCOPO 02.
+ */
+export function separateAndCalculateSolarBom(items = []) {
+  const escopo01_kit_solar_cc = [];
+  const escopo02_materiais_eletricos_ca = [];
+
+  items.forEach((rawItem) => {
+    const scope = classifySolarBomScope(rawItem);
+    const quantity = Number(rawItem.quantity ?? rawItem.qty ?? 1) || 0;
+    const unitPrice = Number(rawItem.unitPrice ?? rawItem.unit_price ?? 0) || 0;
+    const subtotal = Number((quantity * unitPrice).toFixed(2));
+
+    const normalizedItem = {
+      ...rawItem,
+      scope,
+      quantity,
+      unitPrice,
+      subtotal,
+    };
+
+    if (scope === "ESCOPO_02_CA") {
+      escopo02_materiais_eletricos_ca.push({
+        ...normalizedItem,
+        itemCode: String(escopo02_materiais_eletricos_ca.length + 1).padStart(2, "0"),
+      });
+    } else {
+      escopo01_kit_solar_cc.push({
+        ...normalizedItem,
+        itemCode: String(escopo01_kit_solar_cc.length + 1).padStart(2, "0"),
+      });
+    }
+  });
+
+  // Variável exigida: soma exclusivamente os itens classificados no ESCOPO 02 (Lado CA - NBR 5410)
+  const total_orcamento_integrador = Number(
+    escopo02_materiais_eletricos_ca
+      .reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
+      .toFixed(2)
+  );
+
+  return {
+    escopo01_kit_solar_cc,
+    escopo02_materiais_eletricos_ca,
+    total_orcamento_integrador,
+    totalOrcamentoIntegradorFormatted: `R$ ${formatDecimalBR(total_orcamento_integrador)}`,
+  };
+}
+
+/**
+ * Constrói os quantitativos e orçamentos estruturados da BOM Solar (Lado CC vs Lado CA)
+ */
+export function buildSolarBomData(project = {}, config = {}, sizing = {}) {
+  const { panelCount, moduleWp, inverterKw, breaker } = normalizeParams(project, config, sizing);
+  const acVoltage = config?.ac_voltage || project?.voltage || 220;
+  const breakerPrice = breaker >= 100 ? 185.0 : breaker >= 63 ? 118.0 : 78.9;
+  const cableGauge = breaker >= 100 ? "35mm²" : breaker > 63 ? "16mm²" : breaker > 40 ? "10mm²" : "6mm²";
+  const cableUnitPrice = breaker >= 100 ? 34.5 : breaker > 63 ? 16.9 : breaker > 40 ? 11.2 : 6.8;
+
+  const defaultBomItems = [
+    // ESCOPO 01: ENERGIA SOLAR (Kit Gerador / Lado CC - NBR 16690)
+    {
+      description: `Módulo Solar Monocristalino ${moduleWp}Wp Half-Cell Tier 1`,
+      manufacturer: "Canadian / Jinko / Longi",
+      quantity: panelCount,
+      unit: "un",
+      unitPrice: 0,
+      scope: "ESCOPO_01_CC",
+    },
+    {
+      description: `Inversor Solar On-Grid/Híbrido ${inverterKw}kW ${acVoltage}V 2 MPPTs`,
+      manufacturer: "Growatt / Deye / Solis",
+      quantity: 1,
+      unit: "un",
+      unitPrice: 0,
+      scope: "ESCOPO_01_CC",
+    },
+    {
+      description: "Estrutura de Fixação em Alumínio para Telhado Cerâmico / Metálico",
+      manufacturer: "Perfil + Ganchos Inox",
+      quantity: panelCount,
+      unit: "conj",
+      unitPrice: 0,
+      scope: "ESCOPO_01_CC",
+    },
+    {
+      description: "Cabo Solar Fotovoltaico 1kV 4mm² Cobre Estanhado Preto",
+      manufacturer: "Prysmian / Nexans",
+      quantity: 60,
+      unit: "m",
+      unitPrice: 0,
+      scope: "ESCOPO_01_CC",
+    },
+    {
+      description: "Cabo Solar Fotovoltaico 1kV 4mm² Cobre Estanhado Vermelho",
+      manufacturer: "Prysmian / Nexans",
+      quantity: 60,
+      unit: "m",
+      unitPrice: 0,
+      scope: "ESCOPO_01_CC",
+    },
+    {
+      description: "Par de Conectores MC4 Macho / Fêmea 1000V",
+      manufacturer: "Stäubli / Compatível",
+      quantity: 6,
+      unit: "par",
+      unitPrice: 0,
+      scope: "ESCOPO_01_CC",
+    },
+    {
+      description: "Placas de Advertência e Sinalização de Segurança NBR 16690",
+      manufacturer: "Acrílico / Adesivo",
+      quantity: 1,
+      unit: "kit",
+      unitPrice: 0,
+      scope: "ESCOPO_01_CC",
+    },
+
+    // ESCOPO 02: MATERIAIS ELÉTRICOS (Infraestrutura / Lado CA - NBR 5410)
+    {
+      description: `Disjuntor Termomagnético Bipolar/Tripolar Curva C ${breaker}A`,
+      manufacturer: "Schneider / WEG",
+      quantity: 1,
+      unit: "un",
+      unitPrice: breakerPrice,
+      scope: "ESCOPO_02_CA",
+    },
+    {
+      description: "Dispositivo de Proteção contra Surtos (DPS) CA Classe II 275V 20/40kA",
+      manufacturer: "Clamper / WEG",
+      quantity: 2,
+      unit: "un",
+      unitPrice: 64.5,
+      scope: "ESCOPO_02_CA",
+    },
+    {
+      description: `Cabo de Cobre Flexível 750V ${cableGauge} para Saída CA (Fases / Neutro / PE)`,
+      manufacturer: "Sil / Corfio",
+      quantity: 30,
+      unit: "m",
+      unitPrice: cableUnitPrice,
+      scope: "ESCOPO_02_CA",
+    },
+    {
+      description: "Eletroduto Rígido / Corrugado Antichamas c/ Conexões e Abraçadeiras",
+      manufacturer: "Tigre / Amanco",
+      quantity: 1,
+      unit: "lote",
+      unitPrice: 195.0,
+      scope: "ESCOPO_02_CA",
+    },
+    {
+      description: "Quadro de Proteção CA (String Box CA / QDC Sobrepor IP65)",
+      manufacturer: "Brum / Cemar / Steck",
+      quantity: 1,
+      unit: "un",
+      unitPrice: 168.0,
+      scope: "ESCOPO_02_CA",
+    },
+  ];
+
+  const sourceItems =
+    Array.isArray(project?.solar_bom_items) && project.solar_bom_items.length > 0
+      ? project.solar_bom_items
+      : defaultBomItems;
+
+  return separateAndCalculateSolarBom(sourceItems);
+}
+
+/**
  * 4. Lista de Materiais e Quantitativos (BOM)
  */
 export function generateBillOfMaterialsReport(project = {}, config = {}, sizing = {}) {
-  const { panelCount, moduleWp, inverterKw, breaker } = normalizeParams(project, config, sizing);
+  const {
+    escopo01_kit_solar_cc,
+    escopo02_materiais_eletricos_ca,
+    total_orcamento_integrador,
+  } = buildSolarBomData(project, config, sizing);
+
   const doc = new jsPDF("p", "mm", "a4");
   addHeader(doc, "LISTA DE MATERIAIS & QUANTITATIVOS (BOM)", project);
 
-  const bomRows = [
-    ["01", `Módulo Solar Monocristalino ${moduleWp}Wp Half-Cell Tier 1`, "Canadian / Jinko / Longi", String(panelCount), "un"],
-    ["02", `Inversor Solar On-Grid/Híbrido ${inverterKw}kW ${config?.ac_voltage || 220}V 2 MPPTs`, "Growatt / Deye / Solis", "1", "un"],
-    ["03", "Estrutura de Fixação em Alumínio para Telhado Cerâmico / Metálico", "Perfil + Ganchos Inox", String(panelCount), "conj"],
-    ["04", "Cabo Solar Fotovoltaico 1kV 4mm² Cobre Estanhado Preto", "Prysmian / Nexans", "60", "m"],
-    ["05", "Cabo Solar Fotovoltaico 1kV 4mm² Cobre Estanhado Vermelho", "Prysmian / Nexans", "60", "m"],
-    ["06", "Par de Conectores MC4 Macho / Fêmea 1000V", "Stäubli / Compatível", "6", "par"],
-    ["07", `Disjuntor Termomagnético Bipolar/Tripolar Curva C ${breaker}A`, "Schneider / WEG", "1", "un"],
-    ["08", "Dispositivo de Proteção contra Surtos (DPS) CA Classe II 275V 20/40kA", "Clamper / WEG", "2", "un"],
-    ["09", "Cabo de Cobre Flexível 750V 6mm² para Saída CA (Fases / Neutro / PE)", "Sil / Corfio", "30", "m"],
-    ["10", "Eletroduto Rígido / Corrugado Antichamas c/ Conexões e Abraçadeiras", "Tigre / Amanco", "1", "lote"],
-    ["11", "Placas de Advertência e Sinalização de Segurança NBR 16690", "Acrílico / Adesivo", "1", "kit"],
-  ];
+  let y = 28;
 
-  drawSimpleTable(doc, 30, ["Item", "Descrição do Material / Equipamento", "Fabricante / Ref.", "Qtd.", "Un."], bomRows, [14, 86, 46, 18, 18]);
+  // BLOCO 01: ESCOPO 01 — EQUIPAMENTOS DE ENERGIA SOLAR (LADO CC - NBR 16690)
+  doc.setFillColor(241, 245, 249);
+  doc.rect(14, y, 182, 9.5, "F");
+  doc.setFillColor(...BRAND_BLUE);
+  doc.rect(14, y, 2, 9.5, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...BRAND_DARK);
+  doc.text("ESCOPO 01: EQUIPAMENTOS DE ENERGIA SOLAR (Kit Gerador / Lado CC — ABNT NBR 16690)", 18.5, y + 4.3);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.8);
+  doc.setTextColor(90, 105, 125);
+  doc.text("Composição física do Kit Gerador Fotovoltaico (valores financeiros e margens do kit não repassados ao integrador)", 18.5, y + 8.0);
+  y += 11;
+
+  const escopo01Rows = escopo01_kit_solar_cc.map((item) => [
+    item.itemCode,
+    item.description,
+    item.manufacturer,
+    String(item.quantity),
+    item.unit,
+  ]);
+
+  y = drawSimpleTable(
+    doc,
+    y,
+    ["Item", "Descrição do Equipamento Solar (Lado CC)", "Fabricante / Ref.", "Qtd.", "Un."],
+    escopo01Rows,
+    [12, 94, 44, 16, 16]
+  );
+
+  y += 4;
+
+  // BLOCO 02: ESCOPO 02 — MATERIAIS ELÉTRICOS DE INFRAESTRUTURA (LADO CA - NBR 5410)
+  doc.setFillColor(236, 253, 245);
+  doc.rect(14, y, 182, 9.5, "F");
+  doc.setFillColor(...BRAND_TEAL);
+  doc.rect(14, y, 2, 9.5, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...BRAND_DARK);
+  doc.text("ESCOPO 02: MATERIAIS ELÉTRICOS DE INFRAESTRUTURA (Lado CA — ABNT NBR 5410)", 18.5, y + 4.3);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.8);
+  doc.setTextColor(15, 79, 73);
+  doc.text("Escopo de fornecimento e responsabilidade de instalação elétrica CA (base para orçamento do Integrador/Instalador)", 18.5, y + 8.0);
+  y += 11;
+
+  const escopo02Rows = escopo02_materiais_eletricos_ca.map((item) => [
+    item.itemCode,
+    item.description,
+    item.manufacturer,
+    String(item.quantity),
+    item.unit,
+    `R$ ${formatDecimalBR(item.unitPrice)}`,
+    `R$ ${formatDecimalBR(item.subtotal)}`,
+  ]);
+
+  y = drawSimpleTable(
+    doc,
+    y,
+    ["Item", "Descrição do Material Elétrico (Lado CA)", "Fabricante / Ref.", "Qtd.", "Un.", "Vlr. Unit.", "Subtotal"],
+    escopo02Rows,
+    [10, 84, 28, 11, 11, 19, 19]
+  );
+
+  y += 5;
+
+  // RESUMO FINANCEIRO ISOLADO DO INTEGRADOR (RODAPÉ DESTACADO)
+  const cardHeight = 25;
+  doc.setFillColor(...BRAND_DARK);
+  doc.rect(14, y, 182, cardHeight, "F");
+  doc.setFillColor(...BRAND_TEAL);
+  doc.rect(14, y, 2.5, cardHeight, "F");
+  doc.setDrawColor(...BRAND_TEAL);
+  doc.setLineWidth(0.35);
+  doc.rect(14, y, 182, cardHeight, "D");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...BRAND_TEAL);
+  doc.text("DEMONSTRATIVO FINANCEIRO FECHADO — INFRAESTRUTURA ELÉTRICA CA (NBR 5410)", 19.5, y + 6.2);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(255, 255, 255);
+  doc.text(
+    `Orçamento de Materiais Elétricos (Integrador): R$ ${formatDecimalBR(total_orcamento_integrador)}`,
+    19.5,
+    y + 14.5
+  );
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.8);
+  doc.setTextColor(175, 190, 210);
+  doc.text(
+    "Nota: Subtotal apurado exclusivamente sobre o Escopo 02 (Lado CA). Custos e margens do Kit Gerador Solar (Escopo 01) estão isolados e ocultos.",
+    19.5,
+    y + 21.2
+  );
 
   addFooter(doc, 1, 1);
   return doc;
@@ -1044,27 +1343,102 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
 
   addFooter(doc, 1, 2);
 
-  // PÁGINA 2: Lista de Materiais e Retorno Financeiro
+  // PÁGINA 2: Lista de Materiais (Escopo 01 CC / Escopo 02 CA) e Retorno Financeiro
   doc.addPage();
   addHeader(doc, "RELATÓRIO TÉCNICO EXECUTIVO SOLAR (CONT.)", project);
+
+  const {
+    escopo01_kit_solar_cc,
+    escopo02_materiais_eletricos_ca,
+    total_orcamento_integrador,
+  } = buildSolarBomData(project, config, sizing);
 
   y = 28;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...BRAND_DARK);
-  doc.text("3. Lista Resumida de Materiais e Equipamentos (BOM)", 14, y);
+  doc.text("3. Lista de Materiais & Quantitativos (BOM — Separação Normativa CC / CA)", 14, y);
   y += 4;
 
-  const bomRows = [
-    ["01", `Módulos Solares Monocristalinos ${moduleWp}Wp Half-Cell Tier 1`, String(panelCount), "un"],
-    ["02", `Inversor Solar On-Grid/Híbrido ${inverterKw}kW c/ Monitoramento WiFi`, "1", "un"],
-    ["03", "Estrutura de Fixação em Alumínio e Ganchos Inox para Telhado", String(panelCount), "conj"],
-    ["04", "Cabos Solares 1kV 4mm² Cobre Estanhado c/ Conectores MC4", "120", "m"],
-    ["05", `Disjuntor Termomagnético ${breaker}A + DPS CA Classe II 275V`, "1", "kit"],
-  ];
-  y = drawSimpleTable(doc, y, ["Item", "Descrição do Equipamento / Material", "Qtd.", "Un."], bomRows, [14, 130, 20, 18]);
+  // Escopo 01: Kit Solar CC (NBR 16690)
+  doc.setFillColor(241, 245, 249);
+  doc.rect(14, y, 182, 6.5, "F");
+  doc.setFillColor(...BRAND_BLUE);
+  doc.rect(14, y, 2, 6.5, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.8);
+  doc.setTextColor(...BRAND_DARK);
+  doc.text("ESCOPO 01: EQUIPAMENTOS DE ENERGIA SOLAR (Kit Gerador / Lado CC — NBR 16690)", 18, y + 4.4);
+  y += 7.5;
 
-  y += 2;
+  const execEscopo01Rows = escopo01_kit_solar_cc.map((item) => [
+    item.itemCode,
+    item.description,
+    item.manufacturer,
+    String(item.quantity),
+    item.unit,
+  ]);
+  y = drawSimpleTable(
+    doc,
+    y,
+    ["Item", "Descrição do Equipamento Solar (Lado CC)", "Fabricante / Ref.", "Qtd.", "Un."],
+    execEscopo01Rows,
+    [12, 94, 44, 16, 16]
+  );
+
+  y += 1.5;
+
+  // Escopo 02: Materiais Elétricos CA (NBR 5410)
+  doc.setFillColor(236, 253, 245);
+  doc.rect(14, y, 182, 6.5, "F");
+  doc.setFillColor(...BRAND_TEAL);
+  doc.rect(14, y, 2, 6.5, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.8);
+  doc.setTextColor(...BRAND_DARK);
+  doc.text("ESCOPO 02: MATERIAIS ELÉTRICOS DE INFRAESTRUTURA (Lado CA — NBR 5410)", 18, y + 4.4);
+  y += 7.5;
+
+  const execEscopo02Rows = escopo02_materiais_eletricos_ca.map((item) => [
+    item.itemCode,
+    item.description,
+    item.manufacturer,
+    String(item.quantity),
+    item.unit,
+    `R$ ${formatDecimalBR(item.unitPrice)}`,
+    `R$ ${formatDecimalBR(item.subtotal)}`,
+  ]);
+  y = drawSimpleTable(
+    doc,
+    y,
+    ["Item", "Descrição do Material Elétrico (Lado CA)", "Fabricante / Ref.", "Qtd.", "Un.", "Vlr. Unit.", "Subtotal"],
+    execEscopo02Rows,
+    [10, 84, 28, 11, 11, 19, 19]
+  );
+
+  // Card de Resumo Financeiro do Integrador
+  doc.setFillColor(...BRAND_DARK);
+  doc.rect(14, y, 182, 14, "F");
+  doc.setFillColor(...BRAND_TEAL);
+  doc.rect(14, y, 2.5, 14, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text(
+    `Orçamento de Materiais Elétricos (Integrador): R$ ${formatDecimalBR(total_orcamento_integrador)}`,
+    19,
+    y + 6.5
+  );
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(175, 190, 210);
+  doc.text(
+    "Subtotal isolado do Escopo 02 (Infraestrutura CA - NBR 5410). Custos e margens do Kit Solar (Escopo 01) ocultados desta visualização.",
+    19,
+    y + 11.5
+  );
+  y += 18;
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...BRAND_DARK);
@@ -1088,7 +1462,40 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
  */
 export async function printExecutiveSolarReport(project = {}, config = {}, sizing = {}, exportAuth = {}) {
   const { azimuth, dcPowerKw, panelCount, annualKwh, annualSavings, moduleWp, inverterKw, roofArea, usableArea, roofPitch, breaker, investment, payback } = normalizeParams(project, config, sizing);
+  const {
+    escopo01_kit_solar_cc,
+    escopo02_materiais_eletricos_ca,
+    total_orcamento_integrador,
+  } = buildSolarBomData(project, config, sizing);
   const { layoutImage, stringsImage } = await resolveSolarReportImagesAsync({ project, config, sizing });
+
+  const escopo01HtmlRows = escopo01_kit_solar_cc
+    .map(
+      (item) => `
+          <tr>
+            <td><strong>${item.itemCode}</strong></td>
+            <td>${item.description}</td>
+            <td>${item.manufacturer}</td>
+            <td>${item.quantity}</td>
+            <td>${item.unit}</td>
+          </tr>`
+    )
+    .join("");
+
+  const escopo02HtmlRows = escopo02_materiais_eletricos_ca
+    .map(
+      (item) => `
+          <tr>
+            <td><strong>${item.itemCode}</strong></td>
+            <td>${item.description}</td>
+            <td>${item.manufacturer}</td>
+            <td>${item.quantity}</td>
+            <td>${item.unit}</td>
+            <td>R$ ${formatDecimalBR(item.unitPrice)}</td>
+            <td><strong>R$ ${formatDecimalBR(item.subtotal)}</strong></td>
+          </tr>`
+    )
+    .join("");
 
   const html = `
     <!DOCTYPE html>
@@ -1117,11 +1524,20 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
         
         .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin: 10px 0 6px 0; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px; border-radius: 0; }
-        th { background: #1e293b; color: #fff; font-weight: 700; text-align: left; padding: 5px 6px; font-size: 9px; }
+        th { background: #003a78; color: #fff; font-weight: 700; text-align: left; padding: 5px 6px; font-size: 9px; }
         td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #f1f5f9; }
         td:last-child { border-right: none; }
         tr:nth-child(even) td { background: #f8fafc; }
         
+        .bom-scope-banner { padding: 6px 10px; margin: 8px 0 4px 0; border-left: 4px solid #003a78; background: #f1f5f9; }
+        .bom-scope-banner.scope-ca { border-left-color: #00a896; background: #ecfdf5; }
+        .bom-scope-title { font-size: 9.5px; font-weight: 800; color: #0e1726; text-transform: uppercase; }
+        .bom-scope-sub { font-size: 8px; color: #475569; margin-top: 1px; }
+        .integrator-budget-card { margin-top: 8px; margin-bottom: 12px; padding: 12px 14px; background: #0e1726; border-left: 4px solid #00d8b8; color: #ffffff; display: flex; justify-content: space-between; align-items: center; }
+        .integrator-budget-tag { font-size: 8px; font-weight: 700; color: #00d8b8; text-transform: uppercase; letter-spacing: 0.4px; }
+        .integrator-budget-title { font-size: 13px; font-weight: 800; color: #ffffff; margin-top: 2px; }
+        .integrator-budget-note { font-size: 8px; color: #94a3b8; margin-top: 2px; }
+
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .box { border: 1px solid #e2e8f0; border-radius: 0; padding: 10px; background: #fff; }
         .box-title { font-size: 10px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
@@ -1274,6 +1690,55 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
           <div class="info-row"><span class="info-label">Norma de Arranjo:</span><span class="info-val">ABNT NBR 16690</span></div>
           <div class="info-row"><span class="info-label">Norma de Instalação:</span><span class="info-val">ABNT NBR 5410</span></div>
           <div class="info-row"><span class="info-label">Regulatório ANEEL:</span><span class="info-val">REN 1.000 / REN 1.059</span></div>
+        </div>
+      </div>
+
+      <div class="section-title">5. Lista de Materiais & Quantitativos (BOM)</div>
+      <div class="bom-scope-banner">
+        <div class="bom-scope-title">ESCOPO 01: EQUIPAMENTOS DE ENERGIA SOLAR (Kit Gerador / Lado CC — NBR 16690)</div>
+        <div class="bom-scope-sub">Itens componentes do kit base fotovoltaico (valores financeiros e margem não repassados ao integrador)</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 8%;">Item</th>
+            <th style="width: 52%;">Descrição do Equipamento Solar (Lado CC)</th>
+            <th style="width: 24%;">Fabricante / Ref.</th>
+            <th style="width: 8%;">Qtd.</th>
+            <th style="width: 8%;">Un.</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${escopo01HtmlRows}
+        </tbody>
+      </table>
+
+      <div class="bom-scope-banner scope-ca">
+        <div class="bom-scope-title">ESCOPO 02: MATERIAIS ELÉTRICOS DE INFRAESTRUTURA (Lado CA — NBR 5410)</div>
+        <div class="bom-scope-sub">Bloco de responsabilidade do Integrador/Instalador — Orçamento isolado de infraestrutura elétrica CA</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 6%;">Item</th>
+            <th style="width: 44%;">Descrição do Material Elétrico (Lado CA)</th>
+            <th style="width: 18%;">Fabricante / Ref.</th>
+            <th style="width: 6%;">Qtd.</th>
+            <th style="width: 6%;">Un.</th>
+            <th style="width: 10%;">Vlr. Unit.</th>
+            <th style="width: 10%;">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${escopo02HtmlRows}
+        </tbody>
+      </table>
+
+      <div class="integrator-budget-card">
+        <div>
+          <div class="integrator-budget-tag">Demonstrativo Financeiro Fechado — Infraestrutura Elétrica CA (NBR 5410)</div>
+          <div class="integrator-budget-title">Orçamento de Materiais Elétricos (Integrador): R$ ${formatDecimalBR(total_orcamento_integrador)}</div>
+          <div class="integrator-budget-note">Subtotal calculado exclusivamente sobre o Escopo 02. Custos e margens do Kit Solar (Escopo 01) estão ocultos desta visualização.</div>
         </div>
       </div>
 
