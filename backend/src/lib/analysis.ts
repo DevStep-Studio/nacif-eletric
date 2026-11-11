@@ -532,8 +532,10 @@ const POLES = (supply: string) => {
 
 export function calcNominalCurrent(power_w: number, voltage: number, supply_type: string, power_factor = 0.92) {
   if (!power_w || !voltage) return 0;
-  if (supply_type === "Trifásico") return Math.round((power_w / (Math.sqrt(3) * voltage * power_factor)) * 100) / 100;
-  return Math.round((power_w / (voltage * power_factor)) * 100) / 100;
+  const fp = power_factor > 0 ? power_factor : 0.92;
+  const isTrifasico = supply_type === "Trifásico" || /tri/i.test(supply_type) || supply_type === "3F";
+  if (isTrifasico) return Math.round(((power_w / voltage / Math.sqrt(3)) / fp) * 100) / 100;
+  return Math.round(((power_w / voltage) / fp) * 100) / 100;
 }
 
 export function calcCorrectedCurrent(nominal_a: number, temp_ambient = 30, group_count = 1) {
@@ -551,9 +553,10 @@ export function selectWireGauge(corrected_a: number, install_method = "Eletrodut
   return WIRE_TABLE.find((wire) => wire[col] >= corrected_a && wire.area >= min_area) || WIRE_TABLE[WIRE_TABLE.length - 1]!;
 }
 
+export const COMMERCIAL_BREAKER_RATINGS = [6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125, 160, 200, 225, 250, 315, 400, 500, 630];
+
 export function selectBreaker(nominal_a: number) {
-  const sizes = [6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400];
-  return sizes.find((size) => size >= nominal_a) || 400;
+  return COMMERCIAL_BREAKER_RATINGS.find((size) => size >= nominal_a) || COMMERCIAL_BREAKER_RATINGS[COMMERCIAL_BREAKER_RATINGS.length - 1];
 }
 
 export function calcVoltageDrop(power_w: number, voltage: number, supply_type: string, length_m: number, wire_gauge: string, power_factor = 0.92) {
@@ -603,9 +606,11 @@ export function calcCircuit(circuitInput: AnyRecord): AnyRecord {
     wire_gauge: wireData.gauge,
     wire_area: wireData.area,
     minimum_wire_area: minWireArea,
+    power_factor: fp,
     breaker_a,
     breaker_curve: BREAKER_CURVE(type),
     breaker_poles: poles,
+    breaker_label: `Disjuntor ${breaker_a}A ${poles}P Curva ${BREAKER_CURVE(type)}`,
     breaking_capacity_ka: BREAKING_CAPACITY(voltage),
     needs_dr: NEEDS_DR(type),
     needs_dps: true,

@@ -424,8 +424,8 @@ function drawDimensioningTable(doc, metrics) {
   const y = 135;
   const w = 715;
   const rowH = 9;
-  const widths = [34, 139, 45, 38, 42, 40, 46, 52, 46, 54, 44, 44, 44, 37];
-  const headers = ["Circuito", "Descricao", "Pva (W)", "Tensao", "In (A)", "Fc", "Iaj(A)", "Disjuntor", "Queda", "Condutor", "Fase A", "Fase B", "Fase C", "Espaco"];
+  const widths = [30, 135, 48, 34, 28, 44, 28, 44, 78, 38, 48, 44, 44, 44, 28];
+  const headers = ["Circuito", "Descricao", "Potencia (W)", "Tensao", "FP", "Ib (A)", "Fc", "Iaj (A)", "Disjuntor", "Queda", "Condutor", "Fase A", "Fase B", "Fase C", "Espaco"];
 
   doc.setDrawColor(...C.black);
   doc.setLineWidth(0.35);
@@ -452,15 +452,18 @@ function drawDimensioningTable(doc, metrics) {
     const phaseA = (c.phase || "").includes("A") ? Math.round(c.power_w || 0) : "";
     const phaseB = (c.phase || "").includes("B") ? Math.round(c.power_w || 0) : "";
     const phaseC = (c.phase || "").includes("C") ? Math.round(c.power_w || 0) : "";
+    const poles = c.breaker_poles || (c.phase?.length > 1 ? c.phase.length : 1);
+    const breakerText = c.breaker_label || `${c.breaker_a || 16}A ${poles}P Curva ${c.breaker_curve || 'C'}`;
     const row = [
       `C${String(index + 1).padStart(2, "0")}`,
       (c.name || c.type || "Circuito").toUpperCase().slice(0, 32),
       Math.round(c.power_w || 0),
       c.voltage || 220,
-      fmt(c.project_current_a, 1),
+      fmt(c.power_factor ?? 0.92, 2),
+      fmt(c.project_current_a, 2),
       fmt(c.group_factor || 1, 2),
-      fmt(c.corrected_current_a, 1),
-      `${c.breaker_a || 16}A`,
+      fmt(c.corrected_current_a, 2),
+      breakerText,
       `${fmt(c.voltage_drop_pct, 1)}%`,
       c.wire_gauge || "2.5mm²",
       phaseA,
@@ -471,30 +474,33 @@ function drawDimensioningTable(doc, metrics) {
 
     cx = x;
     row.forEach((cell, i) => {
-      if (i === 7 && asNumber(c.breaker_a) >= 40) {
+      if (i === 8 && asNumber(c.breaker_a) >= 40) {
         doc.setFillColor(...C.red);
         doc.rect(cx, yy, widths[i], rowH, "F");
-      } else if (i >= 10 && cell !== "") {
+      } else if (i >= 11 && i <= 13 && cell !== "") {
         doc.setFillColor(...C.yellow);
         doc.rect(cx, yy, widths[i], rowH, "F");
       }
       doc.setDrawColor(...C.black);
       doc.rect(cx, yy, widths[i], rowH);
       doc.setTextColor(...C.black);
-      text(doc, String(cell), cx + widths[i] / 2, yy + 5.8, { align: "center" });
+      const align = i === 1 ? "left" : "center";
+      const tx = align === "left" ? cx + 3 : cx + widths[i] / 2;
+      text(doc, String(cell), tx, yy + 5.8, { align });
       cx += widths[i];
     });
   });
 
   const totalY = y + 6 + Math.min(circuits.length, 22) * rowH;
+  const phaseColStartX = x + widths.slice(0, 11).reduce((s, item) => s + item, 0);
   doc.setFillColor(...C.cyan);
-  doc.rect(x + 360, totalY, 150, rowH, "F");
+  doc.rect(phaseColStartX - 120, totalY, 120, rowH, "F");
   doc.setFont("helvetica", "bold");
-  text(doc, "Balanceamento", x + 435, totalY + 5.8, { align: "center" });
+  text(doc, "Balanceamento", phaseColStartX - 60, totalY + 5.8, { align: "center" });
   doc.setFillColor(...C.yellow);
   ["A", "B", "C"].forEach((ph, index) => {
-    doc.rect(x + 510 + index * 44, totalY, 44, rowH, "F");
-    text(doc, fmt(metrics.phaseLoad?.[ph] || 0, 1), x + 532 + index * 44, totalY + 5.8, { align: "center" });
+    doc.rect(phaseColStartX + index * 44, totalY, 44, rowH, "F");
+    text(doc, fmt(metrics.phaseLoad?.[ph] || 0, 1), phaseColStartX + index * 44 + 22, totalY + 5.8, { align: "center" });
   });
 }
 

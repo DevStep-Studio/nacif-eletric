@@ -224,7 +224,7 @@ function CircuitBox({ x, y, circuit, num }) {
         ΔU {circuit.voltage_drop_pct}% {vdOk ? "OK" : "REVISAR"}
       </text>
       <text x={x + 72} y={y + 119} fill={CAD_SUB} fontSize="7.2" fontWeight="700">
-        I {circuit.project_current_a}A · Ic {circuit.breaking_capacity_ka||6}kA
+        I {Number(circuit.project_current_a || 0).toFixed(2)}A · Ic {circuit.breaking_capacity_ka||6}kA
       </text>
       {circuit.needs_dr && (
         <rect x={x + 8} y={y + 124} width="28" height="10" rx="2" fill="#EEF7FC" stroke="#005188" strokeWidth="0.8" />
@@ -279,8 +279,8 @@ function UnifilarSVG({ project, metrics }) {
     return 120;
   };
   const feeder = feederGauge(metrics?.generalCurrent || generalBreaker || 16);
-  const tableWidths = [34, 140, 44, 37, 42, 36, 46, 52, 44, 54, 44, 44, 44, 35];
-  const tableHeaders = ["Circuito", "Descrição", "Pva (W)", "V", "In(A)", "Fc", "Iaj(A)", "Disjuntor", "Queda", "Condutor", "Fase A", "Fase B", "Fase C", "Esp."];
+  const tableWidths = [30, 140, 48, 34, 28, 44, 28, 44, 80, 38, 50, 42, 42, 42, 30];
+  const tableHeaders = ["Circuito", "Descrição", "Potência (W)", "Tensão", "FP", "Ib (A)", "Fc", "Iaj (A)", "Disjuntor", "Queda", "Condutor", "Fase A", "Fase B", "Fase C", "Esp."];
   const phasePower = (c, ph) => (c.phase || "").includes(ph) ? Math.round(c.power_w || 0) : "";
   const totalKva = ((metrics?.totalPower || 0) / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const mainCurrent = Math.round(metrics?.generalCurrent || 0);
@@ -469,15 +469,18 @@ function UnifilarSVG({ project, metrics }) {
 
       {circuits.slice(0, 23).map((c, rowIndex) => {
         const y = TABLE_Y + 2 + rowIndex * ROW_H;
+        const circuitPoles = c.breaker_poles || (c.phase?.length > 1 ? c.phase.length : 1);
+        const breakerLabel = c.breaker_label || `${c.breaker_a || 16}A ${circuitPoles}P Curva ${c.breaker_curve || 'C'}`;
         const values = [
           `C${String(rowIndex + 1).padStart(2, "0")}`,
           (c.name || c.type || "Circuito").toUpperCase().slice(0, 34),
           Math.round(c.power_w || 0),
           c.voltage || voltage,
-          Number(c.project_current_a || 0).toFixed(1),
+          Number(c.power_factor ?? 0.92).toFixed(2),
+          Number(c.project_current_a || 0).toFixed(2),
           Number(c.group_factor || 1).toFixed(2),
-          Number(c.corrected_current_a || 0).toFixed(1),
-          `${c.breaker_a || 16}A`,
+          Number(c.corrected_current_a || 0).toFixed(2),
+          breakerLabel,
           `${Number(c.voltage_drop_pct || 0).toFixed(1)}%`,
           c.wire_gauge || "2.5mm²",
           phasePower(c, "A"),
@@ -489,8 +492,8 @@ function UnifilarSVG({ project, metrics }) {
           <g key={`${c.name}-${rowIndex}-table`}>
             {values.map((value, i) => {
               const x = TABLE_X + tableWidths.slice(0, i).reduce((sum, item) => sum + item, 0);
-              const isBreakerAlert = i === 7 && Number(c.breaker_a || 0) >= 40;
-              const isPhaseValue = i >= 10 && i <= 12 && value !== "";
+              const isBreakerAlert = i === 8 && Number(c.breaker_a || 0) >= 40;
+              const isPhaseValue = i >= 11 && i <= 13 && value !== "";
               return (
                 <g key={i}>
                   <rect
@@ -526,16 +529,23 @@ function UnifilarSVG({ project, metrics }) {
         );
       })}
 
-      <rect x={TABLE_X + 388} y={TABLE_Y + 2 + 29 * ROW_H} width="118" height={ROW_H} fill="#00a8d7" stroke="#000" strokeWidth="0.35" />
-      <text x={TABLE_X + 447} y={TABLE_Y + 2 + 29 * ROW_H + 5.9} fill="#000" fontSize="5.8" textAnchor="middle" fontWeight="700">Balanceamento</text>
-      {["A", "B", "C"].map((ph, i) => (
-        <g key={ph}>
-          <rect x={TABLE_X + 506 + i * 44} y={TABLE_Y + 2 + 29 * ROW_H} width="44" height={ROW_H} fill="#ffff00" stroke="#000" strokeWidth="0.35" />
-          <text x={TABLE_X + 528 + i * 44} y={TABLE_Y + 2 + 29 * ROW_H + 5.9} fill="#ff0000" fontSize="5.8" textAnchor="middle" fontWeight="700">
-            {Number(metrics?.phaseLoad?.[ph] || 0).toFixed(1)}
-          </text>
-        </g>
-      ))}
+      {(() => {
+        const phaseColStartX = TABLE_X + tableWidths.slice(0, 11).reduce((sum, item) => sum + item, 0);
+        return (
+          <g>
+            <rect x={phaseColStartX - 118} y={TABLE_Y + 2 + 29 * ROW_H} width="118" height={ROW_H} fill="#00a8d7" stroke="#000" strokeWidth="0.35" />
+            <text x={phaseColStartX - 59} y={TABLE_Y + 2 + 29 * ROW_H + 5.9} fill="#000" fontSize="5.8" textAnchor="middle" fontWeight="700">Balanceamento</text>
+            {["A", "B", "C"].map((ph, i) => (
+              <g key={ph}>
+                <rect x={phaseColStartX + i * 42} y={TABLE_Y + 2 + 29 * ROW_H} width="42" height={ROW_H} fill="#ffff00" stroke="#000" strokeWidth="0.35" />
+                <text x={phaseColStartX + i * 42 + 21} y={TABLE_Y + 2 + 29 * ROW_H + 5.9} fill="#ff0000" fontSize="5.8" textAnchor="middle" fontWeight="700">
+                  {Number(metrics?.phaseLoad?.[ph] || 0).toFixed(1)}
+                </text>
+              </g>
+            ))}
+          </g>
+        );
+      })()}
 
       <rect x={TABLE_X + 348} y="388" width="210" height="62" fill="white" stroke="#000" strokeWidth="0.35" />
       {[

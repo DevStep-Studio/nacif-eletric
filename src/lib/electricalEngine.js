@@ -155,8 +155,36 @@ export const POLES = (supply) => {
 
 // ─── Série comercial padronizada de disjuntores (NBR NM 60898 / NBR IEC 60947-2) ──────────────
 export const COMMERCIAL_BREAKER_RATINGS = [
-  6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125, 160, 200, 225, 250, 315, 350, 400, 500, 630, 800,
+  6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125, 160, 200, 225, 250, 315, 400, 500, 630, 800,
 ];
+
+// Identificação robusta de circuitos trifásicos (3F / 3P / Trifásico)
+export function isThreePhase(supply_type, poles = null, phase = "") {
+  const norm = String(supply_type || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const ph = String(phase || "").toUpperCase().trim();
+  const p = Number(poles || 0);
+  return norm.includes("tri") || norm === "3f" || norm === "3p" || p === 3 || ph === "ABC" || ph === "3F";
+}
+
+// Resolução de Fator de Potência com valor padrão / fallback seguro NBR 5410
+export function resolvePowerFactor(power_factor, options = {}) {
+  const fp = Number(power_factor);
+  if (Number.isFinite(fp) && fp > 0.05 && fp <= 1.0) {
+    return fp;
+  }
+  // Valor Padrão (Fallback):
+  // 0.92 para inversores/motores modernos, 0.85 para cargas indutivas gerais
+  const isInductive = options.isInductive || /motor|bomba|ar[ _-]?cond|compressor/i.test(String(options.type || ""));
+  return isInductive ? 0.85 : 0.92;
+}
+
+// Formatação padronizada do Disjuntor Comercial Selecionado conforme NBR 5410
+export function formatBreakerLabel(breaker_a, poles = 1, curve = "C") {
+  const p = Number(poles) || 1;
+  const poleLabel = p === 3 ? "3P" : p === 2 ? "2P" : "1P";
+  const c = String(curve || "C").toUpperCase();
+  return `Disjuntor ${breaker_a}A ${poleLabel} Curva ${c}`;
+}
 
 // ─── Degraus comerciais de IDR de entrada (Piso padrão 40A em conformidade com materiais) ─────
 export const DR_RATINGS = [40, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630];
@@ -261,30 +289,34 @@ export function normalizeElectricalPower({
   };
 }
 
-// ─── Motor de Cálculo de Corrente por Tipo de Alimentação ─────────────────────────────────────
-export function calcNominalCurrent(power_w, voltage, supply_type, power_factor = 0.92, power_va = null) {
+// ─── Motor de Cálculo de Corrente por Tipo de Alimentação (NBR 5410) ──────────────────────────
+export function calcNominalCurrent(power_w, voltage, supply_type, power_factor = null, power_va = null, options = {}) {
   const p = Number(power_w) || 0;
   const v = Number(voltage) || 0;
-  const fp = Math.max(0.01, Number(power_factor) || 0.92);
   if (v <= 0) return 0;
 
-  const s = (power_va !== null && power_va !== undefined && Number(power_va) > 0)
-    ? Number(power_va)
-    : (p > 0 ? p / fp : 0);
-
-  if (p <= 0 && s <= 0) return 0;
+  const fp = resolvePowerFactor(power_factor, options);
+  const isTri = isThreePhase(supply_type, options?.poles, options?.phase);
 
   let I = 0;
-  if (supply_type === "Trifásico") {
-    // Trifásico equilibrado: I = P / (√3 × V_linha × fp) = S / (√3 × V_linha)
-    I = s / (Math.sqrt(3) * v);
-  } else if (supply_type === "Bifásico") {
-    // Carga monofásica ligada entre duas fases (tensão entre fases V_FF):
-    // I = P / (V_linha × fp) = S / V_linha (NÃO aplicar raiz de 3)
-    I = s / v;
-  } else {
-    // Monofásico F+N: I = P / (V_fn × fp) = S / V_fn
-    I = s / v;
+  if (p > 0) {
+    if (isTri) {
+      // 1. Fórmula de Corrente de Projeto (Ib) - Circuito Trifásico NBR 5410:
+      // Ib = Potência (W) / (Tensão (V) * Math.sqrt(3) * FatorDePotencia)
+      // Ordem encadeada: (Potencia_Watts / Tensao / Math.sqrt(3)) / Fator_Potencia
+      I = ((p / v / Math.sqrt(3)) / fp);
+    } else {
+      // 2. Monofásico ou Bifásico (1F/2F):
+      // Ib = Potência (W) / (Tensão (V) * FatorDePotencia)
+      I = (p / v) / fp;
+    }
+  } else if (power_va !== null && power_va !== undefined && Number(power_va) > 0) {
+    const s = Number(power_va);
+    if (isTri) {
+      I = s / (Math.sqrt(3) * v);
+    } else {
+      I = s / v;
+    }
   }
 
   return Math.round(I * 100) / 100;
@@ -972,8 +1004,11 @@ export function calcCircuit(circuit = {}) {
     : getDefaultDemandFactor(type, circuit?.name);
   const resolvedDemandFactor = Number.isFinite(rawDemand) && rawDemand > 0 ? rawDemand : 1.0;
 
-  const defaultFp = (type === "Motor" || type === "Ar Condicionado" ? 0.85 : type === "Iluminação" ? 0.92 : 1.0);
-  const fp = Number(power_factor) || defaultFp;
+  const poles           = POLES(supply_type);
+  const curve           = BREAKER_CURVE(type);
+  const breaking_ka     = BREAKING_CAPACITY(voltage);
+
+  const fp = resolvePowerFactor(power_factor, { type });
 
   const normalized = normalizeElectricalPower({
     power,
@@ -989,8 +1024,9 @@ export function calcCircuit(circuit = {}) {
   const installedPowerVa = normalized.power_va;
   const effectivePowerVa = Math.round(installedPowerVa * resolvedDemandFactor * 100) / 100;
 
-  const nominal_a       = calcNominalCurrent(installedPowerW, voltage, supply_type, fp, installedPowerVa);
-  const demand_a        = calcNominalCurrent(effectivePowerW, voltage, supply_type, fp, effectivePowerVa);
+  const circuitOptions  = { poles, phase: circuit.phase, type };
+  const nominal_a       = calcNominalCurrent(installedPowerW, voltage, supply_type, fp, installedPowerVa, circuitOptions);
+  const demand_a        = calcNominalCurrent(effectivePowerW, voltage, supply_type, fp, effectivePowerVa, circuitOptions);
   const project_current_a = demand_a;
   const corrected_a     = calcCorrectedCurrent(project_current_a, temp_ambient, group_count);
   const minWireArea     = minimumWireAreaForCircuit(type);
@@ -1020,15 +1056,12 @@ export function calcCircuit(circuit = {}) {
 
   const temp_factor     = TEMP_FACTORS[temp_ambient] || 1.0;
   const group_factor    = GROUP_FACTORS[Math.min(Math.max(1, Number(group_count) || 1), 9)] || 0.50;
-  const poles           = POLES(supply_type);
-  const curve           = BREAKER_CURVE(type);
-  const breaking_ka     = BREAKING_CAPACITY(voltage);
 
   const calculated_breaker_a = breaker_a || 0;
   const isManualBreaker = Boolean(circuit.manual_breaker) && Number(circuit.breaker_a) > 0;
   const finalBreakerA = isManualBreaker ? Number(circuit.breaker_a) : calculated_breaker_a;
   const breaker_manual_warning = isManualBreaker && finalBreakerA < project_current_a
-    ? `Disjuntor manual (${finalBreakerA}A) menor que a corrente de projeto calculada (${project_current_a.toFixed(1)}A).`
+    ? `Disjuntor manual (${finalBreakerA}A) menor que a corrente de projeto calculada (${project_current_a.toFixed(2)}A).`
     : null;
   const validation_status = breaker_manual_warning ? "incompatible" : (circuit.validation_status || "valid");
 
@@ -1048,6 +1081,7 @@ export function calcCircuit(circuit = {}) {
     minimum_wire_area:    minWireArea,
     calculated_breaker_a,
     breaker_a:            finalBreakerA,
+    breaker_label:        formatBreakerLabel(finalBreakerA, poles, curve),
     breaker_manual_warning,
     validation_status,
     breaker_curve:        curve,

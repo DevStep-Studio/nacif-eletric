@@ -178,8 +178,9 @@ const asNumber = (value, fallback) => {
 };
 
 const breakerForCurrent = (current) => {
-  const options = [16, 20, 25, 32, 40, 50, 63, 80, 100, 125];
-  return options.find((item) => item >= current * 1.25) || 125;
+  const options = [6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125, 160, 200, 225, 250, 315, 400, 500, 630];
+  const target = Number(current) || 0;
+  return options.find((item) => item >= target) || options[options.length - 1];
 };
 
 function normalizeSolarConfig(config = {}) {
@@ -302,9 +303,13 @@ function calculateSolar(config, panelCapacity = null) {
   
   const dcPowerKw = (panelCount * moduleWp) / 1000;
   const voltage = Math.max(1, asNumber(config.ac_voltage, defaultSolarConfig.ac_voltage));
-  const acCurrent = config.ac_supply_type === "Trifásico"
-    ? (inverterKw * 1000) / (Math.sqrt(3) * voltage)
-    : (inverterKw * 1000) / voltage;
+  const isTri = /tri|3f|3p/i.test(String(config.ac_supply_type || ""));
+  const fp = Math.max(0.01, asNumber(config.power_factor, 0.92));
+  const acCurrent = Math.round(
+    (isTri
+      ? ((inverterKw * 1000 / voltage / Math.sqrt(3)) / fp)
+      : ((inverterKw * 1000) / (voltage * fp))) * 100
+  ) / 100;
   const breaker = breakerForCurrent(acCurrent);
 
   return {
@@ -709,9 +714,13 @@ export default function SolarProject() {
 
   const voltage = Math.max(1, asNumber(config.ac_voltage, defaultSolarConfig.ac_voltage));
   const inverterKw = Math.max(0.1, asNumber(config.inverter_kw, defaultSolarConfig.inverter_kw));
-  const acCurrent = config.ac_supply_type === "Trifásico"
-    ? (inverterKw * 1000) / (Math.sqrt(3) * voltage)
-    : (inverterKw * 1000) / voltage;
+  const isTri = /tri|3f|3p/i.test(String(config.ac_supply_type || ""));
+  const fp = Math.max(0.01, asNumber(config.power_factor, 0.92));
+  const acCurrent = Math.round(
+    (isTri
+      ? ((inverterKw * 1000 / voltage / Math.sqrt(3)) / fp)
+      : ((inverterKw * 1000) / (voltage * fp))) * 100
+  ) / 100;
   const breaker = breakerForCurrent(acCurrent);
 
   const visualSizing = useMemo(() => ({
@@ -3583,7 +3592,7 @@ export default function SolarProject() {
                 {/* Rodapé do Painel Expandido com Ação */}
                 <div className="flex items-center justify-between pt-1">
                   <div className="text-[10px] text-slate-500">
-                    Corrente AC: <strong className="text-slate-800">{visualSizing.acCurrent ? `${visualSizing.acCurrent.toFixed(1)}A` : "—"}</strong> · Disjuntor: <strong className="text-slate-800">{visualSizing.breaker ? `${visualSizing.breaker}A` : "—"}</strong>
+                    Corrente AC: <strong className="text-slate-800">{visualSizing.acCurrent ? `${visualSizing.acCurrent.toFixed(2)}A` : "—"}</strong> · Disjuntor: <strong className="text-slate-800">{visualSizing.breaker ? `Disjuntor ${visualSizing.breaker}A ${config.ac_supply_type === "Trifásico" ? "3P" : config.ac_supply_type === "Bifásico" ? "2P" : "1P"} Curva C` : "—"}</strong>
                   </div>
                   <Button
                     type="button"

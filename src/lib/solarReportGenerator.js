@@ -37,8 +37,25 @@ function normalizeParams(project = {}, config = {}, sizing = {}) {
   const roofWidth = Number(c.roof_width_m ?? 14.67);
   const roofHeight = Number(c.roof_height_m ?? 4.8);
   const roofPitch = Number(c.roof_pitch_deg ?? 12);
-  const breaker = Number(s.breaker ?? 32);
-  const acCurrent = Number(s.acCurrent ?? (dcPowerKw * 1000 / (220 * 1.732)));
+
+  const acVoltage = Number(c.ac_voltage || p.voltage || 220);
+  const supplyType = c.ac_supply_type || p.supply_type || "Bifásico";
+  const isTri = /tri|3f|3p/i.test(String(supplyType));
+  const fp = Math.max(0.01, Number(c.power_factor || p.power_factor || 0.92));
+
+  // Fórmula Exata de Corrente de Projeto (Ib) conforme ABNT NBR 5410:
+  // Se Trifásico: Ib = Potência (W) / (Tensão (V) * Math.sqrt(3) * FatorDePotencia)
+  // Se Monofásico / Bifásico: Ib = Potência (W) / (Tensão (V) * FatorDePotencia)
+  const calculatedIb = isTri
+    ? ((inverterKw * 1000 / acVoltage / Math.sqrt(3)) / fp)
+    : ((inverterKw * 1000) / (acVoltage * fp));
+  const acCurrent = Math.round(Number(s.acCurrent || calculatedIb) * 100) / 100;
+
+  // Seleção automática do calibre comercial padrão IEC/DIN (In >= Ib)
+  const calibresComerciais = [6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125, 160, 200, 225, 250, 315, 400, 500, 630];
+  const autoBreaker = calibresComerciais.find((cal) => cal >= acCurrent) || calibresComerciais[calibresComerciais.length - 1];
+  const breaker = Number(s.breaker || autoBreaker);
+
   const investment = (dcPowerKw * 1000 * 3.5) || 40425;
   const payback = annualSavings > 0 ? (investment / annualSavings).toFixed(1) : "3.5";
 
@@ -58,6 +75,10 @@ function normalizeParams(project = {}, config = {}, sizing = {}) {
     roofWidth,
     roofHeight,
     roofPitch,
+    acVoltage,
+    supplyType,
+    isTri,
+    powerFactor: fp,
     breaker,
     acCurrent,
     investment,
@@ -709,7 +730,7 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
  * 2. Diagrama Elétrico Solar
  */
 export function generateElectricalDiagramReport(project = {}, config = {}, sizing = {}) {
-  const { dcPowerKw, panelCount, moduleWp, inverterKw, breaker } = normalizeParams(project, config, sizing);
+  const { dcPowerKw, panelCount, moduleWp, inverterKw, breaker, acCurrent, isTri, acVoltage, powerFactor } = normalizeParams(project, config, sizing);
   const doc = new jsPDF("p", "mm", "a4");
   addHeader(doc, "DIAGRAMA ELÉTRICO SOLAR & STRINGS", project);
 
@@ -736,12 +757,13 @@ export function generateElectricalDiagramReport(project = {}, config = {}, sizin
   doc.text("2. Proteção e Saída CA (Conexão ao Quadro Principal)", 14, y);
   y += 4;
 
+  const cableGauge = breaker >= 160 ? "70 mm²" : breaker >= 125 ? "50 mm²" : breaker >= 100 ? "35 mm²" : breaker > 63 ? "16 mm²" : breaker > 40 ? "10 mm²" : "6 mm²";
   const acRows = [
-    ["Inversor Fotovoltaico", `${inverterKw} kW (${config?.ac_supply_type || "Bifásico"} ${config?.ac_voltage || 220}V)`, "Sobrecarga CC/CA: 1,25x"],
-    ["Corrente Nominal CA", `${(dcPowerKw * 1000 / (220 * 1.732)).toFixed(1)} A`, "I = P / (V × √3)"],
-    ["Disjuntor Termomagnético CA", `${breaker}A Curva C (${config?.ac_supply_type === "Trifásico" ? "3P" : "2P"})`, "NBR 5410 / NBR 16690"],
-    ["Condutores CA (Fase/Neutro/PE)", "6 mm² Cobre EPR/XLPE 90°C", "Queda de tensão < 1,5%"],
-    ["DPS CA (Classe II)", "DPS 275V / 20-40kA com sinalização", "Proteção contra surtos"],
+    ["Inversor Fotovoltaico", `${inverterKw} kW (${isTri ? "Trifásico" : "Bifásico/Monofásico"} ${acVoltage}V)`, `FP = ${powerFactor.toFixed(2)}`],
+    ["Corrente de Projeto (Ib)", `${acCurrent.toFixed(2)} A`, isTri ? "Ib = P / (V × √3 × FP) [NBR 5410]" : "Ib = P / (V × FP) [NBR 5410]"],
+    ["Disjuntor Termomagnético CA", `Disjuntor ${breaker}A ${isTri ? "3P" : "2P"} Curva C`, `In ≥ Ib (${breaker}A ≥ ${acCurrent.toFixed(2)}A) IEC/DIN`],
+    ["Condutores CA (Fase/Neutro/PE)", `${cableGauge} Cobre EPR/XLPE 90°C`, "Capacidade de condução Iz ≥ In"],
+    ["DPS CA (Classe II)", "DPS 275V / 20-40kA com sinalização", "Proteção contra surtos NBR 5410"],
     ["Quadro de Conexão", "Integrado no Quadro Principal de Entrada", "Quadro de Distribuição"],
   ];
   y = drawSimpleTable(doc, y, ["Elemento", "Parâmetro Calculado", "Critério Normativo"], acRows, [52, 65, 65]);
@@ -1004,11 +1026,11 @@ export function separateAndCalculateSolarBom(items = []) {
  * Constrói os quantitativos e orçamentos estruturados da BOM Solar (Lado CC vs Lado CA)
  */
 export function buildSolarBomData(project = {}, config = {}, sizing = {}) {
-  const { panelCount, moduleWp, inverterKw, breaker } = normalizeParams(project, config, sizing);
-  const acVoltage = config?.ac_voltage || project?.voltage || 220;
-  const breakerPrice = breaker >= 100 ? 185.0 : breaker >= 63 ? 118.0 : 78.9;
-  const cableGauge = breaker >= 100 ? "35mm²" : breaker > 63 ? "16mm²" : breaker > 40 ? "10mm²" : "6mm²";
-  const cableUnitPrice = breaker >= 100 ? 34.5 : breaker > 63 ? 16.9 : breaker > 40 ? 11.2 : 6.8;
+  const { panelCount, moduleWp, inverterKw, breaker, isTri, acVoltage } = normalizeParams(project, config, sizing);
+  const poleLabel = isTri ? "Tripolar 3P" : "Bipolar 2P";
+  const breakerPrice = breaker >= 200 ? 480.0 : breaker >= 100 ? 185.0 : breaker >= 63 ? 118.0 : 78.9;
+  const cableGauge = breaker >= 160 ? "70mm²" : breaker >= 125 ? "50mm²" : breaker >= 100 ? "35mm²" : breaker > 63 ? "16mm²" : breaker > 40 ? "10mm²" : "6mm²";
+  const cableUnitPrice = breaker >= 160 ? 68.0 : breaker >= 125 ? 49.0 : breaker >= 100 ? 34.5 : breaker > 63 ? 16.9 : breaker > 40 ? 11.2 : 6.8;
 
   const defaultBomItems = [
     // ESCOPO 01: ENERGIA SOLAR (Kit Gerador / Lado CC - NBR 16690)
@@ -1071,7 +1093,7 @@ export function buildSolarBomData(project = {}, config = {}, sizing = {}) {
 
     // ESCOPO 02: MATERIAIS ELÉTRICOS (Infraestrutura / Lado CA - NBR 5410)
     {
-      description: `Disjuntor Termomagnético Curva C ${breaker}A (${config?.ac_supply_type === "Trifásico" ? "Tripolar 3P" : "Bipolar 2P"})`,
+      description: `Disjuntor Termomagnético Curva C ${breaker}A (${poleLabel})`,
       manufacturer: "Schneider / WEG",
       quantity: 1,
       unit: "un",
