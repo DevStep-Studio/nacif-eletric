@@ -23,6 +23,7 @@ import {
   Search,
   Settings,
   ShieldAlert,
+  Sparkles,
   Sun,
   UserCircle,
   X,
@@ -688,6 +689,49 @@ export default function Layout() {
                   </span>
                 )}
               </Link>
+
+              {/* Destaque Especial: Planos & Assinaturas */}
+              <div className={sidebarCollapsed ? "pt-2" : "pt-2.5"}>
+                <Link
+                  to="/subscription"
+                  title={sidebarCollapsed ? "Planos & Assinaturas" : undefined}
+                  className={`group relative flex items-center overflow-hidden rounded-xl text-xs font-extrabold transition-all duration-200 ${
+                    sidebarCollapsed ? "h-10 w-10 mx-auto justify-center p-0" : "h-10 w-full justify-between px-3"
+                  } ${
+                    isItemActive("/subscription")
+                      ? "bg-gradient-to-r from-[#0F172A] via-[#13253A] to-[#0f4f49] text-white ring-2 ring-[#00d8b8] shadow-[0_6px_18px_-3px_rgba(0,216,184,0.45)]"
+                      : "bg-gradient-to-r from-[#00d8b8] via-[#00cca8] to-[#00b89c] text-[#0F172A] shadow-[0_6px_16px_-3px_rgba(0,216,184,0.45)] hover:shadow-[0_8px_22px_-2px_rgba(0,216,184,0.65)] hover:brightness-105 hover:-translate-y-0.5 active:translate-y-0 border border-[#00b498]/50"
+                  }`}
+                >
+                  <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                    <div
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110 ${
+                        isItemActive("/subscription")
+                          ? "bg-[#00d8b8]/20 text-[#00d8b8]"
+                          : "bg-[#0F172A]/12 text-[#0F172A]"
+                      }`}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </div>
+                    {!sidebarCollapsed && (
+                      <span className="truncate tracking-tight font-black">
+                        Assinaturas
+                      </span>
+                    )}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-xs transition-colors ${
+                        isItemActive("/subscription")
+                          ? "bg-[#00d8b8] text-[#0F172A]"
+                          : "bg-[#0F172A] text-[#00d8b8]"
+                      }`}
+                    >
+                      PRO
+                    </span>
+                  )}
+                </Link>
+              </div>
             </div>
           </div>
         </nav>
@@ -1176,6 +1220,32 @@ export default function Layout() {
                         </span>
                       )}
                     </Link>
+
+                    <div className="pt-2">
+                      <Link
+                        to="/subscription"
+                        onClick={() => setMobileDrawerOpen(false)}
+                        className={`flex h-10 items-center justify-between rounded-xl px-3 text-xs font-black transition-all ${
+                          isItemActive("/subscription")
+                            ? "bg-gradient-to-r from-[#0F172A] via-[#13253A] to-[#0f4f49] text-white ring-2 ring-[#00d8b8] shadow-md"
+                            : "bg-gradient-to-r from-[#00d8b8] via-[#00cca8] to-[#00b89c] text-[#0F172A] shadow-md"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Sparkles className="h-4 w-4" />
+                          <span>Assinaturas</span>
+                        </div>
+                        <span
+                          className={`rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${
+                            isItemActive("/subscription")
+                              ? "bg-[#00d8b8] text-[#0F172A]"
+                              : "bg-[#0F172A] text-[#00d8b8]"
+                          }`}
+                        >
+                          PRO
+                        </span>
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </nav>
