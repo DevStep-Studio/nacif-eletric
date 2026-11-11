@@ -17,6 +17,7 @@ import {
   HelpCircle,
   Home,
   LayoutGrid,
+  Lock,
   LogOut,
   Menu,
   Plus,
@@ -30,6 +31,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { isAdminUser, isSuperAdmin } from "@/lib/professionalAccess";
+import { canAccessModule } from "@/lib/subscriptionPlans";
 import { useBranding, useNotifications, formatNotificationTime } from "@/lib/appPreferences";
 import { backend } from "@/api/backendClient";
 import { ISSUES_CHANGED_EVENT } from "@/lib/issuePersistence";
@@ -138,6 +140,13 @@ export default function Layout() {
   const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const [activeUser, setActiveUser] = useState(user);
+  const accessMap = useMemo(() => ({
+    plant: canAccessModule(user, "plant").allowed,
+    panel: canAccessModule(user, "panel").allowed,
+    solar: canAccessModule(user, "solar").allowed,
+    unifilar: canAccessModule(user, "unifilar").allowed,
+    budget: canAccessModule(user, "budget").allowed,
+  }), [user]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
@@ -549,6 +558,9 @@ export default function Layout() {
                   <Compass className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/planta-ia") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Planta Elétrica</span>}
                 </div>
+                {!sidebarCollapsed && !accessMap.plant && (
+                  <Lock className="h-3 w-3 shrink-0 text-slate-400 group-hover:text-amber-500" />
+                )}
               </Link>
 
               <Link
@@ -566,6 +578,9 @@ export default function Layout() {
                   <LayoutGrid className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/panel-generator") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Quadro Elétrico</span>}
                 </div>
+                {!sidebarCollapsed && !accessMap.panel && (
+                  <Lock className="h-3 w-3 shrink-0 text-slate-400 group-hover:text-amber-500" />
+                )}
               </Link>
 
               <Link
@@ -583,6 +598,9 @@ export default function Layout() {
                   <Sun className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/solar-project") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Projeto Solar</span>}
                 </div>
+                {!sidebarCollapsed && !accessMap.solar && (
+                  <Lock className="h-3 w-3 shrink-0 text-slate-400 group-hover:text-amber-500" />
+                )}
               </Link>
             </div>
           </div>
@@ -613,6 +631,9 @@ export default function Layout() {
                   <GitBranch className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/unifilar") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Diagrama Unifilar</span>}
                 </div>
+                {!sidebarCollapsed && !accessMap.unifilar && (
+                  <Lock className="h-3 w-3 shrink-0 text-slate-400 group-hover:text-amber-500" />
+                )}
               </Link>
 
               <Link
@@ -664,7 +685,9 @@ export default function Layout() {
                   <FileSpreadsheet className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${isItemActive("/budget") ? "text-[#00d8b8]" : "text-[#64748B] group-hover:text-[#0F172A]"}`} />
                   {!sidebarCollapsed && <span className="truncate">Orçamento</span>}
                 </div>
-                
+                {!sidebarCollapsed && !accessMap.budget && (
+                  <Lock className="h-3 w-3 shrink-0 text-slate-400 group-hover:text-amber-500" />
+                )}
               </Link>
 
               <Link
@@ -1140,28 +1163,37 @@ export default function Layout() {
                     <Link
                       to={effectiveProjectId ? `/planta-ia?project=${effectiveProjectId}` : "/planta-ia"}
                       onClick={() => setMobileDrawerOpen(false)}
-                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
+                      className="flex h-10 items-center justify-between rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
                     >
-                      <Compass className="h-4 w-4" />
-                      <span>Planta Elétrica</span>
+                      <div className="flex items-center gap-3">
+                        <Compass className="h-4 w-4" />
+                        <span>Planta Elétrica</span>
+                      </div>
+                      {!accessMap.plant && <Lock className="h-3 w-3 text-slate-400" />}
                     </Link>
                     <Link
                       to={effectiveProjectId ? `/panel-generator?project=${effectiveProjectId}` : "/panel-generator"}
                       onClick={() => setMobileDrawerOpen(false)}
-                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
+                      className="flex h-10 items-center justify-between rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
                     >
-                      <LayoutGrid className="h-4 w-4" />
-                      <span>Quadro Elétrico</span>
+                      <div className="flex items-center gap-3">
+                        <LayoutGrid className="h-4 w-4" />
+                        <span>Quadro Elétrico</span>
+                      </div>
+                      {!accessMap.panel && <Lock className="h-3 w-3 text-slate-400" />}
                     </Link>
                     <Link
                       to={effectiveProjectId ? `/solar-project?project=${effectiveProjectId}` : "/solar-project"}
                       onClick={() => setMobileDrawerOpen(false)}
-                      className={`flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold ${
+                      className={`flex h-10 items-center justify-between rounded-xl px-3 text-xs font-bold ${
                         isItemActive("/solar-project") ? "bg-[#E8FCF8] text-[#0f4f49]" : "text-[#475467] hover:bg-[#F1F5F9]"
                       }`}
                     >
-                      <Sun className="h-4 w-4 text-[#00d8b8]" />
-                      <span>Projeto Solar</span>
+                      <div className="flex items-center gap-3">
+                        <Sun className="h-4 w-4 text-[#00d8b8]" />
+                        <span>Projeto Solar</span>
+                      </div>
+                      {!accessMap.solar && <Lock className="h-3 w-3 text-slate-400" />}
                     </Link>
                   </div>
                 </div>
@@ -1174,10 +1206,13 @@ export default function Layout() {
                     <Link
                       to={effectiveProjectId ? `/unifilar?project=${effectiveProjectId}` : "/unifilar"}
                       onClick={() => setMobileDrawerOpen(false)}
-                      className="flex h-10 items-center gap-3 rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
+                      className="flex h-10 items-center justify-between rounded-xl px-3 text-xs font-bold text-[#475467] hover:bg-[#F1F5F9]"
                     >
-                      <GitBranch className="h-4 w-4" />
-                      <span>Diagrama Unifilar</span>
+                      <div className="flex items-center gap-3">
+                        <GitBranch className="h-4 w-4" />
+                        <span>Diagrama Unifilar</span>
+                      </div>
+                      {!accessMap.unifilar && <Lock className="h-3 w-3 text-slate-400" />}
                     </Link>
                     <Link
                       to="/calculator"

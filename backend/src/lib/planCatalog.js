@@ -240,7 +240,7 @@ export const LEGACY_PLANS = [
       [FEATURE_KEYS.CUSTOM_TEMPLATES]: 0,
     },
     modules: {
-      plant: "preview",
+      plant: "restricted",
       panel: "restricted",
       unifilar: "restricted",
       solar: false,
@@ -248,7 +248,7 @@ export const LEGACY_PLANS = [
       team: false,
       calculator: "full",
       nbr_library: "full",
-      budget: "preview",
+      budget: "restricted",
     },
     features: [
       "Projetos iniciais",
@@ -341,29 +341,120 @@ export const LEGACY_PLANS = [
 
 // Shared by the API and UI. Unknown plans/modules never unlock commercial access.
 export const MODULE_ALIASES = {
-  circuit_editor: "plant", phase_balance: "calculator", electrical_tools: "calculator",
-  memorial: "unifilar", solar_project: "solar", ai_assistant: "scanner", components: "nbr_library",
+  circuit_editor: "plant",
+  phase_balance: "panel",
+  electrical_tools: "calculator",
+  memorial: "unifilar",
+  solar_project: "solar",
+  ai_assistant: "scanner",
+  components: "nbr_library",
 };
+
 export function getCatalogPlan(code) {
   return [...COMMERCIAL_PLANS, ...LEGACY_PLANS].find(plan => plan.code === code || plan.legacyCodes?.includes(code)) || LEGACY_PLANS[0];
 }
+
 export function catalogModuleLevel(plan, key) {
   const moduleKey = MODULE_ALIASES[key] || key;
-  return moduleKey === "scanner" ? plan?.limits?.aiScans > 0 ? "full" : false : plan?.modules?.[moduleKey] || false;
+  return moduleKey === "scanner" ? (plan?.limits?.aiScans > 0 ? "full" : false) : (plan?.modules?.[moduleKey] || false);
 }
+
 export function catalogModuleAccess(code, key, options = {}) {
-  if (options.isAdmin) return { allowed: true, level: "full", isAcademic: false, isFreeRestricted: false, watermark: null, message: null, requiredPlans: [] };
+  if (options.isAdmin) {
+    return {
+      allowed: true,
+      level: "full",
+      isAcademic: false,
+      isFreeRestricted: false,
+      watermark: null,
+      message: null,
+      requiredPlans: [],
+      discipline: "Administrador",
+      norm: null,
+    };
+  }
+
   const plan = getCatalogPlan(code);
-  const academicValid = Boolean(options.academicStatus && options.academicStatus !== "expired" && options.academicStatus !== "rejected" && (!options.academicValidUntil || Date.parse(options.academicValidUntil) > (options.now ?? Date.now())));
+  const academicValid = Boolean(
+    options.academicStatus &&
+    options.academicStatus !== "expired" &&
+    options.academicStatus !== "rejected" &&
+    (!options.academicValidUntil || Date.parse(options.academicValidUntil) > (options.now ?? Date.now()))
+  );
   const level = catalogModuleLevel(plan, key);
-  const academicBlocked = plan.isAcademic && !academicValid;
-  const allowed = Boolean(level && level !== "restricted" && !academicBlocked);
+  const academicBlocked = Boolean(plan.isAcademic && !academicValid);
   const isFreeRestricted = plan.code === "free";
+  // Bloqueio rigoroso: recursos 'restricted', 'preview' ou falsos exigem assinatura adequada
+  const allowed = Boolean(level && level !== "restricted" && level !== "preview" && !academicBlocked);
+
+  // Metadados técnicos específicos de cada norma para orientar o usuário com precisão:
+  const isSolar = key === "solar" || key === "solar_3d" || key === "solar_project";
+  const isElectrical = key === "plant" || key === "panel" || key === "unifilar" || key === "circuit_editor" || key === "phase_balance" || key === "memorial";
+  const isAi = key === "scanner" || key === "ai_assistant";
+
+  let norm = null;
+  let discipline = "Recurso Técnico";
+  let requiredPlans = [];
+  let primaryPlanCode = "completo";
+  let primaryPlanName = "Nacif Completo";
+  let primaryPlanPrice = "R$ 210,00/mês";
+  let message = null;
+
+  if (isSolar) {
+    norm = "ABNT NBR 16690 / GD (Arranjos Fotovoltaicos)";
+    discipline = "Energia Solar Fotovoltaica";
+    requiredPlans = ["solar", "completo"];
+    primaryPlanCode = "solar";
+    primaryPlanName = "Nacif Solar";
+    primaryPlanPrice = "R$ 149,90/mês";
+    if (plan.code === "eletrico") {
+      message = "O módulo de Energia Solar Fotovoltaica (NBR 16690) não está incluído no plano Nacif Elétrico. Faça o upgrade para o plano Nacif Solar ou Nacif Completo para desbloquear dimensionamento fotovoltaico, arranjos de strings e memorial solar.";
+    } else {
+      message = "O módulo de Energia Solar Fotovoltaica (NBR 16690) é exclusivo para assinantes dos planos Nacif Solar ou Nacif Completo.";
+    }
+  } else if (isElectrical) {
+    norm = "ABNT NBR 5410 (Instalações Elétricas de Baixa Tensão)";
+    discipline = "Instalações Elétricas NBR 5410";
+    requiredPlans = ["eletrico", "completo"];
+    primaryPlanCode = "eletrico";
+    primaryPlanName = "Nacif Elétrico";
+    primaryPlanPrice = "R$ 149,90/mês";
+    if (plan.code === "solar") {
+      message = "O módulo de Instalações Elétricas (NBR 5410) não está incluído no plano Nacif Solar. Faça o upgrade para o plano Nacif Elétrico ou Nacif Completo para desbloquear desenho arquitetônico de circuitos, comandos e quadros de distribuição.";
+    } else {
+      message = "O módulo de Instalações Elétricas (NBR 5410) é exclusivo para assinantes dos planos Nacif Elétrico ou Nacif Completo.";
+    }
+  } else if (isAi) {
+    norm = "Inteligência Artificial Aplicada";
+    discipline = "Assistente & Scanner IA";
+    requiredPlans = ["eletrico", "solar", "completo"];
+    primaryPlanCode = "completo";
+    primaryPlanName = "Nacif Completo";
+    primaryPlanPrice = "R$ 210,00/mês";
+    message = "As ferramentas de Inteligência Artificial e Scanner Técnico são exclusivas para assinantes ativos da Nacif Energy.";
+  } else {
+    requiredPlans = COMMERCIAL_PLANS.filter((p) => {
+      const val = catalogModuleLevel(p, key);
+      return val && val !== "restricted" && val !== "preview";
+    }).map((p) => p.code);
+    message = academicBlocked
+      ? "Atualize seu comprovante acadêmico para utilizar os recursos do plano Estudante."
+      : "Seu plano atual não inclui este recurso. Ative uma assinatura para desbloquear.";
+  }
+
   return {
-    allowed, level: allowed ? level : "restricted", isAcademic: !!plan.isAcademic, isFreeRestricted,
+    allowed,
+    level: allowed ? level : "restricted",
+    isAcademic: Boolean(plan.isAcademic),
+    isFreeRestricted,
     watermark: plan.isAcademic ? "Versão Acadêmica — Uso Educacional" : isFreeRestricted ? "Versão de Avaliação Gratuita" : null,
-    message: allowed ? null : academicBlocked ? "Atualize seu comprovante acadêmico para utilizar os recursos do plano Estudante." : "Seu plano não inclui este módulo. Consulte os planos disponíveis.",
-    requiredPlans: COMMERCIAL_PLANS.filter(p => { const value = catalogModuleLevel(p, key); return value && value !== "restricted"; }).map(p => p.code),
+    message: allowed ? null : message,
+    requiredPlans,
+    primaryPlanCode,
+    primaryPlanName,
+    primaryPlanPrice,
+    discipline,
+    norm,
   };
 }
 export function planComparisonValue(plan, key) {

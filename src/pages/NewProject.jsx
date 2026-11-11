@@ -1,13 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, ArrowLeft, Plus, Sun, Zap } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight, Lock, Plus, Sun, Zap } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { checkProjectCreationAllowed, resolveEffectiveSubscription } from "@/lib/subscriptionPlans";
+import { canAccessModule, checkProjectCreationAllowed, resolveEffectiveSubscription } from "@/lib/subscriptionPlans";
 import PageHeader from "@/components/PageHeader";
 import SolarProjectWizard from "@/components/solar/wizard/SolarProjectWizard";
 
@@ -16,6 +16,9 @@ export default function NewProject() {
   const { user } = useAuth();
   const effectiveSub = resolveEffectiveSubscription(user);
   const defaultDiscipline = effectiveSub.plan.code === "solar" ? "Solar" : "Instalações Elétricas";
+
+  const electricalAccess = useMemo(() => canAccessModule(user, "plant"), [user]);
+  const solarAccess = useMemo(() => canAccessModule(user, "solar"), [user]);
 
   const [form, setForm] = useState({
     name: "",
@@ -38,6 +41,8 @@ export default function NewProject() {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  const currentAccess = form.project_type === "Solar" ? solarAccess : electricalAccess;
+
   const handleSave = async () => {
     if (!form.name.trim()) {
       setErrorMsg("O nome do projeto é obrigatório.");
@@ -45,7 +50,10 @@ export default function NewProject() {
     }
 
     const access = checkProjectCreationAllowed(user, projectsCount, form.project_type);
-    if (!access.allowed) { setErrorMsg(access.reason); return; }
+    if (!access.allowed) {
+      setErrorMsg(access.reason || "Você precisa de uma assinatura ativa para criar projetos nesta disciplina.");
+      return;
+    }
     setSaving(true);
     setErrorMsg("");
     try {
@@ -92,6 +100,8 @@ export default function NewProject() {
               tag: "NBR 5410",
               description: "Quadros de distribuição, circuitos, proteções e diagrama unifilar.",
               icon: Zap,
+              access: electricalAccess,
+              planBadge: "Nacif Elétrico",
             },
             {
               value: "Solar",
@@ -99,10 +109,13 @@ export default function NewProject() {
               tag: "Geração Distribuída",
               description: "Leitura de conta por IA, dimensionamento, telhado 3D e memorial.",
               icon: Sun,
+              access: solarAccess,
+              planBadge: "Nacif Solar",
             },
           ].map((item) => {
             const Icon = item.icon;
             const active = form.project_type === item.value;
+            const isLocked = !item.access.allowed;
             return (
               <button
                 key={item.value}
@@ -132,6 +145,12 @@ export default function NewProject() {
                       <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-slate-600">
                         {item.tag}
                       </span>
+                      {isLocked && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-100/90 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-800">
+                          <Lock className="h-2.5 w-2.5" />
+                          {item.planBadge}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 text-xs text-slate-500 font-medium leading-relaxed">
                       {item.description}
@@ -155,10 +174,69 @@ export default function NewProject() {
         </div>
       </div>
 
-      {form.project_type === "Solar" ? (
-        <div className="mx-auto w-full max-w-4xl">
-          <SolarProjectWizard />
+      {/* Alerta de Recurso Bloqueado para usuários sem o plano correspondente */}
+      {!currentAccess.allowed && (
+        <div className="mx-auto w-full max-w-4xl rounded-2xl border border-amber-200/90 bg-gradient-to-r from-amber-50/90 via-white to-amber-50/50 p-4 text-slate-800 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm mt-0.5">
+                <Lock className="h-4 w-4" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-800">
+                    {form.project_type === "Solar" ? "ABNT NBR 16690 · Energia Solar" : "ABNT NBR 5410 · Instalações Elétricas"}
+                  </span>
+                  <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[9px] font-black text-amber-900">
+                    Assinatura Obrigatória
+                  </span>
+                </div>
+                <p className="text-xs font-medium text-slate-600 leading-relaxed max-w-2xl">
+                  {currentAccess.message}
+                </p>
+              </div>
+            </div>
+
+            <Button
+              asChild
+              size="sm"
+              className="shrink-0 h-9 rounded-xl bg-[#00D8B8] hover:bg-[#00c5a7] active:bg-[#00b397] text-slate-950 font-black text-xs shadow-[0_2px_8px_rgba(0,216,184,0.25)]"
+            >
+              <Link to="/subscription" className="flex items-center gap-1.5">
+                <span>Assinar Plano</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
         </div>
+      )}
+
+      {form.project_type === "Solar" ? (
+        !solarAccess.allowed ? (
+          <div className="mx-auto w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm space-y-4">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0E1726] border border-[#00D8B8]/30 text-[#00D8B8] shadow-md">
+              <Sun className="h-7 w-7" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-lg font-black text-slate-900">Módulo Fotovoltaico (NBR 16690) Bloqueado</h2>
+              <p className="text-xs font-medium text-slate-600 max-w-md mx-auto">
+                Para criar projetos fotovoltaicos, leitura de contas por IA, telhado 3D e memorial descritivo solar, ative o plano Nacif Solar ou Nacif Completo.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Button asChild className="h-11 rounded-xl bg-[#00D8B8] hover:bg-[#00c5a7] text-slate-950 font-extrabold px-6 shadow-md">
+                <Link to="/subscription" className="flex items-center gap-2">
+                  <span>Ativar Plano Solar</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-4xl">
+            <SolarProjectWizard />
+          </div>
+        )
       ) : (
         <div className="mx-auto w-full max-w-2xl space-y-4 p-6 rounded-3xl bg-white border border-slate-200 shadow-sm">
           {errorMsg && (
@@ -167,7 +245,7 @@ export default function NewProject() {
                 <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
                 <span>{errorMsg}</span>
               </div>
-              {(errorMsg.toLowerCase().includes("upgrade") || errorMsg.toLowerCase().includes("plano")) && (
+              {(errorMsg.toLowerCase().includes("upgrade") || errorMsg.toLowerCase().includes("plano") || errorMsg.toLowerCase().includes("assinatura")) && (
                 <div className="pt-1">
                   <Button asChild size="sm" className="h-8 rounded-[6px] bg-[#00d8b8] text-[#0f172a] hover:bg-[#00bda1] font-extrabold text-xs">
                     <Link to="/subscription">Ver planos disponíveis</Link>
@@ -239,13 +317,25 @@ export default function NewProject() {
               </Select>
             </div>
           </div>
-          <Button
-            onClick={handleSave}
-            disabled={!form.name || saving}
-            className="w-full h-12 text-sm font-black bg-primary text-primary-foreground shadow-md hover:bg-primary/90 rounded-xl"
-          >
-            {saving ? "Salvando..." : "Criar Projeto e Abrir Editor"}
-          </Button>
+          {electricalAccess.allowed ? (
+            <Button
+              onClick={handleSave}
+              disabled={!form.name || saving}
+              className="w-full h-12 text-sm font-black bg-primary text-primary-foreground shadow-md hover:bg-primary/90 rounded-xl"
+            >
+              {saving ? "Salvando..." : "Criar Projeto e Abrir Editor"}
+            </Button>
+          ) : (
+            <Button
+              asChild
+              className="w-full h-12 text-sm font-black bg-[#00D8B8] hover:bg-[#00c5a7] text-slate-950 shadow-md rounded-xl"
+            >
+              <Link to="/subscription" className="flex items-center justify-center gap-2">
+                <Lock className="h-4 w-4" />
+                <span>Assinar Nacif Elétrico para Criar Projeto</span>
+              </Link>
+            </Button>
+          )}
         </div>
       )}
     </div>

@@ -1223,7 +1223,19 @@ const projectEntity = {
       return cloneLocal(project);
     }
 
-    return request("/api/projects", { method: "POST", body: data });
+    try {
+      return await request("/api/projects", { method: "POST", body: data });
+    } catch (err) {
+      if (err?.message && /city/i.test(err.message) && /unrecognized/i.test(err.message)) {
+        const { city, ...safePayload } = data || {};
+        const fallbackAddress = [safePayload.address, city].filter(Boolean).join(", ");
+        return await request("/api/projects", {
+          method: "POST",
+          body: { ...safePayload, address: fallbackAddress },
+        });
+      }
+      throw err;
+    }
   },
   async update(id, data) {
     if (isLocalAuthMode) {
@@ -1236,7 +1248,19 @@ const projectEntity = {
       return cloneLocal(updated);
     }
     await this.get(id);
-    return request(`/api/projects/${id}`, { method: "PATCH", body: data });
+    try {
+      return await request(`/api/projects/${id}`, { method: "PATCH", body: data });
+    } catch (err) {
+      if (err?.message && /city/i.test(err.message) && /unrecognized/i.test(err.message)) {
+        const { city, ...safePayload } = data || {};
+        const fallbackAddress = [safePayload.address, city].filter(Boolean).join(", ");
+        return await request(`/api/projects/${id}`, {
+          method: "PATCH",
+          body: { ...safePayload, address: fallbackAddress },
+        });
+      }
+      throw err;
+    }
   },
   async duplicate(id) {
     if (isLocalAuthMode) {
