@@ -211,41 +211,57 @@ export function buildTechnicalMemorialData(project = {}, config = {}, sizing = {
 }
 
 function addHeader(doc, title, project) {
+  // Barra de fundo executiva escura (#0E1726)
   doc.setFillColor(...BRAND_DARK);
-  doc.rect(0, 0, 210, 24, "F");
+  doc.rect(0, 0, 210, 24.3, "F");
 
-  // Símbolo Oficial Nacif Energy (proporções 504:304 preservadas, escala destacada)
+  // Filete luminoso de destaque inferior em ciano/turquesa institucional (#00D8B8)
+  doc.setFillColor(0, 216, 184);
+  doc.rect(0, 24.3, 210, 0.7, "F");
+
+  // Emblema container da logomarca Nacif com destaque e contraste profissional
   try {
-    doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 14, 5.4, 22, 13.2, undefined, "FAST");
+    doc.setFillColor(19, 32, 53);
+    doc.roundedRect(13.5, 3.8, 17.2, 16.5, 2, 2, "F");
+    doc.setDrawColor(0, 216, 184);
+    doc.setLineWidth(0.35);
+    doc.roundedRect(13.5, 3.8, 17.2, 16.5, 2, 2, "S");
+
+    // Símbolo Oficial Nacif Energy (proporções 269:251 preservadas, pureza ciano sobre transparente)
+    doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 14.8, 4.8, 14.6, 13.6, undefined, "FAST");
   } catch {
     // Fallback gracioso
   }
 
-  // Nome oficial da marca com destaque e tipografia imponente
+  // Nome oficial da marca com destaque e tipografia institucional: NACIF (branco) + ENERGY (ciano)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
+  doc.setFontSize(13.5);
   doc.setTextColor(255, 255, 255);
-  doc.text("NACIF ENERGY", 39.5, 11.5);
+  doc.text("NACIF", 34.5, 11.2);
+  const nacifWidth = doc.getTextWidth("NACIF");
 
-  // Slogan institucional em verde-turquesa perfeitamente alinhado
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.8);
   doc.setTextColor(0, 216, 184);
-  doc.text("DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR", 39.5, 16.5);
+  doc.text("ENERGY", 34.5 + nacifWidth + 1.8, 11.2);
 
-  // Lado direito: Título, Projeto, Localização e Data (alinhados na margem direita de 196mm)
+  // Slogan institucional perfeitamente alinhado abaixo do logotipo
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(6.6);
+  doc.setTextColor(0, 216, 184);
+  doc.text("DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR", 34.5, 16.5);
+
+  // Lado direito: Título do Documento, Projeto e Metadados rigorosamente alinhados na margem de 196mm
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.8);
   doc.setTextColor(255, 255, 255);
-  doc.text(title, 196, 9.0, { align: "right" });
+  doc.text(title, 196, 8.8, { align: "right" });
 
   const projectName = project?.name || "Projeto Solar";
-  const displayProject = projectName.length > 38 ? projectName.slice(0, 35) + "..." : projectName;
+  const displayProject = projectName.length > 40 ? projectName.slice(0, 37) + "..." : projectName;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(200, 210, 225);
-  doc.text(`Projeto: ${displayProject}`, 196, 13.5, { align: "right" });
+  doc.setFontSize(7.8);
+  doc.setTextColor(203, 213, 225);
+  doc.text(`Projeto: ${displayProject}`, 196, 13.6, { align: "right" });
 
   const locationText = [project?.city, project?.state].filter(Boolean).join(" / ") || project?.address || "";
   const dateStr = new Date().toLocaleDateString("pt-BR");
@@ -253,8 +269,8 @@ function addHeader(doc, title, project) {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.0);
-  doc.setTextColor(170, 185, 205);
-  doc.text(metaText, 196, 17.5, { align: "right" });
+  doc.setTextColor(148, 163, 184);
+  doc.text(metaText, 196, 17.6, { align: "right" });
 }
 
 function addFooter(doc, pageNum = 1, totalPages = 1) {
@@ -1557,14 +1573,16 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
         @page { size: A4 portrait; margin: 12mm 15mm; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; background: #fff; }
-        .header { display: flex; justify-content: space-between; align-items: center; background: #0e1726; color: #fff; padding: 12px 16px; border-radius: 0; margin-bottom: 14px; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #0e1726; color: #fff; padding: 10px 16px; border-radius: 0; margin-bottom: 14px; border-bottom: 3px solid #00d8b8; }
         .logo-box { display: flex; align-items: center; gap: 12px; }
-        .logo-img { width: 50px; height: 30px; object-fit: contain; }
-        .logo-title { font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.2px; line-height: 1.1; }
-        .logo-sub { font-size: 7.5px; font-weight: 700; color: #00d8b8; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; }
-        .doc-title { text-align: right; font-size: 10.5px; font-weight: 800; color: #ffffff; text-transform: uppercase; }
-        .doc-meta { text-align: right; font-size: 8.5px; color: #cbd5e1; margin-top: 1px; }
-        .doc-submeta { text-align: right; font-size: 7.5px; color: #94a3b8; }
+        .logo-emblem { background: #132035; border: 1.5px solid #00d8b8; border-radius: 6px; padding: 4px; display: flex; align-items: center; justify-content: center; width: 44px; height: 42px; }
+        .logo-img { width: 36px; height: 34px; object-fit: contain; }
+        .logo-title { font-size: 17px; font-weight: 800; color: #ffffff; letter-spacing: -0.2px; line-height: 1.1; }
+        .logo-sub { font-size: 8px; font-weight: 700; color: #00d8b8; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 3px; }
+        .doc-info-box { text-align: right; }
+        .doc-title { text-align: right; font-size: 11px; font-weight: 800; color: #ffffff; text-transform: uppercase; letter-spacing: 0.3px; }
+        .doc-meta { text-align: right; font-size: 8.8px; color: #cbd5e1; margin-top: 2px; }
+        .doc-submeta { text-align: right; font-size: 7.8px; color: #94a3b8; margin-top: 2px; }
         
         .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
         .kpi-card { border: 1px solid #cbd5e1; border-radius: 0; padding: 10px; background: #f8fafc; }
@@ -1605,14 +1623,16 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
       ${exportAuth.watermark ? `<div style="position:fixed;bottom:3mm;left:0;width:100%;text-align:center;color:#777;font-size:10px;z-index:9999">${String(exportAuth.watermark).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>` : ""}
       <div class="header">
         <div class="logo-box">
-          <img src="${NACIF_SYMBOL_BASE64}" class="logo-img" alt="Nacif Energy" />
+          <div class="logo-emblem">
+            <img src="${NACIF_SYMBOL_BASE64}" class="logo-img" alt="Nacif Energy" />
+          </div>
           <div>
-            <div class="logo-title">NACIF ENERGY</div>
-            <div class="logo-sub">DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR</div>
+            <div class="logo-title">NACIF <span style="color:#00d8b8">ENERGY</span></div>
+            <div class="logo-sub">DA PLANTA AO SOL · TUDO EM UM SÓ LUGAR</div>
           </div>
         </div>
-        <div>
-          <div class="doc-title">RELATÓRIO TÉCNICO EXECUTIVO</div>
+        <div class="doc-info-box">
+          <div class="doc-title">RELATÓRIO TÉCNICO EXECUTIVO SOLAR</div>
           <div class="doc-meta">Projeto: ${project?.name || "Projeto Solar"}</div>
           <div class="doc-submeta">${[project?.city, project?.state].filter(Boolean).join(" / ") || project?.address ? `${[project?.city, project?.state].filter(Boolean).join(" / ") || project?.address} · ` : ""}${new Date().toLocaleDateString("pt-BR")}</div>
         </div>
