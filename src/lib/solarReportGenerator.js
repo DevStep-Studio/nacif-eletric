@@ -270,32 +270,58 @@ function addFooter(doc, pageNum = 1, totalPages = 1) {
   doc.text(`Página ${pageNum} de ${totalPages}`, 196, pageHeight - 7, { align: "right" });
 }
 
-function drawSimpleTable(doc, startY, headers, rows, colWidths) {
+function drawSimpleTable(doc, startY, headers, rows, colWidths, colAlignments = []) {
   let y = startY;
-  const rowHeight = 7;
-  const headerHeight = 7.5;
+  const baseRowHeight = 7.6;
+  const headerHeight = 7.8;
   const totalWidth = colWidths.reduce((a, b) => a + b, 0);
 
-  // Cabeçalho da tabela com cantos rigorosamente retos e quadrados
+  // Cabeçalho da tabela com cantos rigorosamente retos e alinhamento coordenado
   doc.setFillColor(...BRAND_BLUE);
   doc.rect(14, y, totalWidth, headerHeight, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.8);
+  doc.setFontSize(7.6);
   doc.setTextColor(255, 255, 255);
 
   let curX = 14;
   headers.forEach((h, i) => {
-    doc.text(String(h), curX + 2.5, y + 5.2);
-    curX += colWidths[i];
+    const align = colAlignments[i] || "left";
+    const w = colWidths[i];
+    if (align === "center") {
+      doc.text(String(h), curX + w / 2, y + 5.1, { align: "center", maxWidth: Math.max(4, w - 2) });
+    } else if (align === "right") {
+      doc.text(String(h), curX + w - 2.8, y + 5.1, { align: "right", maxWidth: Math.max(4, w - 2) });
+    } else {
+      doc.text(String(h), curX + 2.8, y + 5.1, { align: "left", maxWidth: Math.max(4, w - 2) });
+    }
+    curX += w;
   });
   y += headerHeight;
 
-  // Linhas com cantos quadrados e alinhamento simétrico
+  // Linhas com cantos quadrados, quebra inteligente de texto e alinhamento simétrico
   rows.forEach((row, rIndex) => {
     if (y > 270) {
       doc.addPage();
       y = 28;
     }
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+
+    // Pré-calcula quebra de linhas para cada célula para definir a altura necessária da linha
+    const cellLines = row.map((cell, cIdx) => {
+      const text = String(cell ?? "—");
+      const w = colWidths[cIdx];
+      const align = colAlignments[cIdx] || "left";
+      if (align === "left") {
+        return doc.splitTextToSize(text, Math.max(8, w - 4));
+      }
+      return [text];
+    });
+
+    const maxLines = Math.max(1, ...cellLines.map((l) => l.length));
+    const rowHeight = maxLines > 1 ? maxLines * 3.6 + 4.0 : baseRowHeight;
+
     const isEven = rIndex % 2 === 0;
     doc.setFillColor(isEven ? 248 : 255, isEven ? 250 : 255, isEven ? 252 : 255);
     doc.rect(14, y, totalWidth, rowHeight, "F");
@@ -316,13 +342,33 @@ function drawSimpleTable(doc, startY, headers, rows, colWidths) {
 
     const isTotalRow = String(row[0] || "").toLowerCase().includes("total");
     doc.setFont("helvetica", isTotalRow ? "bold" : "normal");
-    doc.setFontSize(7.5);
+    doc.setFontSize(7.2);
     doc.setTextColor(isTotalRow ? BRAND_DARK[0] : 30, isTotalRow ? BRAND_DARK[1] : 40, isTotalRow ? BRAND_DARK[2] : 55);
 
     curX = 14;
     row.forEach((cell, cIndex) => {
-      doc.text(String(cell ?? "—"), curX + 2.5, y + 4.8);
-      curX += colWidths[cIndex];
+      const align = colAlignments[cIndex] || "left";
+      const w = colWidths[cIndex];
+      const lines = cellLines[cIndex];
+
+      if (align === "center") {
+        const textY = y + rowHeight / 2 + 1.2;
+        doc.text(lines[0] || "—", curX + w / 2, textY, { align: "center", maxWidth: Math.max(4, w - 2) });
+      } else if (align === "right") {
+        const textY = y + rowHeight / 2 + 1.2;
+        doc.text(lines[0] || "—", curX + w - 2.8, textY, { align: "right", maxWidth: Math.max(4, w - 2) });
+      } else {
+        if (lines.length <= 1) {
+          const textY = y + rowHeight / 2 + 1.2;
+          doc.text(lines[0] || "—", curX + 2.8, textY, { align: "left", maxWidth: Math.max(4, w - 3.5) });
+        } else {
+          const startYText = y + (rowHeight - (lines.length - 1) * 3.5) / 2 + 0.9;
+          lines.forEach((l, lIdx) => {
+            doc.text(l, curX + 2.8, startYText + lIdx * 3.5, { align: "left", maxWidth: Math.max(4, w - 3.5) });
+          });
+        }
+      }
+      curX += w;
     });
     y += rowHeight;
   });
@@ -332,7 +378,7 @@ function drawSimpleTable(doc, startY, headers, rows, colWidths) {
   doc.setLineWidth(0.3);
   doc.rect(14, startY, totalWidth, y - startY, "D");
 
-  return y + 4;
+  return y + 4.5;
 }
 
 /**
@@ -967,7 +1013,7 @@ export function buildSolarBomData(project = {}, config = {}, sizing = {}) {
       scope: "ESCOPO_01_CC",
     },
     {
-      description: "Estrutura de Fixação em Alumínio para Telhado Cerâmico / Metálico",
+      description: "Estrutura de Fixação em Alumínio p/ Telhado Cerâmico / Metálico",
       manufacturer: "Perfil + Ganchos Inox",
       quantity: panelCount,
       unit: "conj",
@@ -1009,7 +1055,7 @@ export function buildSolarBomData(project = {}, config = {}, sizing = {}) {
 
     // ESCOPO 02: MATERIAIS ELÉTRICOS (Infraestrutura / Lado CA - NBR 5410)
     {
-      description: `Disjuntor Termomagnético Bipolar/Tripolar Curva C ${breaker}A`,
+      description: `Disjuntor Termomagnético Curva C ${breaker}A (${config?.ac_supply_type === "Trifásico" ? "Tripolar 3P" : "Bipolar 2P"})`,
       manufacturer: "Schneider / WEG",
       quantity: 1,
       unit: "un",
@@ -1017,7 +1063,7 @@ export function buildSolarBomData(project = {}, config = {}, sizing = {}) {
       scope: "ESCOPO_02_CA",
     },
     {
-      description: "Dispositivo de Proteção contra Surtos (DPS) CA Classe II 275V 20/40kA",
+      description: "DPS CA Classe II 275V 20/40kA (Proteção Surtos)",
       manufacturer: "Clamper / WEG",
       quantity: 2,
       unit: "un",
@@ -1025,7 +1071,7 @@ export function buildSolarBomData(project = {}, config = {}, sizing = {}) {
       scope: "ESCOPO_02_CA",
     },
     {
-      description: `Cabo de Cobre Flexível 750V ${cableGauge} para Saída CA (Fases / Neutro / PE)`,
+      description: `Cabo de Cobre Flexível 750V ${cableGauge} (Fases / Neutro / PE)`,
       manufacturer: "Sil / Corfio",
       quantity: 30,
       unit: "m",
@@ -1033,7 +1079,7 @@ export function buildSolarBomData(project = {}, config = {}, sizing = {}) {
       scope: "ESCOPO_02_CA",
     },
     {
-      description: "Eletroduto Rígido / Corrugado Antichamas c/ Conexões e Abraçadeiras",
+      description: "Eletroduto Corrugado Antichamas c/ Conexões e Abraçadeiras",
       manufacturer: "Tigre / Amanco",
       quantity: 1,
       unit: "lote",
@@ -1075,18 +1121,18 @@ export function generateBillOfMaterialsReport(project = {}, config = {}, sizing 
 
   // BLOCO 01: ESCOPO 01 — EQUIPAMENTOS DE ENERGIA SOLAR (LADO CC - NBR 16690)
   doc.setFillColor(241, 245, 249);
-  doc.rect(14, y, 182, 9.5, "F");
+  doc.rect(14, y, 182, 10, "F");
   doc.setFillColor(...BRAND_BLUE);
-  doc.rect(14, y, 2, 9.5, "F");
+  doc.rect(14, y, 2.5, 10, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(...BRAND_DARK);
-  doc.text("ESCOPO 01: EQUIPAMENTOS DE ENERGIA SOLAR (Kit Gerador / Lado CC — ABNT NBR 16690)", 18.5, y + 4.3);
+  doc.text("ESCOPO 01: EQUIPAMENTOS DE ENERGIA SOLAR (Kit Gerador / Lado CC — ABNT NBR 16690)", 19, y + 4.5);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.8);
   doc.setTextColor(90, 105, 125);
-  doc.text("Composição física do Kit Gerador Fotovoltaico (valores financeiros e margens do kit não repassados ao integrador)", 18.5, y + 8.0);
-  y += 11;
+  doc.text("Composição física do Kit Gerador Fotovoltaico (valores financeiros e margens do kit não repassados ao integrador)", 19, y + 8.2);
+  y += 11.5;
 
   const escopo01Rows = escopo01_kit_solar_cc.map((item) => [
     item.itemCode,
@@ -1101,25 +1147,26 @@ export function generateBillOfMaterialsReport(project = {}, config = {}, sizing 
     y,
     ["Item", "Descrição do Equipamento Solar (Lado CC)", "Fabricante / Ref.", "Qtd.", "Un."],
     escopo01Rows,
-    [12, 94, 44, 16, 16]
+    [12, 92, 46, 16, 16],
+    ["center", "left", "left", "center", "center"]
   );
 
-  y += 4;
+  y += 4.5;
 
   // BLOCO 02: ESCOPO 02 — MATERIAIS ELÉTRICOS DE INFRAESTRUTURA (LADO CA - NBR 5410)
   doc.setFillColor(236, 253, 245);
-  doc.rect(14, y, 182, 9.5, "F");
+  doc.rect(14, y, 182, 10, "F");
   doc.setFillColor(...BRAND_TEAL);
-  doc.rect(14, y, 2, 9.5, "F");
+  doc.rect(14, y, 2.5, 10, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(...BRAND_DARK);
-  doc.text("ESCOPO 02: MATERIAIS ELÉTRICOS DE INFRAESTRUTURA (Lado CA — ABNT NBR 5410)", 18.5, y + 4.3);
+  doc.text("ESCOPO 02: MATERIAIS ELÉTRICOS DE INFRAESTRUTURA (Lado CA — ABNT NBR 5410)", 19, y + 4.5);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.8);
   doc.setTextColor(15, 79, 73);
-  doc.text("Escopo de fornecimento e responsabilidade de instalação elétrica CA (base para orçamento do Integrador/Instalador)", 18.5, y + 8.0);
-  y += 11;
+  doc.text("Escopo de fornecimento e responsabilidade de instalação elétrica CA (base para orçamento do Integrador/Instalador)", 19, y + 8.2);
+  y += 11.5;
 
   const escopo02Rows = escopo02_materiais_eletricos_ca.map((item) => [
     item.itemCode,
@@ -1136,42 +1183,43 @@ export function generateBillOfMaterialsReport(project = {}, config = {}, sizing 
     y,
     ["Item", "Descrição do Material Elétrico (Lado CA)", "Fabricante / Ref.", "Qtd.", "Un.", "Vlr. Unit.", "Subtotal"],
     escopo02Rows,
-    [10, 84, 28, 11, 11, 19, 19]
+    [10, 70, 36, 11, 11, 22, 22],
+    ["center", "left", "left", "center", "center", "right", "right"]
   );
 
-  y += 5;
+  y += 5.5;
 
   // RESUMO FINANCEIRO ISOLADO DO INTEGRADOR (RODAPÉ DESTACADO)
   const cardHeight = 25;
   doc.setFillColor(...BRAND_DARK);
   doc.rect(14, y, 182, cardHeight, "F");
   doc.setFillColor(...BRAND_TEAL);
-  doc.rect(14, y, 2.5, cardHeight, "F");
+  doc.rect(14, y, 3, cardHeight, "F");
   doc.setDrawColor(...BRAND_TEAL);
   doc.setLineWidth(0.35);
   doc.rect(14, y, 182, cardHeight, "D");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.6);
   doc.setTextColor(...BRAND_TEAL);
-  doc.text("DEMONSTRATIVO FINANCEIRO FECHADO — INFRAESTRUTURA ELÉTRICA CA (NBR 5410)", 19.5, y + 6.2);
+  doc.text("DEMONSTRATIVO FINANCEIRO FECHADO — INFRAESTRUTURA ELÉTRICA CA (NBR 5410)", 20, y + 6.3);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.setTextColor(255, 255, 255);
   doc.text(
     `Orçamento de Materiais Elétricos (Integrador): R$ ${formatDecimalBR(total_orcamento_integrador)}`,
-    19.5,
-    y + 14.5
+    20,
+    y + 14.6
   );
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.8);
+  doc.setFontSize(7.0);
   doc.setTextColor(175, 190, 210);
   doc.text(
     "Nota: Subtotal apurado exclusivamente sobre o Escopo 02 (Lado CA). Custos e margens do Kit Gerador Solar (Escopo 01) estão isolados e ocultos.",
-    19.5,
-    y + 21.2
+    20,
+    y + 21.0
   );
 
   addFooter(doc, 1, 1);
@@ -1362,14 +1410,14 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
 
   // Escopo 01: Kit Solar CC (NBR 16690)
   doc.setFillColor(241, 245, 249);
-  doc.rect(14, y, 182, 6.5, "F");
+  doc.rect(14, y, 182, 7.5, "F");
   doc.setFillColor(...BRAND_BLUE);
-  doc.rect(14, y, 2, 6.5, "F");
+  doc.rect(14, y, 2.5, 7.5, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.8);
+  doc.setFontSize(8.0);
   doc.setTextColor(...BRAND_DARK);
-  doc.text("ESCOPO 01: EQUIPAMENTOS DE ENERGIA SOLAR (Kit Gerador / Lado CC — NBR 16690)", 18, y + 4.4);
-  y += 7.5;
+  doc.text("ESCOPO 01: EQUIPAMENTOS DE ENERGIA SOLAR (Kit Gerador / Lado CC — NBR 16690)", 19, y + 5.0);
+  y += 8.5;
 
   const execEscopo01Rows = escopo01_kit_solar_cc.map((item) => [
     item.itemCode,
@@ -1383,21 +1431,22 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
     y,
     ["Item", "Descrição do Equipamento Solar (Lado CC)", "Fabricante / Ref.", "Qtd.", "Un."],
     execEscopo01Rows,
-    [12, 94, 44, 16, 16]
+    [12, 92, 46, 16, 16],
+    ["center", "left", "left", "center", "center"]
   );
 
-  y += 1.5;
+  y += 2.5;
 
   // Escopo 02: Materiais Elétricos CA (NBR 5410)
   doc.setFillColor(236, 253, 245);
-  doc.rect(14, y, 182, 6.5, "F");
+  doc.rect(14, y, 182, 7.5, "F");
   doc.setFillColor(...BRAND_TEAL);
-  doc.rect(14, y, 2, 6.5, "F");
+  doc.rect(14, y, 2.5, 7.5, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.8);
+  doc.setFontSize(8.0);
   doc.setTextColor(...BRAND_DARK);
-  doc.text("ESCOPO 02: MATERIAIS ELÉTRICOS DE INFRAESTRUTURA (Lado CA — NBR 5410)", 18, y + 4.4);
-  y += 7.5;
+  doc.text("ESCOPO 02: MATERIAIS ELÉTRICOS DE INFRAESTRUTURA (Lado CA — NBR 5410)", 19, y + 5.0);
+  y += 8.5;
 
   const execEscopo02Rows = escopo02_materiais_eletricos_ca.map((item) => [
     item.itemCode,
@@ -1413,7 +1462,8 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
     y,
     ["Item", "Descrição do Material Elétrico (Lado CA)", "Fabricante / Ref.", "Qtd.", "Un.", "Vlr. Unit.", "Subtotal"],
     execEscopo02Rows,
-    [10, 84, 28, 11, 11, 19, 19]
+    [10, 70, 36, 11, 11, 22, 22],
+    ["center", "left", "left", "center", "center", "right", "right"]
   );
 
   // Card de Resumo Financeiro do Integrador
@@ -1473,11 +1523,11 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
     .map(
       (item) => `
           <tr>
-            <td><strong>${item.itemCode}</strong></td>
-            <td>${item.description}</td>
-            <td>${item.manufacturer}</td>
-            <td>${item.quantity}</td>
-            <td>${item.unit}</td>
+            <td class="text-center"><strong>${item.itemCode}</strong></td>
+            <td class="text-left">${item.description}</td>
+            <td class="text-left">${item.manufacturer}</td>
+            <td class="text-center">${item.quantity}</td>
+            <td class="text-center">${item.unit}</td>
           </tr>`
     )
     .join("");
@@ -1486,13 +1536,13 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
     .map(
       (item) => `
           <tr>
-            <td><strong>${item.itemCode}</strong></td>
-            <td>${item.description}</td>
-            <td>${item.manufacturer}</td>
-            <td>${item.quantity}</td>
-            <td>${item.unit}</td>
-            <td>R$ ${formatDecimalBR(item.unitPrice)}</td>
-            <td><strong>R$ ${formatDecimalBR(item.subtotal)}</strong></td>
+            <td class="text-center"><strong>${item.itemCode}</strong></td>
+            <td class="text-left">${item.description}</td>
+            <td class="text-left">${item.manufacturer}</td>
+            <td class="text-center">${item.quantity}</td>
+            <td class="text-center">${item.unit}</td>
+            <td class="text-right">R$ ${formatDecimalBR(item.unitPrice)}</td>
+            <td class="text-right"><strong>R$ ${formatDecimalBR(item.subtotal)}</strong></td>
           </tr>`
     )
     .join("");
@@ -1523,11 +1573,14 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
         .kpi-sub { font-size: 8.5px; color: #059669; font-weight: 600; }
         
         .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin: 10px 0 6px 0; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px; border-radius: 0; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px; border-radius: 0; table-layout: fixed; }
         th { background: #003a78; color: #fff; font-weight: 700; text-align: left; padding: 5px 6px; font-size: 9px; }
-        td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #f1f5f9; }
+        td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #f1f5f9; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
         td:last-child { border-right: none; }
         tr:nth-child(even) td { background: #f8fafc; }
+        th.text-center, td.text-center { text-align: center; }
+        th.text-right, td.text-right { text-align: right; }
+        th.text-left, td.text-left { text-align: left; }
         
         .bom-scope-banner { padding: 6px 10px; margin: 8px 0 4px 0; border-left: 4px solid #003a78; background: #f1f5f9; }
         .bom-scope-banner.scope-ca { border-left-color: #00a896; background: #ecfdf5; }
@@ -1701,11 +1754,11 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
       <table>
         <thead>
           <tr>
-            <th style="width: 8%;">Item</th>
-            <th style="width: 52%;">Descrição do Equipamento Solar (Lado CC)</th>
-            <th style="width: 24%;">Fabricante / Ref.</th>
-            <th style="width: 8%;">Qtd.</th>
-            <th style="width: 8%;">Un.</th>
+            <th class="text-center" style="width: 7%;">Item</th>
+            <th class="text-left" style="width: 53%;">Descrição do Equipamento Solar (Lado CC)</th>
+            <th class="text-left" style="width: 24%;">Fabricante / Ref.</th>
+            <th class="text-center" style="width: 8%;">Qtd.</th>
+            <th class="text-center" style="width: 8%;">Un.</th>
           </tr>
         </thead>
         <tbody>
@@ -1720,13 +1773,13 @@ export async function printExecutiveSolarReport(project = {}, config = {}, sizin
       <table>
         <thead>
           <tr>
-            <th style="width: 6%;">Item</th>
-            <th style="width: 44%;">Descrição do Material Elétrico (Lado CA)</th>
-            <th style="width: 18%;">Fabricante / Ref.</th>
-            <th style="width: 6%;">Qtd.</th>
-            <th style="width: 6%;">Un.</th>
-            <th style="width: 10%;">Vlr. Unit.</th>
-            <th style="width: 10%;">Subtotal</th>
+            <th class="text-center" style="width: 6%;">Item</th>
+            <th class="text-left" style="width: 42%;">Descrição do Material Elétrico (Lado CA)</th>
+            <th class="text-left" style="width: 20%;">Fabricante / Ref.</th>
+            <th class="text-center" style="width: 6%;">Qtd.</th>
+            <th class="text-center" style="width: 6%;">Un.</th>
+            <th class="text-right" style="width: 10%;">Vlr. Unit.</th>
+            <th class="text-right" style="width: 10%;">Subtotal</th>
           </tr>
         </thead>
         <tbody>
