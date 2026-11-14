@@ -488,6 +488,34 @@ export default function BudgetPage() {
     );
     if (!confirmSync) return;
 
+    const isSolarProj = String(project?.project_type || "").toLowerCase() === "solar" || Boolean(project?.solar_config);
+    if (isSolarProj) {
+      const solarBudget = buildDetailedSolarBudget({ project, config: project.solar_config || {} });
+      const solarMaterials = [...solarBudget.equipmentItems, ...solarBudget.caItems].map((item) => ({
+        name: item.name,
+        qty: item.quantity,
+        unit: item.unit,
+        price: Math.round(item.unitPrice * Math.max(0, 1 + (Number(productAdjustment) || 0) / 100) * 100) / 100,
+        basePrice: item.unitPrice,
+        category: item.category,
+        brand: "NACIF Solar",
+      }));
+      const manualOnly = materials.filter((m) => m.manual || m.source === "ia-estimado" || m.source === "manual");
+      setMaterials([...solarMaterials, ...manualOnly]);
+      setServices(
+        solarBudget.serviceItems.map((srv, idx) => ({
+          id: `srv-${Date.now()}-${idx + 1}`,
+          name: srv.name,
+          qty: srv.quantity,
+          unit: srv.unit,
+          price: srv.unitPrice,
+        }))
+      );
+      setMargin(Number(solarBudget.marginPercent ?? margin));
+      hasUnsavedChanges.current = true;
+      return;
+    }
+
     const { materials: syncedMaterials } = buildProjectBudgetMaterials(project, { productAdjustment });
     // Preservar itens manuais existentes no orçamento atual
     const manualOnly = materials.filter((m) => m.manual || m.source === "ia-estimado" || m.source === "manual");

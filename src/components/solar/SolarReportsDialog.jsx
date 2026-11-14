@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { validateProjectDataForReports } from "@/lib/solarWizardState";
+import { buildDetailedSolarBudget } from "@/lib/solarBudgetMath";
 import {
   downloadPdfBlob,
   generateBillOfMaterialsReport,
@@ -97,9 +98,15 @@ export default function SolarReportsDialog({
   config,
   sizing,
   onOpenParameters,
+  onOpenBudget,
 }) {
   const { toast } = useToast();
   const [downloadingId, setDownloadingId] = useState(null);
+
+  const budgetSummary = useMemo(
+    () => buildDetailedSolarBudget({ project, config, sizing }),
+    [project, config, sizing]
+  );
 
   const validation = useMemo(
     () => validateProjectDataForReports(project, config, sizing),
@@ -207,6 +214,43 @@ export default function SolarReportsDialog({
             </Button>
           </div>
         </DialogHeader>
+
+        {/* Faixa Minimalista de Resumo Orçamentário (Equipamentos + Margem) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border border-slate-200 bg-slate-50 px-4 py-3 text-xs mt-2">
+          <div className="flex flex-wrap items-center gap-4">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Equipamentos (Kit CC)</span>
+              <span className="font-black text-slate-900">
+                {budgetSummary.equipmentTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              </span>
+            </div>
+            <div className="h-6 w-px bg-slate-200" />
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Margem Aplicada</span>
+              <span className="font-black text-[#009b84]">
+                {budgetSummary.marginPercent}% (+{budgetSummary.marginBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})
+              </span>
+            </div>
+            <div className="h-6 w-px bg-slate-200" />
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Proposta Turnkey</span>
+              <span className="font-black text-slate-950">
+                {budgetSummary.finalTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              </span>
+            </div>
+          </div>
+          {onOpenBudget && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onOpenBudget}
+              className="h-8 rounded-none border-slate-900 bg-white text-xs font-black text-slate-900 hover:bg-slate-100"
+            >
+              Ajustar Preço & Margem
+            </Button>
+          )}
+        </div>
 
         {/* ALERTA DE VALIDAÇÃO: Só gera relatório depois de preencher os dados do projeto */}
         {!validation.valid && (

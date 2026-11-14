@@ -2118,6 +2118,18 @@ export default function SolarProject() {
             )}
           </Button>
 
+          {/* Atalho Orçamento em telas menores */}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setAppMode((m) => (m === "budget" ? "layout" : "budget"))}
+            className="flex md:hidden h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-xs transition whitespace-nowrap shrink-0"
+          >
+            <DollarSign className="mr-1 h-3.5 w-3.5 text-[#009b84] shrink-0" />
+            <span>{appMode === "budget" ? "Mapa" : "Orçamento"}</span>
+          </Button>
+
           {/* Dropdown de Relatórios */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -3742,6 +3754,10 @@ export default function SolarProject() {
         onOpenParameters={(step) => {
           setProjectParamsInitialStep(step || "consumo");
           setProjectParamsOpen(true);
+        }}
+        onOpenBudget={() => {
+          setReportsOpen(false);
+          setAppMode("budget");
         }}
       />
 
