@@ -370,12 +370,7 @@ export default function ProjectDetail() {
   };
 
   if (loading) {
-    return (
-      <BrandLoadingScreen
-        message="Carregando detalhes do projeto..."
-        subtitle="Sincronizando circuitos, diagramas e dados elétricos"
-      />
-    );
+    return <BrandLoadingScreen />;
   }
 
   if (!project) {

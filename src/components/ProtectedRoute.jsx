@@ -4,13 +4,7 @@ import { useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import BrandLoadingScreen from '@/components/system/BrandLoadingScreen';
 
-const DefaultFallback = () => (
-  <BrandLoadingScreen 
-    fullScreen 
-    message="Validando sessão de acesso..." 
-    subtitle="Conectando aos serviços protegidos Nacif Energy" 
-  />
-);
+const DefaultFallback = () => <BrandLoadingScreen fullScreen />;
 
 export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthenticatedElement }) {
   const { isAuthenticated, isLoadingAuth, authChecked, authError, checkUserAuth } = useAuth();

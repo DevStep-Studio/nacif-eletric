@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import PageHeader from "@/components/PageHeader";
+import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import BillingCheckoutModal from "@/components/subscription/BillingCheckoutModal";
 import {
   FEATURE_KEYS,
@@ -197,7 +198,7 @@ export default function Subscription() {
   const handleCustomerPortal = () => setIsManageModalOpen(true);
 
   if (loadError) return <div role="alert" className="p-6"><p>{loadError}</p><button type="button" onClick={loadData}>Tentar novamente</button></div>;
-  if (loading && !catalog.length) return <div className="p-6" role="status">Carregando planos...</div>;
+  if (loading && !catalog.length) return <BrandLoadingScreen />;
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-7 pb-20">

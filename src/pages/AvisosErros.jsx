@@ -18,6 +18,7 @@ import { backend } from "@/api/backendClient";
 import { ISSUES_CHANGED_EVENT } from "@/lib/issuePersistence";
 import ReportIssueModal from "@/components/issues/ReportIssueModal";
 import IssueDetailModal from "@/components/issues/IssueDetailModal";
+import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 
 const STATUS_OPTIONS = [
   { value: "todos", label: "Todos os Status" },
@@ -387,9 +388,7 @@ export default function AvisosErros() {
 
         {/* Lista de Relatos */}
         {loading ? (
-          <div className="rounded-2xl border border-[#E2E8F0] bg-white p-12 text-center text-xs text-[#64748B]">
-            Carregando relatos...
-          </div>
+          <BrandLoadingScreen compact className="rounded-2xl border border-[#E2E8F0] bg-white py-14" />
         ) : filteredIssues.length === 0 ? (
           // Estado Vazio Elegante
           <div className="rounded-2xl border border-[#E2E8F0] bg-white p-12 text-center space-y-4 shadow-sm">

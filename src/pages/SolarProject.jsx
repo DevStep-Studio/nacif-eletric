@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
+import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
 import Solar3DView from "@/components/solar/Solar3DView";
 import SolarReportsDialog from "@/components/solar/SolarReportsDialog";
@@ -1781,23 +1782,8 @@ export default function SolarProject() {
 
   if (loadingProject && !project) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#070c14] text-white p-4">
-        <div className="flex flex-col items-center gap-4 max-w-sm text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#00d8b8]/10 text-[#00d8b8] ring-1 ring-[#00d8b8]/20 animate-pulse">
-            <Sun className="h-7 w-7 text-[#00d8b8] animate-spin" style={{ animationDuration: "4s" }} />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-white">Carregando Designer Solar</h3>
-            <p className="text-xs text-slate-400 mt-1">Sincronizando arranjo fotovoltaico e coordenadas...</p>
-          </div>
-          <Loader2 className="h-5 w-5 animate-spin text-[#00d8b8]" />
-          <Link
-            to="/projects"
-            className="text-xs text-slate-400 hover:text-white transition mt-2 underline"
-          >
-            Voltar aos Projetos
-          </Link>
-        </div>
+      <div className="min-h-screen bg-[#FAFCFC]">
+        <BrandLoadingScreen fullScreen />
       </div>
     );
   }

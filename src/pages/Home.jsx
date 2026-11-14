@@ -16,7 +16,6 @@ import {
   GitBranch,
   HelpCircle,
   LayoutGrid,
-  Loader2,
   Minus,
   MoreHorizontal,
   Plus,
@@ -41,6 +40,7 @@ import { buildProjectBudgetMaterials } from "@/lib/projectBudgetMaterials";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import ProjectStatusBadge from "@/components/ProjectStatusBadge";
+import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1153,9 +1153,8 @@ export default function Home() {
               <tbody className="divide-y divide-[#F1F5F9] font-medium text-[#334155]">
                 {status === "loading" ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-xs font-semibold text-[#64748B]">
-                      <Loader2 className="h-6 w-6 animate-spin mx-auto text-[#00d8b8] mb-2" />
-                      Carregando projetos...
+                    <td colSpan={9} className="py-8">
+                      <BrandLoadingScreen compact className="py-4" />
                     </td>
                   </tr>
                 ) : filteredProjects.length === 0 ? (

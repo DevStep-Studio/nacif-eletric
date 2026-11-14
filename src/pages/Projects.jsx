@@ -30,6 +30,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import PageHeader from "@/components/PageHeader";
+import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import ProjectProgress from "@/components/navigation/ProjectProgress";
 import EditProjectModal from "@/components/EditProjectModal";
 import ProjectStatusBadge, { formatProjectStatusLabel } from "@/components/ProjectStatusBadge";
@@ -487,17 +488,7 @@ export default function Projects() {
 }
 
 function ProjectLoading() {
-  return (
-    <div className="p-4">
-      <p className="text-sm font-extrabold text-[#101828]">Carregando projetos</p>
-      <p className="mt-1 text-sm font-medium text-[#667085]">Buscando projetos reais do workspace.</p>
-      <div className="mt-5 space-y-3">
-        {[0, 1, 2, 3].map((item) => (
-          <div key={item} className="h-16 rounded-[10px] border border-[#EAECF0] bg-[#F9FAFB]" />
-        ))}
-      </div>
-    </div>
-  );
+  return <BrandLoadingScreen compact className="py-16" />;
 }
 
 function EmptyProjects() {

@@ -138,13 +138,7 @@ const AuthenticatedApp = () => {
 
   // Show branded loading screen while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
-    return (
-      <BrandLoadingScreen
-        fullScreen
-        message="Iniciando ambiente Nacif Energy..."
-        subtitle="Verificando credenciais e configurações de segurança"
-      />
-    );
+    return <BrandLoadingScreen fullScreen />;
   }
 
   // Handle authentication errors
@@ -159,14 +153,7 @@ const AuthenticatedApp = () => {
 
   // Render the main app
   return (
-    <React.Suspense
-      fallback={
-        <BrandLoadingScreen
-          message="Carregando módulo Nacif Energy..."
-          subtitle="Preparando interface e recursos técnicos"
-        />
-      }
-    >
+    <React.Suspense fallback={<BrandLoadingScreen />}>
       <Routes>
         {/* Auth Public Routes */}
         <Route path="/login" element={<Login />} />

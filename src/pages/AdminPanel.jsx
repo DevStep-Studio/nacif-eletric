@@ -203,12 +203,7 @@ export default function AdminPanel() {
   };
 
   if (loading) {
-    return (
-      <BrandLoadingScreen
-        message="Carregando painel administrativo..."
-        subtitle="Carregando usuários, métricas e configurações globais"
-      />
-    );
+    return <BrandLoadingScreen />;
   }
 
   const planCounts = { gratuito: 0, profissional: 0, engenharia: 0 };

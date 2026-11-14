@@ -43,6 +43,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import PageHeader from "@/components/PageHeader";
+import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
 import MaterialProductThumb from "@/components/MaterialProductThumb";
 import {
@@ -908,7 +909,7 @@ export default function BudgetPage() {
             </div>
 
             {loadingProjects ? (
-              <div className="py-8 text-center text-xs font-semibold text-muted-foreground">Carregando projetos...</div>
+              <BrandLoadingScreen compact className="py-8" />
             ) : filteredProjects.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs font-semibold text-muted-foreground">
                 Nenhum projeto encontrado.
@@ -948,7 +949,11 @@ export default function BudgetPage() {
         <main className="min-w-0 space-y-6">
           {!project ? (
             <div className="rounded-2xl border border-border/50 bg-card p-12 text-center text-muted-foreground">
-              {loadingProject ? "Carregando projeto e orçamentos..." : "Selecione um projeto na lista lateral para gerenciar os orçamentos."}
+              {loadingProject ? (
+                <BrandLoadingScreen compact className="py-4" />
+              ) : (
+                "Selecione um projeto na lista lateral para gerenciar os orçamentos."
+              )}
             </div>
           ) : (
             <>
