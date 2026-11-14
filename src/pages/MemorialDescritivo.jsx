@@ -11,6 +11,14 @@ import PageHeader from "@/components/PageHeader";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
 import { useBranding } from "@/lib/appPreferences";
 import { buildProjectBudgetMaterials, getProjectLogo } from "@/lib/projectBudgetMaterials";
+import { NACIF_SYMBOL_BASE64 } from "@/lib/solarLogoAsset";
+import {
+  PDF_THEME,
+  drawPdfKpiStrip,
+  drawPdfSectionTitle,
+  drawElectricalUnifilarVector,
+  drawVectorBarChart,
+} from "@/lib/unifilarPdfDrawer";
 import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 
 const formatCurrencyBR = (value = 0) => Number(value || 0).toLocaleString("pt-BR", {
@@ -83,7 +91,7 @@ const detectPdfImageType = (url = "") => {
 };
 
 // ─── Geração do PDF com jsPDF ─────────────────────────────────────────────────
-function generatePDF(project, metrics, { brandName = "NACIF Energy", logoUrl = brandLogoEnergy } = {}) {
+export function generatePDF(project, metrics, { brandName = "NACIF Energy", logoUrl = brandLogoEnergy } = {}) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const circuits = metrics.circuits || [];
   const bom = buildMemorialMaterialRows(project);
@@ -95,145 +103,245 @@ function generatePDF(project, metrics, { brandName = "NACIF Energy", logoUrl = b
 
   const PW = 210; // page width mm
   const PH = 297;
-  const ML = 20; const MR = 20; const TW = PW - ML - MR;
-  let page = 1;
+  const ML = 16;
+  const MR = 16;
+  const TW = PW - ML - MR; // 178mm
 
-  const newPage = () => {
-    doc.addPage();
-    page++;
-    // rodapé
-    doc.setFontSize(7); doc.setTextColor(130, 130, 130);
-    doc.line(ML, PH - 14, PW - MR, PH - 14);
-    doc.text(`${brandName} · Memorial Descritivo · NBR 5410:2004 · Página ${page}`, ML, PH - 9);
-    doc.text(`${project.name}`, PW - MR, PH - 9, { align: "right" });
-  };
+  const drawRunningHeader = (sectionSubtitle = "Memorial Técnico Descritivo · ABNT NBR 5410") => {
+    doc.setFillColor(...PDF_THEME.navy);
+    doc.rect(0, 0, PW, 16, "F");
+    doc.setFillColor(...PDF_THEME.teal);
+    doc.rect(0, 16, PW, 1.2, "F");
 
-  // helper – checkY com margem
-  let curY = 0;
-  const checkY = (need = 12) => {
-    if (curY + need > PH - 20) { newPage(); curY = 24; }
-  };
-
-  // ── CAPA ──────────────────────────────────────────────────────────────────
-  doc.setFillColor(14, 36, 89);
-  doc.rect(0, 0, PW, 80, "F");
-
-  doc.setFillColor(37, 99, 235);
-  doc.rect(0, 75, PW, 6, "F");
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(9); doc.setFont("helvetica", "normal");
-  doc.text(`${brandName.toUpperCase()} — PLATAFORMA DE ENGENHARIA ELÉTRICA`, ML, 22);
-  if (pdfImageType) {
     try {
-      doc.addImage(logoUrl, pdfImageType, PW - MR - 38, 14, 36, 18, undefined, "FAST");
+      if (pdfImageType) {
+        doc.addImage(logoUrl, pdfImageType, ML, 3, 10, 10, undefined, "FAST");
+      } else {
+        doc.addImage(NACIF_SYMBOL_BASE64, "PNG", ML, 3, 10, 10, undefined, "FAST");
+      }
     } catch {
-      // Mantém o PDF válido mesmo quando o arquivo de logo não está em base64.
+      try {
+        doc.addImage(NACIF_SYMBOL_BASE64, "PNG", ML, 3, 10, 10, undefined, "FAST");
+      } catch {}
     }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...PDF_THEME.white);
+    doc.text(`${brandName.toUpperCase()} — MEMORIAL DESCRITIVO ELÉTRICO`, ML + 13, 8.2);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.8);
+    doc.setTextColor(...PDF_THEME.teal);
+    doc.text(sectionSubtitle, ML + 13, 12.6);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...PDF_THEME.white);
+    doc.text(String(project?.name || "Projeto Elétrico").slice(0, 38), PW - MR, 8.5, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(180, 198, 220);
+    doc.text(`${project?.supply_type || "Sistema BT"} · ${project?.voltage || 220}V`, PW - MR, 12.6, { align: "right" });
+  };
+
+  let currentSectionSubtitle = "Memorial Técnico Descritivo · ABNT NBR 5410";
+  const newPage = (subtitle = currentSectionSubtitle) => {
+    currentSectionSubtitle = subtitle;
+    doc.addPage();
+    drawRunningHeader(subtitle);
+    return 24;
+  };
+
+  let curY = 0;
+  const checkY = (need = 12, subtitle = currentSectionSubtitle) => {
+    if (curY + need > PH - 18) {
+      curY = newPage(subtitle);
+    }
+  };
+
+  // ── CAPA EXECUTIVA NACIF ──────────────────────────────────────────────────
+  doc.setFillColor(...PDF_THEME.navy);
+  doc.rect(0, 0, PW, 74, "F");
+  doc.setFillColor(...PDF_THEME.blue);
+  doc.rect(0, 74, PW, 1.5, "F");
+  doc.setFillColor(...PDF_THEME.teal);
+  doc.rect(0, 75.5, PW, 2.0, "F");
+
+  try {
+    if (pdfImageType) {
+      doc.addImage(logoUrl, pdfImageType, PW - MR - 24, 14, 24, 24, undefined, "FAST");
+    } else {
+      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", PW - MR - 24, 14, 24, 24, undefined, "FAST");
+    }
+  } catch {
+    try {
+      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", PW - MR - 24, 14, 24, 24, undefined, "FAST");
+    } catch {}
   }
 
-  doc.setFontSize(24); doc.setFont("helvetica", "bold");
-  doc.text("MEMORIAL", ML, 38);
-  doc.text("DESCRITIVO", ML, 52);
-  doc.setFontSize(12); doc.setFont("helvetica", "normal");
-  doc.text("Elétrico, Instalação e Quantitativo de Materiais", ML, 65);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.2);
+  doc.setTextColor(...PDF_THEME.teal);
+  doc.text(`${brandName.toUpperCase()} · DA PLANTA AO SOL · ENGENHARIA ELÉTRICA`, ML, 18);
 
-  doc.setTextColor(37, 99, 235);
-  doc.rect(ML, 90, 4, 100, "F");
+  doc.setTextColor(...PDF_THEME.white);
+  doc.setFontSize(25);
+  doc.text("MEMORIAL DESCRITIVO", ML, 36);
+  doc.setFontSize(20);
+  doc.setTextColor(...PDF_THEME.teal);
+  doc.text("PROJETO ELÉTRICO DE BAIXA TENSÃO", ML, 48);
 
-  doc.setTextColor(20, 20, 20);
-  doc.setFontSize(18); doc.setFont("helvetica", "bold");
-  doc.text((project.name || "Projeto").toUpperCase(), ML + 10, 108);
+  doc.setFontSize(9.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(210, 224, 240);
+  doc.text("Dimensionamento normativo, diagrama unifilar, proteção, balanceamento e quantitativo (ABNT NBR 5410)", ML, 61);
 
-  doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
+  // Card principal do empreendimento
+  doc.setFillColor(...PDF_THEME.slate50);
+  doc.setDrawColor(...PDF_THEME.slate200);
+  doc.setLineWidth(0.35);
+  doc.rect(ML, 88, TW, 134, "FD");
+  doc.setFillColor(...PDF_THEME.teal);
+  doc.rect(ML, 88, 3, 134, "F");
+
+  doc.setTextColor(...PDF_THEME.navy);
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.text((project.name || "Projeto Elétrico").toUpperCase().slice(0, 44), ML + 8, 102);
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...PDF_THEME.slate500);
+  doc.text("FICHA TÉCNICA DO EMPREENDIMENTO", ML + 8, 108.5);
+
+  // Badge NBR Score
+  const sc = Number(metrics.nbrScore || 0);
+  const scColor = sc >= 90 ? PDF_THEME.emerald : sc >= 70 ? PDF_THEME.amber : PDF_THEME.red;
+  doc.setFillColor(...PDF_THEME.navy);
+  doc.rect(PW - MR - 42, 95, 36, 36, "F");
+  doc.setFillColor(...scColor);
+  doc.rect(PW - MR - 42, 95, 36, 3.5, "F");
+  doc.setTextColor(...PDF_THEME.white);
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.text(`${sc}`, PW - MR - 24, 115, { align: "center" });
+  doc.setFontSize(7.2);
+  doc.setTextColor(...PDF_THEME.teal);
+  doc.text("NBR 5410 SCORE", PW - MR - 24, 122.5, { align: "center" });
+  doc.setTextColor(180, 198, 220);
+  doc.setFont("helvetica", "normal");
+  doc.text("de 100 pontos", PW - MR - 24, 127.5, { align: "center" });
+
+  doc.setFontSize(9.2);
   const infoLines = [
-    ["Cliente:", project.client_name || "—"],
-    ["Endereço:", project.address || "—"],
-    ["Região:", region],
-    ["Área:", Number(areaM2 || 0) > 0 ? `${Number(areaM2).toFixed(2).replace(".", ",")} m²` : "—"],
-    ["GPS:", gps || "—"],
-    ["Alimentação:", `${project.supply_type || "—"} · ${project.voltage || "—"}V`],
-    ["Potência Total:", `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW`],
-    ["Nº de Circuitos:", `${circuits.length}`],
-    ["Disjuntor Geral:", metrics.generalBreaker ? `${metrics.generalBreaker}A` : "—"],
-    ["Tamanho do Quadro:", `${metrics.panelSize} DINs`],
-    ["NBR Score:", metrics.nbrScore ? `${metrics.nbrScore}/100` : "Pendente"],
-    ["Data:", new Date().toLocaleDateString("pt-BR")],
-    ["Responsável:", "Engenheiro Eletricista"],
+    ["Cliente / Titular:", project.client_name || "—"],
+    ["Endereço da Obra:", project.address || "—"],
+    ["Região / Cidade:", region],
+    ["Área Construída:", Number(areaM2 || 0) > 0 ? `${Number(areaM2).toFixed(2).replace(".", ",")} m²` : "—"],
+    ["Coordenadas GPS:", gps || "—"],
+    ["Alimentação:", `${project.supply_type || "—"} · ${project.voltage || "—"}V · 60 Hz`],
+    ["Potência Instalada:", `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW`],
+    ["Circuitos Finais:", `${circuits.length} circuito(s)`],
+    ["Disjuntor Geral:", metrics.generalBreaker ? `${metrics.generalBreaker}A (${poles_label(project.supply_type)})` : "—"],
+    ["Quadro de Distribuição:", `${metrics.panelSize || 24} módulos DIN`],
+    ["Responsável Técnico:", project.technical_responsible || "Engenheiro Eletricista"],
+    ["Data de Emissão:", new Date().toLocaleDateString("pt-BR")],
   ];
   infoLines.forEach(([l, v], i) => {
-    doc.setFont("helvetica", "bold"); doc.text(l, ML + 10, 124 + i * 9);
-    doc.setFont("helvetica", "normal"); doc.text(v, ML + 46, 124 + i * 9);
+    const rowY = 120 + i * 8.2;
+    if (i % 2 === 0) {
+      doc.setFillColor(...PDF_THEME.white);
+      doc.rect(ML + 7, rowY - 4.8, TW - 54, 7.2, "F");
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PDF_THEME.slate700);
+    doc.text(l, ML + 9, rowY);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...PDF_THEME.slate900);
+    doc.text(String(v).slice(0, 48), ML + 49, rowY);
   });
 
-  // Caixa NBR Score (Cantos Quadrados)
-  const sc = metrics.nbrScore;
-  const scColor = sc >= 90 ? [22, 163, 74] : sc >= 70 ? [202, 138, 4] : [220, 38, 38];
-  doc.setFillColor(...scColor);
-  doc.rect(PW - MR - 44, 100, 44, 44, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(28); doc.setFont("helvetica", "bold");
-  doc.text(`${sc}`, PW - MR - 22, 124, { align: "center" });
-  doc.setFontSize(8);
-  doc.text("NBR Score", PW - MR - 22, 133, { align: "center" });
-  doc.text("/100", PW - MR - 22, 140, { align: "center" });
-
-  // rodapé capa
-  doc.setTextColor(130, 130, 130); doc.setFontSize(7); doc.setFont("helvetica", "normal");
-  doc.line(ML, PH - 14, PW - MR, PH - 14);
-  doc.text(`${brandName} · Memorial Descritivo · NBR 5410:2004 · Página 1`, ML, PH - 9);
-  doc.text(new Date().toLocaleDateString("pt-BR"), PW - MR, PH - 9, { align: "right" });
+  // Strip de KPIs na Capa
+  drawPdfKpiStrip(doc, [
+    { label: "CARGA INSTALADA", value: `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW`, sub: `${circuits.length} circuitos finais` },
+    { label: "DEMANDA CALCULADA", value: `${(Number(metrics?.totalDemandPower ?? metrics?.totalPower ?? 0) / 1000).toFixed(2)} kW`, sub: `Ib = ${metrics?.generalCurrent || 0} A` },
+    { label: "PROTEÇÃO GERAL", value: metrics.generalBreaker ? `${metrics.generalBreaker} A` : "A definir", sub: metrics.generalDr ? `IDR ${metrics.generalDr}A 30mA` : "Com DPS Classe II", accent: PDF_THEME.blue },
+    { label: "CONFORMIDADE", value: `${sc}/100`, sub: sc >= 90 ? "Aprovado NBR 5410" : "Verificar alertas", highlight: true },
+  ], ML, 232, TW, 22);
 
   // ── SUMÁRIO ───────────────────────────────────────────────────────────────
-  newPage(); curY = 28;
-  doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.setTextColor(14, 36, 89);
-  doc.text("SUMÁRIO", ML, curY); curY += 4;
-  doc.setFillColor(37, 99, 235); doc.rect(ML, curY, TW, 1.5, "F"); curY += 10;
+  curY = newPage("Índice Técnico do Documento") + 4;
+  curY = drawPdfSectionTitle(doc, "SUMÁRIO EXECUTIVO DO MEMORIAL", ML, curY, TW, {
+    accentColor: PDF_THEME.teal,
+    rightBadge: "NBR 5410:2004",
+  });
+  curY += 3;
 
   const sumItems = [
-    ["1.", "Escopo do Projeto"],
-    ["2.", "Normas e Referências Técnicas"],
-    ["3.", "Dados da Instalação"],
-    ["4.", "Detalhes de Instalação e Execução"],
-    ["5.", "Memorial de Cálculo dos Circuitos"],
-    ["6.", "Balanceamento de Fases"],
-    ["7.", "Quadro de Distribuição — Composição"],
-    ["8.", "Quantitativo de Materiais"],
-    ["9.", "Análise NBR 5410 — Não-Conformidades"],
-    ["10.", "ART — Anotação de Responsabilidade Técnica"],
-    ["11.", "Conclusão e Assinatura"],
+    ["01.", "Escopo do Projeto"],
+    ["02.", "Normas e Referências Técnicas"],
+    ["03.", "Dados da Instalação"],
+    ["04.", "Detalhes de Instalação e Execução"],
+    ["05.", "Memorial de Cálculo dos Circuitos"],
+    ["06.", "Balanceamento de Fases e Gráfico de Carregamento"],
+    ["07.", "Quadro de Distribuição — Composição"],
+    ["08.", "Diagrama Unifilar do Quadro de Distribuição"],
+    ["09.", "Quantitativo de Materiais"],
+    ["10.", "Análise NBR 5410 — Não-Conformidades"],
+    ["11.", "ART — Anotação de Responsabilidade Técnica"],
+    ["12.", "Conclusão e Assinatura"],
   ];
-  doc.setFontSize(11); doc.setTextColor(30, 30, 30);
-  sumItems.forEach(([n, t]) => {
-    checkY(10);
-    doc.setFont("helvetica", "bold"); doc.text(n, ML, curY);
-    doc.setFont("helvetica", "normal"); doc.text(t, ML + 12, curY);
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineDashPattern([1, 2], 0);
-    doc.line(ML + 12 + doc.getTextWidth(t) + 2, curY, PW - MR - 8, curY - 1);
+  doc.setFontSize(10.5);
+  sumItems.forEach(([n, t], idx) => {
+    checkY(11);
+    if (idx % 2 === 0) {
+      doc.setFillColor(...PDF_THEME.slate50);
+      doc.rect(ML, curY - 5.2, TW, 8.2, "F");
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PDF_THEME.tealDeep);
+    doc.text(n, ML + 3, curY);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...PDF_THEME.slate900);
+    doc.text(t, ML + 14, curY);
+    doc.setDrawColor(...PDF_THEME.slate300);
+    doc.setLineDashPattern([0.8, 1.8], 0);
+    doc.line(ML + 16 + doc.getTextWidth(t), curY - 0.8, PW - MR - 6, curY - 0.8);
     doc.setLineDashPattern([], 0);
-    curY += 10;
+    curY += 9.5;
   });
 
   // ── 1. ESCOPO ─────────────────────────────────────────────────────────────
-  newPage(); curY = 28;
-  const h2 = (txt) => {
-    checkY(16);
-    doc.setFillColor(239, 246, 255); doc.rect(ML, curY - 5, TW, 10, "F");
-    doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(14, 36, 89);
-    doc.text(txt, ML + 2, curY); curY += 8;
-    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(40, 40, 40);
+  curY = newPage("1. Escopo e Referências Normativas") + 2;
+  const h2 = (txt, badge = "") => {
+    checkY(18);
+    curY = drawPdfSectionTitle(doc, txt, ML, curY, TW, {
+      accentColor: PDF_THEME.teal,
+      rightBadge: badge,
+    });
+    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...PDF_THEME.slate700);
   };
   const para = (txt) => {
-    checkY(12);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.3);
+    doc.setTextColor(...PDF_THEME.slate700);
     const lines = doc.splitTextToSize(txt, TW);
-    doc.text(lines, ML, curY); curY += lines.length * 5.5 + 3;
+    checkY(lines.length * 4.8 + 4);
+    doc.text(lines, ML, curY);
+    curY += lines.length * 4.8 + 3;
   };
   const bullet = (txt) => {
-    checkY(8);
-    doc.text("•", ML + 2, curY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.1);
+    doc.setTextColor(...PDF_THEME.slate700);
     const lines = doc.splitTextToSize(txt, TW - 8);
-    doc.text(lines, ML + 8, curY); curY += lines.length * 5.5 + 1.5;
+    checkY(lines.length * 4.7 + 2.5);
+    doc.setFillColor(...PDF_THEME.teal);
+    doc.rect(ML + 2.5, curY - 2.3, 1.5, 1.5, "F");
+    doc.text(lines, ML + 7.5, curY);
+    curY += lines.length * 4.7 + 1.8;
   };
 
   h2("1. ESCOPO DO PROJETO");
@@ -331,24 +439,26 @@ function generatePDF(project, metrics, { brandName = "NACIF Energy", logoUrl = b
   bullet("Antes da energização, executar inspeção visual, teste de continuidade do PE, resistência de isolamento, polaridade, atuação do DR e conferência de identificação dos circuitos.");
 
   // ── 5. MEMORIAL DE CÁLCULO ────────────────────────────────────────────────
-  newPage(); curY = 28;
-  h2("5. MEMORIAL DE CÁLCULO DOS CIRCUITOS");
+  curY = newPage("5. Memorial de Cálculo dos Circuitos") + 2;
+  h2("5. MEMORIAL DE CÁLCULO DOS CIRCUITOS", "ABNT NBR 5410");
   para(`Os circuitos foram dimensionados conforme os critérios da NBR 5410:2004, considerando: método de instalação, temperatura ambiente (${30}°C), fator de agrupamento, queda de tensão máxima de 4% e seleção do disjuntor com 25% de sobrecarga.`);
   para("Foi adotada seção mínima de 1.5mm² para iluminação e 2.5mm² para tomadas, TUE e circuitos de força, preservando o aumento automático de bitola quando exigido pelos cálculos.");
   curY += 2;
 
   circuits.forEach((c, i) => {
-    checkY(70);
-    // cabeçalho do circuito
-    const phaseColors = { A: [29, 78, 216], B: [126, 34, 206], C: [180, 83, 9], AB: [29, 78, 216], BC: [126, 34, 206], ABC: [22, 101, 52] };
-    const [r, g, b] = phaseColors[(c.phase || "A")[0] === "A" ? "A" : (c.phase || "A")[0] === "B" ? "B" : "C"] || [29, 78, 216];
+    checkY(70, "5. Memorial de Cálculo dos Circuitos");
+    const phaseColors = { A: PDF_THEME.blue, B: PDF_THEME.violet, C: PDF_THEME.amber, AB: PDF_THEME.blue, BC: PDF_THEME.violet, ABC: PDF_THEME.emerald };
+    const phaseKey = (c.phase || "A")[0];
+    const [r, g, b] = phaseColors[phaseKey] || PDF_THEME.navy;
+    doc.setFillColor(...PDF_THEME.navy);
+    doc.rect(ML, curY - 4.5, TW, 8.5, "F");
     doc.setFillColor(r, g, b);
-    doc.rect(ML, curY - 5, TW, 9, "F");
-    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-    doc.text(`Circuito C${String(i + 1).padStart(2, "0")} — ${c.name || "Circuito"} · Fase ${c.phase || "A"}`, ML + 2, curY + 1);
-    curY += 8;
+    doc.rect(ML, curY - 4.5, 3, 8.5, "F");
+    doc.setTextColor(...PDF_THEME.white); doc.setFontSize(9.3); doc.setFont("helvetica", "bold");
+    doc.text(`Circuito C${String(i + 1).padStart(2, "0")} — ${c.name || "Circuito"} · Fase ${c.phase || "A"}`, ML + 5.5, curY + 1);
+    curY += 7.5;
 
-    doc.setTextColor(30, 30, 30); doc.setFontSize(9); doc.setFont("helvetica", "normal");
+    doc.setTextColor(...PDF_THEME.slate900); doc.setFontSize(8.5); doc.setFont("helvetica", "normal");
 
     const cRows = [
       ["Tipo de circuito", c.type || "—", "Alimentação", `${c.supply_type || "—"} · ${c.voltage}V`],
@@ -362,55 +472,78 @@ function generatePDF(project, metrics, { brandName = "NACIF Energy", logoUrl = b
       ["Queda de tensão (V)", `${c.voltage_drop_v} V`, "Módulos DIN ocupados", String(c.din_modules || 1)],
     ];
 
-    cRows.forEach(([l1, v1, l2, v2]) => {
-      checkY(7);
-      if (curY % 14 < 7) { doc.setFillColor(247, 250, 255); doc.rect(ML, curY - 5, TW, 6.5, "F"); }
-      doc.setFont("helvetica", "bold"); doc.text(l1 + ":", ML + 2, curY);
-      doc.setFont("helvetica", "normal"); doc.text(v1, ML + 52, curY);
-      if (l2) {
-        doc.setFont("helvetica", "bold"); doc.text(l2 + ":", ML + 96, curY);
-        doc.setFont("helvetica", "normal"); doc.text(v2 || "", ML + 146, curY);
+    cRows.forEach(([l1, v1, l2, v2], rowIdx) => {
+      checkY(7, "5. Memorial de Cálculo dos Circuitos");
+      if (rowIdx % 2 === 0) {
+        doc.setFillColor(...PDF_THEME.slate50);
+        doc.rect(ML, curY - 4.5, TW, 6.2, "F");
       }
-      curY += 6.5;
+      doc.setDrawColor(...PDF_THEME.slate200);
+      doc.setLineWidth(0.15);
+      doc.line(ML, curY + 1.7, ML + TW, curY + 1.7);
+      doc.setFont("helvetica", "bold"); doc.setTextColor(...PDF_THEME.slate700); doc.text(l1 + ":", ML + 2.5, curY);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(...PDF_THEME.slate900); doc.text(String(v1).slice(0, 26), ML + 46, curY);
+      if (l2) {
+        doc.setFont("helvetica", "bold"); doc.setTextColor(...PDF_THEME.slate700); doc.text(l2 + ":", ML + 92, curY);
+        doc.setFont("helvetica", "normal"); doc.setTextColor(...PDF_THEME.slate900); doc.text(String(v2 || "").slice(0, 28), ML + 138, curY);
+      }
+      curY += 6.2;
     });
     curY += 5;
   });
 
   // ── 6. BALANCEAMENTO DE FASES ─────────────────────────────────────────────
-  checkY(60);
-  h2("6. BALANCEAMENTO DE FASES");
+  checkY(115, "6. Balanceamento de Fases");
+  h2("6. BALANCEAMENTO DE FASES", "Desequilíbrio <= 5%");
 
   const phLoad = metrics?.phaseLoad || {};
+  const phA = Number(phLoad?.A || 0);
+  const phB = Number(phLoad?.B || 0);
+  const phC = Number(phLoad?.C || 0);
+
+  curY = drawVectorBarChart(doc, {
+    x: ML,
+    y: curY,
+    w: TW,
+    h: 50,
+    title: "CARREGAMENTO DE CORRENTE POR FASE (A)",
+    subtitle: `Desequilíbrio apurado: ${metrics.imbalance_pct || 0}% · Corrente de demanda geral: ${metrics?.generalCurrent || 0} A`,
+    labels: ["Fase A (R)", "Fase B (S)", "Fase C (T)", "Neutro (N)"],
+    values: [phA, phB, phC, Number(metrics?.neutral_a || 0)],
+    barColor: PDF_THEME.teal,
+    valueFormatter: (v) => `${Number(v).toFixed(1)} A`,
+  });
+
   const phRows = [
     ["Fase", "Circuitos", "Corrente Total (A)", "% Carregamento", "Status"],
-    ["A (R)", circuits.filter(c => (c.phase||"").includes("A")).length, `${Number(phLoad?.A || 0).toFixed(1)} A`, `${((Number(phLoad?.A || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, (metrics?.generalBreaker && Number(phLoad?.A || 0) > metrics.generalBreaker * 0.9) ? "⚠ Atenção" : "✓ OK"],
-    ["B (S)", circuits.filter(c => (c.phase||"").includes("B")).length, `${Number(phLoad?.B || 0).toFixed(1)} A`, `${((Number(phLoad?.B || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, (metrics?.generalBreaker && Number(phLoad?.B || 0) > metrics.generalBreaker * 0.9) ? "⚠ Atenção" : "✓ OK"],
-    ["C (T)", circuits.filter(c => (c.phase||"").includes("C")).length, `${Number(phLoad?.C || 0).toFixed(1)} A`, `${((Number(phLoad?.C || 0) / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, (metrics?.generalBreaker && Number(phLoad?.C || 0) > metrics.generalBreaker * 0.9) ? "⚠ Atenção" : "✓ OK"],
+    ["A (R)", circuits.filter(c => (c.phase||"").includes("A")).length, `${phA.toFixed(1)} A`, `${((phA / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, (metrics?.generalBreaker && phA > metrics.generalBreaker * 0.9) ? "⚠ Atenção" : "✓ OK"],
+    ["B (S)", circuits.filter(c => (c.phase||"").includes("B")).length, `${phB.toFixed(1)} A`, `${((phB / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, (metrics?.generalBreaker && phB > metrics.generalBreaker * 0.9) ? "⚠ Atenção" : "✓ OK"],
+    ["C (T)", circuits.filter(c => (c.phase||"").includes("C")).length, `${phC.toFixed(1)} A`, `${((phC / (metrics?.generalCurrent || 1)) * 100).toFixed(1)}%`, (metrics?.generalBreaker && phC > metrics.generalBreaker * 0.9) ? "⚠ Atenção" : "✓ OK"],
     ["Neutro (N)", "—", `${metrics?.neutral_a || 0} A (calc.)`, "—", "Verificar corrente harmônica"],
   ];
   let pbY = curY;
   phRows.forEach((row, ri) => {
     checkY(8);
     if (pbY !== curY) pbY = curY;
-    if (ri === 0) { doc.setFillColor(14, 36, 89); doc.setTextColor(255, 255, 255); }
-    else { doc.setFillColor(ri % 2 === 0 ? 239 : 255, ri % 2 === 0 ? 246 : 255, 255); doc.setTextColor(30, 30, 30); }
+    if (ri === 0) { doc.setFillColor(...PDF_THEME.navy); doc.setTextColor(255, 255, 255); }
+    else { doc.setFillColor(...(ri % 2 === 0 ? PDF_THEME.slate50 : PDF_THEME.white)); doc.setTextColor(...PDF_THEME.slate900); }
     doc.rect(ML, pbY - 5, TW, 8, "F");
     const pCols = [24, 26, 40, 38, TW - 128];
     let phX = ML + 2;
     row.forEach((cell, ci) => {
-      doc.setFont("helvetica", ri === 0 ? "bold" : "normal"); doc.setFontSize(9);
+      doc.setFont("helvetica", ri === 0 ? "bold" : "normal"); doc.setFontSize(8.8);
       doc.text(String(cell), phX, pbY);
       phX += pCols[ci];
     });
-    doc.setDrawColor(200, 200, 200); doc.rect(ML, pbY - 5, TW, 8, "S");
+    doc.setDrawColor(...PDF_THEME.slate200); doc.rect(ML, pbY - 5, TW, 8, "S");
     pbY += 8; curY = pbY;
   });
   curY += 4;
   para(`Desequilíbrio entre fases: ${metrics.imbalance_pct}% — ${metrics.imbalance_pct <= 5 ? "ACEITÁVEL conforme NBR 5410" : metrics.imbalance_pct <= 10 ? "ATENÇÃO — recomenda-se redistribuição" : "CRÍTICO — redistribuição obrigatória (NBR 5410)"}`);
 
   // ── 7. QUADRO DE DISTRIBUIÇÃO ─────────────────────────────────────────────
-  checkY(40);
-  h2("7. QUADRO DE DISTRIBUIÇÃO — COMPOSIÇÃO");
+  checkY(48);
+  h2("7. QUADRO DE DISTRIBUIÇÃO — COMPOSIÇÃO", `${metrics.panelSize || 24} DINs`);
   para(`O quadro de distribuição (QDC) deverá ser dimensionado para ${metrics.panelSize} módulos DIN, incluindo reserva de 20% para expansões futuras, conforme boa prática de engenharia e NBR 5410.`);
   bullet(metrics.generalBreaker ? `Disjuntor geral: ${poles_label(project.supply_type)} ${metrics.generalBreaker}A Curva C` : "Disjuntor geral: a definir (sem cargas)");
   bullet(`DR geral (opcional): ${project.supply_type === "Trifásico" ? "4P" : "2P"} — proteção diferencial geral`);
@@ -419,80 +552,106 @@ function generatePDF(project, metrics, { brandName = "NACIF Energy", logoUrl = b
   bullet(`${circuits.filter(c => c.needs_dr).length} circuito(s) com proteção DR individual obrigatória`);
   bullet(`Total de módulos DIN utilizados: ${circuits.reduce((s, c) => s + (c.din_modules || 1), 0)} + ${4} (geral/DR/DPS) = ${circuits.reduce((s, c) => s + (c.din_modules || 1), 0) + 4}`);
 
-  // ── 8. QUANTITATIVO DE MATERIAIS ──────────────────────────────────────────
-  newPage(); curY = 28;
-  h2("8. QUANTITATIVO DE MATERIAIS");
+  // ── 8. DIAGRAMA UNIFILAR DO QUADRO DE DISTRIBUIÇÃO ────────────────────────
+  const perSheetCircuits = 16;
+  const totalUnifilarSheets = Math.max(1, Math.ceil(circuits.length / perSheetCircuits));
+  for (let sheetIdx = 0; sheetIdx < totalUnifilarSheets; sheetIdx += 1) {
+    curY = newPage(`8. Diagrama Unifilar (${sheetIdx + 1}/${totalUnifilarSheets})`) + 2;
+    const startIdx = sheetIdx * perSheetCircuits;
+    const sheetTitle = totalUnifilarSheets > 1
+      ? `8. DIAGRAMA UNIFILAR DO QUADRO DE DISTRIBUIÇÃO (FOLHA ${sheetIdx + 1}/${totalUnifilarSheets})`
+      : "8. DIAGRAMA UNIFILAR DO QUADRO DE DISTRIBUIÇÃO";
+    h2(sheetTitle, "ABNT NBR 5410 · IEC");
+    curY = drawElectricalUnifilarVector(doc, project, metrics, {
+      x: ML,
+      y: curY,
+      w: TW,
+      h: 222,
+      startIndex: startIdx,
+      maxCircuits: perSheetCircuits,
+      sheetLabel: totalUnifilarSheets > 1 ? `FOLHA ${sheetIdx + 1}/${totalUnifilarSheets}` : "PRANCHA ÚNICA",
+    });
+  }
+
+  // ── 9. QUANTITATIVO DE MATERIAIS ──────────────────────────────────────────
+  curY = newPage("9. Quantitativo de Materiais") + 2;
+  h2("9. QUANTITATIVO DE MATERIAIS", `${bom.length} itens`);
   para("Os materiais abaixo foram selecionados a partir da base técnica do projeto, garantindo conformidade com as normas e rastreabilidade do memorial.");
   curY += 2;
 
-  const qCols = [TW - 104, 24, 14, 26, 26];
+  const qCols = [TW - 92, 24, 14, 24, 30];
   const qHeaders = ["Descrição / Modelo", "Código", "Un", "Qtd", "Total R$"];
-  // header
-  doc.setFillColor(14, 36, 89); doc.rect(ML, curY - 5, TW, 8, "F");
-  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+  doc.setFillColor(...PDF_THEME.navy); doc.rect(ML, curY - 5, TW, 8, "F");
+  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(8.8);
   let qx = ML + 2;
   qHeaders.forEach((h, hi) => { doc.text(h, qx, curY); qx += qCols[hi]; });
-  doc.setDrawColor(255, 255, 255); doc.rect(ML, curY - 5, TW, 8, "S");
+  doc.setDrawColor(...PDF_THEME.navy); doc.rect(ML, curY - 5, TW, 8, "S");
   curY += 8;
 
   bom.forEach((item, ii) => {
-    checkY(8);
-    if (ii % 2 === 0) { doc.setFillColor(239, 246, 255); } else { doc.setFillColor(255, 255, 255); }
+    checkY(8, "9. Quantitativo de Materiais");
+    if (ii % 2 === 0) { doc.setFillColor(...PDF_THEME.slate50); } else { doc.setFillColor(...PDF_THEME.white); }
     doc.rect(ML, curY - 5, TW, 7, "F");
-    doc.setTextColor(30, 30, 30); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+    doc.setTextColor(...PDF_THEME.slate900); doc.setFont("helvetica", "normal"); doc.setFontSize(8.3);
     const cells = [
       item.model || item.name,
       item.code || "—",
       item.unit || "un",
       item.unit === "m" ? `${item.qty.toFixed(0)}m` : String(item.qty),
-      `R$ ${item.total.toFixed(2)}`,
+      `R$ ${formatCurrencyBR(item.total)}`,
     ];
     let itemX = ML + 2;
     cells.forEach((cell, ci) => {
-      doc.text(String(cell).slice(0, ci === 0 ? 38 : 12), itemX, curY);
+      doc.text(String(cell).slice(0, ci === 0 ? 44 : 14), itemX, curY);
       itemX += qCols[ci];
     });
-    doc.setDrawColor(200, 200, 200); doc.rect(ML, curY - 5, TW, 7, "S");
+    doc.setDrawColor(...PDF_THEME.slate200); doc.rect(ML, curY - 5, TW, 7, "S");
     curY += 7;
   });
 
   // Total
   checkY(14);
-  doc.setFillColor(14, 36, 89); doc.rect(ML, curY - 5, TW, 9, "F");
-  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-  doc.text("TOTAL ESTIMADO DE MATERIAIS (sem mão de obra):", ML + 2, curY + 1);
-  doc.text(`R$ ${totalBOM.toFixed(2)}`, PW - MR - 2, curY + 1, { align: "right" });
-  curY += 14;
+  doc.setFillColor(...PDF_THEME.navy); doc.rect(ML, curY - 5, TW, 9, "F");
+  doc.setFillColor(...PDF_THEME.teal); doc.rect(ML, curY - 5, 2.5, 9, "F");
+  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(9.5);
+  doc.text("TOTAL ESTIMADO DE MATERIAIS (sem mão de obra):", ML + 5, curY + 1);
+  doc.setTextColor(...PDF_THEME.teal);
+  doc.text(`R$ ${formatCurrencyBR(totalBOM)}`, PW - MR - 3, curY + 1, { align: "right" });
+  curY += 13;
   para("* Valores de referência. Podem variar conforme fornecedor, região e condições comerciais. Mão de obra não inclusa.");
 
-  // ── 9. ANÁLISE NBR 5410 ───────────────────────────────────────────────────
-  checkY(30);
-  h2("9. ANÁLISE NBR 5410 — NÃO-CONFORMIDADES E ALERTAS");
+  // ── 10. ANÁLISE NBR 5410 ──────────────────────────────────────────────────
+  checkY(32);
+  h2("10. ANÁLISE NBR 5410 — NÃO-CONFORMIDADES E ALERTAS", `${metrics.validations.length} apontamento(s)`);
   if (metrics.validations.length === 0) {
-    doc.setTextColor(22, 163, 74); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
-    doc.text("✓ Nenhuma não-conformidade identificada. Instalação dentro dos parâmetros NBR 5410.", ML, curY);
-    curY += 10;
+    doc.setFillColor(...PDF_THEME.emeraldSoft);
+    doc.setDrawColor(...PDF_THEME.emerald);
+    doc.rect(ML, curY - 4, TW, 10, "FD");
+    doc.setTextColor(...PDF_THEME.emerald); doc.setFont("helvetica", "bold"); doc.setFontSize(9.8);
+    doc.text("✓ Nenhuma não-conformidade identificada. Instalação dentro dos parâmetros NBR 5410.", ML + 4, curY + 2.5);
+    curY += 12;
   } else {
     metrics.validations.forEach(v => {
-      checkY(10);
+      const lines = doc.splitTextToSize(v.msg || "", TW - 28);
+      const rowH = Math.max(9, lines.length * 4.5 + 4);
+      checkY(rowH + 2);
       const isErr = v.severity === "error";
-      doc.setFillColor(isErr ? 254 : 255, isErr ? 242 : 251, isErr ? 242 : 235);
-      doc.rect(ML, curY - 5, TW, 9, "F");
-      doc.setTextColor(isErr ? 220 : 202, isErr ? 38 : 138, isErr ? 38 : 4);
-      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-      doc.text(isErr ? "⚠ ERRO:" : "⚡ AVISO:", ML + 2, curY);
-      doc.setFont("helvetica", "normal"); doc.setTextColor(40, 40, 40);
-      const lines = doc.splitTextToSize(v.msg, TW - 30);
-      doc.text(lines, ML + 22, curY);
-      curY += 9;
+      doc.setFillColor(...(isErr ? PDF_THEME.redSoft : PDF_THEME.amberSoft));
+      doc.rect(ML, curY - 4.5, TW, rowH, "F");
+      doc.setTextColor(...(isErr ? PDF_THEME.red : PDF_THEME.amber));
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.8);
+      doc.text(isErr ? "⚠ ERRO:" : "⚡ AVISO:", ML + 2.5, curY + 0.5);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(...PDF_THEME.slate900);
+      doc.text(lines, ML + 22, curY + 0.5);
+      curY += rowH + 1.5;
     });
-    curY += 4;
+    curY += 3;
     para("Todas as não-conformidades identificadas devem ser corrigidas antes da energização da instalação, conforme NBR 5410:2004 item 3.4 (responsabilidade do instalador).");
   }
 
-  // ── 10. ART ───────────────────────────────────────────────────────────────
-  newPage(); curY = 28;
-  h2("10. ART — ANOTAÇÃO DE RESPONSABILIDADE TÉCNICA");
+  // ── 11. ART ───────────────────────────────────────────────────────────────
+  curY = newPage("11. ART & Conclusão Técnica") + 2;
+  h2("11. ART — ANOTAÇÃO DE RESPONSABILIDADE TÉCNICA", "CONFEA / CREA");
   para("A Anotação de Responsabilidade Técnica (ART) é documento obrigatório conforme Lei Federal 6.496/77 e Resolução CONFEA 1.010/2010, devendo ser emitida pelo profissional habilitado (Engenheiro Eletricista) antes do início dos serviços.");
   curY += 4;
 
@@ -504,58 +663,82 @@ function generatePDF(project, metrics, { brandName = "NACIF Energy", logoUrl = b
     ["Título do projeto:", project.name || "—"],
     ["Endereço da obra:", project.address || "—"],
     ["Contratante:", project.client_name || "—"],
-    ["Responsável técnico:", "___________________________________ CREA nº: ___________"],
-    ["Registro CREA:", "___________"],
-    ["Data de emissão:", "___________"],
+    ["Responsável técnico:", `${project.technical_responsible || "___________________________________"}   CREA nº: ${project.crea || "___________"}`],
+    ["Data de emissão:", new Date().toLocaleDateString("pt-BR")],
     ["Assinatura:", "___________________________________ (Responsável Técnico)"],
-    ["Visto CREA:", "___________________________________ (Fiscal)"],
   ];
 
-  doc.setFontSize(10);
-  artFields.forEach(([label, val]) => {
+  doc.setFontSize(9.2);
+  artFields.forEach(([label, val], idx) => {
     checkY(9);
-    doc.setFont("helvetica", "bold"); doc.setTextColor(14, 36, 89);
-    doc.text(label, ML + 2, curY);
-    doc.setFont("helvetica", "normal"); doc.setTextColor(40, 40, 40);
-    const lines = doc.splitTextToSize(val, TW - 60);
-    doc.text(lines, ML + 58, curY);
-    doc.setDrawColor(210, 210, 210);
-    doc.line(ML, curY + 3, PW - MR, curY + 3);
-    curY += 9;
+    if (idx % 2 === 0) {
+      doc.setFillColor(...PDF_THEME.slate50);
+      doc.rect(ML, curY - 4.5, TW, 8, "F");
+    }
+    doc.setFont("helvetica", "bold"); doc.setTextColor(...PDF_THEME.navy);
+    doc.text(label, ML + 2.5, curY);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(...PDF_THEME.slate900);
+    const lines = doc.splitTextToSize(val, TW - 58);
+    doc.text(lines, ML + 56, curY);
+    doc.setDrawColor(...PDF_THEME.slate200);
+    doc.line(ML, curY + 3.2, PW - MR, curY + 3.2);
+    curY += 8.2;
   });
 
-  curY += 8;
-  doc.setFontSize(8.5); doc.setTextColor(100, 100, 100);
-  para("IMPORTANTE: Esta ART deve ser recolhida no CREA da jurisdição da obra e uma via entregue ao contratante antes do início dos serviços. O valor da ART é determinado pela tabela de honorários do CREA estadual.");
+  curY += 5;
+  para("IMPORTANTE: Esta ART deve ser recolhida no CREA da jurisdição da obra e uma via entregue ao contratante antes do início dos serviços.");
 
-  // ── 11. CONCLUSÃO ─────────────────────────────────────────────────────────
-  checkY(60);
-  h2("11. CONCLUSÃO E ASSINATURA");
+  // ── 12. CONCLUSÃO ─────────────────────────────────────────────────────────
+  checkY(65);
+  h2("12. CONCLUSÃO E ASSINATURA", "Termo Técnico");
   para(`O presente memorial descritivo apresenta o dimensionamento completo da instalação elétrica de baixa tensão para o empreendimento "${project.name || "descrito na capa"}", elaborado em conformidade com a NBR 5410:2004 e suas referências normativas.`);
-  curY += 2;
   para(`O projeto prevê ${circuits.length} circuito(s) finais com potência total instalada de ${(metrics.totalPower / 1000).toFixed(2)} kW, alimentados por sistema ${project.supply_type || "—"} em ${project.voltage || 220}V${metrics.generalBreaker ? `, protegidos por disjuntor geral de ${metrics.generalBreaker}A` : ""}.`);
-  curY += 2;
   para(`O NBR Score calculado pela plataforma ${brandName} considera queda de tensão, balanceamento de fases, proteção diferencial e DPS, resultando em uma avaliação objetiva da conformidade normativa.`);
-  curY += 4;
+  curY += 2;
 
   // Caixa de assinatura
-  checkY(60);
-  doc.setDrawColor(14, 36, 89); doc.setLineWidth(0.8);
-  doc.rect(ML, curY, TW, 54, "S");
-  doc.setFillColor(239, 246, 255); doc.rect(ML, curY, TW, 10, "F");
-  doc.setTextColor(14, 36, 89); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-  doc.text("DECLARAÇÃO DO RESPONSÁVEL TÉCNICO", PW / 2, curY + 7, { align: "center" });
+  checkY(58);
+  doc.setFillColor(...PDF_THEME.slate50);
+  doc.setDrawColor(...PDF_THEME.navy);
+  doc.setLineWidth(0.5);
+  doc.rect(ML, curY, TW, 52, "FD");
+  doc.setFillColor(...PDF_THEME.navy);
+  doc.rect(ML, curY, TW, 9.5, "F");
+  doc.setFillColor(...PDF_THEME.teal);
+  doc.rect(ML, curY + 9.5, TW, 1, "F");
+  doc.setTextColor(...PDF_THEME.white);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.text("DECLARAÇÃO DO RESPONSÁVEL TÉCNICO", PW / 2, curY + 6.5, { align: "center" });
 
-  doc.setTextColor(40, 40, 40); doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-  doc.text("Declaro que o presente memorial descritivo foi elaborado por mim, conforme as", ML + 4, curY + 18);
-  doc.text("normas técnicas vigentes, sendo de minha responsabilidade técnica e legal.", ML + 4, curY + 25);
-  doc.text(`Local e data: _________________________, ${new Date().toLocaleDateString("pt-BR")}`, ML + 4, curY + 34);
-  doc.text("Assinatura: ___________________________________ CREA: ___________", ML + 4, curY + 43);
-  doc.text("Carimbo:", ML + 4, curY + 50);
+  doc.setTextColor(...PDF_THEME.slate700);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.8);
+  doc.text("Declaro que o presente memorial descritivo foi elaborado por mim, conforme as normas", ML + 5, curY + 17);
+  doc.text("técnicas vigentes (ABNT NBR 5410), sendo de minha responsabilidade técnica e legal.", ML + 5, curY + 23);
+  doc.text(`Local e data: _________________________, ${new Date().toLocaleDateString("pt-BR")}`, ML + 5, curY + 32);
+  doc.text("Assinatura: ___________________________________ CREA: ___________", ML + 5, curY + 41);
+  doc.text("Carimbo profissional:", ML + 5, curY + 48);
 
-  curY += 60;
-  doc.setFontSize(8); doc.setTextColor(130, 130, 130);
-  para(`Este documento foi gerado automaticamente pela plataforma ${brandName} com base nos dados inseridos pelo usuário. A responsabilidade técnica pelo projeto é inteiramente do Engenheiro Responsável habilitado. ${brandName} é uma ferramenta de auxílio ao projeto e não substitui a análise crítica do profissional.`);
+  curY += 56;
+  doc.setFontSize(7.8); doc.setTextColor(...PDF_THEME.slate500);
+  para(`Documento gerado automaticamente pela plataforma ${brandName}. A responsabilidade técnica pela execução é inteiramente do profissional habilitado.`);
+
+  // Rodapé unificado em todas as páginas (Página X de Y)
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p += 1) {
+    doc.setPage(p);
+    doc.setDrawColor(...PDF_THEME.slate200);
+    doc.setLineWidth(0.3);
+    doc.line(ML, PH - 13, PW - MR, PH - 13);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    doc.setTextColor(...PDF_THEME.slate500);
+    doc.text(`${brandName} · Memorial Descritivo · ABNT NBR 5410:2004`, ML, PH - 8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PDF_THEME.navy);
+    doc.text(`${project?.name || "Projeto"} · Página ${p} de ${totalPages}`, PW - MR, PH - 8, { align: "right" });
+  }
 
   return doc;
 }

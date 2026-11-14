@@ -15,6 +15,13 @@ import { jsPDF } from "jspdf";
 import { getAzimuthWithCardinal } from "./solarDesignerGeometry.js";
 import { NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
 import { resolveSolarReportImages, resolveSolarReportImagesAsync } from "./solarLayoutImageRenderer.js";
+import {
+  PDF_THEME,
+  drawPdfKpiStrip,
+  drawPdfSectionTitle,
+  drawSolarUnifilarVector,
+  drawVectorBarChart,
+} from "./unifilarPdfDrawer.js";
 
 const BRAND_DARK = [14, 23, 38];   // #0e1726
 const BRAND_BLUE = [13, 59, 130];  // #0d3b82
@@ -473,12 +480,11 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
   // ==========================================
   addHeader(doc, "PLANTA DE IMPLANTAÇÃO SOLAR", project);
 
-  let y = 29;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("1. Dados Gerais da Instalação", 14, y);
-  y += 3.5;
+  let y = 28;
+  y = drawPdfSectionTitle(doc, "1. Dados Gerais da Instalação", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: `${dcPowerKw.toFixed(2)} kWp · ${panelCount} módulos`,
+  });
 
   const dataRows = [
     ["Cliente", project?.client_name || "Cliente Solar", "Endereço", project?.address || "Endereço da Instalação"],
@@ -490,12 +496,11 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
 
   y = drawSimpleTable(doc, y, ["Parâmetro", "Especificação", "Parâmetro", "Especificação"], dataRows, [42, 49, 42, 49]);
 
-  y += 4;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("2. Layout e Arranjo Físico no Telhado", 14, y);
-  y += 3.5;
+  y += 1.5;
+  y = drawPdfSectionTitle(doc, "2. Layout e Arranjo Físico no Telhado", 14, y, 182, {
+    accentColor: BRAND_BLUE,
+    rightBadge: `Azimute ${azimuth.formatted}`,
+  });
 
   // Sub-bloco A: Imagem do Layout dos Módulos no Telhado
   doc.setFont("helvetica", "bold");
@@ -506,12 +511,12 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
 
   // Imagem do layout dos módulos no telhado
   const imgWidth = 182;
-  const imgHeight = 82;
+  const imgHeight = 76;
   try {
     if (layoutImage) {
       doc.addImage(layoutImage, "PNG", 14, y, imgWidth, imgHeight, undefined, "FAST");
       doc.setDrawColor(180, 200, 225);
-      doc.setLineWidth(0.3);
+      doc.setLineWidth(0.35);
       doc.rect(14, y, imgWidth, imgHeight, "D");
     }
   } catch (err) {
@@ -521,38 +526,38 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
 
   // Box de Especificações Técnicas de Montagem Física (Cantos Quadrados e Simétricos)
   doc.setFillColor(248, 250, 253);
-  doc.rect(14, y, 182, 54, "FD");
+  doc.rect(14, y, 182, 52, "FD");
   doc.setDrawColor(210, 225, 240);
   doc.setLineWidth(0.3);
-  doc.rect(14, y, 182, 54, "D");
+  doc.rect(14, y, 182, 52, "D");
   doc.setFillColor(...BRAND_TEAL);
-  doc.rect(14, y, 1.5, 54, "F");
+  doc.rect(14, y, 2.0, 52, "F");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(...BRAND_BLUE);
-  doc.text(`Especificações Técnicas de Montagem Física · ${panelCount} Módulos (${moduleWp}Wp)`, 18, y + 7);
+  doc.text(`Especificações Técnicas de Montagem Física · ${panelCount} Módulos (${moduleWp}Wp)`, 18.5, y + 6.5);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.4);
   doc.setTextColor(60, 75, 95);
 
-  const col1X = 18;
+  const col1X = 18.5;
   const col2X = 105;
 
-  doc.text(`• Dimensões do Telhado: ${roofWidth} m × ${roofHeight} m (${roofArea.toFixed(1)} m²)`, col1X, y + 14);
-  doc.text(`• Afastamento de segurança (Setback): 0,30 m nas bordas`, col1X, y + 21);
-  doc.text(`• Orientação dos módulos: ${config?.module_orientation === "horizontal" ? "Deitado (Paisagem)" : "Em pé (Retrato)"}`, col1X, y + 28);
-  doc.text(`• Obstáculos identificados: ${config?.obstacles?.length || 0} excluídos da área útil`, col1X, y + 35);
-  doc.text(`• Espaçamento térmico intermódulos: 20 mm c/ grampos`, col1X, y + 42);
-  doc.text(`• Inclinação / Azimute: ${roofPitch}° / ${azimuth.formatted}`, col1X, y + 49);
+  doc.text(`• Dimensões do Telhado: ${roofWidth} m × ${roofHeight} m (${roofArea.toFixed(1)} m²)`, col1X, y + 13.5);
+  doc.text(`• Afastamento de segurança (Setback): 0,30 m nas bordas`, col1X, y + 20.2);
+  doc.text(`• Orientação dos módulos: ${config?.module_orientation === "horizontal" ? "Deitado (Paisagem)" : "Em pé (Retrato)"}`, col1X, y + 26.9);
+  doc.text(`• Obstáculos identificados: ${config?.obstacles?.length || 0} excluídos da área útil`, col1X, y + 33.6);
+  doc.text(`• Espaçamento térmico intermódulos: 20 mm c/ grampos`, col1X, y + 40.3);
+  doc.text(`• Inclinação / Azimute: ${roofPitch}° / ${azimuth.formatted}`, col1X, y + 47.0);
 
-  doc.text(`• Estrutura de fixação: Perfis de alumínio anodizado 6063-T6`, col2X, y + 14);
-  doc.text(`• Fixadores: Parafusos prisioneiros / ganchos inox 304`, col2X, y + 21);
-  doc.text(`• Carga estática admissível: 2400 Pa (vento) / 5400 Pa (peso)`, col2X, y + 28);
-  doc.text(`• Aterramento da estrutura: Cabo de cobre nu / isolado 6 mm²`, col2X, y + 35);
-  doc.text(`• Grau de proteção dos módulos: IP68 (caixa de junção)`, col2X, y + 42);
-  doc.text(`• Conexões CC: Conectores padrão MC4 c/ travamento de segurança`, col2X, y + 49);
+  doc.text(`• Estrutura de fixação: Perfis de alumínio anodizado 6063-T6`, col2X, y + 13.5);
+  doc.text(`• Fixadores: Parafusos prisioneiros / ganchos inox 304`, col2X, y + 20.2);
+  doc.text(`• Carga estática admissível: 2400 Pa (vento) / 5400 Pa (peso)`, col2X, y + 26.9);
+  doc.text(`• Aterramento da estrutura: Cabo de cobre nu / isolado 6 mm²`, col2X, y + 33.6);
+  doc.text(`• Grau de proteção dos módulos: IP68 (caixa de junção)`, col2X, y + 40.3);
+  doc.text(`• Conexões CC: Conectores padrão MC4 c/ travamento de segurança`, col2X, y + 47.0);
 
   // =======================================================
   // PÁGINA 2: ARRANJO ELÉTRICO DE STRINGS / CIRCUITOS CC
@@ -560,12 +565,11 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
   doc.addPage();
   addHeader(doc, "PLANTA DE IMPLANTAÇÃO SOLAR — ARRANJO ELÉTRICO", project);
 
-  let y2 = 29;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("2. Layout e Arranjo Físico no Telhado (Continuação)", 14, y2);
-  y2 += 3.5;
+  let y2 = 28;
+  y2 = drawPdfSectionTitle(doc, "2. Layout e Arranjo Físico no Telhado (Continuação)", 14, y2, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: "Topologia CC · NBR 16690",
+  });
 
   // Sub-bloco B: Imagem do Arranjo de Strings / Circuito Solar
   doc.setFont("helvetica", "bold");
@@ -575,12 +579,12 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
   y2 += 2.5;
 
   // Imagem do arranjo elétrico / strings / circuitos (Borda Quadrada)
-  const stringsImgHeight = 84;
+  const stringsImgHeight = 80;
   try {
     if (stringsImage) {
       doc.addImage(stringsImage, "PNG", 14, y2, imgWidth, stringsImgHeight, undefined, "FAST");
       doc.setDrawColor(180, 200, 225);
-      doc.setLineWidth(0.3);
+      doc.setLineWidth(0.35);
       doc.rect(14, y2, imgWidth, stringsImgHeight, "D");
     }
   } catch (err) {
@@ -590,7 +594,7 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
 
   // Tabela Técnica de Strings / Circuitos Solares
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(9.2);
   doc.setTextColor(...BRAND_DARK);
   doc.text("2.3 Quadro de Divisão das Strings e Conexão ao Inversor", 14, y2);
   y2 += 3;
@@ -648,7 +652,7 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
     [32, 22, 26, 25, 25, 24, 28]
   );
 
-  y2 += 4;
+  y2 += 3;
   // Normas e Requisitos Construtivos
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
@@ -664,12 +668,12 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
   doc.setLineWidth(0.3);
   doc.rect(14, y2, 182, normBoxH, "D");
   doc.setFillColor(...BRAND_TEAL);
-  doc.rect(14, y2, 1.5, normBoxH, "F");
+  doc.rect(14, y2, 2.0, normBoxH, "F");
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(50, 65, 85);
-  const normLeft = 18;
+  const normLeft = 18.5;
   doc.text("• ABNT NBR 16690: Instalação de arranjos fotovoltaicos com proteção contra sobrecorrentes e sobretensões transitórias.", normLeft, y2 + 7);
   doc.text("• Condutores CC: Cabos flexíveis de cobre estanhado 4/6 mm², classe térmica 90°C (120°C máx), isolação 1,8 kV CC resistente a UV.", normLeft, y2 + 13.5);
   doc.text("• Conectores MC4: Crimpagem profissional com ferramentas calibradas e teste de continuidade prévio ao comissionamento.", normLeft, y2 + 20);
@@ -683,12 +687,10 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
     doc.addPage();
     addHeader(doc, "PLANTA DE IMPLANTAÇÃO SOLAR — VISTAS COMPLEMENTARES", project);
 
-    let y3 = 29;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
-    doc.setTextColor(...BRAND_DARK);
-    doc.text("3. Vistas Complementares e Registros Técnicos", 14, y3);
-    y3 += 4;
+    let y3 = 28;
+    y3 = drawPdfSectionTitle(doc, "3. Vistas Complementares e Registros Técnicos", 14, y3, 182, {
+      accentColor: BRAND_BLUE,
+    });
 
     extraImages.slice(0, 4).forEach((extra, idx) => {
       if (idx > 0 && idx % 2 === 0) {
@@ -730,34 +732,93 @@ export async function generateSitePlanReport(project = {}, config = {}, sizing =
  * 2. Diagrama Elétrico Solar
  */
 export function generateElectricalDiagramReport(project = {}, config = {}, sizing = {}) {
-  const { dcPowerKw, panelCount, moduleWp, inverterKw, breaker, acCurrent, isTri, acVoltage, powerFactor } = normalizeParams(project, config, sizing);
+  const { dcPowerKw, panelCount, moduleWp, inverterKw, breaker, acCurrent, isTri, acVoltage, powerFactor, supplyType } = normalizeParams(project, config, sizing);
   const doc = new jsPDF("p", "mm", "a4");
   addHeader(doc, "DIAGRAMA ELÉTRICO SOLAR & STRINGS", project);
 
-  let y = 30;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("1. Configuração de Strings e Inversor", 14, y);
-  y += 4;
+  const cableGauge = breaker >= 160 ? "70 mm²" : breaker >= 125 ? "50 mm²" : breaker >= 100 ? "35 mm²" : breaker > 63 ? "16 mm²" : breaker > 40 ? "10 mm²" : "6 mm²";
+
+  let y = 28;
+  y = drawPdfKpiStrip(doc, [
+    { label: "GERADOR CC", value: `${dcPowerKw.toFixed(2)} kWp`, sub: `${panelCount} × ${moduleWp}Wp`, highlight: true },
+    { label: "INVERSOR CA", value: `${inverterKw} kW`, sub: `${isTri ? "Trifásico" : supplyType} · ${acVoltage}V` },
+    { label: "CORRENTE PROJETO (Ib)", value: `${acCurrent.toFixed(1)} A`, sub: `FP ${powerFactor.toFixed(2)}` },
+    { label: "DISJUNTOR / CABO CA", value: `${breaker}A ${isTri ? "3P" : "2P"}`, sub: `Curva C · ${cableGauge}` },
+  ], 14, y, 182, 20);
+
+  // Bloco principal: Diagrama Unifilar Vetorial Completo CC -> Inversor -> CA -> Rede
+  y = drawPdfSectionTitle(doc, "1. Diagrama Unifilar Elétrico Fotovoltaico (NBR 16690 / NBR 5410)", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: "Esquema Vetorial CC / CA",
+  });
 
   const countStr1 = Math.ceil(panelCount / 2);
   const countStr2 = Math.floor(panelCount / 2);
-  const stringRows = [
-    ["String 01", `${countStr1} × ${moduleWp}Wp`, `${((countStr1 * moduleWp) / 1000).toFixed(2)} kWp`, "456,5 V", "547,8 V", "13,25 A"],
-    ["String 02", `${countStr2} × ${moduleWp}Wp`, `${((countStr2 * moduleWp) / 1000).toFixed(2)} kWp`, "415,0 V", "498,0 V", "13,25 A"],
-    ["Total Gerador CC", `${panelCount} módulos`, `${dcPowerKw.toFixed(2)} kWp`, "—", "—", "26,50 A"],
-  ];
+  const resolvedStrings = (sizing?.strings && sizing.strings.length > 0)
+    ? sizing.strings
+    : [
+        {
+          stringName: "String 01",
+          modulesCount: countStr1,
+          powerKw: ((countStr1 * moduleWp) / 1000).toFixed(2),
+          vmpV: (countStr1 * 41.5).toFixed(1),
+          vocV: (countStr1 * 49.8).toFixed(1),
+          impA: "13,25",
+        },
+        ...(countStr2 > 0 ? [{
+          stringName: "String 02",
+          modulesCount: countStr2,
+          powerKw: ((countStr2 * moduleWp) / 1000).toFixed(2),
+          vmpV: (countStr2 * 41.5).toFixed(1),
+          vocV: (countStr2 * 49.8).toFixed(1),
+          impA: "13,25",
+        }] : []),
+      ];
+
+  y = drawSolarUnifilarVector(doc, {
+    dcPowerKw,
+    panelCount,
+    moduleWp,
+    inverterKw,
+    acVoltage,
+    supplyType,
+    isTri,
+    breaker,
+    acCurrent,
+    cableGauge,
+    strings: resolvedStrings,
+  }, { x: 14, y, w: 182, h: 102 });
+
+  y = drawPdfSectionTitle(doc, "2. Configuração de Strings e Inversor", 14, y, 182, {
+    accentColor: BRAND_BLUE,
+    rightBadge: `${resolvedStrings.length} String(s) CC`,
+  });
+
+  const stringRows = resolvedStrings.map((str, idx) => {
+    const cnt = Number(str.modulesCount || str.count || Math.ceil(panelCount / resolvedStrings.length));
+    return [
+      str.stringName || `String 0${idx + 1}`,
+      `${cnt} × ${moduleWp}Wp`,
+      `${Number(str.powerKw || ((cnt * moduleWp) / 1000)).toFixed(2)} kWp`,
+      `${str.vmpV || "456,5"} V`,
+      `${str.vocV || "547,8"} V`,
+      `${str.impA || "13,25"} A`,
+    ];
+  });
+  stringRows.push(["Total Gerador CC", `${panelCount} módulos`, `${dcPowerKw.toFixed(2)} kWp`, "—", "—", `${(resolvedStrings.length * 13.25).toFixed(2).replace(".", ",")} A`]);
   y = drawSimpleTable(doc, y, ["String / Circuito", "Módulos", "Potência (kWp)", "Vmp (V)", "Voc (V)", "Imp (A)"], stringRows, [30, 32, 30, 30, 30, 30]);
 
-  y += 4;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("2. Proteção e Saída CA (Conexão ao Quadro Principal)", 14, y);
-  y += 4;
+  if (y > 215) {
+    doc.addPage();
+    addHeader(doc, "DIAGRAMA ELÉTRICO SOLAR & PROTEÇÕES (CONT.)", project);
+    y = 29;
+  }
 
-  const cableGauge = breaker >= 160 ? "70 mm²" : breaker >= 125 ? "50 mm²" : breaker >= 100 ? "35 mm²" : breaker > 63 ? "16 mm²" : breaker > 40 ? "10 mm²" : "6 mm²";
+  y = drawPdfSectionTitle(doc, "3. Proteção e Saída CA (Conexão ao Quadro Principal)", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: "NBR 5410 · IEC 60898",
+  });
+
   const acRows = [
     ["Inversor Fotovoltaico", `${inverterKw} kW (${isTri ? "Trifásico" : "Bifásico/Monofásico"} ${acVoltage}V)`, `FP = ${powerFactor.toFixed(2)}`],
     ["Corrente de Projeto (Ib)", `${acCurrent.toFixed(2)} A`, isTri ? "Ib = P / (V × √3 × FP) [NBR 5410]" : "Ib = P / (V × FP) [NBR 5410]"],
@@ -768,7 +829,28 @@ export function generateElectricalDiagramReport(project = {}, config = {}, sizin
   ];
   y = drawSimpleTable(doc, y, ["Elemento", "Parâmetro Calculado", "Critério Normativo"], acRows, [52, 65, 65]);
 
-  addFooter(doc, 1, 1);
+  if (y <= 252) {
+    doc.setFillColor(...PDF_THEME.slate50);
+    doc.setDrawColor(...PDF_THEME.slate200);
+    doc.rect(14, y, 182, 22, "FD");
+    doc.setFillColor(...BRAND_TEAL);
+    doc.rect(14, y, 2.0, 22, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...BRAND_DARK);
+    doc.text("Notas Técnicas de Execução e Comissionamento", 18.5, y + 5.5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.9);
+    doc.setTextColor(...PDF_THEME.slate700);
+    doc.text("• Polaridade CC, tensão de circuito aberto (Voc) e isolação deverão ser verificadas antes da energização do inversor.", 18.5, y + 11.2);
+    doc.text("• Identificar de forma permanente os quadros CC/CA, seccionadoras e ponto de conexão com advertência de geração própria.", 18.5, y + 16.5);
+  }
+
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    addFooter(doc, p, totalPages);
+  }
   return doc;
 }
 
@@ -839,15 +921,33 @@ export function generateTechnicalMemorialReport(project = {}, config = {}, sizin
 
   addHeader(doc, "MEMORIAL DESCRITIVO FOTOVOLTAICO", project);
 
+  // Bloco Hero Executivo do Memorial Solar
+  doc.setFillColor(...PDF_THEME.slate50);
+  doc.setDrawColor(...PDF_THEME.slate200);
+  doc.setLineWidth(0.35);
+  doc.rect(14, y - 2, 182, 20, "FD");
+  doc.setFillColor(...BRAND_TEAL);
+  doc.rect(14, y - 2, 2.5, 20, "F");
+
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
+  doc.setFontSize(15);
   doc.setTextColor(...BRAND_BLUE);
-  doc.text("MEMORIAL DESCRITIVO", 14, y);
-  y += 7;
-  doc.setFontSize(12);
+  doc.text("MEMORIAL DESCRITIVO", 20, y + 6);
+  doc.setFontSize(9.5);
   doc.setTextColor(...BRAND_TEAL);
-  doc.text("SISTEMA FOTOVOLTAICO", 14, y);
-  y += 12;
+  doc.text("SISTEMA DE GERAÇÃO SOLAR FOTOVOLTAICO · NBR 16690 & NBR 5410", 20, y + 12.5);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...BRAND_DARK);
+  doc.text(`Emissão: ${data.date}`, 192, y + 12.5, { align: "right" });
+  y += 22;
+
+  y = drawPdfKpiStrip(doc, [
+    { label: "POTÊNCIA GERADOR", value: `${formatDecimalBR(data.systemPowerKwp)} kWp`, sub: `${data.panelCount} × ${data.moduleWp}Wp`, highlight: true },
+    { label: "INVERSOR(ES)", value: `${formatDecimalBR(data.inverterPowerKw)} kW`, sub: `${data.inverterCount} un · ${data.systemType}` },
+    { label: "CONEXÃO CA", value: `${data.connectionVoltage} V`, sub: `${data.supplyType} · ${data.frequencyHz} Hz` },
+    { label: "DISJUNTOR CONEXÃO", value: data.connectionBreakerA ? `${data.connectionBreakerA} A` : "A definir", sub: data.distributor },
+  ], 14, y, 182, 19);
 
   sectionTitle("1. IDENTIFICAÇÃO DO PROJETO");
   keyValueRows([
@@ -914,18 +1014,42 @@ export function generateTechnicalMemorialReport(project = {}, config = {}, sizin
   ]);
   paragraph("O sistema será conectado de forma a operar em paralelo com a rede elétrica da distribuidora, conforme as características técnicas estabelecidas no projeto elétrico.");
 
-  ensureSpace(44);
+  const memorialSolarParams = normalizeParams(project, config, sizing);
+  ensureSpace(112);
+  y = drawPdfSectionTitle(doc, "6.1 Esquema Unifilar Simplificado de Conexão", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: "NBR 16690 / NBR 5410",
+  });
+  y = drawSolarUnifilarVector(doc, {
+    ...memorialSolarParams,
+    strings: [
+      { id: "STR 01", modules: Math.ceil(memorialSolarParams.panelCount / 2), kw: (Math.ceil(memorialSolarParams.panelCount / 2) * memorialSolarParams.moduleWp) / 1000, vmp: 456.5, imp: 13.25 },
+      { id: "STR 02", modules: Math.floor(memorialSolarParams.panelCount / 2), kw: (Math.floor(memorialSolarParams.panelCount / 2) * memorialSolarParams.moduleWp) / 1000, vmp: 415.0, imp: 13.25 },
+    ],
+  }, { x: 14, y, w: 182, h: 92 });
+
+  ensureSpace(46);
+  doc.setFillColor(...PDF_THEME.slate50);
+  doc.setDrawColor(...PDF_THEME.slate200);
+  doc.rect(14, y, 182, 34, "FD");
+  doc.setFillColor(...BRAND_DARK);
+  doc.rect(14, y, 2, 34, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...BRAND_DARK);
+  doc.text("RESPONSÁVEL TÉCNICO PELO PROJETO", 19, y + 6.5);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(45, 55, 70);
-  doc.text(`Responsável Técnico: ${data.technicalResponsibleName}`, 14, y);
-  y += 12;
-  doc.line(14, y, 112, y);
-  doc.text(`CREA: ${data.crea}`, 122, y);
-  y += 13;
-  doc.text(`Data: ${data.date}`, 14, y);
-  y += 10;
-  doc.text("Assinatura do Responsável Técnico", 14, y);
+  doc.text(`Profissional: ${data.technicalResponsibleName}`, 19, y + 12.5);
+  doc.text(`Registro Profissional: ${data.crea}   |   Data: ${data.date}`, 19, y + 18);
+  doc.setDrawColor(...PDF_THEME.slate500);
+  doc.setLineWidth(0.35);
+  doc.line(19, y + 27, 112, y + 27);
+  doc.setFontSize(7.2);
+  doc.setTextColor(...PDF_THEME.slate500);
+  doc.text("Assinatura do Responsável Técnico", 19, y + 31);
+  y += 38;
 
   const totalPages = doc.getNumberOfPages();
   for (let page = 1; page <= totalPages; page += 1) {
@@ -1151,11 +1275,19 @@ export function generateBillOfMaterialsReport(project = {}, config = {}, sizing 
     escopo02_materiais_eletricos_ca,
     total_orcamento_integrador,
   } = buildSolarBomData(project, config, sizing);
+  const { dcPowerKw, panelCount, inverterKw } = normalizeParams(project, config, sizing);
 
   const doc = new jsPDF("p", "mm", "a4");
   addHeader(doc, "LISTA DE MATERIAIS & QUANTITATIVOS (BOM)", project);
 
-  let y = 28;
+  let y = 26;
+  y = drawPdfKpiStrip(doc, [
+    { label: "ITENS KIT SOLAR (CC)", value: `${escopo01_kit_solar_cc.length} itens`, sub: `${panelCount} módulos · ${dcPowerKw.toFixed(2)} kWp` },
+    { label: "ITENS INFRA CA (5410)", value: `${escopo02_materiais_eletricos_ca.length} itens`, sub: `Inversor ${inverterKw} kW` },
+    { label: "ESCOPO CC (KIT)", value: "Isolado", sub: "Custo oculto ao integrador", accent: BRAND_BLUE },
+    { label: "ORÇAMENTO INTEGRADOR", value: `R$ ${formatDecimalBR(total_orcamento_integrador)}`, sub: "Escopo 02 (Lado CA)", highlight: true },
+  ], 14, y, 182, 18.5);
+  y += 3.5;
 
   // BLOCO 01: ESCOPO 01 — EQUIPAMENTOS DE ENERGIA SOLAR (LADO CC - NBR 16690)
   doc.setFillColor(241, 245, 249);
@@ -1260,7 +1392,11 @@ export function generateBillOfMaterialsReport(project = {}, config = {}, sizing 
     y + 21.0
   );
 
-  addFooter(doc, 1, 1);
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    addFooter(doc, p, totalPages);
+  }
   return doc;
 }
 
@@ -1268,22 +1404,71 @@ export function generateBillOfMaterialsReport(project = {}, config = {}, sizing 
  * 5. Simulação de Geração e Desempenho
  */
 export function generateGenerationSimulationReport(project = {}, config = {}, sizing = {}) {
-  const { annualKwh } = normalizeParams(project, config, sizing);
+  const { annualKwh, annualSavings, dcPowerKw, panelCount, moduleWp } = normalizeParams(project, config, sizing);
   const doc = new jsPDF("p", "mm", "a4");
   addHeader(doc, "SIMULAÇÃO DE GERAÇÃO & DESEMPENHO ANUAL", project);
 
   const monthWeights = [1.12, 1.08, 1.05, 0.95, 0.85, 0.78, 0.82, 0.90, 0.96, 1.08, 1.18, 1.23];
   const weightSum = monthWeights.reduce((a, b) => a + b, 0);
   const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  const shortMonths = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+  const monthlyKwh = months.map((_, i) => Math.round((annualKwh * monthWeights[i]) / weightSum));
+  const peakIdx = monthlyKwh.indexOf(Math.max(...monthlyKwh));
+  const avgMonthly = Math.round(annualKwh / 12);
+
+  let y = 26;
+  y = drawPdfKpiStrip(doc, [
+    { label: "GERAÇÃO ANUAL", value: `${Math.round(annualKwh).toLocaleString("pt-BR")} kWh`, sub: `${dcPowerKw.toFixed(2)} kWp (${panelCount}×${moduleWp}Wp)`, highlight: true },
+    { label: "MÉDIA MENSAL", value: `${avgMonthly.toLocaleString("pt-BR")} kWh`, sub: `Mês pico: ${shortMonths[peakIdx]} (${monthlyKwh[peakIdx]} kWh)` },
+    { label: "PERFORMANCE RATIO", value: "80,0%", sub: "Fator global de perdas (PR)" },
+    { label: "ECONOMIA 1º ANO", value: `R$ ${Math.round(annualSavings).toLocaleString("pt-BR")}`, sub: "Tarifa ref. estimada" },
+  ], 14, y, 182, 19);
+
+  y += 2;
+  y = drawVectorBarChart(doc, {
+    x: 14,
+    y,
+    w: 182,
+    h: 58,
+    title: "CURVA DE GERAÇÃO MENSAL ESTIMADA (kWh/MÊS)",
+    subtitle: `Irradiação regional típica · Sistema ${dcPowerKw.toFixed(2)} kWp`,
+    labels: shortMonths,
+    values: monthlyKwh,
+    barColor: BRAND_TEAL,
+    valueFormatter: (v) => String(Math.round(v)),
+  });
+
+  y += 2;
+  y = drawPdfSectionTitle(doc, "Detalhamento Mensal de Geração e Economia Estimada", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: "Ciclo 12 Meses",
+  });
 
   const tableBody = months.map((month, i) => {
-    const kwh = Math.round((annualKwh * monthWeights[i]) / weightSum);
+    const kwh = monthlyKwh[i];
     const savings = Math.round(kwh * 0.95);
     return [month, `${kwh.toLocaleString("pt-BR")} kWh`, `R$ ${savings.toLocaleString("pt-BR")}`, "80,0%"];
   });
   tableBody.push(["TOTAL ANUAL", `${Math.round(annualKwh).toLocaleString("pt-BR")} kWh`, `R$ ${Math.round(annualKwh * 0.95).toLocaleString("pt-BR")}`, "80,0%"]);
 
-  drawSimpleTable(doc, 30, ["Mês", "Geração Prevista (kWh)", "Economia Estimada (R$)", "PR Médio"], tableBody, [45, 45, 46, 46]);
+  y = drawSimpleTable(doc, y, ["Mês", "Geração Prevista (kWh)", "Economia Estimada (R$)", "PR Médio"], tableBody, [45, 45, 46, 46]);
+
+  if (y <= 255) {
+    doc.setFillColor(...PDF_THEME.slate50);
+    doc.setDrawColor(...PDF_THEME.slate200);
+    doc.rect(14, y, 182, 16, "FD");
+    doc.setFillColor(...BRAND_BLUE);
+    doc.rect(14, y, 2, 16, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.4);
+    doc.setTextColor(...BRAND_DARK);
+    doc.text("Premissas de Simulação:", 18.5, y + 5.5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.9);
+    doc.setTextColor(...PDF_THEME.slate700);
+    doc.text("Consideradas perdas por temperatura, cabeamento CC/CA, eficiência do inversor, sujeira e sombreamento parcial conforme orientação do telhado.", 18.5, y + 11.2);
+  }
 
   addFooter(doc, 1, 1);
   return doc;
@@ -1293,29 +1478,93 @@ export function generateGenerationSimulationReport(project = {}, config = {}, si
  * 6. Proposta Comercial Executiva
  */
 export function generateCommercialProposalReport(project = {}, config = {}, sizing = {}) {
-  const { dcPowerKw, annualSavings, investment, payback, panelCount } = normalizeParams(project, config, sizing);
+  const { dcPowerKw, annualSavings, annualKwh, investment, payback, panelCount, moduleWp, inverterKw } = normalizeParams(project, config, sizing);
   const doc = new jsPDF("p", "mm", "a4");
   addHeader(doc, "PROPOSTA COMERCIAL EXECUTIVA", project);
 
   const savings25Years = annualSavings * 25;
+  const roiPct = investment > 0 ? ((savings25Years - investment) / investment) * 100 : 0;
+  const co2Year = (dcPowerKw * 0.48).toFixed(1);
+  const trees = Math.max(12, Math.round(dcPowerKw * 18));
 
-  let y = 30;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("Resumo do Investimento e Retorno Financeiro", 14, y);
-  y += 4;
+  let y = 26;
+  y = drawPdfKpiStrip(doc, [
+    { label: "INVESTIMENTO TURNKEY", value: investment.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), sub: `${dcPowerKw.toFixed(2)} kWp · ${panelCount}×${moduleWp}Wp` },
+    { label: "ECONOMIA 1º ANO", value: annualSavings.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), sub: `~${Math.round(annualKwh / 12)} kWh/mês gerados`, accent: BRAND_TEAL },
+    { label: "ECONOMIA 25 ANOS", value: savings25Years.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), sub: `ROI acumulado ${Math.round(roiPct)}%`, highlight: true },
+    { label: "PAYBACK SIMPLES", value: `${payback} anos`, sub: "Retorno do capital investido" },
+  ], 14, y, 182, 20);
+
+  y += 2;
+  // Gráfico comparativo de fluxo acumulado (Anos 1, 3, 5, 10, 15, 20, 25)
+  const yearsLabels = ["Ano 1", "Ano 3", "Ano 5", "Ano 10", "Ano 15", "Ano 20", "Ano 25"];
+  const yearsMult = [1, 3, 5, 10, 15, 20, 25];
+  const cumSavings = yearsMult.map((yr) => Math.round((annualSavings * yr) / 1000));
+  y = drawVectorBarChart(doc, {
+    x: 14,
+    y,
+    w: 182,
+    h: 54,
+    title: "PROJEÇÃO DE ECONOMIA ACUMULADA AO LONGO DE 25 ANOS (MIL R$)",
+    subtitle: `Inversor ${inverterKw} kW · Vida útil estimada de geração > 25 anos`,
+    labels: yearsLabels,
+    values: cumSavings,
+    barColor: BRAND_TEAL,
+    valueFormatter: (v) => `R$ ${Math.round(v)}k`,
+  });
+
+  y += 2;
+  y = drawPdfSectionTitle(doc, "1. Resumo do Investimento e Retorno Financeiro", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: "Proposta Turnkey",
+  });
 
   const proposalRows = [
-    ["Potência do Sistema", `${dcPowerKw.toFixed(2)} kWp`, `${panelCount} módulos fotovoltaicos`],
-    ["Investimento Estimado", investment.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Equipamentos + Engenharia + Instalação"],
-    ["Economia no 1º Ano", annualSavings.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Redução de até 95% na conta de luz"],
-    ["Economia em 25 Anos", savings25Years.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Garantia linear de desempenho"],
-    ["Payback Simples", `${payback} anos`, "Tempo estimado de retorno do investimento"],
-    ["Impacto Ambiental", `${(dcPowerKw * 0.48).toFixed(1)} ton CO2/ano`, "Equivalente a 85 árvores plantadas"],
+    ["Potência do Sistema", `${dcPowerKw.toFixed(2)} kWp`, `${panelCount} módulos fotovoltaicos (${moduleWp} Wp)`],
+    ["Investimento Estimado", investment.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Equipamentos + Engenharia + Instalação + Homologação"],
+    ["Economia no 1º Ano", annualSavings.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Redução de até 95% na fatura de energia elétrica"],
+    ["Economia em 25 Anos", savings25Years.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Garantia linear de desempenho dos módulos"],
+    ["Payback Simples", `${payback} anos`, "Tempo estimado de retorno integral do investimento"],
+    ["Impacto Ambiental", `${co2Year} ton CO2/ano`, `Equivalente a ~${trees} árvores preservadas/ano`],
   ];
 
-  drawSimpleTable(doc, y, ["Indicador Financeiro", "Valor Projetado", "Observação"], proposalRows, [55, 55, 72]);
+  y = drawSimpleTable(doc, y, ["Indicador Financeiro", "Valor Projetado", "Observação"], proposalRows, [48, 48, 86]);
+  y += 3;
+
+  // Bloco de condições comerciais e escopo incluso
+  if (y <= 238) {
+    doc.setFillColor(...PDF_THEME.slate50);
+    doc.setDrawColor(...PDF_THEME.slate200);
+    doc.rect(14, y, 89, 34, "FD");
+    doc.setFillColor(...BRAND_TEAL);
+    doc.rect(14, y, 2, 34, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.8);
+    doc.setTextColor(...BRAND_DARK);
+    doc.text("ESCOPO INCLUSO NA PROPOSTA", 18.5, y + 6);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.0);
+    doc.setTextColor(...PDF_THEME.slate700);
+    doc.text("• Módulos fotovoltaicos Tier-1 + Inversor homologado INMETRO", 18.5, y + 12);
+    doc.text("• String Box CC / Proteções CA (Disjuntor + DPS)", 18.5, y + 17.5);
+    doc.text("• Projeto executivo, ART CREA e homologação na distribuidora", 18.5, y + 23);
+    doc.text("• Instalação mecânica/elétrica e comissionamento completo", 18.5, y + 28.5);
+
+    doc.setFillColor(...PDF_THEME.navySoft);
+    doc.setDrawColor(...BRAND_DARK);
+    doc.rect(107, y, 89, 34, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.8);
+    doc.setTextColor(...BRAND_TEAL);
+    doc.text("CONDIÇÕES & GARANTIAS", 112, y + 6);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.0);
+    doc.setTextColor(226, 232, 240);
+    doc.text("• Validade da proposta: 15 dias corridos", 112, y + 12);
+    doc.text("• Garantia de geração linear módulos: 25 anos", 112, y + 17.5);
+    doc.text("• Garantia do inversor: conforme fabricante (5 a 10 anos)", 112, y + 23);
+    doc.text("• Garantia de instalação e engenharia: 12 meses", 112, y + 28.5);
+  }
 
   addFooter(doc, 1, 1);
   return doc;
@@ -1325,113 +1574,146 @@ export function generateCommercialProposalReport(project = {}, config = {}, sizi
  * 7. Relatório Executivo Completo Consolidado (Todas as seções em um único PDF de 2 páginas)
  */
 export async function generateExecutiveSolarPdf(project = {}, config = {}, sizing = {}) {
-  const { azimuth, dcPowerKw, panelCount, usableArea, annualKwh, annualSavings, moduleWp, inverterKw, roofArea, roofPitch, breaker, investment, payback } = normalizeParams(project, config, sizing);
+  const solarParams = normalizeParams(project, config, sizing);
+  const {
+    azimuth,
+    dcPowerKw,
+    panelCount,
+    usableArea,
+    annualKwh,
+    annualSavings,
+    moduleWp,
+    inverterKw,
+    roofArea,
+    roofPitch,
+    breaker,
+    acVoltage,
+    supplyType,
+    isTri,
+    acCurrent,
+    cableGauge,
+    investment,
+    payback,
+  } = solarParams;
   const doc = new jsPDF("p", "mm", "a4");
   const { layoutImage, stringsImage } = await resolveSolarReportImagesAsync({ project, config, sizing }).catch(() => ({ layoutImage: null, stringsImage: null }));
 
-  // PÁGINA 1: Capa & Dados Técnicos e Financeiros
+  // PÁGINA 1: Capa Executiva, Dados Técnicos, Strings & Implantação
   addHeader(doc, "RELATÓRIO TÉCNICO EXECUTIVO SOLAR", project);
 
-  let y = 28;
+  let y = 26;
+  y = drawPdfKpiStrip(doc, [
+    { label: "POTÊNCIA INSTALADA", value: `${dcPowerKw.toFixed(2)} kWp`, sub: `${panelCount} Módulos (${moduleWp}Wp)`, highlight: true },
+    { label: "GERAÇÃO ANUAL", value: `${(annualKwh / 1000).toFixed(2)} MWh`, sub: `${Math.round(annualKwh / 12)} kWh/mês` },
+    { label: "ECONOMIA 1º ANO", value: `R$ ${Math.round(annualSavings).toLocaleString("pt-BR")}`, sub: "Até 95% de abatimento" },
+    { label: "PAYBACK ESTIMADO", value: `${payback} anos`, sub: `Invest. R$ ${Math.round(investment).toLocaleString("pt-BR")}` },
+  ], 14, y, 182, 20);
 
-  // Box de Indicadores Principais (KPIs - Cantos Quadrados)
-  doc.setFillColor(245, 248, 252);
-  doc.rect(14, y, 182, 28, "FD");
-  doc.setDrawColor(200, 215, 235);
-  doc.setLineWidth(0.3);
-  doc.rect(14, y, 182, 28, "D");
-  doc.setFillColor(...BRAND_TEAL);
-  doc.rect(14, y, 1.5, 28, "F");
-
-  const kpis = [
-    { label: "POTÊNCIA INSTALADA", val: `${dcPowerKw.toFixed(2)} kWp`, sub: `${panelCount} Módulos (${moduleWp}Wp)` },
-    { label: "GERAÇÃO ANUAL", val: `${(annualKwh / 1000).toFixed(2)} MWh`, sub: `${Math.round(annualKwh / 12)} kWh/mês` },
-    { label: "ECONOMIA 1º ANO", val: `R$ ${Math.round(annualSavings).toLocaleString("pt-BR")}`, sub: "Até 95% de abatimento" },
-    { label: "PAYBACK ESTIMADO", val: `${payback} anos`, sub: `Invest. R$ ${Math.round(investment).toLocaleString("pt-BR")}` },
-  ];
-
-  kpis.forEach((kpi, idx) => {
-    const xPos = 18 + idx * 45;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(100, 115, 135);
-    doc.text(kpi.label, xPos, y + 7);
-
-    doc.setFontSize(11);
-    doc.setTextColor(...BRAND_DARK);
-    doc.text(kpi.val, xPos, y + 15);
-
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(0, 150, 130);
-    doc.text(kpi.sub, xPos, y + 21);
+  y += 2;
+  y = drawPdfSectionTitle(doc, "1. Dados da Instalação e Características do Telhado", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: "Visão Geral",
   });
-
-  y += 34;
-
-  // Seção 1: Dados Gerais
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("1. Dados da Instalação e Características do Telhado", 14, y);
-  y += 4;
 
   const dataRows = [
     ["Cliente / Titular", project?.client_name || "Cliente Solar", "Endereço", project?.address || "Endereço da Instalação"],
     ["Cidade / UF", `${project?.city || "São Paulo"} / ${project?.state || "SP"}`, "Distribuidora", project?.consumption?.distributor || project?.distributor || "Enel SP"],
     ["Área do Telhado", `${roofArea.toFixed(1)} m² (Útil: ${usableArea.toFixed(1)} m²)`, "Azimute / Inclinação", `${azimuth.formatted} / ${roofPitch}°`],
-    ["Inversor FV", `${inverterKw} kW (${config?.ac_supply_type || "Bifásico"} ${config?.ac_voltage || 220}V)`, "Disjuntor CA", `${breaker}A Curva C`],
+    ["Inversor FV", `${inverterKw} kW (${supplyType} ${acVoltage}V)`, "Disjuntor CA", `${breaker}A Curva C`],
   ];
   y = drawSimpleTable(doc, y, ["Parâmetro", "Especificação", "Parâmetro", "Especificação"], dataRows, [42, 49, 42, 49]);
 
   y += 2;
-  // Seção 2: Arranjo de Strings
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("2. Arranjo de Strings CC e Geração", 14, y);
-  y += 4;
+  y = drawPdfSectionTitle(doc, "2. Arranjo de Strings CC e Geração", 14, y, 182, {
+    accentColor: BRAND_BLUE,
+    rightBadge: "NBR 16690",
+  });
 
+  const s1Count = Math.ceil(panelCount / 2);
+  const s2Count = Math.floor(panelCount / 2);
   const stringRows = [
-    ["String 01", `${Math.ceil(panelCount / 2)} × ${moduleWp}Wp`, `${((Math.ceil(panelCount / 2) * moduleWp) / 1000).toFixed(2)} kWp`, "456,5 V", "13,25 A"],
-    ["String 02", `${Math.floor(panelCount / 2)} × ${moduleWp}Wp`, `${((Math.floor(panelCount / 2) * moduleWp) / 1000).toFixed(2)} kWp`, "415,0 V", "13,25 A"],
+    ["String 01", `${s1Count} × ${moduleWp}Wp`, `${((s1Count * moduleWp) / 1000).toFixed(2)} kWp`, "456,5 V", "13,25 A"],
+    ["String 02", `${s2Count} × ${moduleWp}Wp`, `${((s2Count * moduleWp) / 1000).toFixed(2)} kWp`, "415,0 V", "13,25 A"],
     ["Total Gerador", `${panelCount} Módulos`, `${dcPowerKw.toFixed(2)} kWp`, "—", "26,50 A"],
   ];
   y = drawSimpleTable(doc, y, ["Circuito", "Módulos", "Potência CC", "Tensão Vmp", "Corrente Imp"], stringRows, [35, 40, 35, 36, 36]);
 
   if (layoutImage || stringsImage) {
     y += 2;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...BRAND_DARK);
-    doc.text("2.1 Implantação dos Módulos no Telhado e Topologia de Strings", 14, y);
-    y += 3.5;
+    y = drawPdfSectionTitle(doc, "2.1 Implantação dos Módulos no Telhado e Topologia de Strings", 14, y, 182, {
+      accentColor: BRAND_TEAL,
+    });
 
     const cardW = 89;
     const cardH = 54;
     if (layoutImage) {
       try {
         doc.addImage(layoutImage, "PNG", 14, y, cardW, cardH, undefined, "FAST");
-        doc.setDrawColor(180, 200, 225);
-        doc.setLineWidth(0.3);
+        doc.setDrawColor(...PDF_THEME.slate300);
+        doc.setLineWidth(0.35);
         doc.rect(14, y, cardW, cardH, "D");
       } catch {}
     }
     if (stringsImage) {
       try {
         doc.addImage(stringsImage, "PNG", 107, y, cardW, cardH, undefined, "FAST");
-        doc.setDrawColor(180, 200, 225);
-        doc.setLineWidth(0.3);
+        doc.setDrawColor(...PDF_THEME.slate300);
+        doc.setLineWidth(0.35);
         doc.rect(107, y, cardW, cardH, "D");
       } catch {}
     }
   }
 
-  addFooter(doc, 1, 2);
-
-  // PÁGINA 2: Lista de Materiais (Escopo 01 CC / Escopo 02 CA) e Retorno Financeiro
+  // PÁGINA 2: Diagrama Unifilar Elétrico Solar + Proteções + Curva de Geração Mensal
   doc.addPage();
-  addHeader(doc, "RELATÓRIO TÉCNICO EXECUTIVO SOLAR (CONT.)", project);
+  addHeader(doc, "DIAGRAMA UNIFILAR & DESEMPENHO SOLAR", project);
+  y = 26;
+
+  y = drawPdfSectionTitle(doc, "3. Diagrama Unifilar Elétrico — Sistema Fotovoltaico CC / CA", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: "NBR 16690 · NBR 5410",
+  });
+  y = drawSolarUnifilarVector(doc, {
+    ...solarParams,
+    strings: [
+      { id: "STR 01", modules: s1Count, kw: (s1Count * moduleWp) / 1000, vmp: 456.5, imp: 13.25 },
+      { id: "STR 02", modules: s2Count, kw: (s2Count * moduleWp) / 1000, vmp: 415.0, imp: 13.25 },
+    ],
+  }, { x: 14, y, w: 182, h: 102 });
+
+  y += 2;
+  y = drawPdfSectionTitle(doc, "3.1 Dimensionamento de Proteção e Circuito CA", 14, y, 182, {
+    accentColor: BRAND_BLUE,
+    rightBadge: `${supplyType} ${acVoltage}V`,
+  });
+  const acSummaryRows = [
+    ["Corrente de Projeto (Ib)", `${acCurrent.toFixed(2)} A`, "Disjuntor CA (In)", `${breaker}A ${isTri ? "3P" : "2P"} Curva C`],
+    ["Condutores CA", `${cableGauge} Cobre XLPE 90°C`, "Proteção Surto (DPS)", "Classe II 275V 20/40kA"],
+  ];
+  y = drawSimpleTable(doc, y, ["Parâmetro CA", "Valor Calculado", "Proteção / Norma", "Especificação"], acSummaryRows, [42, 46, 42, 52]);
+
+  y += 2;
+  const monthWeights = [1.12, 1.08, 1.05, 0.95, 0.85, 0.78, 0.82, 0.90, 0.96, 1.08, 1.18, 1.23];
+  const weightSum = monthWeights.reduce((a, b) => a + b, 0);
+  const shortMonths = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  const monthlyKwh = shortMonths.map((_, i) => Math.round((annualKwh * monthWeights[i]) / weightSum));
+
+  drawVectorBarChart(doc, {
+    x: 14,
+    y,
+    w: 182,
+    h: 58,
+    title: "4. CURVA DE GERAÇÃO MENSAL ESTIMADA (kWh/MÊS)",
+    subtitle: `Geração anual total: ${Math.round(annualKwh).toLocaleString("pt-BR")} kWh/ano (PR 80%)`,
+    labels: shortMonths,
+    values: monthlyKwh,
+    barColor: BRAND_TEAL,
+    valueFormatter: (v) => String(Math.round(v)),
+  });
+
+  // PÁGINA 3: Lista de Materiais (Escopo 01 CC / Escopo 02 CA) e Retorno Financeiro
+  doc.addPage();
+  addHeader(doc, "MATERIAIS (BOM) & VIABILIDADE FINANCEIRA", project);
 
   const {
     escopo01_kit_solar_cc,
@@ -1439,12 +1721,11 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
     total_orcamento_integrador,
   } = buildSolarBomData(project, config, sizing);
 
-  y = 28;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("3. Lista de Materiais & Quantitativos (BOM — Separação Normativa CC / CA)", 14, y);
-  y += 4;
+  y = 26;
+  y = drawPdfSectionTitle(doc, "5. Lista de Materiais & Quantitativos (BOM — Separação Normativa CC / CA)", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: "CC + CA",
+  });
 
   // Escopo 01: Kit Solar CC (NBR 16690)
   doc.setFillColor(241, 245, 249);
@@ -1527,11 +1808,10 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
   );
   y += 18;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...BRAND_DARK);
-  doc.text("4. Viabilidade Financeira e Retorno em 25 Anos", 14, y);
-  y += 4;
+  y = drawPdfSectionTitle(doc, "6. Viabilidade Financeira e Retorno em 25 Anos", 14, y, 182, {
+    accentColor: BRAND_TEAL,
+    rightBadge: `Payback ${payback} anos`,
+  });
 
   const finRows = [
     ["Investimento Estimado (Turnkey)", investment.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Equipamentos + Engenharia + Instalação + Homologação"],
@@ -1541,7 +1821,11 @@ export async function generateExecutiveSolarPdf(project = {}, config = {}, sizin
   ];
   drawSimpleTable(doc, y, ["Indicador Financeiro", "Valor Projetado", "Premissa Técnica"], finRows, [60, 48, 74]);
 
-  addFooter(doc, 2, 2);
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    addFooter(doc, p, totalPages);
+  }
   return doc;
 }
 

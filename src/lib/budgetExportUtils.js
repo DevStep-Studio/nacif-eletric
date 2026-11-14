@@ -1,5 +1,7 @@
 import { stampPdfWithPlanWatermark } from "./planEnforcement.js";
 import { jsPDF } from "jspdf";
+import { NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
+import { PDF_THEME, drawPdfKpiStrip, drawPdfSectionTitle } from "./unifilarPdfDrawer.js";
 
 const formatBRL = (value = 0) =>
   `R$ ${Number(value || 0).toLocaleString("pt-BR", {
@@ -22,9 +24,9 @@ const sanitizeFileName = (name = "") =>
     .toLowerCase();
 
 /**
- * Gera e baixa o Orçamento em PDF formatado no padrão A4 Executivo Comercial
+ * Gera o documento jsPDF de Orçamento formatado no padrão A4 Executivo Comercial
  */
-export function downloadBudgetPDF({
+export function buildBudgetPDFDoc({
   project = {},
   budget = {},
   budgetName = "",
@@ -59,44 +61,67 @@ export function downloadBudgetPDF({
     : `PROP-${project.id ? String(project.id).slice(-6).toUpperCase() : Date.now().toString().slice(-6)}`;
 
   const drawHeaderBanner = (isFirstPage = true) => {
+    const logoType = /^data:image\/(png|jpe?g);/i.exec(String(logoUrl || ""));
+    const addBannerLogo = (lx, ly, lw, lh) => {
+      try {
+        if (logoType) {
+          doc.addImage(logoUrl, logoType[1].toLowerCase().startsWith("jp") ? "JPEG" : "PNG", lx, ly, lw, lh, undefined, "FAST");
+        } else {
+          doc.addImage(NACIF_SYMBOL_BASE64, "PNG", lx, ly, lw, lh, undefined, "FAST");
+        }
+      } catch {
+        try {
+          doc.addImage(NACIF_SYMBOL_BASE64, "PNG", lx, ly, lw, lh, undefined, "FAST");
+        } catch {}
+      }
+    };
+
     if (isFirstPage) {
-      doc.setFillColor(15, 79, 73);
-      doc.rect(marginX, curY, contentWidth, 20, "F");
+      doc.setFillColor(...PDF_THEME.navy);
+      doc.rect(marginX, curY, contentWidth, 22, "F");
+      doc.setFillColor(...PDF_THEME.blue);
+      doc.rect(marginX, curY + 20.4, contentWidth, 0.7, "F");
+      doc.setFillColor(...PDF_THEME.teal);
+      doc.rect(marginX, curY + 21.1, contentWidth, 1.4, "F");
 
-      doc.setFillColor(0, 216, 184);
-      doc.rect(marginX, curY + 18.5, contentWidth, 1.5, "F");
+      addBannerLogo(marginX + 3.5, curY + 3.5, 13.5, 13.5);
 
-      doc.setTextColor(255, 255, 255);
+      doc.setTextColor(...PDF_THEME.white);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(13);
-      doc.text(brandName.toUpperCase(), marginX + 4, curY + 7);
+      doc.text(`${brandName.toUpperCase()} — ORÇAMENTO EXECUTIVO`, marginX + 20, curY + 8.5);
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(0, 216, 184);
-      doc.text("PROPOSTA TÉCNICA E COMERCIAL DE ENGENHARIA ELÉTRICA · NBR 5410", marginX + 4, curY + 13);
-
-      doc.setFontSize(7.5);
-      doc.setTextColor(255, 255, 255);
-      doc.text(`Nº: ${proposalId}`, marginX + contentWidth - 4, curY + 7, { align: "right" });
-      doc.text(`EMISSÃO: ${dateStr}`, marginX + contentWidth - 4, curY + 13, { align: "right" });
-
-      curY += 24;
-    } else {
-      doc.setFillColor(15, 79, 73);
-      doc.rect(marginX, curY, contentWidth, 10, "F");
-      doc.setFillColor(0, 216, 184);
-      doc.rect(marginX, curY + 9, contentWidth, 1, "F");
-
-      doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.text(`${brandName.toUpperCase()} — ORÇAMENTO: ${projectName.toUpperCase()}`, marginX + 4, curY + 6.5);
-
       doc.setFontSize(7.5);
-      doc.text(`Nº: ${proposalId} (Continuação)`, marginX + contentWidth - 4, curY + 6.5, { align: "right" });
+      doc.setTextColor(...PDF_THEME.teal);
+      doc.text("PROPOSTA TÉCNICA E COMERCIAL DE ENGENHARIA ELÉTRICA · ABNT NBR 5410", marginX + 20, curY + 14.5);
 
-      curY += 13;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.6);
+      doc.setTextColor(...PDF_THEME.white);
+      doc.text(`Nº: ${proposalId}`, marginX + contentWidth - 4, curY + 8.2, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(190, 206, 226);
+      doc.text(`EMISSÃO: ${dateStr}`, marginX + contentWidth - 4, curY + 14.2, { align: "right" });
+
+      curY += 26;
+    } else {
+      doc.setFillColor(...PDF_THEME.navy);
+      doc.rect(marginX, curY, contentWidth, 11, "F");
+      doc.setFillColor(...PDF_THEME.teal);
+      doc.rect(marginX, curY + 10, contentWidth, 1, "F");
+      addBannerLogo(marginX + 2.5, curY + 1.5, 7.5, 7.5);
+
+      doc.setTextColor(...PDF_THEME.white);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.8);
+      doc.text(`${brandName.toUpperCase()} — ${projectName.toUpperCase().slice(0, 48)}`, marginX + 12.5, curY + 7);
+
+      doc.setFontSize(7.2);
+      doc.setTextColor(...PDF_THEME.teal);
+      doc.text(`Nº: ${proposalId} (Continuação)`, marginX + contentWidth - 3.5, curY + 7, { align: "right" });
+
+      curY += 14.5;
     }
   };
 
@@ -124,163 +149,145 @@ export function downloadBudgetPDF({
   drawHeaderBanner(true);
 
   // Card de Dados do Projeto e Contratante (Cantos Quadrados)
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(203, 213, 225);
+  doc.setFillColor(...PDF_THEME.slate50);
+  doc.setDrawColor(...PDF_THEME.slate200);
   doc.setLineWidth(0.3);
-  doc.rect(marginX, curY, contentWidth, 20, "FD");
+  doc.rect(marginX, curY, contentWidth, 21, "FD");
+  doc.setFillColor(...PDF_THEME.teal);
+  doc.rect(marginX, curY, 2.2, 21, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(15, 79, 73);
-  doc.text("DADOS DO PROJETO E DO CLIENTE", marginX + 3.5, curY + 4.5);
+  doc.setFontSize(7.8);
+  doc.setTextColor(...PDF_THEME.navy);
+  doc.text("DADOS DO PROJETO E DO CONTRATANTE", marginX + 5, curY + 4.8);
+  if (budgetStatus) {
+    doc.setFontSize(6.6);
+    doc.setTextColor(...PDF_THEME.tealDeep);
+    doc.text(`STATUS: ${String(budgetStatus).toUpperCase()}`, marginX + contentWidth - 4, curY + 4.8, { align: "right" });
+  }
 
-  doc.setFontSize(7.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text("Projeto / Obra:", marginX + 3.5, curY + 9.5);
-  doc.text("Cliente:", marginX + 3.5, curY + 14.5);
+  doc.setFontSize(7.4);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...PDF_THEME.slate500);
+  doc.text("Projeto / Obra:", marginX + 5, curY + 10.5);
+  doc.text("Cliente:", marginX + 5, curY + 16);
 
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(15, 23, 42);
-  doc.text(projectName, marginX + 24, curY + 9.5);
-  doc.text(clientName, marginX + 24, curY + 14.5);
+  doc.setTextColor(...PDF_THEME.slate900);
+  doc.text(String(projectName).slice(0, 42), marginX + 26, curY + 10.5);
+  doc.text(String(clientName).slice(0, 42), marginX + 26, curY + 16);
 
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(71, 85, 105);
-  doc.text("Alimentação:", marginX + 105, curY + 9.5);
-  doc.text("Endereço / Local:", marginX + 105, curY + 14.5);
+  doc.setTextColor(...PDF_THEME.slate500);
+  doc.text("Alimentação:", marginX + 102, curY + 10.5);
+  doc.text("Endereço / Local:", marginX + 102, curY + 16);
 
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(15, 23, 42);
-  doc.text(supplyInfo, marginX + 124, curY + 9.5);
-  doc.text(address, marginX + 128, curY + 14.5);
+  doc.setTextColor(...PDF_THEME.slate900);
+  doc.text(String(supplyInfo).slice(0, 32), marginX + 121, curY + 10.5);
+  doc.text(String(address).slice(0, 32), marginX + 126, curY + 16);
 
   curY += 24;
 
   // Mini Cards de Resumo dos Totais (KPIs)
-  const kpiWidth = (contentWidth - 6) / 3;
-  const kpis = [
-    { label: "MATERIAIS E EQUIP.", val: formatBRL(totals.materialTotal || totals.baseMaterialTotal) },
-    { label: "SERVIÇOS / MÃO DE OBRA", val: formatBRL(totals.servicesTotal || totals.laborCost) },
-    { label: "VALOR TOTAL DA PROPOSTA", val: formatBRL(totals.total), highlight: true },
-  ];
+  curY = drawPdfKpiStrip(doc, [
+    { label: "MATERIAIS E EQUIP.", value: formatBRL(totals.materialTotal || totals.baseMaterialTotal), sub: `${materials.length} item(ns)` },
+    { label: "SERVIÇOS / MÃO DE OBRA", value: formatBRL(totals.servicesTotal || totals.laborCost), sub: "Instalação e engenharia", accent: PDF_THEME.blue },
+    { label: "VALOR TOTAL DA PROPOSTA", value: formatBRL(totals.total), sub: "Condição Turnkey NBR 5410", highlight: true },
+  ], marginX, curY, contentWidth, 18.5);
 
-  kpis.forEach((kpi, idx) => {
-    const kpiX = marginX + idx * (kpiWidth + 3);
-    if (kpi.highlight) {
-      doc.setFillColor(0, 216, 184);
-      doc.setDrawColor(0, 169, 142);
-      doc.rect(kpiX, curY, kpiWidth, 14, "FD");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.8);
-      doc.setTextColor(15, 79, 73);
-      doc.text(kpi.label, kpiX + 3, curY + 4.5);
-
-      doc.setFontSize(10.5);
-      doc.setTextColor(15, 79, 73);
-      doc.text(kpi.val, kpiX + 3, curY + 10.5);
-    } else {
-      doc.setFillColor(241, 245, 249);
-      doc.setDrawColor(226, 232, 240);
-      doc.rect(kpiX, curY, kpiWidth, 14, "FD");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.5);
-      doc.setTextColor(100, 116, 139);
-      doc.text(kpi.label, kpiX + 3, curY + 4.5);
-
-      doc.setFontSize(9.5);
-      doc.setTextColor(15, 23, 42);
-      doc.text(kpi.val, kpiX + 3, curY + 10.5);
-    }
-  });
-
-  curY += 18;
+  curY += 2;
 
   // Tabela de Materiais
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.setTextColor(15, 79, 73);
-  doc.text("DISCRIMINAÇÃO DETALHADA DE MATERIAIS E COMPONENTES", marginX, curY + 3);
-  curY += 6;
+  curY = drawPdfSectionTitle(doc, "1. DISCRIMINAÇÃO DETALHADA DE MATERIAIS E COMPONENTES", marginX, curY, contentWidth, {
+    accentColor: PDF_THEME.teal,
+    rightBadge: `${materials.length} itens`,
+  });
 
   const colW = {
-    idx: 10,
-    name: 82,
+    idx: 9,
+    name: 83,
     cat: 26,
-    qty: 16,
-    unit: 12,
-    price: 18,
-    total: 18,
+    qty: 15,
+    unit: 11,
+    price: 19,
+    total: 19,
   };
 
   const drawTableHeader = (title = "MATERIAIS") => {
-    doc.setFillColor(15, 79, 73);
-    doc.rect(marginX, curY, contentWidth, 6, "F");
+    doc.setFillColor(...PDF_THEME.navy);
+    doc.rect(marginX, curY, contentWidth, 6.5, "F");
+    doc.setFillColor(...PDF_THEME.teal);
+    doc.rect(marginX, curY + 6.1, contentWidth, 0.5, "F");
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.8);
     doc.setTextColor(255, 255, 255);
 
-    let x = marginX + 1.5;
-    doc.text("#", x, curY + 4.2); x += colW.idx;
-    doc.text(title === "MATERIAIS" ? "DESCRIÇÃO DO MATERIAL" : "DESCRIÇÃO DO SERVIÇO / ATIVIDADE", x, curY + 4.2); x += colW.name;
-    doc.text("CATEGORIA", x, curY + 4.2); x += colW.cat;
-    doc.text("QTD", x + colW.qty - 2, curY + 4.2, { align: "right" }); x += colW.qty;
-    doc.text("UN.", x, curY + 4.2); x += colW.unit;
-    doc.text("UNIT. (R$)", x + colW.price - 2, curY + 4.2, { align: "right" }); x += colW.price;
-    doc.text("TOTAL (R$)", x + colW.total - 2, curY + 4.2, { align: "right" });
+    let x = marginX + 1.8;
+    doc.text("#", x, curY + 4.4); x += colW.idx;
+    doc.text(title === "MATERIAIS" ? "DESCRIÇÃO DO MATERIAL" : "DESCRIÇÃO DO SERVIÇO / ATIVIDADE", x, curY + 4.4); x += colW.name;
+    doc.text("CATEGORIA", x, curY + 4.4); x += colW.cat;
+    doc.text("QTD", x + colW.qty - 2, curY + 4.4, { align: "right" }); x += colW.qty;
+    doc.text("UN.", x, curY + 4.4); x += colW.unit;
+    doc.text("UNIT. (R$)", x + colW.price - 2, curY + 4.4, { align: "right" }); x += colW.price;
+    doc.text("TOTAL (R$)", x + colW.total - 2, curY + 4.4, { align: "right" });
 
-    curY += 6;
+    curY += 6.6;
+  };
+
+  const drawLineItemRow = (item, idx, defaultCategory = "Geral", tableKind = "MATERIAIS") => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.8);
+    const wrappedName = doc.splitTextToSize(String(item.name || "Item"), colW.name - 3);
+    const rowH = Math.max(5.6, wrappedName.length * 3.4 + 2.2);
+
+    if (curY + rowH > pageHeight - 28) {
+      doc.addPage();
+      curY = 14;
+      drawHeaderBanner(false);
+      drawTableHeader(tableKind);
+    }
+
+    const rowTotal = (Number(item.qty) || 0) * (Number(item.price) || 0);
+    if (idx % 2 === 0) {
+      doc.setFillColor(...PDF_THEME.slate50);
+      doc.rect(marginX, curY, contentWidth, rowH, "F");
+    }
+
+    const textY = curY + 3.8;
+    let x = marginX + 1.8;
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PDF_THEME.slate500);
+    doc.text(String(idx + 1), x, textY); x += colW.idx;
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...PDF_THEME.slate900);
+    doc.text(wrappedName, x, textY); x += colW.name;
+
+    doc.setTextColor(...PDF_THEME.slate500);
+    doc.text(String(item.category || defaultCategory).slice(0, 18), x, textY); x += colW.cat;
+
+    doc.setTextColor(...PDF_THEME.slate900);
+    doc.text(formatQty(item.qty), x + colW.qty - 2, textY, { align: "right" }); x += colW.qty;
+    doc.text(String(item.unit || "un"), x, textY); x += colW.unit;
+    doc.text(Number(item.price || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x + colW.price - 2, textY, { align: "right" }); x += colW.price;
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PDF_THEME.navy);
+    doc.text(Number(rowTotal || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x + colW.total - 2, textY, { align: "right" });
+
+    doc.setDrawColor(...PDF_THEME.slate200);
+    doc.setLineWidth(0.18);
+    doc.line(marginX, curY + rowH, marginX + contentWidth, curY + rowH);
+
+    curY += rowH;
   };
 
   drawTableHeader("MATERIAIS");
 
   materials.forEach((m, idx) => {
-    if (curY > pageHeight - 32) {
-      doc.addPage();
-      curY = 14;
-      drawHeaderBanner(false);
-      drawTableHeader("MATERIAIS");
-    }
-
-    const rowTotal = (Number(m.qty) || 0) * (Number(m.price) || 0);
-    const isEven = idx % 2 === 0;
-
-    if (isEven) {
-      doc.setFillColor(248, 250, 252);
-      doc.rect(marginX, curY, contentWidth, 5.2, "F");
-    }
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.8);
-    doc.setTextColor(15, 23, 42);
-
-    let x = marginX + 1.5;
-    doc.text(String(idx + 1), x, curY + 3.8); x += colW.idx;
-
-    const shortName = String(m.name || "Material").length > 55
-      ? `${String(m.name).slice(0, 52)}...`
-      : String(m.name);
-    doc.text(shortName, x, curY + 3.8); x += colW.name;
-
-    doc.setTextColor(100, 116, 139);
-    doc.text(String(m.category || "Geral").slice(0, 18), x, curY + 3.8); x += colW.cat;
-
-    doc.setTextColor(15, 23, 42);
-    doc.text(formatQty(m.qty), x + colW.qty - 2, curY + 3.8, { align: "right" }); x += colW.qty;
-    doc.text(String(m.unit || "un"), x, curY + 3.8); x += colW.unit;
-    doc.text(Number(m.price || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x + colW.price - 2, curY + 3.8, { align: "right" }); x += colW.price;
-
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(15, 79, 73);
-    doc.text(Number(rowTotal || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x + colW.total - 2, curY + 3.8, { align: "right" });
-
-    doc.setDrawColor(241, 245, 249);
-    doc.setLineWidth(0.2);
-    doc.line(marginX, curY + 5.2, marginX + contentWidth, curY + 5.2);
-
-    curY += 5.2;
+    drawLineItemRow(m, idx, "Geral", "MATERIAIS");
   });
 
   // Tabela de Serviços (se existirem serviços detalhados)
@@ -289,73 +296,29 @@ export function downloadBudgetPDF({
     : (Array.isArray(budget.services) && budget.services.length > 0 ? budget.services : []);
 
   if (actualServices.length > 0) {
-    curY += 4;
-    if (curY > pageHeight - 35) {
+    curY += 5;
+    if (curY > pageHeight - 36) {
       doc.addPage();
       curY = 14;
       drawHeaderBanner(false);
     }
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(15, 79, 73);
-    doc.text("DISCRIMINAÇÃO DETALHADA DE SERVIÇOS E EXECUÇÃO", marginX, curY + 3);
-    curY += 6;
+    curY = drawPdfSectionTitle(doc, "2. DISCRIMINAÇÃO DETALHADA DE SERVIÇOS E EXECUÇÃO", marginX, curY, contentWidth, {
+      accentColor: PDF_THEME.blue,
+      rightBadge: `${actualServices.length} atividades`,
+    });
 
     drawTableHeader("SERVICOS");
 
     actualServices.forEach((s, idx) => {
-      if (curY > pageHeight - 32) {
-        doc.addPage();
-        curY = 14;
-        drawHeaderBanner(false);
-        drawTableHeader("SERVICOS");
-      }
-
-      const rowTotal = (Number(s.qty) || 0) * (Number(s.price) || 0);
-      const isEven = idx % 2 === 0;
-
-      if (isEven) {
-        doc.setFillColor(248, 250, 252);
-        doc.rect(marginX, curY, contentWidth, 5.2, "F");
-      }
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.8);
-      doc.setTextColor(15, 23, 42);
-
-      let x = marginX + 1.5;
-      doc.text(String(idx + 1), x, curY + 3.8); x += colW.idx;
-
-      const shortName = String(s.name || "Serviço").length > 55
-        ? `${String(s.name).slice(0, 52)}...`
-        : String(s.name);
-      doc.text(shortName, x, curY + 3.8); x += colW.name;
-
-      doc.setTextColor(100, 116, 139);
-      doc.text(String(s.category || "Instalação").slice(0, 18), x, curY + 3.8); x += colW.cat;
-
-      doc.setTextColor(15, 23, 42);
-      doc.text(formatQty(s.qty), x + colW.qty - 2, curY + 3.8, { align: "right" }); x += colW.qty;
-      doc.text(String(s.unit || "un"), x, curY + 3.8); x += colW.unit;
-      doc.text(Number(s.price || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x + colW.price - 2, curY + 3.8, { align: "right" }); x += colW.price;
-
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(15, 79, 73);
-      doc.text(Number(rowTotal || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), x + colW.total - 2, curY + 3.8, { align: "right" });
-
-      doc.setDrawColor(241, 245, 249);
-      doc.setLineWidth(0.2);
-      doc.line(marginX, curY + 5.2, marginX + contentWidth, curY + 5.2);
-
-      curY += 5.2;
+      drawLineItemRow(s, idx, "Instalação", "SERVICOS");
     });
   }
 
-  curY += 4;
+  curY += 5;
 
   // Bloco financeiro e condições
-  if (curY > pageHeight - 65) {
+  if (curY > pageHeight - 68) {
     doc.addPage();
     curY = 14;
     drawHeaderBanner(false);
@@ -364,18 +327,20 @@ export function downloadBudgetPDF({
   const splitW = (contentWidth - 6) / 2;
 
   // Lado esquerdo: Condições Comerciais e Normativas (Cantos Quadrados)
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.rect(marginX, curY, splitW, 48, "FD");
+  doc.setFillColor(...PDF_THEME.slate50);
+  doc.setDrawColor(...PDF_THEME.slate200);
+  doc.rect(marginX, curY, splitW, 50, "FD");
+  doc.setFillColor(...PDF_THEME.blue);
+  doc.rect(marginX, curY, splitW, 2, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.setTextColor(15, 79, 73);
-  doc.text("CONDIÇÕES COMERCIAIS & GARANTIA", marginX + 3.5, curY + 5);
+  doc.setFontSize(7.6);
+  doc.setTextColor(...PDF_THEME.navy);
+  doc.text("CONDIÇÕES COMERCIAIS & GARANTIA", marginX + 3.5, curY + 7);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.6);
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(...PDF_THEME.slate700);
   const validityDays = commercialTerms?.validityDays || budget.validity_days || 15;
   const executionDeadline = commercialTerms?.executionTime || budget.execution_deadline || "15 dias úteis";
   const paymentTerms = commercialTerms?.paymentTerms || budget.payment_terms || "50% entrada e 50% na conclusão";
@@ -385,27 +350,29 @@ export function downloadBudgetPDF({
     `• Validade da proposta: ${validityDays} dias corridos.`,
     `• Prazo de execução: ${executionDeadline}.`,
     `• Pagamento: ${paymentTerms}.`,
-    "• Materiais de primeira linha certificados INMETRO.",
-    "• Dimensionamento em estrita conformidade com a NBR 5410:2004.",
-    "• Mão de obra técnica qualificada com emissão de ART/TRT.",
+    "• Materiais certificados INMETRO e ensaiados em fábrica.",
+    "• Dimensionamento em estrita conformidade com a ABNT NBR 5410.",
+    "• Mão de obra qualificada NR-10 com emissão de ART/TRT.",
     notesText
       ? `• Obs: ${String(notesText).slice(0, 50)}`
       : "• Garantia de 12 meses para serviços elétricos instalados.",
   ];
   conditions.forEach((cond, idx) => {
-    doc.text(cond, marginX + 3.5, curY + 11 + idx * 5.0);
+    doc.text(cond, marginX + 3.5, curY + 13 + idx * 5.0);
   });
 
   // Lado direito: Quadro de Totais Detalhado (Cantos Quadrados)
   const rightX = marginX + splitW + 6;
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(203, 213, 225);
-  doc.rect(rightX, curY, splitW, 48, "FD");
+  doc.setFillColor(...PDF_THEME.white);
+  doc.setDrawColor(...PDF_THEME.slate300);
+  doc.rect(rightX, curY, splitW, 50, "FD");
+  doc.setFillColor(...PDF_THEME.teal);
+  doc.rect(rightX, curY, splitW, 2, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.setTextColor(15, 79, 73);
-  doc.text("COMPOSIÇÃO FINANCEIRA DO ORÇAMENTO", rightX + 3.5, curY + 5);
+  doc.setFontSize(7.6);
+  doc.setTextColor(...PDF_THEME.navy);
+  doc.text("COMPOSIÇÃO FINANCEIRA DO ORÇAMENTO", rightX + 3.5, curY + 7);
 
   const discountAmount = Number(totals.discountAmount || totals.discount_amount || 0);
   const surchargeAmount = Number(totals.surchargeAmount || totals.surcharge_amount || 0);
@@ -423,32 +390,34 @@ export function downloadBudgetPDF({
   finRows.slice(0, 4).forEach(([lbl, val], idx) => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
-    doc.setTextColor(71, 85, 105);
-    doc.text(lbl, rightX + 3.5, curY + 11 + idx * 5.2);
+    doc.setTextColor(...PDF_THEME.slate700);
+    doc.text(lbl, rightX + 3.5, curY + 13 + idx * 5.2);
 
     doc.setFont("helvetica", "bold");
     if (lbl.includes("Desconto")) {
-      doc.setTextColor(16, 185, 129);
+      doc.setTextColor(...PDF_THEME.emerald);
     } else {
-      doc.setTextColor(15, 23, 42);
+      doc.setTextColor(...PDF_THEME.slate900);
     }
-    doc.text(val, rightX + splitW - 3.5, curY + 11 + idx * 5.2, { align: "right" });
+    doc.text(val, rightX + splitW - 3.5, curY + 13 + idx * 5.2, { align: "right" });
   });
 
   // Linha de Destaque Total Final (Cantos Quadrados)
-  doc.setFillColor(15, 79, 73);
-  doc.rect(rightX + 2, curY + 33, splitW - 4, 12, "F");
+  doc.setFillColor(...PDF_THEME.navy);
+  doc.rect(rightX + 2.5, curY + 35, splitW - 5, 12.5, "F");
+  doc.setFillColor(...PDF_THEME.teal);
+  doc.rect(rightX + 2.5, curY + 35, 2.2, 12.5, "F");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
-  doc.setTextColor(0, 216, 184);
-  doc.text("TOTAL DA PROPOSTA:", rightX + 5, curY + 40.5);
+  doc.setTextColor(...PDF_THEME.teal);
+  doc.text("TOTAL DA PROPOSTA:", rightX + 6.5, curY + 42.5);
 
   doc.setFontSize(10.5);
-  doc.setTextColor(255, 255, 255);
-  doc.text(formatBRL(totals.total), rightX + splitW - 5, curY + 40.8, { align: "right" });
+  doc.setTextColor(...PDF_THEME.white);
+  doc.text(formatBRL(totals.total), rightX + splitW - 4.5, curY + 42.8, { align: "right" });
 
-  curY += 52;
+  curY += 54;
 
   // Bloco de Assinaturas
   if (curY < pageHeight - 30) {
@@ -488,6 +457,14 @@ export function downloadBudgetPDF({
   const baseName = sanitized.startsWith("orcamento") ? sanitized : `orcamento_${sanitized}`;
   if (exportAuth) { stampPdfWithPlanWatermark(doc, exportAuth); }
   const fileName = `${baseName}.pdf`;
+  return { doc, fileName };
+}
+
+/**
+ * Gera e baixa o Orçamento em PDF formatado no padrão A4 Executivo Comercial
+ */
+export function downloadBudgetPDF(options = {}) {
+  const { doc, fileName } = buildBudgetPDFDoc(options);
   doc.save(fileName);
   return fileName;
 }

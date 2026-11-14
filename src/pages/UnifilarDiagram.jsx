@@ -1,6 +1,8 @@
 import { authorizePlanExport, stampPdfWithPlanWatermark, stampSvgWithPlanWatermark } from "@/lib/planEnforcement";
 import { useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
+import { drawInteractiveNodesUnifilarPdf } from "@/lib/unifilarPdfDrawer";
+import { svgElementToHighResPngDataUrl } from "@/lib/pdfSvgHelper";
 import ProfessionalBoardSheetSVG from "@/components/ProfessionalBoardSheetSVG";
 import QgbtDiagramSheetSVG from "@/components/QgbtDiagramSheetSVG";
 import { buildProfessionalPanelBoardSheets, calcPeConductor, getPhaseColor } from "@/lib/professionalPanelBoardLibrary";
@@ -2085,12 +2087,17 @@ export default function UnifilarDiagram() {
     a.click();
   };
 
-  // Exportar Diagrama Interativo em PDF (Formato A3 Paisagem)
+  // Exportar Diagrama Interativo em PDF (Formato A3 Paisagem Vetorial)
   const downloadInteractivePDF = async () => {
-    const svg = svgRef.current;
-    if (!svg) return;
     try {
-      const bounds = getLayoutBounds() || { minX: 0, minY: 0, width: 1200, height: 800 };
+      const exportAuth = await authorizePlanExport({
+        projectId: project?.id,
+        moduleKey: "unifilar",
+        format: "PDF",
+        label: "Diagrama Unifilar Interativo",
+      });
+      if (!exportAuth.allowed) return;
+
       const doc = new jsPDF({
         orientation: "landscape",
         unit: "mm",
@@ -2099,34 +2106,24 @@ export default function UnifilarDiagram() {
       });
 
       doc.setProperties({
-        title: `${project?.name || "Projeto"} - Diagrama Interativo`,
+        title: `${project?.name || "Projeto"} - Diagrama Unifilar Interativo`,
         subject: "Diagrama vetorial interativo unifilar conforme NBR 5410",
         creator: "Nacif Energy",
       });
 
-      const clone = svg.cloneNode(true);
-      const pad = 60;
-      const exportW = Math.max(bounds.width + pad * 2, 800);
-      const exportH = Math.max(bounds.height + pad * 2, 600);
-      clone.setAttribute("width", String(exportW));
-      clone.setAttribute("height", String(exportH));
-      clone.setAttribute("viewBox", `${bounds.minX - pad} ${bounds.minY - pad} ${exportW} ${exportH}`);
-      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-
-      const exportAuth = await authorizePlanExport({
-        projectId: project?.id,
-        format: "PDF",
-        label: "Diagrama Unifilar Interativo",
+      drawInteractiveNodesUnifilarPdf(doc, {
+        project,
+        nodes,
+        connections,
+        metrics,
       });
-      if (!exportAuth.allowed) return;
-      const svgContent = new XMLSerializer().serializeToString(clone);
-      await doc.addSvgAsImage(svgContent, 10, 10, 400, 277, "interactive-diagram", "FAST");
+
       stampPdfWithPlanWatermark(doc, exportAuth);
       doc.save(`diagrama_interativo_${safeFileName(project?.name)}.pdf`);
 
       toast({
         title: "PDF gerado com sucesso!",
-        description: "Diagrama interativo exportado em formato A3.",
+        description: "Diagrama unifilar interativo exportado em formato vetorial A3.",
       });
     } catch (err) {
       console.error("Erro ao exportar PDF do diagrama interativo:", err);
@@ -2193,6 +2190,14 @@ export default function UnifilarDiagram() {
     }
 
     try {
+      const exportAuth = await authorizePlanExport({
+        projectId: project?.id,
+        moduleKey: "unifilar",
+        format: "PDF",
+        label: "Pranchas Diagrama Unifilar",
+      });
+      if (!exportAuth.allowed) return;
+
       const doc = new jsPDF({
         orientation: "landscape",
         unit: "mm",
@@ -2211,22 +2216,15 @@ export default function UnifilarDiagram() {
         if (i > 0) {
           doc.addPage([1189, 841], "landscape");
         }
-        const clone = svg.cloneNode(true);
-        clone.setAttribute("width", "1189");
-        clone.setAttribute("height", "841");
-        clone.setAttribute("viewBox", clone.getAttribute("viewBox") || "0 0 1189 841");
-        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-
-        const svgContent = new XMLSerializer().serializeToString(clone);
-        await doc.addSvgAsImage(svgContent, 0, 0, 1189, 841, `board-sheet-${i + 1}`, "FAST");
+        const pngDataUrl = await svgElementToHighResPngDataUrl(svg, {
+          widthPx: 1189,
+          heightPx: 841,
+          scale: 2.5,
+          backgroundColor: "#ffffff",
+        });
+        doc.addImage(pngDataUrl, "PNG", 0, 0, 1189, 841, `board-sheet-${i + 1}`, "FAST");
       }
 
-      const exportAuth = await authorizePlanExport({
-        projectId: project?.id,
-        format: "PDF",
-        label: "Pranchas Diagrama Unifilar",
-      });
-      if (!exportAuth.allowed) return;
       stampPdfWithPlanWatermark(doc, exportAuth);
       const fileName = diagramModel === "qgbt"
         ? `prancha_qgbt_${safeFileName(project?.name)}.pdf`
@@ -2235,7 +2233,7 @@ export default function UnifilarDiagram() {
 
       toast({
         title: "PDF gerado com sucesso!",
-        description: `${svgs.length} folha(s) incluída(s) em formato executivo A0/A3.`,
+        description: `${svgs.length} folha(s) incluída(s) em formato executivo A0 de alta definição.`,
       });
     } catch (err) {
       console.error("Erro ao exportar prancha A0:", err);
