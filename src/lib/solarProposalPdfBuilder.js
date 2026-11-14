@@ -1052,3 +1052,4 @@ export function buildNacifCommercialProposalPdf({ project = {}, config = {}, siz
 
   return doc;
 }
+
