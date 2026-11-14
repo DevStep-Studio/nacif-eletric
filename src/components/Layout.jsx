@@ -64,7 +64,7 @@ import OnboardingModal from "@/components/onboarding/OnboardingModal";
 import ToolsModal from "@/components/navigation/ToolsModal";
 import PublicFooter from "@/components/system/PublicFooter";
 import brandLogoEnergy from "@/assets/brand-logo-principal.png";
-import brandMarkEnergy from "@/assets/brand-mark-principal.png";
+import brandMarkEnergy from "@/assets/brand-symbol-pure.png";
 
 const SIDEBAR_STORAGE_KEY = "nacif:sidebar-collapsed";
 

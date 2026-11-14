@@ -93,6 +93,12 @@ export default function SolarProjectParametersModal({
       roof_polygon: config?.roof_polygon || [],
       roof_defined: config?.roof_defined || false,
       roof_area_m2: config?.roof_area_m2 || 54,
+      equipment_kit_price:
+        config?.solar_budget?.useKitTotalOverride
+          ? config?.solar_budget?.kitTotalOverride
+          : (config?.equipment_kit_price || ""),
+      margin_percent: config?.solar_budget?.marginPercent ?? config?.margin_percent ?? 20,
+      investment_brl: project?.investment_brl || config?.solar_budget?.finalTotal || "",
       roof_rotation_deg: config?.roof_rotation_deg || 0,
       roof_pitch_deg: config?.roof_pitch_deg || 12,
       investment_brl: project?.investment_brl || "",
@@ -184,6 +190,13 @@ export default function SolarProjectParametersModal({
         roof_height_m: Number(state.roof_height_m) || config.roof_height_m || 6,
         roof_rotation_deg: state.roof_rotation_deg !== undefined ? Number(state.roof_rotation_deg) : (config.roof_rotation_deg || 0),
         available_area_m2: Number(state.available_area_m2) || Number(state.roof_area_m2) || config.available_area_m2 || null,
+        solar_budget: {
+          ...(config.solar_budget || {}),
+          ...(Number(state.equipment_kit_price) > 0
+            ? { useKitTotalOverride: true, kitTotalOverride: Number(state.equipment_kit_price) }
+            : {}),
+          marginPercent: state.margin_percent !== "" && state.margin_percent !== undefined ? Number(state.margin_percent) : (config.solar_budget?.marginPercent ?? 20),
+        },
       };
 
       const updatedProjectPayload = {

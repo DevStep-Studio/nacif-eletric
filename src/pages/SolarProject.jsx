@@ -20,6 +20,7 @@ import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
 import Solar3DView from "@/components/solar/Solar3DView";
 import SolarReportsDialog from "@/components/solar/SolarReportsDialog";
 import SolarProjectParametersModal from "@/components/solar/SolarProjectParametersModal";
+import SolarBudgetPanel from "@/components/solar/SolarBudgetPanel";
 import CustomModuleModal from "@/components/solar/CustomModuleModal";
 import { syncSolarToProjectCircuits } from "@/lib/projectUnifiedSync";
 import { validateProjectDataForReports } from "@/lib/solarWizardState";
@@ -693,10 +694,10 @@ export default function SolarProject() {
 
   const paybackYears = useMemo(
     () => estimateSimplePaybackYears(
-      project?.investment_brl || (totalDcPowerKw * 1000 * 3.5),
+      Number(config?.solar_budget?.finalTotal || project?.investment_brl || (totalDcPowerKw * 1000 * 3.5)),
       annualSavingsBrl
     ) || 3.8,
-    [project, totalDcPowerKw, annualSavingsBrl]
+    [project, config?.solar_budget?.finalTotal, totalDcPowerKw, annualSavingsBrl]
   );
 
   const strings = useMemo(
@@ -782,6 +783,7 @@ export default function SolarProject() {
     };
     return {
       ...project,
+      investment_brl: Number(config?.solar_budget?.finalTotal || project.investment_brl || 0) || project.investment_brl,
       address: project.address || searchAddress || "Localização demarcada no mapa",
       consumption: resolvedConsumption,
       monthly_consumption_kwh: resolvedConsumption.monthly_consumption_kwh,
@@ -1649,9 +1651,15 @@ export default function SolarProject() {
         solar_config: normalizedConfig,
       }, normalizedConfig);
 
+      const resolvedInvestment =
+        normalizedConfig?.solar_budget?.finalTotal ||
+        project?.investment_brl ||
+        undefined;
+
       const payload = {
         project_type: "Solar",
         solar_config: normalizedConfig,
+        ...(resolvedInvestment ? { investment_brl: resolvedInvestment } : {}),
         voltage: normalizedConfig.ac_voltage,
         supply_type: normalizedConfig.ac_supply_type,
         circuits: solarSync.project.circuits,
@@ -2014,7 +2022,7 @@ export default function SolarProject() {
 
           <span className="h-5 w-px bg-slate-200 shrink-0" />
 
-          {/* Navegação Layout / Elétrica */}
+          {/* Navegação Layout / Elétrica / Orçamento */}
           <div className="flex h-8 items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs shrink-0 whitespace-nowrap">
             <button
               type="button"
@@ -2034,9 +2042,19 @@ export default function SolarProject() {
             >
               Elétrica
             </button>
+            <button
+              type="button"
+              onClick={() => setAppMode("budget")}
+              className={`h-full px-3 rounded-md font-bold whitespace-nowrap flex items-center justify-center transition ${
+                appMode === "budget" ? "bg-white text-slate-950 font-black shadow-xs" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Orçamento
+            </button>
           </div>
 
-          {/* Alternância 2D / 3D */}
+          {/* Alternância 2D / 3D (visível fora da aba Orçamento) */}
+          {appMode !== "budget" && (
           <div className="flex h-8 items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs shrink-0 whitespace-nowrap">
             <button
               type="button"
@@ -2057,6 +2075,7 @@ export default function SolarProject() {
               3D
             </button>
           </div>
+          )}
 
           <span className="h-5 w-px bg-slate-200 shrink-0" />
 
@@ -2202,7 +2221,60 @@ export default function SolarProject() {
         </div>
       </header>
 
-      {/* 2. ÁREA CENTRAL: INSPECTOR LATERAL (18-22%) + MAPA / EDITOR (78-82%) */}
+      {/* 2. ÁREA CENTRAL: ORÇAMENTO DETALHADO OU INSPECTOR + MAPA */}
+      {appMode === "budget" ? (
+        <div className="flex min-h-0 flex-1 overflow-hidden relative">
+          <SolarBudgetPanel
+            project={reportProject || project}
+            config={config}
+            sizing={visualSizing}
+            saving={saving}
+            onUpdateSolarBudget={(nextBudgetRaw) => {
+              setConfig((curr) => ({ ...curr, solar_budget: nextBudgetRaw }));
+            }}
+            onSaveProjectBudget={async (calculatedBudget) => {
+              const nextBudgetPayload = {
+                ...(config?.solar_budget || {}),
+                equipmentItems: calculatedBudget.equipmentItems,
+                caItems: calculatedBudget.caItems,
+                serviceItems: calculatedBudget.serviceItems,
+                marginPercent: calculatedBudget.marginPercent,
+                discountBrl: calculatedBudget.discountBrl,
+                useKitTotalOverride: calculatedBudget.useKitTotalOverride,
+                kitTotalOverride: calculatedBudget.kitTotalOverride,
+                validityDays: calculatedBudget.validityDays,
+                selectedPaymentOption: calculatedBudget.selectedPaymentOption,
+                commercialContact: calculatedBudget.commercialContact,
+                finalTotal: calculatedBudget.finalTotal,
+              };
+              const nextConfig = { ...config, solar_budget: nextBudgetPayload };
+              setConfig(nextConfig);
+              const activeId = projectId || project?.id;
+              if (!activeId) return;
+              setSaving(true);
+              setSaveStatus("saving");
+              try {
+                const payload = {
+                  solar_config: nextConfig,
+                  investment_brl: calculatedBudget.finalTotal,
+                };
+                await backend.entities.Project.update(activeId, payload);
+                setProject((curr) => (curr ? { ...curr, ...payload } : curr));
+                setSaveStatus("saved");
+                toast({
+                  title: "Orçamento solar salvo",
+                  description: `Proposta de ${calculatedBudget.finalTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} (margem ${calculatedBudget.marginPercent}%) vinculada ao projeto.`,
+                });
+              } catch {
+                setSaveStatus("error");
+                toast({ title: "Não foi possível salvar o orçamento", variant: "destructive" });
+              } finally {
+                setSaving(false);
+              }
+            }}
+          />
+        </div>
+      ) : (
       <div className="flex min-h-0 flex-1 overflow-hidden relative">
         {/* Painel Lateral Contextual (Inspector Light) */}
         {sidebarOpen ? (
@@ -3658,6 +3730,7 @@ export default function SolarProject() {
           </div>
         </main>
       </div>
+      )}
 
       {/* Modal de Relatórios Profissionais */}
       <SolarReportsDialog

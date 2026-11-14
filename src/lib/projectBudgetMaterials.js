@@ -14,6 +14,7 @@ import {
   resolveBudgetSupplyType,
 } from "./budgetElectricalMaterials.js";
 import { getMaterialProductInfo } from "./materialProductCatalog.js";
+import { buildDetailedSolarBudget } from "./solarBudgetMath.js";
 
 export const calculateCircuitBreakerPrice = ({
   current = 16,
@@ -372,13 +373,57 @@ export function buildProjectBudgetMaterials(project, { productAdjustment = 0 } =
     : (project?.infra_type || project?.plant_infra_type || "embutido");
 
   const baseMaterials = [];
+  const budgetSupplyType = resolveBudgetSupplyType({ project, circuits });
+  const budgetPhaseCount = budgetSupplyType === "Trifásico" ? 3 : budgetSupplyType === "Bifásico" ? 2 : 1;
+  const isSolarProject = String(project?.project_type || "").toLowerCase() === "solar" || Boolean(project?.solar_config);
+
+  if (isSolarProject && project?.solar_config && circuits.length === 0) {
+    const solarBudget = buildDetailedSolarBudget({ project, config: project.solar_config, sizing: project.solar_sizing || {} });
+    [...solarBudget.equipmentItems, ...solarBudget.caItems].forEach((item) => {
+      baseMaterials.push({
+        name: item.name,
+        qty: item.quantity,
+        price: item.unitPrice,
+        unit: item.unit,
+        category: item.category,
+        brand: "NACIF Solar Kit",
+        source: "solar",
+      });
+    });
+    const aggregatedSolar = aggregateBudgetMaterials(baseMaterials);
+    const solarMaterials = aggregatedSolar.map((material) => ({
+      ...material,
+      basePrice: material.price,
+      price: Math.round(material.price * productMultiplier * 100) / 100,
+    }));
+    const baseMaterialTotal = aggregatedSolar.reduce((sum, material) => sum + material.qty * material.price, 0);
+    const materialTotal = solarMaterials.reduce((sum, material) => sum + material.qty * material.price, 0);
+    return {
+      metrics,
+      circuits,
+      plantDesign,
+      plantRoutes,
+      plantPoints,
+      inferredInfraType,
+      budgetSupplyType,
+      budgetPhaseCount,
+      isPanelAssemblyOnly: false,
+      budgetScope: "solar",
+      materials: solarMaterials,
+      baseMaterials: aggregatedSolar,
+      customManualItems: [],
+      generatedManualItems: [],
+      baseMaterialTotal,
+      materialTotal,
+      productAdjustmentValue: materialTotal - baseMaterialTotal,
+    };
+  }
+
   const panelComponents = getProjectPanelComponents(project).filter((component) => component?.type && component.type !== "spacer");
   const panelBreakers = getProjectPanelComponents(project, "breaker");
   const drComponents = getProjectPanelComponents(project, "dr");
   const dpsComponents = getProjectPanelComponents(project, "dps");
-  const panelWires = getProjectPanelWires(project).filter((wire) => wire?.visible !== false && !wire?.deleted);
-  const budgetSupplyType = resolveBudgetSupplyType({ project, circuits });
-  const budgetPhaseCount = budgetSupplyType === "Trifásico" ? 3 : budgetSupplyType === "Bifásico" ? 2 : 1;
+  const panelWires = getProjectPanelComponents(project) && getProjectPanelWires(project).filter((wire) => wire?.visible !== false && !wire?.deleted);
   const hasBudgetElectricalSource = circuits.length > 0 || panelComponents.length > 0;
   const manualItems = normalizeManualBudgetItems(project?.manual_budget_items);
   const customManualItems = manualItems.filter((item) => !isGeneratedBudgetSource(item.source));

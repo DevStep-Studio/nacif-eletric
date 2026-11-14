@@ -1,4 +1,4 @@
-import { NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
+import { NACIF_LOGO_DARK_BASE64, NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
 
 export const PDF_THEME = {
   navy: [14, 23, 38],         // #0E1726
@@ -1103,23 +1103,17 @@ export function drawInteractiveNodesUnifilarPdf(doc, { project = {}, nodes = [],
   doc.rect(14, 26.2, W - 24, 0.8, "F");
 
   try {
-    doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 17.5, 12.2, 12.5, 11.7, undefined, "FAST");
+    doc.addImage(NACIF_LOGO_DARK_BASE64, "PNG", 17.5, 11.8, 35.5, 10.9, undefined, "FAST");
   } catch {
-    // Fallback silencioso
+    try {
+      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 17.5, 12.2, 12.5, 11.7, undefined, "FAST");
+    } catch {}
   }
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(...PDF_THEME.white);
-  txt(doc, "NACIF", 33, 18.2);
-  const nw = doc.getTextWidth("NACIF");
-  doc.setTextColor(...PDF_THEME.teal);
-  txt(doc, "ENERGY", 33 + nw + 1.5, 18.2);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.5);
+  doc.setFontSize(7.0);
   doc.setTextColor(...PDF_THEME.slate300);
-  txt(doc, "DIAGRAMA UNIFILAR INTERATIVO DE FLUXO · ABNT NBR 5410", 33, 23.0);
+  txt(doc, "DA PLANTA AO SOL · DIAGRAMA UNIFILAR INTERATIVO DE FLUXO · ABNT NBR 5410", 57, 19.6);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);

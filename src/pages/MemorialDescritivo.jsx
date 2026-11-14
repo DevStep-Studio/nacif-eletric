@@ -11,7 +11,7 @@ import PageHeader from "@/components/PageHeader";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
 import { useBranding } from "@/lib/appPreferences";
 import { buildProjectBudgetMaterials, getProjectLogo } from "@/lib/projectBudgetMaterials";
-import { NACIF_SYMBOL_BASE64 } from "@/lib/solarLogoAsset";
+import { NACIF_LOGO_DARK_BASE64, NACIF_SYMBOL_BASE64 } from "@/lib/solarLogoAsset";
 import {
   PDF_THEME,
   drawPdfKpiStrip,
@@ -115,25 +115,29 @@ export function generatePDF(project, metrics, { brandName = "NACIF Energy", logo
 
     try {
       if (pdfImageType) {
-        doc.addImage(logoUrl, pdfImageType, ML, 3, 10, 10, undefined, "FAST");
+        doc.addImage(logoUrl, pdfImageType, ML, 3.2, 28, 9.3, undefined, "FAST");
       } else {
-        doc.addImage(NACIF_SYMBOL_BASE64, "PNG", ML, 3, 10, 10, undefined, "FAST");
+        doc.addImage(NACIF_LOGO_DARK_BASE64, "PNG", ML, 3.2, 29, 8.9, undefined, "FAST");
       }
     } catch {
       try {
-        doc.addImage(NACIF_SYMBOL_BASE64, "PNG", ML, 3, 10, 10, undefined, "FAST");
-      } catch {}
+        doc.addImage(NACIF_LOGO_DARK_BASE64, "PNG", ML, 3.2, 29, 8.9, undefined, "FAST");
+      } catch {
+        try {
+          doc.addImage(NACIF_SYMBOL_BASE64, "PNG", ML, 3, 10, 10, undefined, "FAST");
+        } catch {}
+      }
     }
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setTextColor(...PDF_THEME.white);
-    doc.text(`${brandName.toUpperCase()} — MEMORIAL DESCRITIVO ELÉTRICO`, ML + 13, 8.2);
+    doc.text(`${brandName.toUpperCase()} — MEMORIAL DESCRITIVO ELÉTRICO`, ML + 32, 8.0);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.8);
+    doc.setFontSize(6.6);
     doc.setTextColor(...PDF_THEME.teal);
-    doc.text(sectionSubtitle, ML + 13, 12.6);
+    doc.text(sectionSubtitle, ML + 32, 12.6);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
@@ -170,14 +174,18 @@ export function generatePDF(project, metrics, { brandName = "NACIF Energy", logo
 
   try {
     if (pdfImageType) {
-      doc.addImage(logoUrl, pdfImageType, PW - MR - 24, 14, 24, 24, undefined, "FAST");
+      doc.addImage(logoUrl, pdfImageType, PW - MR - 54, 15, 54, 18, undefined, "FAST");
     } else {
-      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", PW - MR - 24, 14, 24, 24, undefined, "FAST");
+      doc.addImage(NACIF_LOGO_DARK_BASE64, "PNG", PW - MR - 56, 15, 56, 17.3, undefined, "FAST");
     }
   } catch {
     try {
-      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", PW - MR - 24, 14, 24, 24, undefined, "FAST");
-    } catch {}
+      doc.addImage(NACIF_LOGO_DARK_BASE64, "PNG", PW - MR - 56, 15, 56, 17.3, undefined, "FAST");
+    } catch {
+      try {
+        doc.addImage(NACIF_SYMBOL_BASE64, "PNG", PW - MR - 24, 14, 24, 24, undefined, "FAST");
+      } catch {}
+    }
   }
 
   doc.setFont("helvetica", "bold");

@@ -1,6 +1,6 @@
 import { stampPdfWithPlanWatermark } from "./planEnforcement.js";
 import { jsPDF } from "jspdf";
-import { NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
+import { NACIF_LOGO_DARK_BASE64, NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
 import { PDF_THEME, drawPdfKpiStrip, drawPdfSectionTitle } from "./unifilarPdfDrawer.js";
 
 const formatBRL = (value = 0) =>
@@ -67,11 +67,11 @@ export function buildBudgetPDFDoc({
         if (logoType) {
           doc.addImage(logoUrl, logoType[1].toLowerCase().startsWith("jp") ? "JPEG" : "PNG", lx, ly, lw, lh, undefined, "FAST");
         } else {
-          doc.addImage(NACIF_SYMBOL_BASE64, "PNG", lx, ly, lw, lh, undefined, "FAST");
+          doc.addImage(NACIF_LOGO_DARK_BASE64, "PNG", lx, ly, lw, lh, undefined, "FAST");
         }
       } catch {
         try {
-          doc.addImage(NACIF_SYMBOL_BASE64, "PNG", lx, ly, lw, lh, undefined, "FAST");
+          doc.addImage(NACIF_SYMBOL_BASE64, "PNG", lx, ly, lh, lh, undefined, "FAST");
         } catch {}
       }
     };
@@ -84,17 +84,17 @@ export function buildBudgetPDFDoc({
       doc.setFillColor(...PDF_THEME.teal);
       doc.rect(marginX, curY + 21.1, contentWidth, 1.4, "F");
 
-      addBannerLogo(marginX + 3.5, curY + 3.5, 13.5, 13.5);
+      addBannerLogo(marginX + 3.5, curY + 4.4, 38, 11.7);
 
       doc.setTextColor(...PDF_THEME.white);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text(`${brandName.toUpperCase()} — ORÇAMENTO EXECUTIVO`, marginX + 20, curY + 8.5);
+      doc.setFontSize(12);
+      doc.text(`${brandName.toUpperCase()} — ORÇAMENTO EXECUTIVO`, marginX + 44, curY + 8.8);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       doc.setTextColor(...PDF_THEME.teal);
-      doc.text("PROPOSTA TÉCNICA E COMERCIAL DE ENGENHARIA ELÉTRICA · ABNT NBR 5410", marginX + 20, curY + 14.5);
+      doc.text("PROPOSTA TÉCNICA E COMERCIAL DE ENGENHARIA ELÉTRICA · ABNT NBR 5410", marginX + 44, curY + 14.5);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.6);
@@ -110,12 +110,12 @@ export function buildBudgetPDFDoc({
       doc.rect(marginX, curY, contentWidth, 11, "F");
       doc.setFillColor(...PDF_THEME.teal);
       doc.rect(marginX, curY + 10, contentWidth, 1, "F");
-      addBannerLogo(marginX + 2.5, curY + 1.5, 7.5, 7.5);
+      addBannerLogo(marginX + 2.5, curY + 1.5, 24, 7.4);
 
       doc.setTextColor(...PDF_THEME.white);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.8);
-      doc.text(`${brandName.toUpperCase()} — ${projectName.toUpperCase().slice(0, 48)}`, marginX + 12.5, curY + 7);
+      doc.text(`${brandName.toUpperCase()} — ${projectName.toUpperCase().slice(0, 44)}`, marginX + 29, curY + 7);
 
       doc.setFontSize(7.2);
       doc.setTextColor(...PDF_THEME.teal);

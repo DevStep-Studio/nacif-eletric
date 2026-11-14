@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { openHTMLPrint, PAPER_SIZES } from "@/lib/printUtils";
 import { downloadBudgetPDF, downloadBudgetCSV } from "@/lib/budgetExportUtils";
+import { buildDetailedSolarBudget } from "@/lib/solarBudgetMath";
 import {
   calculateBudgetFinancials,
   formatCurrencyBR,
@@ -282,24 +283,51 @@ export default function BudgetPage() {
 
   // Função para criar o payload do primeiro orçamento do projeto
   const createInitialBudgetFromProject = (proj) => {
-    const { materials: projMaterials } = buildProjectBudgetMaterials(proj, { productAdjustment: 0 });
-    const initialServices = [
-      {
-        id: `srv-${Date.now()}-1`,
-        name: "Mão de obra e execução técnica especializada",
-        qty: 1,
-        unit: "vb.",
-        price: 800,
-      },
-    ];
+    const isSolarProj = String(proj?.project_type || "").toLowerCase() === "solar" || Boolean(proj?.solar_config);
+    const solarBudget = isSolarProj ? buildDetailedSolarBudget({ project: proj, config: proj.solar_config || {} }) : null;
+
+    const { materials: projMaterials } = isSolarProj
+      ? {
+          materials: [...solarBudget.equipmentItems, ...solarBudget.caItems].map((item) => ({
+            name: item.name,
+            qty: item.quantity,
+            unit: item.unit,
+            price: item.unitPrice,
+            basePrice: item.unitPrice,
+            category: item.category,
+            brand: "NACIF Solar",
+          })),
+        }
+      : buildProjectBudgetMaterials(proj, { productAdjustment: 0 });
+
+    const initialServices = isSolarProj
+      ? solarBudget.serviceItems.map((srv, idx) => ({
+          id: `srv-${Date.now()}-${idx + 1}`,
+          name: srv.name,
+          qty: srv.quantity,
+          unit: srv.unit,
+          price: srv.unitPrice,
+        }))
+      : [
+          {
+            id: `srv-${Date.now()}-1`,
+            name: "Mão de obra e execução técnica especializada",
+            qty: 1,
+            unit: "vb.",
+            price: 800,
+          },
+        ];
+
+    const initialMargin = isSolarProj ? Number(solarBudget.marginPercent ?? 20) : 30;
+    const initialDiscount = isSolarProj ? Number(solarBudget.discountBrl ?? 0) : 0;
 
     const initialFinancials = calculateBudgetFinancials({
       materials: projMaterials,
       services: initialServices,
       productAdjustmentPercent: 0,
-      marginPercent: 30,
+      marginPercent: initialMargin,
       discountType: "fixed",
-      discountValue: 0,
+      discountValue: initialDiscount,
       surchargeType: "fixed",
       surchargeValue: 0,
     });
@@ -310,16 +338,18 @@ export default function BudgetPage() {
       project_name: proj.name,
       client_name: proj.client_name,
       status: "rascunho",
-      margin_percent: 30,
+      margin_percent: initialMargin,
       product_adjustment_percent: 0,
       discount_type: "fixed",
-      discount_value: 0,
+      discount_value: initialDiscount,
       surcharge_type: "fixed",
       surcharge_value: 0,
-      validity_days: "15 dias",
-      payment_terms: "50% de entrada + 50% na conclusão da obra",
+      validity_days: isSolarProj ? `${solarBudget.validityDays} dias` : "15 dias",
+      payment_terms: isSolarProj ? "À vista ou financiamento solar em até 60x" : "50% de entrada + 50% na conclusão da obra",
       execution_time: "5 a 10 dias úteis",
-      notes: "Proposta técnica conforme normas vigentes ABNT NBR 5410:2004 e padrões de segurança.",
+      notes: isSolarProj
+        ? "Proposta técnica e comercial solar conforme normas vigentes ABNT NBR 16690, NBR 5410 e Lei 14.300."
+        : "Proposta técnica conforme normas vigentes ABNT NBR 5410:2004 e padrões de segurança.",
       materials: projMaterials,
       services: initialServices,
       ...initialFinancials,
@@ -1574,7 +1604,7 @@ export default function BudgetPage() {
               </div>
 
               {/* Quadro Resumo Financeiro & Consolidação */}
-              <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-white border-2 border-primary/30 space-y-4 shadow-sm">
+              <div className="p-6 rounded-2xl bg-slate-50 border-2 border-[#009b84]/40 space-y-4 shadow-sm">
                 <div className="flex items-center justify-between border-b border-primary/20 pb-3">
                   <div>
                     <h3 className="font-black text-slate-900 text-base">Consolidação Financeira da Proposta</h3>

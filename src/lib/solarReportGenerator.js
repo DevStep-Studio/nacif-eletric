@@ -12,8 +12,15 @@
  */
 
 import { jsPDF } from "jspdf";
+import { buildDetailedSolarBudget } from "./solarBudgetMath.js";
+import { buildNacifCommercialProposalPdf } from "./solarProposalPdfBuilder.js";
 import { getAzimuthWithCardinal } from "./solarDesignerGeometry.js";
-import { NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
+import {
+  NACIF_LOGO_DARK_BASE64,
+  NACIF_LOGO_PRINCIPAL_BASE64,
+  NACIF_LOGO_WHITE_BASE64,
+  NACIF_SYMBOL_BASE64,
+} from "./solarLogoAsset.js";
 import { resolveSolarReportImages, resolveSolarReportImagesAsync } from "./solarLayoutImageRenderer.js";
 import {
   PDF_THEME,
@@ -63,7 +70,9 @@ function normalizeParams(project = {}, config = {}, sizing = {}) {
   const autoBreaker = calibresComerciais.find((cal) => cal >= acCurrent) || calibresComerciais[calibresComerciais.length - 1];
   const breaker = Number(s.breaker || autoBreaker);
 
-  const investment = (dcPowerKw * 1000 * 3.5) || 40425;
+  const detailedBudget = buildDetailedSolarBudget({ project: p, config: c, sizing: s });
+  const explicitInv = Number(c?.solar_budget?.finalTotal || p?.investment_brl || 0);
+  const investment = explicitInv > 0 ? explicitInv : (detailedBudget.finalTotal || (dcPowerKw * 1000 * 3.5) || 40425);
   const payback = annualSavings > 0 ? (investment / annualSavings).toFixed(1) : "3.5";
 
   return {
@@ -247,35 +256,20 @@ function addHeader(doc, title, project) {
   doc.setFillColor(0, 216, 184);
   doc.rect(0, 24.3, 210, 0.7, "F");
 
-  // Emblema container da logomarca Nacif com destaque e contraste profissional
+  // Logotipo Original NACIF ENERGY (dark mode 876:270) sobre o cabeçalho institucional #0E1726
   try {
-    doc.setFillColor(19, 32, 53);
-    doc.roundedRect(13.5, 3.8, 17.2, 16.5, 2, 2, "F");
-    doc.setDrawColor(0, 216, 184);
-    doc.setLineWidth(0.35);
-    doc.roundedRect(13.5, 3.8, 17.2, 16.5, 2, 2, "S");
-
-    // Símbolo Oficial Nacif Energy (proporções 269:251 preservadas, pureza ciano sobre transparente)
-    doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 14.8, 4.8, 14.6, 13.6, undefined, "FAST");
+    doc.addImage(NACIF_LOGO_DARK_BASE64, "PNG", 14, 3.6, 42, 12.9, undefined, "FAST");
   } catch {
-    // Fallback gracioso
+    try {
+      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 14, 4.0, 14.6, 13.6, undefined, "FAST");
+    } catch {}
   }
 
-  // Nome oficial da marca com destaque e tipografia institucional: NACIF (branco) + ENERGY (ciano)
+  // Slogan institucional abaixo do logotipo original
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13.5);
-  doc.setTextColor(255, 255, 255);
-  doc.text("NACIF", 34.5, 11.2);
-  const nacifWidth = doc.getTextWidth("NACIF");
-
+  doc.setFontSize(6.2);
   doc.setTextColor(0, 216, 184);
-  doc.text("ENERGY", 34.5 + nacifWidth + 1.8, 11.2);
-
-  // Slogan institucional perfeitamente alinhado abaixo do logotipo
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.6);
-  doc.setTextColor(0, 216, 184);
-  doc.text("DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR", 34.5, 16.5);
+  doc.text("DA PLANTA AO SOL - TUDO EM UM SÓ LUGAR", 14.2, 20.6);
 
   // Lado direito: Título do Documento, Projeto e Metadados rigorosamente alinhados na margem de 196mm
   doc.setFont("helvetica", "bold");
@@ -1475,99 +1469,11 @@ export function generateGenerationSimulationReport(project = {}, config = {}, si
 }
 
 /**
- * 6. Proposta Comercial Executiva
+ * 6. Proposta Comercial Completa (9 Páginas — Padrão Visual NACIF Energy)
  */
 export function generateCommercialProposalReport(project = {}, config = {}, sizing = {}) {
-  const { dcPowerKw, annualSavings, annualKwh, investment, payback, panelCount, moduleWp, inverterKw } = normalizeParams(project, config, sizing);
-  const doc = new jsPDF("p", "mm", "a4");
-  addHeader(doc, "PROPOSTA COMERCIAL EXECUTIVA", project);
-
-  const savings25Years = annualSavings * 25;
-  const roiPct = investment > 0 ? ((savings25Years - investment) / investment) * 100 : 0;
-  const co2Year = (dcPowerKw * 0.48).toFixed(1);
-  const trees = Math.max(12, Math.round(dcPowerKw * 18));
-
-  let y = 26;
-  y = drawPdfKpiStrip(doc, [
-    { label: "INVESTIMENTO TURNKEY", value: investment.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), sub: `${dcPowerKw.toFixed(2)} kWp · ${panelCount}×${moduleWp}Wp` },
-    { label: "ECONOMIA 1º ANO", value: annualSavings.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), sub: `~${Math.round(annualKwh / 12)} kWh/mês gerados`, accent: BRAND_TEAL },
-    { label: "ECONOMIA 25 ANOS", value: savings25Years.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), sub: `ROI acumulado ${Math.round(roiPct)}%`, highlight: true },
-    { label: "PAYBACK SIMPLES", value: `${payback} anos`, sub: "Retorno do capital investido" },
-  ], 14, y, 182, 20);
-
-  y += 2;
-  // Gráfico comparativo de fluxo acumulado (Anos 1, 3, 5, 10, 15, 20, 25)
-  const yearsLabels = ["Ano 1", "Ano 3", "Ano 5", "Ano 10", "Ano 15", "Ano 20", "Ano 25"];
-  const yearsMult = [1, 3, 5, 10, 15, 20, 25];
-  const cumSavings = yearsMult.map((yr) => Math.round((annualSavings * yr) / 1000));
-  y = drawVectorBarChart(doc, {
-    x: 14,
-    y,
-    w: 182,
-    h: 54,
-    title: "PROJEÇÃO DE ECONOMIA ACUMULADA AO LONGO DE 25 ANOS (MIL R$)",
-    subtitle: `Inversor ${inverterKw} kW · Vida útil estimada de geração > 25 anos`,
-    labels: yearsLabels,
-    values: cumSavings,
-    barColor: BRAND_TEAL,
-    valueFormatter: (v) => `R$ ${Math.round(v)}k`,
-  });
-
-  y += 2;
-  y = drawPdfSectionTitle(doc, "1. Resumo do Investimento e Retorno Financeiro", 14, y, 182, {
-    accentColor: BRAND_TEAL,
-    rightBadge: "Proposta Turnkey",
-  });
-
-  const proposalRows = [
-    ["Potência do Sistema", `${dcPowerKw.toFixed(2)} kWp`, `${panelCount} módulos fotovoltaicos (${moduleWp} Wp)`],
-    ["Investimento Estimado", investment.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Equipamentos + Engenharia + Instalação + Homologação"],
-    ["Economia no 1º Ano", annualSavings.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Redução de até 95% na fatura de energia elétrica"],
-    ["Economia em 25 Anos", savings25Years.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Garantia linear de desempenho dos módulos"],
-    ["Payback Simples", `${payback} anos`, "Tempo estimado de retorno integral do investimento"],
-    ["Impacto Ambiental", `${co2Year} ton CO2/ano`, `Equivalente a ~${trees} árvores preservadas/ano`],
-  ];
-
-  y = drawSimpleTable(doc, y, ["Indicador Financeiro", "Valor Projetado", "Observação"], proposalRows, [48, 48, 86]);
-  y += 3;
-
-  // Bloco de condições comerciais e escopo incluso
-  if (y <= 238) {
-    doc.setFillColor(...PDF_THEME.slate50);
-    doc.setDrawColor(...PDF_THEME.slate200);
-    doc.rect(14, y, 89, 34, "FD");
-    doc.setFillColor(...BRAND_TEAL);
-    doc.rect(14, y, 2, 34, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.8);
-    doc.setTextColor(...BRAND_DARK);
-    doc.text("ESCOPO INCLUSO NA PROPOSTA", 18.5, y + 6);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.0);
-    doc.setTextColor(...PDF_THEME.slate700);
-    doc.text("• Módulos fotovoltaicos Tier-1 + Inversor homologado INMETRO", 18.5, y + 12);
-    doc.text("• String Box CC / Proteções CA (Disjuntor + DPS)", 18.5, y + 17.5);
-    doc.text("• Projeto executivo, ART CREA e homologação na distribuidora", 18.5, y + 23);
-    doc.text("• Instalação mecânica/elétrica e comissionamento completo", 18.5, y + 28.5);
-
-    doc.setFillColor(...PDF_THEME.navySoft);
-    doc.setDrawColor(...BRAND_DARK);
-    doc.rect(107, y, 89, 34, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.8);
-    doc.setTextColor(...BRAND_TEAL);
-    doc.text("CONDIÇÕES & GARANTIAS", 112, y + 6);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.0);
-    doc.setTextColor(226, 232, 240);
-    doc.text("• Validade da proposta: 15 dias corridos", 112, y + 12);
-    doc.text("• Garantia de geração linear módulos: 25 anos", 112, y + 17.5);
-    doc.text("• Garantia do inversor: conforme fabricante (5 a 10 anos)", 112, y + 23);
-    doc.text("• Garantia de instalação e engenharia: 12 meses", 112, y + 28.5);
-  }
-
-  addFooter(doc, 1, 1);
-  return doc;
+  const params = normalizeParams(project, config, sizing);
+  return buildNacifCommercialProposalPdf({ project, config, sizing, params });
 }
 
 /**

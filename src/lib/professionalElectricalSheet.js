@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { calcProjectMetrics } from "./electricalEngine.js";
-import { NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
+import { NACIF_LOGO_DARK_BASE64, NACIF_SYMBOL_BASE64 } from "./solarLogoAsset.js";
 import { PDF_THEME, PHASE_RGB } from "./unifilarPdfDrawer.js";
 
 const SHEET = { w: 1189, h: 841 };
@@ -73,13 +73,17 @@ export function drawSheetFrame(doc, mode = "unifilar") {
   doc.rect(6, 46, SHEET.w - 12, 4, "F");
 
   try {
-    doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 18, 13, 28, 28, undefined, "FAST");
-  } catch {}
+    doc.addImage(NACIF_LOGO_DARK_BASE64, "PNG", 18, 12.5, 92, 28.4, undefined, "FAST");
+  } catch {
+    try {
+      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 18, 13, 28, 28, undefined, "FAST");
+    } catch {}
+  }
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
+  doc.setFontSize(17);
   doc.setTextColor(...PDF_THEME.white);
-  text(doc, "NACIF ENERGY — PROJETO EXECUTIVO DE ENGENHARIA ELÉTRICA", 56, 25);
+  text(doc, "PROJETO EXECUTIVO DE ENGENHARIA ELÉTRICA", 122, 24.5);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10.5);
@@ -89,8 +93,8 @@ export function drawSheetFrame(doc, mode = "unifilar") {
     mode === "unifilar"
       ? "DIAGRAMA UNIFILAR DE QUADROS, BARRAMENTOS E PLANILHA DE DIMENSIONAMENTO · ABNT NBR 5410"
       : "PRANCHA EXECUTIVA DE INSTALAÇÕES ELÉTRICAS EM PLANTA BAIXA · ABNT NBR 5410",
-    56,
-    38
+    122,
+    37.5
   );
 
   doc.setFont("helvetica", "bold");
@@ -184,8 +188,12 @@ export function drawTitleBlock(doc, project = {}, title = "PROJETO EXECUTIVO") {
   doc.rect(x, cy, 4, 32, "F");
   drawRect(doc, x, cy, w, 32, C.black, 0.4);
   try {
-    doc.addImage(NACIF_SYMBOL_BASE64, "PNG", x + w - 28, cy + 5, 22, 22, undefined, "FAST");
-  } catch {}
+    doc.addImage(NACIF_LOGO_DARK_BASE64, "PNG", x + w - 58, cy + 8, 52, 16, undefined, "FAST");
+  } catch {
+    try {
+      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", x + w - 28, cy + 5, 22, 22, undefined, "FAST");
+    } catch {}
+  }
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(...PDF_THEME.teal);

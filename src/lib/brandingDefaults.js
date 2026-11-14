@@ -1,5 +1,5 @@
 export const DEFAULT_LOGO_URL = "/brand-logo-principal.png";
-export const DEFAULT_COMPACT_LOGO_URL = "/brand-mark-principal.png";
+export const DEFAULT_COMPACT_LOGO_URL = "/brand-symbol-pure.png";
 export const DEFAULT_LOGO_BLACK_URL = "/brand-logo-black.png";
 export const DEFAULT_LOGO_WHITE_URL = "/brand-logo-white.png";
 export const DEFAULT_FAVICON_URL = "/favicon.png";

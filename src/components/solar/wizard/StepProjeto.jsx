@@ -73,20 +73,51 @@ export default function StepProjeto({ state, onChange, onCreate, creating }) {
         </div>
       </div>
 
-      {/* 2. Investimento Estimado (Opcional) */}
-      <div className="space-y-1.5">
-        <Label className="text-xs font-black text-foreground">
-          Investimento estimado (R$) — opcional
-        </Label>
-        <PtBrNumericInput
-          value={state.investment_brl}
-          onChange={(v) => onChange({ investment_brl: v })}
-          placeholder={`Deixe em branco para estimar por R$ ${DEFAULT_SIZING_PREMISES.costPerWpBrl.toFixed(2).replace(".", ",")}/Wp`}
-          suffix="R$"
-          min={0}
-        />
-        <p className="text-[11px] font-semibold text-muted-foreground">
-          Utilizado para o cálculo do Payback simples e indicadores de viabilidade financeira.
+      {/* 2. Preço do Equipamento, Margem Solicitada & Investimento (Opcional) */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+        <p className="text-xs font-black uppercase tracking-wider text-slate-800">
+          Precificação & Orçamento Solar (Opcional)
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <Label className="text-[11px] font-bold text-foreground">
+              Preço Equipamento / Kit CC (R$)
+            </Label>
+            <PtBrNumericInput
+              value={state.equipment_kit_price}
+              onChange={(v) => onChange({ equipment_kit_price: v })}
+              placeholder="Ex: 18500"
+              suffix="R$"
+              min={0}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px] font-bold text-foreground">
+              Margem Solicitada (%)
+            </Label>
+            <PtBrNumericInput
+              value={state.margin_percent ?? 20}
+              onChange={(v) => onChange({ margin_percent: v })}
+              placeholder="Ex: 20"
+              suffix="%"
+              min={0}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px] font-bold text-foreground">
+              Investimento Turnkey Final (R$)
+            </Label>
+            <PtBrNumericInput
+              value={state.investment_brl}
+              onChange={(v) => onChange({ investment_brl: v })}
+              placeholder={`Estimado: R$ ${DEFAULT_SIZING_PREMISES.costPerWpBrl.toFixed(2).replace(".", ",")}/Wp`}
+              suffix="R$"
+              min={0}
+            />
+          </div>
+        </div>
+        <p className="text-[11px] font-medium text-muted-foreground">
+          Informe o preço do kit de equipamentos e a margem desejada (%) para compor automaticamente a Proposta Comercial e o Payback.
         </p>
       </div>
 

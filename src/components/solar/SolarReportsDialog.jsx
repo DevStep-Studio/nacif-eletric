@@ -82,11 +82,11 @@ const REPORT_CARDS = [
   },
   {
     id: "proposal",
-    title: "Proposta Comercial",
-    desc: "Apresentação executiva para cliente com payback, ROI e economia de 25 anos.",
+    title: "Proposta Comercial Completa (9 Págs.)",
+    desc: "Modelo NACIF Energy de 9 páginas com capa, preços dos equipamentos, margem, VPL/TIR, fluxo de caixa 25 anos e aceite.",
     icon: Receipt,
     fn: generateCommercialProposalReport,
-    filename: "06_Proposta_Comercial_Solar.pdf",
+    filename: "06_Proposta_Comercial_NACIF_Energy.pdf",
   },
 ];
 
