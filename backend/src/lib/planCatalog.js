@@ -1,3 +1,5 @@
+export const BILLING_API_VERSION = "complete-trial-v1";
+
 export const FEATURE_KEYS = {
   PROJECTS: "projects",
   STORAGE_MB: "storageMb",

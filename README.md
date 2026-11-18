@@ -176,3 +176,30 @@ Nao e necessaria nova migration para essa correcao; publique backend e frontend.
 
 Validacao: `npm --prefix backend run test:auth-register`,
 `npm --prefix backend run test:billing` e `npm run test:subscription-state`.
+
+
+### Frontend atualizado, mas os 7 dias grátis não aparecem
+
+A oferta exige que a API autenticada retorne `trial_eligible: true`. Se o frontend já mostra “Assinar plano”, mas a API pública ainda devolve o plano “Gratuito” com 1 projeto, o processo do backend está antigo. Não é um problema que criar outra conta ou recarregar o navegador resolva.
+
+Verifique a API pública sem criar contas ou efetuar cobranças:
+
+```bash
+npm run check:api
+# Para outro host:
+npm run check:api -- https://seu-dominio.com
+```
+
+No checkout que atende a API de produção, atualizar o código e aplicar a migration de teste antes de iniciar a versão nova:
+
+```bash
+git pull --ff-only
+cd backend
+npx prisma migrate deploy
+npx prisma generate
+cd ..
+npm run start:api
+npm run check:api
+```
+
+A verificação exige `billingApiVersion: "complete-trial-v1"` em `/api/health`. O processo de publicação não considera mais uma API antiga pronta apenas porque ela responde HTTP 200 e tem a rota de planos. Se a verificação local passar e a pública falhar, o proxy de `/api` está apontando para outro processo ou servidor. Compilar apenas `dist/` não atualiza a API.

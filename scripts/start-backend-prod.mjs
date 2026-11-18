@@ -2,6 +2,7 @@ import { execSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { BILLING_API_VERSION } from "../backend/src/lib/planCatalog.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,9 +11,9 @@ const backendDir = path.resolve(rootDir, "backend");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function checkHealth(port = 3001) {
+export async function checkHealth(port = 3001, origin) {
   try {
-    const baseUrl = `http://127.0.0.1:${port}`;
+    const baseUrl = origin ? new URL(origin).origin : `http://127.0.0.1:${port}`;
     const [healthResponse, plansResponse] = await Promise.all([
       fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(3000) }),
       fetch(`${baseUrl}/api/subscriptions/plans`, { signal: AbortSignal.timeout(3000) }),
@@ -27,6 +28,9 @@ export async function checkHealth(port = 3001) {
     const expectedPlans = ["free", "estudante", "eletrico", "solar", "completo"];
     if (health.ok !== true || health.service !== "nacif-electric-backend" || !Array.isArray(catalog?.plans) || !expectedPlans.every(code => catalog.plans.some(plan => plan.code === code))) {
       return { ok: false, data: health, reason: "A porta configurada não está servindo a API e o catálogo esperados." };
+    }
+    if (health.billingApiVersion !== BILLING_API_VERSION) {
+      return { ok: false, data: health, reason: `Backend desatualizado: a API ainda não confirma suporte ao teste de 7 dias (${BILLING_API_VERSION}). Atualize o backend, aplique a migration 20261117000000_complete_trial e reinicie nacif-electric-api. Publicar somente o frontend não atualiza a API.` };
     }
     return { ok: true, data: health, reason: null };
   } catch (error) {
