@@ -5,12 +5,16 @@ import { buildApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { env } from "../src/config/env.js";
 import { addCycle, paymentPeriods, validDocument } from "../src/lib/asaasBilling.js";
-import { effectivePlanCode, paidEntitlement } from "../src/lib/planGovernance.js";
+import { effectivePlanCode, paidEntitlement, trialEntitlement } from "../src/lib/planGovernance.js";
+
+import { getTrialSchedule } from "../src/lib/planCatalog.js";
 
 const clone = <T>(value: T): T => structuredClone(value);
 const dateOnly = (date = new Date()) => date.toISOString().slice(0, 10);
 
 test("calendar periods, duplicate invoices and document validation", () => {
+  assert.equal(getTrialSchedule(Date.parse("2027-01-01T03:00:00Z")).end.toISOString(), "2027-01-08T03:00:00.000Z");
+  assert.equal(getTrialSchedule(Date.parse("2027-01-01T12:00:00Z")).firstChargeDate, "2027-01-09");
   assert.equal(addCycle(new Date("2027-01-31T12:00:00Z"), "monthly").toISOString(), "2027-02-28T12:00:00.000Z");
   assert.equal(addCycle(new Date("2028-02-29T12:00:00Z"), "annual").toISOString(), "2029-02-28T12:00:00.000Z");
   assert.equal(validDocument("529.982.247-25"), true);
@@ -170,6 +174,77 @@ test("billing HTTP lifecycle with real handlers and an isolated Asaas simulator"
   const post = (suffix: string, payload: any = {}, id = "owner") => app.inject({ method: "POST", url: `/api/subscriptions/${suffix}`, payload, headers: headers(id) });
   const webhook = (id: string, event = "PAYMENT_CONFIRMED", payment = payments[0]) => app.inject({ method: "POST", url: "/api/subscriptions/webhook/asaas", headers: { "asaas-access-token": env.ASAAS_WEBHOOK_TOKEN }, payload: { id, event, payment: { id: payment.id, subscription: payment.subscription, status: "CONFIRMED" } } });
   try {
+    const trialInput = () => ({ ...input("CREDIT_CARD", "completo"), trial: true, acceptRecurringCharge: true,
+      creditCard: { holderName: "Cliente Teste", number: "4111111111111111", expiryMonth: "12", expiryYear: "2030", ccv: "123" } });
+    await t.test("no-plan accounts cannot invoke technical modules or create budgets directly", async () => {
+      reset();
+      for (const url of ["/api/analysis/planta/requested-plan", "/api/analysis/solar/roof-estimate", "/api/budgets"]) {
+        const result = await app.inject({ method: "POST", url, headers: headers(), payload: {} });
+        assert.equal(result.statusCode, 403, result.body);
+      }
+    });
+    await t.test("trial validates card, grants complete without payment and preserves access on cancel", async () => {
+      reset();
+      const result = await post("create-checkout-session", trialInput());
+      assert.equal(result.statusCode, 200, result.body);
+      assert.equal(result.json().trial, true);
+      assert.equal(result.json().url, null, "trial never redirects to an immediate-payment invoice");
+      assert.equal(subscriptions[0].creditCard.number, "4111111111111111");
+      assert.equal(subscriptions[0].remoteIp, "127.0.0.1");
+      assert.equal(payments[0].status, "PENDING");
+      assert.ok(Date.parse(result.json().trialEndsAt) - Date.now() >= 7 * 86400000 - 1000);
+      assert.equal(subscriptions[0].nextDueDate, result.json().firstChargeDate);
+      assert.equal(effectivePlanCode(tables.user[0]), "completo");
+      const me = await app.inject({ method: "GET", url: "/api/auth/me", headers: headers() });
+      assert.equal(me.json().has_paid_subscription, false);
+      assert.equal(me.json().has_active_trial, true);
+      assert.equal(me.json().subscription_status, "trialing");
+      assert.equal(me.json().trial_eligible, false);
+      const trialPermissions = tables.user[0].customPermissions;
+      assert.equal(trialEntitlement({ customPermissions: { ...trialPermissions, billingEnvironment: "other" } }), null);
+      assert.equal(trialEntitlement(tables.user[0], Date.parse(trialPermissions.billingTrial.start) - 1), null);
+      assert.equal(trialEntitlement(tables.user[0], Date.parse(trialPermissions.billingTrial.end)), null);
+      assert.ok(!JSON.stringify(tables).includes("4111111111111111"), "card data never persisted");
+      assert.equal((await post("create-checkout-session", trialInput())).statusCode, 200);
+      assert.equal(creationCalls, 1);
+      assert.equal((await post("cancel")).statusCode, 200);
+      assert.equal(effectivePlanCode(tables.user[0]), "completo");
+      assert.equal(tables.user[0].customPermissions.autoRenew, false);
+      assert.ok(payments[0].deleted);
+      assert.equal((await post("create-checkout-session", trialInput())).statusCode, 409);
+    });
+    await t.test("rejected cards, wrong plan and missing consent do not grant trial", async () => {
+      reset();
+      assert.equal((await post("create-checkout-session", { ...trialInput(), acceptRecurringCharge: undefined })).statusCode, 400);
+      assert.equal((await post("create-checkout-session", { ...trialInput(), planCode: "solar" })).statusCode, 400);
+      assert.equal((await post("create-checkout-session", { ...trialInput(), billingType: "PIX" })).statusCode, 400);
+      assert.equal((await post("create-checkout-session", { ...trialInput(), creditCard: undefined })).statusCode, 400);
+      rejectCreate = true;
+      assert.equal((await post("create-checkout-session", trialInput())).statusCode, 400);
+      assert.equal(effectivePlanCode(tables.user[0]), "gratuito");
+      assert.equal(tables.user[0].customPermissions.trialUsed, undefined);
+      rejectCreate = false;
+      assert.equal((await post("create-checkout-session", trialInput())).statusCode, 200);
+    });
+    await t.test("ambiguous trial creation recovers once, expires and converts only after verified payment", async () => {
+      reset(); timeoutAfterCreate = true;
+      assert.equal((await post("create-checkout-session", trialInput())).statusCode, 503);
+      assert.equal(effectivePlanCode(tables.user[0]), "gratuito");
+      assert.equal((await post("sync")).statusCode, 200);
+      assert.equal(creationCalls, 1);
+      assert.equal(effectivePlanCode(tables.user[0]), "completo");
+      tables.billingSubscription[0].trialEndsAt = new Date(Date.now() - 1);
+      assert.equal((await post("sync")).statusCode, 200);
+      assert.equal(effectivePlanCode(tables.user[0]), "gratuito");
+      payments[0].status = "OVERDUE";
+      assert.equal((await webhook("trial-declined", "PAYMENT_OVERDUE")).statusCode, 200);
+      assert.equal(effectivePlanCode(tables.user[0]), "gratuito");
+      payments[0].status = "CONFIRMED"; payments[0].paymentDate = dateOnly();
+      assert.equal((await webhook("trial-paid")).statusCode, 200);
+      assert.equal((await webhook("trial-paid")).statusCode, 200);
+      assert.equal(effectivePlanCode(tables.user[0]), "completo");
+      assert.ok(paidEntitlement(tables.user[0]));
+    });
     for (const type of ["PIX", "BOLETO", "CREDIT_CARD"]) await t.test(`${type}: pending checkout, verified payment and cancellation`, async () => {
       reset();
       const checkout = await post("create-checkout-session", { ...input(type), value: 0.01 });
@@ -196,7 +271,7 @@ test("billing HTTP lifecycle with real handlers and an isolated Asaas simulator"
     await t.test("ownership, academic constraints and invalid inputs", async () => {
       reset();
       assert.equal((await post("create-checkout-session", input("PIX", "estudante", "annual"))).statusCode, 400);
-      assert.equal((await post("create-checkout-session", input("PIX", "estudante"))).statusCode, 403);
+      assert.equal((await post("create-checkout-session", input("PIX", "estudante"))).statusCode, 400);
       assert.equal((await post("create-checkout-session", { ...input(), billingDetails: { ...input().billingDetails, cpfCnpj: "11111111111" } })).statusCode, 400);
       const checkout = await post("create-checkout-session", input());
       assert.equal((await post("verify-checkout-session", { subscriptionId: checkout.json().subscriptionId }, "other")).statusCode, 404);
@@ -205,7 +280,7 @@ test("billing HTTP lifecycle with real handlers and an isolated Asaas simulator"
       tables.user[0].customPermissions.academicStatus = "approved";
       tables.user[0].customPermissions.academicValidUntil = new Date(Date.now()+86400000).toISOString();
       assert.equal((await post("cancel")).statusCode, 200);
-      assert.equal((await post("create-checkout-session", input("BOLETO", "estudante"))).statusCode, 200);
+      assert.equal((await post("create-checkout-session", input("BOLETO", "estudante"))).statusCode, 400);
     });
     await t.test("ambiguous creation is recovered without a second subscription", async () => {
       reset(); timeoutAfterCreate = true;

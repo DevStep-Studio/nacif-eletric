@@ -1,5 +1,5 @@
 import { normalizeAccountStatus } from "./accountAccess.js";
-import { paidEntitlement } from "./planGovernance.js";
+import { paidEntitlement, trialEntitlement } from "./planGovernance.js";
 import type { Project, ProjectStatus, User, UserPlan, UserRole } from "@prisma/client";
 
 const projectStatusLabelMap: Record<ProjectStatus, "Rascunho" | "Em Andamento" | "Concluído" | "Aprovado"> = {
@@ -53,6 +53,11 @@ type SafeUser = {
   subscription_cycle?: string | null;
   subscription_plan?: string | null;
   has_paid_subscription?: boolean;
+  has_active_trial?: boolean;
+  trial_eligible?: boolean;
+  trial_start_date?: string | null;
+  trial_end_date?: string | null;
+  first_charge_date?: string | null;
   academic_status?: string;
   academic_institution?: string;
   academic_course?: string;
@@ -112,10 +117,11 @@ export const serializeUser = (user: User): SafeUser => {
   const isSuper = user.role === "super_admin" || Boolean(user.isSuperAdmin) || SUPER_ADMIN_EMAILS.includes(normalizedEmail);
   const stored = (user.customPermissions as Record<string, any>) || {};
   const entitlement = paidEntitlement(user);
+  const trial = trialEntitlement(user);
   const hasBilling = Boolean(stored.billingProvider === "asaas" || stored.asaasSubscriptionId);
   const subscriptionStatus = entitlement
     ? stored.autoRenew ? "active" : "cancelled"
-    : hasBilling ? stored.subscriptionStatus === "active" ? "expired" : stored.subscriptionStatus || "pending" : "none";
+    : trial ? "trialing" : hasBilling ? ["active", "trialing"].includes(stored.subscriptionStatus) ? "expired" : stored.subscriptionStatus || "pending" : "none";
   const permissions: Record<string, any> = {
     ...stored,
     subscriptionStartDate: entitlement?.start || null,
@@ -131,9 +137,14 @@ export const serializeUser = (user: User): SafeUser => {
     email: user.email,
     full_name: user.fullName,
     role: isSuper ? ("super_admin" as UserRole) : user.role,
-    plan: (entitlement?.planCode || "gratuito") as UserPlan,
+    plan: (entitlement?.planCode || trial?.planCode || "gratuito") as UserPlan,
     subscription_plan: entitlement?.planCode || null,
     has_paid_subscription: Boolean(entitlement),
+    has_active_trial: Boolean(trial && !entitlement),
+    trial_eligible: !stored.trialUsed && !stored.billingPaidBefore && !(stored.billingEntitlements || []).length && !entitlement,
+    trial_start_date: stored.billingTrial?.start || null,
+    trial_end_date: stored.billingTrial?.end || null,
+    first_charge_date: stored.billingTrial?.firstChargeDate || null,
     profession: user.profession ?? "",
     profissao: user.profession ?? "",
     is_super_admin: isSuper,

@@ -36,6 +36,12 @@ try {
   assert.equal(normalizeSubscription(paidUser).planCode, "solar");
   assert.equal(normalizeSubscription(paidUser).hasPaidSubscription, true);
   assert.equal(normalizeSubscription(paidUser).price, 149.9);
+  const trialUser = { billing_provider: "asaas", has_active_trial: true, has_paid_subscription: false,
+    trial_start_date: new Date(Date.now()-1000).toISOString(), trial_end_date: new Date(Date.now()+86400000).toISOString() };
+  assert.equal(normalizeSubscription(trialUser).planCode, "completo");
+  assert.equal(normalizeSubscription(trialUser).hasPaidSubscription, false);
+  assert.equal(normalizeSubscription(trialUser).hasAccess, true);
+  assert.equal(normalizeSubscription({ ...trialUser, trial_end_date: new Date(Date.now()-1).toISOString() }).hasAccess, false);
   const { backend, isLocalAuthMode } = await server.ssrLoadModule("/src/api/backendClient.js");
   assert.equal(isLocalAuthMode, true);
   const { user } = await backend.auth.register({ email: "signup-no-plan@example.com", password: "test-password-123", profession: "engenheiro" });
@@ -48,7 +54,7 @@ try {
   await backend.auth.register({ email: "second-user@example.com", password: "test-password-123", profession: "engenheiro" });
   assert.deepEqual(await backend.entities.Project.list(), []);
   for (const op of [() => backend.entities.Project.get(project.id), () => backend.entities.Project.update(project.id, { name: "Hijack" }), () => backend.entities.Project.duplicate(project.id), () => backend.entities.Project.delete(project.id)]) {
-    await assert.rejects(op, { status: 404 });
+    await assert.rejects(op, { status: 403 });
   }
   console.log("PASS: novas contas e perfis antigos sem assinatura, recarga local sem promoção e assinatura paga preservada.");
 } finally {

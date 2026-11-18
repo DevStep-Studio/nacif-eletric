@@ -2,6 +2,7 @@ import { isSuperAdmin } from "./professionalAccess.js";
 
 import { FEATURE_KEYS, COMMERCIAL_PLANS, LEGACY_PLANS, catalogModuleAccess, planComparisonValue } from "../../backend/src/lib/planCatalog.js";
 export { FEATURE_KEYS, COMMERCIAL_PLANS };
+export { getTrialSchedule } from "../../backend/src/lib/planCatalog.js";
 
 export function applyRemotePlanCatalog(_plans) {
   if (!Array.isArray(_plans)) return;
@@ -206,22 +207,26 @@ export function normalizeSubscription(user = {}) {
   const startDate = user?.subscription?.start_date || user?.subscription_start_date || null;
   const currentPeriodPaid = provider === "asaas" && Date.parse(renewalDate) > Date.now() && (!startDate || Date.parse(startDate) <= Date.now());
   const explicitPlanCode = user?.subscription_plan || user?.plan || user?.subscription?.planCode || user?.subscription?.plan_code || user?.plan_code;
-  const isTerminatedStatus = ["cancelled", "expired", "past_due"].includes(storedStatus);
-  const hasPaidSubscription = Boolean(
-    (currentPeriodPaid && (user?.has_paid_subscription ?? !isTerminatedStatus)) ||
-    (explicitPlanCode && explicitPlanCode !== "free" && provider !== "asaas" && !isTerminatedStatus)
-  );
-  const plan = getPlanByCode(hasPaidSubscription && explicitPlanCode ? explicitPlanCode : "free");
+  const hasPaidSubscription = Boolean(currentPeriodPaid && user?.has_paid_subscription === true);
+  const hasActiveTrial = Boolean(provider === "asaas" && user?.has_active_trial === true &&
+    Date.parse(user?.trial_start_date) <= Date.now() && Date.parse(user?.trial_end_date) > Date.now());
+  const hasAccess = hasPaidSubscription || hasActiveTrial;
+  const plan = getPlanByCode(hasPaidSubscription && explicitPlanCode ? explicitPlanCode : hasActiveTrial ? "completo" : "free");
   const billingConfigured = provider === "asaas" || Boolean(user?.asaas_subscription_id);
-  const cycle = hasPaidSubscription ? user?.subscription?.cycle || user?.subscription_cycle || user?.billing_cycle || "monthly" : null;
+  const cycle = hasAccess ? user?.subscription?.cycle || user?.subscription_cycle || user?.billing_cycle || "monthly" : null;
 
   return {
     plan,
     planCode: plan.code,
     cycle,
-    status: hasPaidSubscription ? storedStatus : billingConfigured ? storedStatus === "active" ? "expired" : storedStatus : "none",
+    status: hasActiveTrial ? "trialing" : hasPaidSubscription ? storedStatus : billingConfigured ? ["active", "trialing"].includes(storedStatus) ? "expired" : storedStatus : "none",
     provider,
     hasPaidSubscription,
+    hasActiveTrial,
+    hasAccess,
+    trialEligible: user?.trial_eligible === true,
+    trialEndDate: user?.trial_end_date || null,
+    firstChargeDate: user?.first_charge_date || null,
     price: hasPaidSubscription ? user?.subscription?.price ?? user?.subscription_price ?? (cycle === "annual" ? plan.annualPrice : plan.monthlyPrice) : 0,
     startDate: hasPaidSubscription ? user?.subscription?.start_date || user?.subscription_start_date || null : null,
     renewalDate: hasPaidSubscription ? renewalDate : null,
@@ -262,7 +267,7 @@ export function estimateProjectStorageMb(project = {}) {
 export function resolveEffectiveSubscription(user = {}) {
   const sub = normalizeSubscription(user);
   const isAdmin = user?.role === "admin" || isSuperAdmin(user);
-  return { ...sub, isAdmin, isInactive: !sub.hasPaidSubscription };
+  return { ...sub, isAdmin, isInactive: !sub.hasAccess };
 }
 
 export function checkFeatureQuotaAllowed(user = {}, featureKey = "", currentUsage = 0, increment = 1) {

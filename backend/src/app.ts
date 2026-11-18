@@ -67,7 +67,7 @@ export const buildApp = async () => {
 
   const app = Fastify({
     bodyLimit: 30 * 1024 * 1024,
-    logger: { redact: ["req.headers.authorization", "req.headers[\"asaas-access-token\"]"] },
+    logger: { redact: ["req.body.creditCard", "body.creditCard", "req.headers.authorization", "req.headers[\"asaas-access-token\"]"] },
     trustProxy: true, // Essencial para proxies reversos, Cloudflare e Nginx
     ajv: {
       customOptions: {

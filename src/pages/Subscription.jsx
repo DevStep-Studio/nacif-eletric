@@ -234,6 +234,15 @@ export default function Subscription() {
         </section>
       )}
 
+      {subscription.trialEligible && !billingData.subscription && <section className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm">
+        <strong>Experimente o Completo grátis por 7 dias com cartão.</strong>
+        <p>Depois do teste, R$ 210,00/mês. Cancele antes da primeira cobrança para não pagar.</p>
+        <Button className="mt-3" onClick={() => { setCycle("monthly"); handleSubscription("completo"); }}>Testar Completo por 7 dias</Button>
+      </section>}
+      {subscription.hasActiveTrial && <section className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm">
+        <strong>Teste grátis do Completo até {formatIsoDate(subscription.trialEndDate)}.</strong>
+        <p>{subscription.autoRenew ? `Primeira cobrança de R$ 210,00/mês em ${formatIsoDate(`${subscription.firstChargeDate}T12:00:00`)}. Cancele em Gerenciar assinatura antes dessa data para evitar a cobrança.` : "Renovação cancelada. Você mantém o teste até o término, sem novas cobranças."}</p>
+      </section>}
       {/* 3.2 Plano Atual e Uso no Período */}
       <section className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
         {/* Bloco Plano Atual */}
@@ -241,11 +250,11 @@ export default function Subscription() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-[#667085]">Plano atual</p>
-              <h2 className="mt-1.5 text-2xl font-extrabold text-[#101828]">{subscription.hasPaidSubscription ? subscription.plan.name : "Sem assinatura"}</h2>
-              <p className="mt-1 text-xs font-medium leading-5 text-[#667085]">{subscription.hasPaidSubscription ? subscription.plan.commercialTagline : "Você ainda não contratou um plano. Escolha uma opção abaixo para assinar."}</p>
+              <h2 className="mt-1.5 text-2xl font-extrabold text-[#101828]">{subscription.hasAccess ? subscription.plan.name : "Sem plano"}</h2>
+              <p className="mt-1 text-xs font-medium leading-5 text-[#667085]">{subscription.hasAccess ? subscription.plan.commercialTagline : "Você ainda não contratou um plano. Escolha uma opção abaixo para assinar."}</p>
             </div>
             <Badge className="rounded-[6px] border border-[#BCEEE5] bg-[#E8FCF8] text-xs font-extrabold text-[#0f4f49] hover:bg-[#E8FCF8]">
-              {subscription.hasPaidSubscription ? "Atual" : "Não contratado"}
+              {subscription.hasActiveTrial ? "Teste grátis" : subscription.hasPaidSubscription ? "Atual" : "Sem plano"}
             </Badge>
           </div>
 
@@ -253,35 +262,35 @@ export default function Subscription() {
             <div className="flex items-center justify-between">
               <span className="font-extrabold text-[#101828]">Status da assinatura:</span>
               <Badge className="rounded-[4px] bg-emerald-100 text-emerald-800 text-[11px] font-bold hover:bg-emerald-100">
-                {({ none: "Sem assinatura", active: "Ativa", pending: "Aguardando pagamento", past_due: "Pagamento atrasado", cancelled: "Cancelada", expired: "Expirada" })[subscription.status] || subscription.status}
+                {({ none: "Sem plano", trialing: "Teste grátis", active: "Ativa", pending: "Aguardando pagamento", past_due: "Pagamento atrasado", cancelled: "Cancelada", expired: "Expirada" })[subscription.status] || subscription.status}
               </Badge>
             </div>
 
             <div className="mt-2.5 flex items-center justify-between">
-              <span className="text-[#667085]">Valor contratado:</span>
+              <span className="text-[#667085]">{subscription.hasActiveTrial ? "Valor após o teste:" : "Valor contratado:"}</span>
               <span className="font-extrabold text-[#101828]">
-                {subscription.hasPaidSubscription ? `${formatPlanPrice(subscription.plan, subscription.cycle)} / ${subscription.cycle === "annual" ? "ano" : "mês"}` : "Nenhum"}
+                {subscription.hasAccess ? `${formatPlanPrice(subscription.plan, subscription.cycle)} / ${subscription.cycle === "annual" ? "ano" : "mês"}` : "Nenhum"}
               </span>
             </div>
 
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[#667085]">Periodicidade:</span>
               <span className="font-bold text-[#344054] capitalize">
-                {!subscription.hasPaidSubscription ? "Não contratada" : subscription.cycle === "annual" ? "Anual (-30% OFF)" : "Mensal"}
+                {!subscription.hasAccess ? "Não contratada" : subscription.cycle === "annual" ? "Anual (-30% OFF)" : "Mensal"}
               </span>
             </div>
 
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[#667085]">Início do contrato:</span>
               <span className="font-semibold text-[#344054]">
-                {subscription.hasPaidSubscription ? formatIsoDate(subscription.startDate) : "—"}
+                {subscription.hasActiveTrial ? formatIsoDate(activeUser.trial_start_date) : subscription.hasPaidSubscription ? formatIsoDate(subscription.startDate) : "—"}
               </span>
             </div>
 
             <div className="mt-2 flex items-center justify-between">
-              <span className="text-[#667085]">Próxima renovação:</span>
+              <span className="text-[#667085]">{subscription.hasActiveTrial ? subscription.autoRenew ? "Primeira cobrança:" : "Término do teste:" : "Próxima renovação:"}</span>
               <span className="font-semibold text-[#344054]">
-                {subscription.hasPaidSubscription ? formatIsoDate(subscription.renewalDate) : "—"}
+                {subscription.hasActiveTrial ? formatIsoDate(subscription.trialEndDate) : subscription.hasPaidSubscription ? formatIsoDate(subscription.renewalDate) : "—"}
               </span>
             </div>
 
@@ -352,7 +361,7 @@ export default function Subscription() {
               </p>
             </div>
             <Badge variant="outline" className="w-fit rounded-[6px] border-[#D0D5DD] text-xs font-bold text-[#344054]">
-              Renovação: {subscription.hasPaidSubscription ? formatIsoDate(subscription.renewalDate) : "—"}
+              Renovação: {subscription.hasActiveTrial ? formatIsoDate(subscription.trialEndDate) : subscription.hasPaidSubscription ? formatIsoDate(subscription.renewalDate) : "—"}
             </Badge>
           </div>
 
@@ -735,7 +744,7 @@ export default function Subscription() {
         </div>
       </section>
 
-      <BillingCheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} targetPlan={selectedTargetPlan} cycle={cycle} user={activeUser} />
+      <BillingCheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} targetPlan={selectedTargetPlan} cycle={cycle} user={activeUser} onSuccess={async () => { await refreshBilling(); await loadData(); setBillingMessage("Cartão validado. Seu teste grátis do Completo está ativo."); }} />
       {/* Modais de Fluxo Funcional */}
       <PlanChangeModal
         isOpen={isPlanChangeOpen}

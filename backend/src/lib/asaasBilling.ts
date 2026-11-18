@@ -4,9 +4,9 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { prisma } from "./prisma.js";
 import { AppError } from "./errors.js";
-import { paidEntitlement } from "./planGovernance.js";
+import { paidEntitlement, trialEntitlement } from "./planGovernance.js";
 import { assertAccountAvailable } from "./accountAccess.js";
-import { COMMERCIAL_PLANS } from "./planCatalog.js";
+import { COMMERCIAL_PLANS, getTrialSchedule } from "./planCatalog.js";
 import { asaasList, asaasRequest, AsaasError, safeInvoiceUrl } from "./asaas.js";
 
 export const changeSchema = z.object({
@@ -30,6 +30,15 @@ export function validDocument(raw: string): boolean {
 }
 export const checkoutSchema = changeSchema.extend({
   billingType: z.enum(["CREDIT_CARD", "PIX", "BOLETO"]),
+  trial: z.boolean().default(false),
+  acceptRecurringCharge: z.literal(true).optional(),
+  creditCard: z.object({
+    holderName: z.string().trim().min(3).max(100),
+    number: z.string().transform(digits).pipe(z.string().regex(/^\d{13,19}$/)),
+    expiryMonth: z.string().regex(/^(0[1-9]|1[0-2])$/),
+    expiryYear: z.string().regex(/^20\d{2}$/),
+    ccv: z.string().regex(/^\d{3,4}$/),
+  }).optional(),
   billingDetails: z.object({
     cpfCnpj: z.string().transform(digits).refine(validDocument, "CPF/CNPJ inválido."),
     postalCode: z.string().transform(digits).pipe(z.string().regex(/^\d{8}$/, "CEP inválido.")),
@@ -140,23 +149,42 @@ async function recoverSubscription(account: BillingAccount, local: BillingSubscr
   if (local.createAttempted) throw new AppError("Assinatura em conciliação no Asaas. Não repita a contratação; aguarde ou contate o suporte.", 503);
   return local;
 }
-export async function startCheckout(account: BillingAccount, input: CheckoutInput) {
+export async function startCheckout(account: BillingAccount, input: CheckoutInput, remoteIp?: string) {
   const { plan, value } = planPrice(input.planCode, input.cycle);
   await academicCheck(account.userId, input.planCode);
-  const customerId = await customer(account, input);
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: account.userId } });
   let local = await currentSubscription(account);
-  if (local && (local.planCode !== input.planCode || local.cycle !== input.cycle || local.billingType !== input.billingType))
+  if (input.trial) {
+    if (input.planCode !== "completo" || input.cycle !== "monthly" || input.billingType !== "CREDIT_CARD" || !input.acceptRecurringCharge)
+      throw new AppError("O teste exige Completo mensal, cartão e aceite da cobrança após os 7 dias.", 400);
+    const p = permissionData(user);
+    const previous = await prisma.billingSubscription.findMany({ where: { accountId: account.id } });
+    const previousTrial = previous.some(s => s.trialRequested && s.remoteId && s.id !== local?.id);
+    const previousPayment = await prisma.billingPayment.findFirst({ where: { subscriptionId: { in: previous.map(s => s.id) }, paidAt: { not: null } } });
+    if (previousTrial || ((p.trialUsed || p.billingPaidBefore || previousPayment || (p.billingEntitlements || []).length) && !(local?.trialRequested && local.remoteId)))
+      throw new AppError("O teste grátis já foi utilizado ou esta conta já possui assinatura paga.", 409);
+    if (!local?.remoteId && !input.creditCard) throw new AppError("Informe um cartão válido para iniciar o teste.", 400);
+  }
+  const customerId = await customer(account, input);
+  if (local && (local.planCode !== input.planCode || local.cycle !== input.cycle || local.billingType !== input.billingType || Boolean(local.trialRequested) !== input.trial))
     throw new AppError("Você já possui uma contratação. Gerencie ou cancele a assinatura atual antes de contratar outra.", 409);
   if (!local) {
-    const due = new Date(); due.setUTCDate(due.getUTCDate() + 3);
+    const { start, end } = getTrialSchedule();
+    const due = input.trial ? end : new Date(Date.now() + 3 * 86400000);
     local = await prisma.billingSubscription.create({ data: {
       accountId: account.id, planCode: input.planCode, cycle: input.cycle, billingType: input.billingType,
       value, nextDueDate: dateOnly(due),
+      trialRequested: input.trial,
+      ...(input.trial ? { trialStartedAt: start, trialEndsAt: due, scheduleAligned: true } : {}),
     } });
   }
   local = await recoverSubscription(account, local);
   if (!local.remoteId) {
     await asaasRequest(`/customers/${encodeURIComponent(customerId)}`, "PUT", input.billingDetails);
+    if (input.trial) {
+      const { start, end, firstChargeDate } = getTrialSchedule();
+      local = await prisma.billingSubscription.update({ where: { id: local.id }, data: { trialStartedAt: start, trialEndsAt: end, nextDueDate: firstChargeDate } });
+    }
     await prisma.billingSubscription.update({ where: { id: local.id }, data: { createAttempted: true } });
     let remote;
     try {
@@ -165,6 +193,15 @@ export async function startCheckout(account: BillingAccount, input: CheckoutInpu
         cycle: local.cycle === "annual" ? "YEARLY" : "MONTHLY", nextDueDate: local.nextDueDate,
         description: `${plan.name} — ${local.cycle === "annual" ? "Anual" : "Mensal"}`,
         externalReference: local.id,
+        ...(input.trial ? {
+          creditCard: input.creditCard,
+          creditCardHolderInfo: {
+            name: input.creditCard!.holderName, email: user.email,
+            cpfCnpj: input.billingDetails.cpfCnpj, postalCode: input.billingDetails.postalCode,
+            addressNumber: input.billingDetails.addressNumber, phone: input.billingDetails.phone,
+          },
+          remoteIp,
+        } : {}),
         callback: { successUrl: `${env.FRONTEND_URL}/subscription?checkout=success&subscription_id=${encodeURIComponent(local.id)}`, autoRedirect: true },
       });
     } catch (error) {
@@ -176,6 +213,7 @@ export async function startCheckout(account: BillingAccount, input: CheckoutInpu
     local = await prisma.billingSubscription.update({ where: { id: local.id }, data: { remoteId: remote.id, status: "pending" } });
   }
   await reconcileSubscription(account, local);
+  if (local.trialRequested) return { trial: true, subscriptionId: local.id, trialEndsAt: local.trialEndsAt, firstChargeDate: dateOnly(local.trialEndsAt!), url: null };
   const payment = await prisma.billingPayment.findFirst({ where: { subscriptionId: local.id, status: { in: unpaidStatuses } }, orderBy: { dueDate: "asc" } });
   if (!payment?.invoiceUrl) throw new AppError("Assinatura criada. O Asaas ainda está preparando a cobrança; atualize os detalhes em instantes.", 409);
   return { url: payment.invoiceUrl, subscriptionId: local.id, paymentId: payment.id };
@@ -307,7 +345,7 @@ export async function reconcileSubscription(account: BillingAccount, local: Bill
     const periods = paymentPeriods(all);
     for (const [id, period] of periods) await tx.billingPayment.update({ where: { id }, data: period });
     const cancelled = local.cancelRequested || remote.deleted || remote.status === "INACTIVE" || remote.status === "EXPIRED";
-    const status = local.cancelRequested && local.status !== "cancelled" ? "cancelling" : cancelled ? "cancelled" : all.some(p => p.status === "OVERDUE") ? "past_due" : all.some(p => PAID_STATUSES.includes(p.status)) ? "active" : "pending";
+    const status = local.cancelRequested && local.status !== "cancelled" ? "cancelling" : cancelled ? "cancelled" : local.trialRequested && local.trialEndsAt && local.trialEndsAt > new Date() ? "trialing" : all.some(p => p.status === "OVERDUE") ? "past_due" : all.some(p => PAID_STATUSES.includes(p.status)) ? "active" : "pending";
     await tx.billingSubscription.update({ where: { id: local.id }, data: { status, nextDueDate: remote.nextDueDate || local.nextDueDate } });
     await updateEntitlement(tx, account);
     if (event) await tx.billingEvent.create({ data: { id: `${account.environment}:${event.id}`, environment: account.environment, type: event.event } });
@@ -322,9 +360,17 @@ async function updateEntitlement(tx: Prisma.TransactionClient, account: BillingA
   const entitled = payments.find(p => p.periodStart && p.periodStart <= now);
   const sub = subscriptions.find(s => s.id === entitled?.subscriptionId) || subscriptions[0];
   const p = permissionData(user);
+  const previousPayment = await tx.billingPayment.findFirst({ where: { subscriptionId: { in: subscriptions.map(s => s.id) }, paidAt: { not: null } } });
+  const trial = subscriptions.find(s => s.trialRequested && s.remoteId && s.trialStartedAt && s.trialEndsAt && s.status !== "failed");
   await tx.user.update({ where: { id: user.id }, data: {
     plan: entitled?.planCode as any || "gratuito",
-    customPermissions: { ...p, billingProvider: "asaas", billingEnvironment: account.environment,
+    customPermissions: { ...p,
+      billingPaidBefore: Boolean(p.billingPaidBefore || previousPayment),
+      ...(trial ? {
+        trialUsed: true,
+        billingTrial: { subscriptionId: trial.id, planCode: "completo", start: trial.trialStartedAt!.toISOString(), end: trial.trialEndsAt!.toISOString(), firstChargeDate: dateOnly(trial.trialEndsAt!) },
+      } : {}),
+      billingProvider: "asaas", billingEnvironment: account.environment,
       asaasCustomerId: account.customerId, asaasSubscriptionId: sub?.remoteId || null,
       subscriptionStatus: entitled ? sub?.status === "cancelled" ? "cancelled" : "active" : sub?.status === "active" ? "expired" : sub?.status || "pending",
       subscriptionCycle: entitled?.cycle || sub?.cycle || "monthly",
@@ -371,6 +417,7 @@ export async function changeSubscription(account: BillingAccount, input: z.infer
   const previous = local.pendingChange as any;
   if (previous?.state === "applying" && (previous.planCode !== input.planCode || previous.cycle !== input.cycle))
     throw new AppError("Uma alteração anterior está em conciliação no Asaas. Atualize a assinatura antes de escolher outro plano.", 409);
+  if (trialEntitlement(user)) throw new AppError("Aguarde o término do teste ou cancele antes de mudar o plano.", 409);
   const validUntil = paidEntitlement(user)?.end;
   if (!validUntil || Date.parse(validUntil) <= Date.now()) throw new AppError("Confirme o pagamento atual antes de alterar o plano.", 409);
   const effectiveDate = dateOnly(new Date(validUntil));

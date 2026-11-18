@@ -3,13 +3,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createCheckoutSession, BILLING_TYPE_LABELS } from "@/lib/billingApi";
-import { formatPlanPrice } from "@/lib/subscriptionPlans";
+import { formatPlanPrice, getTrialSchedule } from "@/lib/subscriptionPlans";
 import { cleanDigits, maskCep, maskCpfCnpj, maskPhone } from "@/lib/brFormatters";
 import { fetchAddressByCep } from "@/lib/cepService";
 
-export default function BillingCheckoutModal({ isOpen, onClose, targetPlan, cycle, user }) {
+export default function BillingCheckoutModal({ isOpen, onClose, targetPlan, cycle, user, onSuccess }) {
   const [billingType, setBillingType] = useState("CREDIT_CARD");
   const [details, setDetails] = useState({ cpfCnpj: "", postalCode: "", address: "", addressNumber: "", province: "", phone: maskPhone(user?.phone || "") });
+  const [trial, setTrial] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [card, setCard] = useState({ holderName: "", number: "", expiryMonth: "", expiryYear: "", ccv: "" });
+  useEffect(() => {
+    if (!isOpen) { setCard({ holderName: "", number: "", expiryMonth: "", expiryYear: "", ccv: "" }); setAccepted(false); setTrial(false); }
+  }, [isOpen]);
+  useEffect(() => {
+    if (isOpen) {
+      setTrial(user?.trial_eligible === true && targetPlan?.code === "completo" && cycle === "monthly");
+      setAccepted(false);
+      setError("");
+    }
+  }, [isOpen, user?.trial_eligible, targetPlan?.code, cycle]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [cepStatus, setCepStatus] = useState({ loading: false, message: "", error: false });
@@ -59,6 +72,9 @@ export default function BillingCheckoutModal({ isOpen, onClose, targetPlan, cycl
 
   if (!targetPlan) return null;
   const effectiveCycle = targetPlan.hasAnnualOption ? cycle : "monthly";
+  const trialAvailable = user?.trial_eligible === true && targetPlan.code === "completo" && effectiveCycle === "monthly";
+  const useTrial = trialAvailable && trial;
+  const firstChargeDate = getTrialSchedule().end.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const fields = [
     ["cpfCnpj", "CPF ou CNPJ", "numeric", "off"], ["phone", "Telefone com DDD", "tel", "tel-national"],
     ["postalCode", "CEP", "numeric", "postal-code"], ["address", "Endereço", "text", "street-address"],
@@ -69,7 +85,13 @@ export default function BillingCheckoutModal({ isOpen, onClose, targetPlan, cycl
     if (loading || cepStatus.loading) return;
     setLoading(true); setError("");
     try {
-      const result = await createCheckoutSession({ planCode: targetPlan.code, cycle: effectiveCycle, billingType, billingDetails: { ...details, cpfCnpj: cleanDigits(details.cpfCnpj), postalCode: cleanDigits(details.postalCode), phone: cleanDigits(details.phone) } });
+      const result = await createCheckoutSession({ planCode: targetPlan.code, cycle: effectiveCycle, billingType: useTrial ? "CREDIT_CARD" : billingType, ...(useTrial ? { trial: true, acceptRecurringCharge: accepted, creditCard: card } : {}), billingDetails: { ...details, cpfCnpj: cleanDigits(details.cpfCnpj), postalCode: cleanDigits(details.postalCode), phone: cleanDigits(details.phone) } });
+      if (result.trial) {
+        setCard({ holderName: "", number: "", expiryMonth: "", expiryYear: "", ccv: "" });
+        await onSuccess?.(result);
+        onClose();
+        return;
+      }
       if (!result.url) throw new Error("Cobrança ainda indisponível. Consulte Gerenciar assinatura.");
       window.location.assign(result.url);
     } catch (err) { setError(err.message || "Não foi possível iniciar o pagamento."); }
@@ -82,12 +104,14 @@ export default function BillingCheckoutModal({ isOpen, onClose, targetPlan, cycl
         <DialogDescription>{formatPlanPrice(targetPlan, effectiveCycle)} por {effectiveCycle === "annual" ? "ano" : "mês"}. Pagamento seguro pelo Asaas.</DialogDescription>
       </DialogHeader>
       <form onSubmit={submit} className="space-y-4">
-        <label className="block text-sm font-semibold">Forma de pagamento
+        {trialAvailable && <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={trial} disabled={loading} onChange={e => { setTrial(e.target.checked); setAccepted(false); }} />Testar o Completo grátis por 7 dias com cartão</label>}
+        {useTrial && <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm">Nada será cobrado agora. Seu teste terá pelo menos 7 dias completos. A primeira cobrança será em <strong>{firstChargeDate}</strong>, no valor de <strong>{formatPlanPrice(targetPlan, "monthly")}/mês</strong>. Cancele antes dessa data para evitar a cobrança.</div>}
+        {!useTrial && <><label className="block text-sm font-semibold">Forma de pagamento
           <select value={billingType} onChange={e => setBillingType(e.target.value)} disabled={loading} className="mt-1 h-10 w-full rounded-md border bg-white px-3">
             {Object.entries(BILLING_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
-        <p className="text-sm text-slate-600">{billingType === "CREDIT_CARD" ? "Você informa o cartão somente na página do Asaas. As próximas cobranças serão automáticas após a autorização." : "A cada ciclo será gerada uma cobrança para pagamento manual. O Asaas enviará os avisos para seu e-mail."} O plano é liberado após a confirmação do pagamento. A primeira cobrança vence em três dias.</p>
+        <p className="text-sm text-slate-600">{billingType === "CREDIT_CARD" ? "Você informa o cartão somente na página do Asaas. As próximas cobranças serão automáticas após a autorização." : "A cada ciclo será gerada uma cobrança para pagamento manual. O Asaas enviará os avisos para seu e-mail."} O plano é liberado após a confirmação do pagamento. A primeira cobrança vence em três dias.</p></>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {fields.map(([key,label,inputMode,autoComplete]) => <label key={key} className="text-sm font-semibold">{label}
             <Input required disabled={loading} inputMode={inputMode} autoComplete={autoComplete}
@@ -98,11 +122,17 @@ export default function BillingCheckoutModal({ isOpen, onClose, targetPlan, cycl
             {key === "postalCode" && cepStatus.message && <span id="billing-cep-status" role="status" aria-live="polite" className={`mt-1 block text-xs font-normal ${cepStatus.error ? "text-amber-700" : "text-slate-600"}`}>{cepStatus.message}</span>}
           </label>)}
         </div>
+        {useTrial && <>
+          <div className="grid grid-cols-2 gap-3">
+            {[["holderName", "Nome do titular", "cc-name", "text", 100], ["number", "Número do cartão", "cc-number", "numeric", 19], ["expiryMonth", "Mês (MM)", "cc-exp-month", "numeric", 2], ["expiryYear", "Ano (AAAA)", "cc-exp-year", "numeric", 4], ["ccv", "Código de segurança", "cc-csc", "numeric", 4]].map(([key, label, autoComplete, inputMode, maxLength]) => <label key={key} className="text-sm font-semibold">{label}<Input required disabled={loading} type={key === "ccv" ? "password" : "text"} autoComplete={autoComplete} inputMode={inputMode} maxLength={maxLength} value={card[key]} onChange={e => setCard(current => ({ ...current, [key]: key === "holderName" ? e.target.value : cleanDigits(e.target.value) }))} /></label>)}
+          </div>
+          <label className="flex items-start gap-2 text-sm"><input type="checkbox" required checked={accepted} disabled={loading} onChange={e => setAccepted(e.target.checked)} />Autorizo a cobrança automática de {formatPlanPrice(targetPlan, "monthly")}/mês a partir de {firstChargeDate}, se eu não cancelar antes.</label>
+        </>}
         <p className="text-xs text-slate-500">Os dados de cobrança serão enviados ao Asaas para emitir a assinatura. Não armazenamos dados do cartão.</p>
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         <div className="flex gap-3">
           <Button type="button" variant="outline" disabled={loading} onClick={onClose}>Voltar</Button>
-          <Button type="submit" disabled={loading || cepStatus.loading} className="flex-1 bg-[#00d8b8] text-slate-900 hover:bg-[#00bda1]">{loading ? "Preparando cobrança..." : "Continuar para o Asaas"}</Button>
+          <Button type="submit" disabled={loading || cepStatus.loading || (useTrial && !accepted)} className="flex-1 bg-[#00d8b8] text-slate-900 hover:bg-[#00bda1]">{loading ? "Validando contratação..." : useTrial ? "Validar cartão e iniciar teste grátis" : "Continuar para o Asaas"}</Button>
         </div>
       </form>
     </DialogContent>

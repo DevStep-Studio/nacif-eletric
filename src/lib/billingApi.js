@@ -1,6 +1,6 @@
 import { request } from "@/api/backendClient";
 
-export const createCheckoutSession = ({ planCode, cycle = "monthly", billingType, billingDetails }) => request("/api/subscriptions/create-checkout-session", { method: "POST", body: { planCode, cycle, billingType, billingDetails } });
+export const createCheckoutSession = (input) => request("/api/subscriptions/create-checkout-session", { method: "POST", body: input });
 export const verifyCheckoutSession = ({ subscriptionId }) => request("/api/subscriptions/verify-checkout-session", { method: "POST", body: { subscriptionId } });
 export const syncSubscription = () => request("/api/subscriptions/sync", { method: "POST", body: {} });
 export const getBillingDetails = () => request("/api/subscriptions/billing");

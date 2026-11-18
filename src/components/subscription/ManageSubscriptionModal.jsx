@@ -22,10 +22,10 @@ export default function ManageSubscriptionModal({ isOpen, onClose, subscription,
       <div className="space-y-4 text-sm">
         <div className="rounded-xl border p-4 space-y-2">
           <p className="font-bold">{record ? getPlanByCode(record.planCode).name : "Sem assinatura"}</p>
-          <p>Situação: {({ active: "Ativa", pending: "Aguardando pagamento", past_due: "Pagamento atrasado", cancelled: "Cancelada", cancelling: "Cancelamento em andamento", creating: "Preparando contratação", failed: "Contratação não concluída" })[record?.status] || "Sem assinatura paga"}</p>
+          <p>Situação: {({ active: "Ativa", trialing: "Teste grátis", pending: "Aguardando pagamento", past_due: "Pagamento atrasado", cancelled: "Cancelada", cancelling: "Cancelamento em andamento", creating: "Preparando contratação", failed: "Contratação não concluída" })[record?.status] || "Sem assinatura paga"}</p>
           <p>Forma de pagamento: {BILLING_TYPE_LABELS[record?.billingType] || "Não definida"}</p>
           {record && <p>Valor contratado: {Number(record.value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} / {record.cycle === "annual" ? "ano" : "mês"}</p>}
-          <p>Acesso pago até: {formatDate(subscription?.renewalDate)}</p>
+          <p>{subscription?.hasActiveTrial ? "Teste grátis até" : "Acesso pago até"}: {formatDate(subscription?.hasActiveTrial ? subscription.trialEndDate : subscription?.renewalDate)}</p>
           {record && !record.cancelRequested && record.status !== "cancelled" && <p>Próximo vencimento: {formatDate(record.nextDueDate)}</p>}
           {record?.billingType !== "CREDIT_CARD" && record && <p className="text-slate-600">Pix e boleto precisam ser pagos a cada vencimento.</p>}
           {record?.pendingChange?.state === "scheduled" && <p className="text-teal-800">Alteração para {getPlanByCode(record.pendingChange.planCode).name}, ciclo {record.pendingChange.cycle === "annual" ? "anual" : "mensal"}, a partir de {formatDate(record.pendingChange.effectiveDate)}.</p>}
@@ -36,7 +36,7 @@ export default function ManageSubscriptionModal({ isOpen, onClose, subscription,
           {!billingData?.payments?.length && <p className="text-slate-600">Nenhuma cobrança disponível.</p>}
           {billingData?.payments?.map(payment => <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
             <div><p className="font-semibold">{Number(payment.value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · {formatDate(payment.dueDate)}</p><p className="text-slate-600">{paymentLabels[payment.status] || "Em processamento"}</p></div>
-            {payment.invoiceUrl && payment.status !== "DELETED" && <a className="font-semibold text-teal-800 underline" href={payment.invoiceUrl} target="_blank" rel="noopener noreferrer">{["PENDING", "OVERDUE"].includes(payment.status) ? "Pagar cobrança" : "Ver fatura"}</a>}
+            {!subscription?.hasActiveTrial && payment.invoiceUrl && payment.status !== "DELETED" && <a className="font-semibold text-teal-800 underline" href={payment.invoiceUrl} target="_blank" rel="noopener noreferrer">{["PENDING", "OVERDUE"].includes(payment.status) ? "Pagar cobrança" : "Ver fatura"}</a>}
           </div>)}
         </div>
         {error && <p role="alert" className="text-red-700">{error}</p>}

@@ -20,7 +20,7 @@ export async function asaasRequest<T = any>(path: string, method = "GET", body?:
       method,
       headers: { access_token: env.ASAAS_API_KEY, "Content-Type": "application/json", "User-Agent": "NacifEnergy/1.0" },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(path === "/subscriptions" && method === "POST" ? 65000 : 30000),
     });
   } catch {
     // Never automatically retry a financial POST after an ambiguous network failure.

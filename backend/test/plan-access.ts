@@ -43,3 +43,9 @@ test('modules, academic validity, and payload bypasses are enforced', () => {
   assert.equal(checkServerModuleAccess(paid('completo'), 'unknown-module').allowed, false);
   assert.equal(checkServerProjectCreation({ role:'admin' }, 9999, 'solar').allowed, true);
 });
+
+test('accounts without a plan cannot use any module', () => {
+  for (const key of ['plant', 'solar', 'panel', 'unifilar', 'calculator', 'nbr_library', 'budget', 'team', 'scanner']) {
+    assert.equal(checkServerModuleAccess({ role: 'user', plan: 'completo' }, key).allowed, false, key);
+  }
+});

@@ -44,7 +44,7 @@ test("registration survives optional notification failures", async (t) => {
   });
   const register = (email: string, password = "test-secret-123") => app.inject({
     method: "POST", url: "/api/auth/register",
-    payload: { email, password, profession: "Projetista", terms_accepted: true, plan: "completo", role: "admin", subscription_status: "active" },
+    payload: { email, password, profession: "Projetista", terms_accepted: true, plan: "completo", role: "admin", subscription_status: "active", has_active_trial: true, trialUsed: true, custom_permissions: { billingProvider: "asaas", trialUsed: true } },
   });
   try {
     for (const failure of [0, 1, 2]) {
@@ -61,6 +61,8 @@ test("registration survives optional notification failures", async (t) => {
         assert.equal(user.plan, "gratuito");
         assert.equal(user.subscription_plan, null);
         assert.equal(user.has_paid_subscription, false);
+        assert.equal(user.has_active_trial, false);
+        assert.equal(user.trial_eligible, true);
         assert.equal(user.subscription_status, "none");
         assert.equal(user.billing_provider, "none");
         assert.equal(user.subscription_price, 0);

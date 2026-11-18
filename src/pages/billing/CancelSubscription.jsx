@@ -82,9 +82,9 @@ export default function CancelSubscriptionPage() {
           <div className="rounded-xl bg-[#F8FAFC] border border-[#F1F5F9] p-3 text-xs text-[#64748B] space-y-1">
             <p className="font-bold text-[#0F172A]">O que acontece ao cancelar:</p>
             <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
-              <li>Seu acesso profissional continua ativo até o final do ciclo de faturamento já pago.</li>
+              <li>Seu acesso continua até o término do teste grátis ou do período já pago.</li>
               <li>Nenhum projeto ou dado criado será apagado. Seus arquivos existentes permanecem preservados.</li>
-              <li>Novas exportações de pranchas completas e geração por IA passarão a seguir os limites do plano gratuito.</li>
+              <li>Ao término do acesso, os módulos ficam bloqueados até uma nova contratação.</li>
               <li>Você pode reativar seu plano a qualquer momento sem perder histórico.</li>
             </ul>
           </div>
@@ -137,7 +137,7 @@ export default function CancelSubscriptionPage() {
         title="Confirmar cancelamento da assinatura"
         description="Tem certeza de que deseja cancelar a renovação automática da sua assinatura?"
         consequences={[
-          "Seu plano será convertido para a versão gratuita ao término do período.",
+          "Sua conta ficará sem plano ao término do período vigente.",
           "O suporte prioritário e limites ilimitados serão desativados.",
         ]}
         confirmTextRequired="CANCELAR"

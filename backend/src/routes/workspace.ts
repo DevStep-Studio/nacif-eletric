@@ -6,7 +6,7 @@ import { AppError } from "../lib/errors.js";
 import { serializeProject, serializeUser } from "../lib/serializers.js";
 import { generateResetToken, hashPassword } from "../lib/auth.js";
 import { sendPasswordResetEmail } from "../lib/mailer.js";
-import { isServerAdmin } from "../lib/planGovernance.js";
+import { isServerAdmin, checkServerModuleAccess } from "../lib/planGovernance.js";
 
 // Serialize account deletion with billing claims, including creation still in flight.
 const deleteUserSafely = (userId: string) => prisma.$transaction(async tx => {
@@ -281,7 +281,11 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
   app.get("/api/budgets/:id", auth, async (request) =>
     serializeBudget(await budget(request)),
   );
-  app.post("/api/budgets", auth, async (request) => {
+  const budgetAuth = { preHandler: [app.authenticate, async (request: import("fastify").FastifyRequest) => {
+    const access = checkServerModuleAccess(request.authUser, "budget");
+    if (!access.allowed) throw new AppError(access.message || "Contrate um plano para usar orçamentos.", 403);
+  }] };
+  app.post("/api/budgets", budgetAuth, async (request) => {
     const data = budgetSchema.parse(request.body);
     await ensureProject(data.project_id, request);
     return serializeBudget(
@@ -294,7 +298,7 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
       }),
     );
   });
-  app.put("/api/budgets/:id", auth, async (request) => {
+  app.put("/api/budgets/:id", budgetAuth, async (request) => {
     const row = await budget(request),
       data = budgetSchema.partial().parse(request.body);
     await ensureProject(data.project_id, request);
@@ -310,7 +314,7 @@ export const registerWorkspaceRoutes = async (app: FastifyInstance) => {
     await prisma.budget.delete({ where: { id: row.id } });
     return { ok: true };
   });
-  app.post("/api/budgets/:id/duplicate", auth, async (request) => {
+  app.post("/api/budgets/:id/duplicate", budgetAuth, async (request) => {
     const row = await budget(request);
     const { id, createdAt, updatedAt, ...data } = row;
     return serializeBudget(

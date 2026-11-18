@@ -27,7 +27,7 @@ export const registerSubscriptionRoutes = async (app: FastifyInstance) => {
   }));
   app.post("/api/subscriptions/create-checkout-session", auth, async request => {
     const input = checkoutSchema.parse(request.body);
-    return withBillingAccount(request.authUser.id, account => startCheckout(account, input));
+    return withBillingAccount(request.authUser.id, account => startCheckout(account, input, request.ip));
   });
   app.post("/api/subscriptions/change-plan", auth, async request => {
     const input = changeSchema.parse(request.body);

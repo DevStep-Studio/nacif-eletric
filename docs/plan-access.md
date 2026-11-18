@@ -13,7 +13,7 @@ O catálogo compartilhado em `backend/src/lib/planCatalog.js` define os valores 
 - Elétrico inclui planta, quadro e unifilar; não inclui projeto e layout solar.
 - Solar inclui projeto e layout solar; os módulos gerais de planta, quadro e unifilar ficam bloqueados. As proteções e circuitos próprios do projeto solar permanecem disponíveis.
 - Completo inclui todos os módulos.
-- Sem período pago confirmado e vigente do Asaas, aplica-se o gratuito: 1 projeto, 100 MB, 3 exportações/mês, sem IA, solar, quadro, unifilar ou equipes. Permanecem os recursos básicos de planta, cálculo, biblioteca e orçamento.
+- Sem período pago confirmado ou teste vigente do Asaas, a conta fica **Sem plano**, sem acesso aos módulos. A interface permite somente contratação e configurações da conta. Projetos e dados anteriores são preservados; leitura pela API para gestão da conta permanece disponível.
 
 O campo `plan` isolado não libera assinatura. Períodos futuros e expirados não liberam acesso; cancelamento mantém direitos durante o período já pago. Administradores têm acesso operacional separado da assinatura comercial.
 
@@ -30,7 +30,7 @@ Falhas de autorização ou indisponibilidade da API bloqueiam exportações. Exp
 
 A suíte MySQL exige banco com sufixo `_test` e verifica também concorrência, mudança de plano, módulos, armazenamento e cotas reais sem cobrança ou chamada ao provedor de IA.
 
-Publicar frontend e backend juntos. Esta alteração não exige migration de banco.
+Publicar frontend e backend juntos. O teste grátis exige a migration `20261117000000_complete_trial`.
 
 ## Isolamento dos projetos por conta
 
@@ -43,3 +43,24 @@ Em produção, o frontend usa exclusivamente os projetos retornados pela API. Re
 Publicar o frontend e reiniciar o backend é obrigatório: alterar somente os arquivos não atualiza um processo Node já iniciado. Na pasta do projeto no servidor, executar `npm run build` (o postbuild prepara e recarrega a API); confirmar nos logs que o backend iniciou corretamente. Em instalações PM2, pode-se verificar com `pm2 status nacif-electric-api`.
 
 A resposta autenticada de `/api/projects` deve conter `X-Project-Isolation: owner-v2` e `Cache-Control: private, no-store`. Sem esse marcador, a requisição está chegando a uma versão antiga ou a outro backend/proxy. O frontend valida `owner_id` com o ID retornado por `/api/auth/me`, ignora registros sem proprietário e impede que uma resposta iniciada na sessão anterior seja exibida.
+
+
+## Teste grátis do Completo
+
+- Oferecido uma única vez por conta, apenas no Completo mensal (R$ 210,00/mês). Usuários com histórico de pagamento não recebem novo teste.
+- O cliente informa cartão e dados do titular e aceita expressamente a cobrança recorrente. O servidor cria a assinatura com cartão diretamente no Asaas, que o valida sem cobrança imediata. O cartão e o CVV nunca são gravados no banco nem retornados pela API; o logger remove o campo de cartão.
+- O Asaas agenda por data, sem horário: o primeiro vencimento é arredondado para a próxima meia-noite de São Paulo depois de sete dias completos. Isso concede entre sete e oito dias de teste e evita cobrar antes de sete dias. A data efetiva e o preço são mostrados antes do aceite.
+- O acesso só começa após confirmação da criação pelo Asaas. `trialRequested`, `trialStartedAt` e `trialEndsAt` guardam o histórico no banco; `trialUsed` permanece no perfil após cancelamento. Respostas perdidas são conciliadas pela referência externa existente, sem repetir a criação.
+- A API expõe `has_active_trial`, `trial_eligible`, `trial_start_date`, `trial_end_date` e `first_charge_date`. `has_paid_subscription` permanece falso durante o teste; o status é `trialing`.
+- Cancelar desativa a assinatura e exclui as cobranças pendentes, mantendo acesso até o fim do teste. Expiração bloqueia os módulos mesmo sem webhook. Somente pagamento confirmado libera o período pago seguinte.
+- Durante o teste, a interface não oferece pagamento antecipado da fatura nem mudança de plano. Contratações anuais, Pix e boleto mantêm o fluxo pago sem teste.
+
+### Publicação e homologação
+
+1. Aplicar as migrations antes de reiniciar a API: `cd backend && npx prisma migrate deploy && npx prisma generate`.
+2. Publicar frontend e backend juntos; executar a checagem de schema e reiniciar o processo da API.
+3. A captura de cartão exige HTTPS, com proxy encaminhando o IP real do cliente. Configurar chave e webhook do Asaas para o ambiente correto.
+4. No sandbox real, conferir cartão válido/recusado, ausência de cobrança inicial, vencimento futuro e cancelamento que remove a cobrança pendente. Confirmar a conversão com webhooks e a expiração com cartão recusado.
+
+Validação automatizada: `npm --prefix backend run typecheck`, `node backend/node_modules/tsx/dist/cli.mjs --test backend/test/asaas-billing.ts backend/test/auth-register.ts backend/test/plan-access.ts` e `node scripts/subscription-state-smoke.mjs`.
+Os testes de cobrança usam um simulador isolado; não substituem a homologação com credenciais reais de sandbox.

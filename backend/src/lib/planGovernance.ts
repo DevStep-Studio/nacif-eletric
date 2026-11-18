@@ -49,6 +49,15 @@ export function paidEntitlement(user?: { customPermissions?: unknown }) {
   return result;
 }
 
+export function trialEntitlement(user?: { customPermissions?: unknown }, now = Date.now()) {
+  const p = (user?.customPermissions as Record<string, any>) || {};
+  const trial = p.billingTrial;
+  if (p.billingProvider !== "asaas" || p.billingEnvironment !== env.ASAAS_ENVIRONMENT ||
+      !p.trialUsed || !trial?.subscriptionId || trial.planCode !== "completo" ||
+      !(Date.parse(trial.start) <= now && Date.parse(trial.end) > now)) return null;
+  return trial as { subscriptionId: string; planCode: string; start: string; end: string; firstChargeDate: string };
+}
+
 export const effectivePlanCode = (user?: {
   role?: string; isSuperAdmin?: boolean; plan?: string; customPermissions?: unknown;
 }): string => {
@@ -57,7 +66,7 @@ export const effectivePlanCode = (user?: {
   if (entitlement && COMMERCIAL_PLANS.some(p => p.code === entitlement.planCode)) {
     return entitlement.planCode;
   }
-  return "gratuito";
+  return trialEntitlement(user)?.planCode || "gratuito";
 };
 
 export const getServerPlan = (planCode?: string | null): PlanLimitDefinition =>

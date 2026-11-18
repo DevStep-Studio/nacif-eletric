@@ -222,20 +222,20 @@ export const LEGACY_PLANS = [
   {
     code: "free",
     legacyCodes: ["gratuito", "starter"],
-    name: "Gratuito",
-    shortName: "Gratuito",
-    description: "Para testar o fluxo e organizar os primeiros estudos.",
-    commercialTagline: "Para testar o fluxo e organizar os primeiros estudos.",
+    name: "Sem plano",
+    shortName: "Sem plano",
+    description: "Escolha uma assinatura ou ative o teste grátis para utilizar os módulos.",
+    commercialTagline: "Escolha uma assinatura ou ative o teste grátis para utilizar os módulos.",
     monthlyPrice: 0,
     annualPrice: 0,
     hasAnnualOption: false,
     recommended: false,
     isAcademic: false,
     limits: {
-      [FEATURE_KEYS.PROJECTS]: 1,
-      [FEATURE_KEYS.STORAGE_MB]: 100,
-      [FEATURE_KEYS.TEAM_MEMBERS]: 1,
-      [FEATURE_KEYS.EXPORTS]: 3,
+      [FEATURE_KEYS.PROJECTS]: 0,
+      [FEATURE_KEYS.STORAGE_MB]: 0,
+      [FEATURE_KEYS.TEAM_MEMBERS]: 0,
+      [FEATURE_KEYS.EXPORTS]: 0,
       [FEATURE_KEYS.AI_SCANS]: 0,
       [FEATURE_KEYS.CUSTOM_TEMPLATES]: 0,
     },
@@ -376,16 +376,14 @@ export function catalogModuleAccess(code, key, options = {}) {
 
   const plan = getCatalogPlan(code);
   const academicValid = Boolean(
-    options.academicStatus &&
-    options.academicStatus !== "expired" &&
-    options.academicStatus !== "rejected" &&
+    options.academicStatus === "approved" &&
     (!options.academicValidUntil || Date.parse(options.academicValidUntil) > (options.now ?? Date.now()))
   );
   const level = catalogModuleLevel(plan, key);
   const academicBlocked = Boolean(plan.isAcademic && !academicValid);
   const isFreeRestricted = plan.code === "free";
   // Bloqueio rigoroso: recursos 'restricted', 'preview' ou falsos exigem assinatura adequada
-  const allowed = Boolean(level && level !== "restricted" && level !== "preview" && !academicBlocked);
+  const allowed = Boolean(!isFreeRestricted && level && level !== "restricted" && level !== "preview" && !academicBlocked);
 
   // Metadados técnicos específicos de cada norma para orientar o usuário com precisão:
   const isSolar = key === "solar" || key === "solar_3d" || key === "solar_project";
@@ -467,4 +465,15 @@ export function planComparisonValue(plan, key) {
   if (key === "team") return plan.modules.team ? "Sim" : "Não";
   const level = catalogModuleLevel(plan, key);
   return level === "academic" ? "Acadêmico" : level === "restricted" ? "Restrito" : level ? "Completo" : "Não incluído";
+}
+
+// Asaas bills calendar dates. São Paulo currently uses UTC-03:00 year-round.
+// Round up so the first charge never precedes seven complete days of access.
+export function getTrialSchedule(now = Date.now()) {
+  const start = new Date(now);
+  const seventhDay = new Date(now + 7 * 86400000);
+  const localDay = new Date(seventhDay.getTime() - 3 * 3600000).toISOString().slice(0, 10);
+  const midnight = Date.parse(`${localDay}T00:00:00-03:00`);
+  const end = new Date(midnight + (midnight < seventhDay.getTime() ? 86400000 : 0));
+  return { start, end, firstChargeDate: end.toISOString().slice(0, 10) };
 }
