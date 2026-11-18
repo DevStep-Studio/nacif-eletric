@@ -693,6 +693,8 @@ const auth = {
         plan: assignedPlan,
         subscription_plan: null,
         has_paid_subscription: false,
+        has_active_trial: false,
+        trial_eligible: true,
         subscription_status: "none",
         billing_provider: "none",
         subscription_auto_renew: false,

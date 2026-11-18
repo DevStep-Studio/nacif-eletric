@@ -121,6 +121,8 @@ export default function Subscription() {
   }, [user]);
 
   const subscription = normalizeSubscription(activeUser);
+  const hasBillingInProgress = billingData.subscription && !["cancelled", "failed"].includes(billingData.subscription.status);
+  const canStartTrial = subscription.trialEligible && !subscription.hasAccess && !hasBillingInProgress;
   const usage = useMemo(() => ({ ...buildUsageFromProjects(projects, {}, activeUser), ...serverUsage }), [projects, activeUser, serverUsage]);
   const usageRows = useMemo(() => getUsageRows(subscription.plan, usage), [subscription.plan, usage]);
 
@@ -234,7 +236,7 @@ export default function Subscription() {
         </section>
       )}
 
-      {subscription.trialEligible && !billingData.subscription && <section className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm">
+      {canStartTrial && <section className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm">
         <strong>Experimente o Completo grátis por 7 dias com cartão.</strong>
         <p>Depois do teste, R$ 210,00/mês. Cancele antes da primeira cobrança para não pagar.</p>
         <Button className="mt-3" onClick={() => { setCycle("monthly"); handleSubscription("completo"); }}>Testar Completo por 7 dias</Button>
@@ -457,6 +459,7 @@ export default function Subscription() {
           {catalog.map((plan) => {
             const isCurrent = plan.code === subscription.planCode && (plan.code === "estudante" || cycle === subscription.cycle);
             const isCompleto = plan.code === "completo";
+            const showTrialOffer = isCompleto && cycle === "monthly" && canStartTrial;
             const isEstudante = plan.code === "estudante" || Boolean(plan.isPendingRelease);
             const isPendingRelease = Boolean(plan.isPendingRelease || (isEstudante && !isCurrent));
             const annualSavings = calculateAnnualSavings(plan);
@@ -489,7 +492,7 @@ export default function Subscription() {
                     ) : isCompleto ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#E8FCF8] border border-[#BCEEE5] px-2.5 py-0.5 text-[11px] font-extrabold text-[#0f4f49]">
                         <Sparkles className="h-3 w-3 text-[#009b84]" />
-                        Mais Completo
+                        {showTrialOffer ? "7 dias grátis com cartão" : "Mais Completo"}
                       </span>
                     ) : isPendingRelease ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
@@ -588,12 +591,17 @@ export default function Subscription() {
                           <Lock className="h-3.5 w-3.5 text-amber-600" />
                           Em aguardo • Próximas atualizações
                         </span>
+                      ) : showTrialOffer ? (
+                        "Testar grátis por 7 dias"
                       ) : plan.isAcademic ? (
                         "Contratar com documento"
                       ) : (
-                        "Fazer upgrade"
+                        subscription.hasAccess ? "Fazer upgrade" : "Assinar plano"
                       )}
                     </Button>
+                    {showTrialOffer && <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                      Depois, {formatPlanPrice(plan, "monthly")}/mês. Cancele antes da primeira cobrança para não pagar.
+                    </p>}
                   </div>
 
                   {/* Lista de Recursos Principais (Minimalista) */}

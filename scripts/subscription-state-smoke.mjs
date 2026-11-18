@@ -48,8 +48,13 @@ try {
   assert.equal(user.plan, "gratuito");
   assert.equal(user.subscription_status, "none");
   assert.equal(user.has_paid_subscription, false);
+  assert.equal(user.has_active_trial, false);
+  assert.equal(user.trial_eligible, true);
+  assert.equal(normalizeSubscription(user).trialEligible, true);
+  assert.equal(normalizeSubscription(user).hasAccess, false);
   assert.equal((await backend.auth.me()).plan, "gratuito", "local reload must not promote the account");
   assert.equal(normalizeSubscription(await backend.auth.me()).status, "none");
+  assert.equal(normalizeSubscription(await backend.auth.me()).trialEligible, true);
   const project = await backend.entities.Project.create({ name: "Private" });
   await backend.auth.register({ email: "second-user@example.com", password: "test-password-123", profession: "engenheiro" });
   assert.deepEqual(await backend.entities.Project.list(), []);
