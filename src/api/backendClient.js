@@ -518,6 +518,17 @@ export const request = async (path, options = {}) => {
   return data;
 };
 
+const removeLocalAccountData = async (userId) => {
+  writeLocalProjects(readLocalProjects().filter(project => project.owner_id !== userId && project.user_id !== userId && project.created_by !== userId));
+  writeLocalBudgets(readLocalBudgets().filter(budget => budget.owner_id !== userId && budget.user_id !== userId));
+  writeLocalNotifications(readLocalNotifications().filter(notification => notification.user_id !== userId));
+  writeLocalResetTokens(Object.fromEntries(Object.entries(readLocalResetTokens()).filter(([, entry]) => entry.userId !== userId)));
+  for (const issue of await getAllIssues()) {
+    if (issue.user_id === userId) await deleteIssue(issue.id);
+  }
+  writeLocalUsers(readLocalUsers().filter(user => user.id !== userId));
+};
+
 const auth = {
   getToken: getStoredToken,
   setToken: setStoredToken,
@@ -1039,30 +1050,7 @@ const auth = {
       const currentUser = requireLocalUser();
       const userId = currentUser.id;
 
-      // 1. Remover conta de usuário
-      const users = readLocalUsers();
-      const nextUsers = users.filter((item) => item.id !== userId);
-      writeLocalUsers(nextUsers);
-
-      // 2. Cascade de projetos próprios (LGPD Art. 18 - Eliminação completa de dados do titular)
-      const projects = readLocalProjects();
-      writeLocalProjects(projects.filter((p) => p.owner_id !== userId && p.user_id !== userId));
-
-      // 3. Cascade de orçamentos próprios
-      const budgets = readLocalBudgets();
-      writeLocalBudgets(budgets.filter((b) => b.owner_id !== userId && b.user_id !== userId));
-
-      // 4. Cascade de notificações do usuário
-      const notifs = readLocalNotifications();
-      writeLocalNotifications(notifs.filter((n) => n.user_id !== userId));
-
-      // 5. Cascade de tokens de reset do usuário
-      const tokens = readLocalResetTokens();
-      const cleanTokens = {};
-      Object.entries(tokens).forEach(([t, entry]) => {
-        if (entry.userId !== userId) cleanTokens[t] = entry;
-      });
-      writeLocalResetTokens(cleanTokens);
+      await removeLocalAccountData(userId);
 
       clearStoredToken();
 
@@ -2428,17 +2416,7 @@ const superAdminEntity = {
         }
       }
 
-      const timestamp = nowIso();
-      const updatedUser = {
-        ...target,
-        is_deleted: true,
-        status: "suspended",
-        deleted_at: timestamp,
-        updated_date: timestamp,
-      };
-
-      const nextUsers = users.map((u) => (u.id === id ? updatedUser : u));
-      writeLocalUsers(nextUsers);
+      await removeLocalAccountData(id);
 
       recordAuditEvent({
         actor: currentAdmin,
@@ -2446,7 +2424,7 @@ const superAdminEntity = {
         targetType: "user",
         targetId: target.id,
         targetName: target.full_name || target.email,
-        details: `Exclusão lógica da conta ${target.email} realizada`,
+        details: `Exclusão definitiva da conta ${target.email} realizada`,
       });
 
       return { ok: true };

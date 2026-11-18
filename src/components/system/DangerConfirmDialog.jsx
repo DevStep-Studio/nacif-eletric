@@ -95,7 +95,7 @@ export default function DangerConfirmDialog({
         </div>
 
         {error && (
-          <p className="text-xs font-bold text-red-600">{error}</p>
+          <p role="alert" className="text-xs font-bold text-red-600">{error}</p>
         )}
 
         <DialogFooter className="mt-4 flex flex-col-reverse sm:flex-row gap-2">

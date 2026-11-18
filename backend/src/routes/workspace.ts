@@ -18,8 +18,17 @@ const deleteUserSafely = (userId: string) => prisma.$transaction(async tx => {
     accountId: { in: accounts.map(a => a.id) }, status: { notIn: ["cancelled", "failed"] },
   } });
   if (renewable) throw new AppError("Cancele a assinatura e suas cobranças antes de excluir a conta.", 409);
-  await tx.user.update({ where: { id: userId }, data: { isDeleted: true, deletedAt: new Date(), status: "deleted" } });
-});
+  const accountIds = accounts.map(account => account.id);
+  const subscriptions = await tx.billingSubscription.findMany({ where: { accountId: { in: accountIds } }, select: { id: true } });
+  // Billing and audit tables have no user foreign key; remove them explicitly.
+  await tx.billingPayment.deleteMany({ where: { subscriptionId: { in: subscriptions.map(subscription => subscription.id) } } });
+  await tx.billingSubscription.deleteMany({ where: { accountId: { in: accountIds } } });
+  await tx.billingAccount.deleteMany({ where: { userId } });
+  await tx.auditLog.deleteMany({ where: { OR: [{ actorId: userId }, { targetType: "user", targetId: userId }] } });
+  // The database cascades projects/revisions, budgets, issues/comments,
+  // notifications and password-reset tokens when the user is physically removed.
+  await tx.user.delete({ where: { id: userId } });
+}, { timeout: 90000 });
 
 const idOf = (request: any) =>
   z.object({ id: z.string().min(1) }).parse(request.params).id;

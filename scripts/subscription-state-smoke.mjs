@@ -61,6 +61,15 @@ try {
   for (const op of [() => backend.entities.Project.get(project.id), () => backend.entities.Project.update(project.id, { name: "Hijack" }), () => backend.entities.Project.duplicate(project.id), () => backend.entities.Project.delete(project.id)]) {
     await assert.rejects(op, { status: 403 });
   }
+  const secondUserId = (await backend.auth.me()).id;
+  await backend.auth.deleteAccount();
+  await assert.rejects(() => backend.auth.me(), { status: 401 });
+  const recreated = await backend.auth.register({ email: "second-user@example.com", password: "new-password-123", profession: "engenheiro" });
+  assert.notEqual(recreated.user.id, secondUserId, "deleted email must be available for a fresh account");
+  await backend.auth.loginViaEmailPassword("admin@nacif.com", "admin");
+  await backend.entities.SuperAdmin.deleteUser(user.id);
+  assert.equal(JSON.parse(entries.get("voltai_local_users")).some(account => account.id === user.id), false);
+  assert.equal(JSON.parse(entries.get("voltai_local_projects")).some(item => item.id === project.id), false);
   console.log("PASS: novas contas e perfis antigos sem assinatura, recarga local sem promoção e assinatura paga preservada.");
 } finally {
   if (originalWindow === undefined) delete globalThis.window;

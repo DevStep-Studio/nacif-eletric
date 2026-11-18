@@ -64,3 +64,14 @@ A resposta autenticada de `/api/projects` deve conter `X-Project-Isolation: owne
 
 Validação automatizada: `npm --prefix backend run typecheck`, `node backend/node_modules/tsx/dist/cli.mjs --test backend/test/asaas-billing.ts backend/test/auth-register.ts backend/test/plan-access.ts` e `node scripts/subscription-state-smoke.mjs`.
 Os testes de cobrança usam um simulador isolado; não substituem a homologação com credenciais reais de sandbox.
+
+
+## Exclusão definitiva de conta
+
+`DELETE /api/auth/me` e a exclusão administrativa removem fisicamente o usuário, liberando o e-mail para novo cadastro. A operação usa uma transação e bloqueio do usuário; remove explicitamente registros locais de cobrança e auditoria ligados à conta. As relações do banco removem projetos, revisões, orçamentos, relatos, comentários, notificações e tokens de recuperação em cascata.
+
+Uma assinatura renovável (inclusive teste grátis) ou operação de cobrança em andamento bloqueia a exclusão com HTTP 409. O cliente deve cancelar em Assinatura e repetir a exclusão após a confirmação. Falhas da API permanecem visíveis no diálogo e não exibem sucesso nem encerram a sessão. A confirmação existente por digitação de EXCLUIR permanece obrigatória.
+
+Arquivos antigos de upload não têm vínculo de proprietário no banco; a exclusão remove as referências dos projetos, mas não apaga arquivos arbitrários por URL, pois poderiam pertencer a outra conta. A remoção física desses arquivos exige rastreamento de propriedade separado.
+
+Validação: `node backend/node_modules/tsx/dist/cli.mjs --test backend/test/account-deletion.ts` e `node scripts/subscription-state-smoke.mjs`. Nenhuma migration nova é necessária; o banco deve ter as chaves estrangeiras com cascata previstas no schema Prisma.

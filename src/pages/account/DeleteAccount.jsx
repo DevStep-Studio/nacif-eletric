@@ -14,15 +14,8 @@ export default function DeleteAccountPage() {
   const [deleted, setDeleted] = useState(false);
 
   const handleConfirmDelete = async () => {
-    try {
-      if (backend?.auth?.deleteAccount) {
-        await backend.auth.deleteAccount();
-      } else if (backend?.auth?.updateMe) {
-        await backend.auth.updateMe({ account_status: "deleted" });
-      }
-    } catch (e) {
-      console.warn("Delete account call fallback:", e);
-    }
+    const result = await backend.auth.deleteAccount();
+    if (result?.ok !== true) throw new Error("A exclusão não foi confirmada pelo servidor. Tente novamente.");
     setDeleted(true);
     setTimeout(() => {
       logout();
@@ -38,7 +31,7 @@ export default function DeleteAccountPage() {
           </div>
           <h1 className="text-2xl font-black text-[#0F172A]">Conta excluída</h1>
           <p className="text-xs sm:text-sm text-[#64748B] leading-relaxed">
-            Sua conta e os dados pessoais foram removidos permanentemente. Você será redirecionado para a tela de login.
+            Seu cadastro e os projetos vinculados foram removidos permanentemente. Você será redirecionado para a tela de login.
           </p>
         </div>
       </SystemPageLayout>
@@ -63,7 +56,7 @@ export default function DeleteAccountPage() {
                 Esta ação é permanente e irreversível
               </h2>
               <p className="text-xs text-red-800">
-                Ao excluir sua conta, todos os seus dados cadastrais e de projetos serão desvinculados.
+                Ao excluir sua conta, seu cadastro e os projetos vinculados serão excluídos permanentemente.
               </p>
             </div>
           </div>
@@ -72,8 +65,8 @@ export default function DeleteAccountPage() {
             <p className="font-bold">O que será afetado:</p>
             <ul className="list-disc pl-5 space-y-1 text-[11px]">
               <li>Acesso a todos os seus projetos elétricos e memoriais descritivos salvos na nuvem.</li>
-              <li>Cancelamento imediato de qualquer assinatura ativa (sem cobranças futuras).</li>
-              <li>Exclusão de arquivos de plantas importadas em formato PDF, DWG e imagens.</li>
+              <li>Cancele sua assinatura e as cobranças futuras em Assinatura antes de excluir a conta.</li>
+              <li>Remoção dos projetos e de suas referências a plantas importadas.</li>
               <li>Histórico de dimensionamentos e relatórios técnicos.</li>
             </ul>
           </div>
@@ -87,7 +80,7 @@ export default function DeleteAccountPage() {
             <p>E-mail: {user?.email}</p>
           </div>
           <p className="text-[11px] text-[#94A3B8]">
-            Caso deseje apenas fazer uma pausa, você pode cancelar a assinatura mantendo sua conta gratuita.
+            Caso deseje apenas fazer uma pausa, você pode cancelar a assinatura mantendo sua conta sem plano.
           </p>
         </div>
 
@@ -121,7 +114,7 @@ export default function DeleteAccountPage() {
         description="Esta ação apagará permanentemente sua conta e todos os seus projetos elétricos associados."
         consequences={[
           "Seus projetos e plantas serão excluídos permanentemente.",
-          "Sua assinatura atual será cancelada de forma irreversível.",
+          "Assinaturas com cobranças futuras precisam ser canceladas antes da exclusão.",
           "Não será possível recuperar estes dados após a confirmação.",
         ]}
         confirmTextRequired="EXCLUIR"
