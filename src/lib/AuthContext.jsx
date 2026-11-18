@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { applyRemotePlanCatalog } from '@/lib/subscriptionPlans';
-import { backend } from '@/api/backendClient';
+import { backend, SESSION_EXPIRED_EVENT } from '@/api/backendClient';
 import { PENDING_REGISTER_PROFESSION_KEY, normalizeProfession } from '@/lib/professionalAccess';
 import { queryClientInstance } from '@/lib/query-client';
 
@@ -13,144 +13,110 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
-  const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
+  const [appPublicSettings, setAppPublicSettings] = useState(null);
+  const authCheckId = useRef(0);
+  const currentUserId = useRef(null);
 
-  useEffect(() => {
-    checkAppState();
-
-    const handleStorage = (e) => {
-      if (e.key === "voltai_access_token" || e.key === "voltai_token") {
-        if (!e.newValue) {
-          queryClientInstance.clear();
-          setUser(null);
-          setIsAuthenticated(false);
-          setIsLoadingAuth(false);
-          setAuthChecked(true);
-        } else {
-          queryClientInstance.clear();
-          setUser(null);
-          setIsAuthenticated(false);
-          checkUserAuth();
-        }
-      }
-    };
-
-    const handleUserUpdated = async () => {
-      if (backend.auth.getToken?.()) {
-        try {
-          const currentUser = await backend.auth.me();
-          if (currentUser) {
-            if (user?.id !== currentUser.id) queryClientInstance.clear();
-            setUser(currentUser);
-          }
-        } catch {
-          // mantém estado atual em caso de falha transitória
-        }
-      }
-    };
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("storage", handleStorage);
-      window.addEventListener("voltai:user-updated", handleUserUpdated);
-      return () => {
-        window.removeEventListener("storage", handleStorage);
-        window.removeEventListener("voltai:user-updated", handleUserUpdated);
-      };
-    }
+  const clearAuthState = useCallback(() => {
+    authCheckId.current += 1;
+    currentUserId.current = null;
+    queryClientInstance.clear();
+    setUser(null);
+    setIsAuthenticated(false);
+    setIsLoadingAuth(false);
+    setAuthChecked(true);
+    setAuthError(null);
   }, []);
 
-  const resolvePendingProfession = async (currentUser) => {
+  const resolvePendingProfession = useCallback(async (currentUser) => {
     if (typeof window === "undefined" || !currentUser) return currentUser;
-
     const pendingProfession = normalizeProfession(window.localStorage.getItem(PENDING_REGISTER_PROFESSION_KEY));
     if (!pendingProfession) return currentUser;
-
     const currentProfession = normalizeProfession(currentUser.profession || currentUser.profissao);
     if (currentProfession === pendingProfession) {
       window.localStorage.removeItem(PENDING_REGISTER_PROFESSION_KEY);
       return currentUser;
     }
-
     try {
       const updatedUser = await backend.auth.updateMe({ profession: pendingProfession });
       window.localStorage.removeItem(PENDING_REGISTER_PROFESSION_KEY);
-      window.dispatchEvent(new Event("voltai:user-updated"));
       return updatedUser ? { ...currentUser, ...updatedUser, profession: pendingProfession } : { ...currentUser, profession: pendingProfession };
     } catch (error) {
+      if (error.status === 401 || error.status === 403) throw error;
       console.warn("Não foi possível salvar a profissão do usuário:", error);
       return currentUser;
     }
-  };
+  }, []);
 
-  const checkAppState = async () => {
-    try {
-      setIsLoadingPublicSettings(true);
-      setAuthError(null);
-
-      setAppPublicSettings({
-        id: "volta-ia-backend",
-        public_settings: {
-          auth_required: true,
-        },
-      });
-      setIsLoadingPublicSettings(false);
-
-      try {
-        const catalog = await backend.subscriptions.getPlans();
-        if (catalog?.plans) {
-          applyRemotePlanCatalog(catalog.plans);
-        }
-      } catch (planErr) {
-        console.warn("Catálogo de planos remoto indisponível, utilizando catálogo local:", planErr);
-      }
-
-      if (backend.auth.getToken?.()) {
-        await checkUserAuth();
-      } else {
-        setIsLoadingAuth(false);
-        setIsAuthenticated(false);
-        setAuthChecked(true);
-      }
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      setAuthError({
-        type: 'unknown',
-        message: error.message || 'Ocorreu um erro inesperado'
-      });
-      setIsLoadingPublicSettings(false);
-      setIsLoadingAuth(false);
+  const checkUserAuth = useCallback(async ({ silent = false } = {}) => {
+    if (!backend.auth.getToken?.()) {
+      clearAuthState();
+      return;
     }
-  };
-
-  const checkUserAuth = async ({ silent = false } = {}) => {
+    const checkId = ++authCheckId.current;
+    const checkedToken = backend.auth.getToken();
+    const isCurrentCheck = () => checkId === authCheckId.current && checkedToken === backend.auth.getToken();
+    if (!silent) setIsLoadingAuth(true);
+    setAuthError(null);
     try {
-      if (!silent) setIsLoadingAuth(true);
-      setAuthError(null);
       const currentUser = await backend.auth.me();
+      if (!isCurrentCheck()) return;
       const resolvedUser = await resolvePendingProfession(currentUser);
-      if (user?.id !== resolvedUser?.id) queryClientInstance.clear();
+      if (!isCurrentCheck()) return;
+      if (currentUserId.current !== resolvedUser?.id) queryClientInstance.clear();
+      currentUserId.current = resolvedUser?.id;
       setUser(resolvedUser);
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
       setAuthChecked(true);
     } catch (error) {
-      console.error('User auth check failed:', error);
-      setIsLoadingAuth(false);
-      setIsAuthenticated(false);
-      setAuthChecked(true);
+      // A 401 event or another login may already have replaced this session.
+      if (checkId !== authCheckId.current) return;
+      if (checkedToken !== backend.auth.getToken() && backend.auth.getToken()) return;
       if (error.status === 401 || error.status === 403) {
-        setAuthError({
-          type: 'auth_required',
-          message: 'Autenticação obrigatória'
-        });
+        backend.auth.logout(false);
+        clearAuthState();
+        return;
       }
+      setUser(null);
+      setIsAuthenticated(false);
+      setIsLoadingAuth(false);
+      setAuthChecked(true);
     }
-  };
+  }, [clearAuthState, resolvePendingProfession]);
+
+  const checkAppState = useCallback(async () => {
+    setAppPublicSettings({ id: "volta-ia-backend", public_settings: { auth_required: true } });
+    setIsLoadingPublicSettings(false);
+    // A slow public catalog must not prevent the login form from rendering.
+    void backend.subscriptions.getPlans().then(catalog => {
+      if (catalog?.plans) applyRemotePlanCatalog(catalog.plans);
+    }).catch(planErr => console.warn("Catálogo remoto indisponível, utilizando catálogo local:", planErr));
+    await checkUserAuth();
+  }, [checkUserAuth]);
+
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key === null || event.key === "voltai_access_token" || event.key === "voltai_token") {
+        if (!backend.auth.getToken?.()) clearAuthState();
+        else void checkUserAuth();
+      }
+    };
+    const handleUserUpdated = () => { void checkUserAuth({ silent: true }); };
+    window.addEventListener(SESSION_EXPIRED_EVENT, clearAuthState);
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("voltai:user-updated", handleUserUpdated);
+    void checkAppState();
+    return () => {
+      authCheckId.current += 1;
+      window.removeEventListener(SESSION_EXPIRED_EVENT, clearAuthState);
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("voltai:user-updated", handleUserUpdated);
+    };
+  }, [checkAppState, checkUserAuth, clearAuthState]);
 
   const logout = (shouldRedirect = true) => {
-    queryClientInstance.clear();
-    setUser(null);
-    setIsAuthenticated(false);
+    clearAuthState();
     backend.auth.logout(shouldRedirect ? "/login" : false);
   };
 
@@ -159,18 +125,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isAuthenticated, 
-      isLoadingAuth,
-      isLoadingPublicSettings,
-      authError,
-      appPublicSettings,
-      authChecked,
-      logout,
-      navigateToLogin,
-      checkUserAuth,
-      checkAppState
+    <AuthContext.Provider value={{
+      user, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError,
+      appPublicSettings, authChecked, logout, navigateToLogin, checkUserAuth, checkAppState,
     }}>
       {children}
     </AuthContext.Provider>
@@ -179,8 +136,6 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth deve ser usado dentro de um AuthProvider');
-  }
+  if (!context) throw new Error('useAuth deve ser usado dentro de um AuthProvider');
   return context;
 };

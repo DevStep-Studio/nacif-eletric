@@ -203,3 +203,10 @@ npm run check:api
 ```
 
 A verificação exige `billingApiVersion: "complete-trial-v1"` em `/api/health`. O processo de publicação não considera mais uma API antiga pronta apenas porque ela responde HTTP 200 e tem a rota de planos. Se a verificação local passar e a pública falhar, o proxy de `/api` está apontando para outro processo ou servidor. Compilar apenas `dist/` não atualiza a API.
+
+
+### Sessão expirada e loop na página de login
+
+Um HTTP 401 de uma requisição autenticada remove os tokens da sessão e limpa o estado de autenticação e o cache. O redirecionamento para `/login` é feito pelas rotas protegidas, sem recarregar a página durante a renderização. As páginas públicas de login, cadastro e recuperação continuam acessíveis. Erros 403 de módulos não encerram a sessão; uma resposta atrasada de uma sessão anterior também não apaga o token de um novo login. O carregamento do catálogo não bloqueia mais a exibição do login.
+
+Validação de regressão: `npm run test:session-expiry`. A correção exige publicar o frontend atualizado.

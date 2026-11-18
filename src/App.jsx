@@ -4,7 +4,6 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Layout from './components/Layout';
 // Páginas principais e editores técnicos com Code Splitting (React.lazy)
@@ -130,7 +129,7 @@ class AppErrorBoundary extends React.Component {
 }
 
 const AuthenticatedApp = () => {
-  const { user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { user, isLoadingAuth, isLoadingPublicSettings } = useAuth();
   const adminAccess = isAdminUser(user);
   const requireAdmin = (element) => adminAccess ? element : <Navigate to="/403" replace />;
   const superAdminAccess = isSuperAdmin(user);
@@ -139,16 +138,6 @@ const AuthenticatedApp = () => {
   // Show branded loading screen while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return <BrandLoadingScreen fullScreen />;
-  }
-
-  // Handle authentication errors
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required') {
-      navigateToLogin();
-      return null;
-    }
   }
 
   // Render the main app

@@ -3,7 +3,7 @@ import { createServer } from "vite";
 
 const server = await createServer({
   optimizeDeps: { noDiscovery: true, include: [] },
-  server: { middlewareMode: true }, appType: "custom",
+  server: { middlewareMode: true, hmr: false, ws: false }, appType: "custom",
 });
 const originalWindow = globalThis.window;
 const entries = new Map();

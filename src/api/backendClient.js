@@ -480,6 +480,8 @@ const readResponse = async (response) => {
   throw createError("Resposta inválida da API. Verifique VITE_API_BASE_URL e o proxy de /api.", response.ok ? 502 : response.status);
 };
 
+export const SESSION_EXPIRED_EVENT = "voltai:session-expired";
+
 export const request = async (path, options = {}) => {
   const token = getStoredToken();
   const headers = new Headers(options.headers || {});
@@ -506,6 +508,14 @@ export const request = async (path, options = {}) => {
     throw createError("Não foi possível conectar ao backend. Verifique a conexão e a configuração da API.", 503);
   }
 
+  // Expire only the session that made this request. An old response must not
+  // log out a newly signed-in user, and a rejected login is not session expiry.
+  const publicAuth = /^\/api\/auth\/(login|register|forgot-password|reset-password|reset-password-request)$/.test(path);
+  if (response.status === 401 && !publicAuth && token &&
+      headers.get("Authorization") === `Bearer ${token}` && getStoredToken() === token) {
+    clearStoredToken();
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
   const data = await readResponse(response);
 
   if (!response.ok) {

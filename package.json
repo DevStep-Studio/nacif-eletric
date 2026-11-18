@@ -43,6 +43,7 @@
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
     "test:solar-render": "node scripts/solar-render-smoke.mjs",
+    "test:session-expiry": "node scripts/auth-session-expiry-tests.mjs",
     "test:subscription-state": "node scripts/subscription-state-smoke.mjs"
   },
   "dependencies": {
