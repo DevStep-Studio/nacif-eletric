@@ -63,6 +63,7 @@ import { getProjectProgress } from "@/lib/projectProgress";
 import OnboardingModal from "@/components/onboarding/OnboardingModal";
 import ToolsModal from "@/components/navigation/ToolsModal";
 import PublicFooter from "@/components/system/PublicFooter";
+import SupportWhatsAppWidget from "@/components/SupportWhatsAppWidget";
 import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 import brandMarkEnergy from "@/assets/brand-symbol-pure.png";
 
@@ -1311,6 +1312,9 @@ export default function Layout() {
         {/* Public Institutional & Legal Footer */}
         <PublicFooter className="mt-auto" />
       </main>
+
+      {/* Floating WhatsApp Support Widget */}
+      <SupportWhatsAppWidget />
     </div>
   );
 }
