@@ -40,11 +40,12 @@ export async function checkHealth(port = 3001, origin) {
 
 async function main() {
   const isForce = process.argv.includes("--force");
+  const isProductionVps = fs.existsSync("/home/nacifenergy");
   const isCi =
-    process.env.GITHUB_ACTIONS === "true" ||
-    process.env.CI === "true" ||
-    process.env.VERCEL === "1" ||
-    process.env.CF_PAGES === "1";
+    !isProductionVps &&
+    (process.env.GITHUB_ACTIONS === "true" ||
+      process.env.VERCEL === "1" ||
+      process.env.CF_PAGES === "1");
 
   if (!isForce && (isCi || process.platform === "win32")) {
     return;
@@ -65,6 +66,14 @@ async function main() {
       cwd: backendDir,
       stdio: "inherit",
     });
+    try {
+      execSync("npx prisma migrate deploy", {
+        cwd: backendDir,
+        stdio: "inherit",
+      });
+    } catch (migrateErr) {
+      console.warn("[deploy-backend] Aviso ao executar prisma migrate deploy (o bootstrap reconciliará colunas pendentes):", migrateErr.message);
+    }
   } catch (err) {
     throw new Error(`Falha ao preparar dependências do backend: ${err.message}`);
   }

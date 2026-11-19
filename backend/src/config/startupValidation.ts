@@ -50,7 +50,9 @@ export function validateStartupEnvironment(): ValidationResult {
     billingErrors.push("Configure ASAAS_WEBHOOK_TOKEN exclusivo, sem espaços, entre 32 e 255 caracteres.");
   if (isProduction && env.ASAAS_ENVIRONMENT !== "production" && process.env.ALLOW_SANDBOX_ASAAS !== "true")
     billingErrors.push("Use ASAAS_ENVIRONMENT=production em produção; staging pode usar ALLOW_SANDBOX_ASAAS=true.");
-  (isProduction ? errors : warnings).push(...billingErrors);
+  // Avisos de billing não devem derrubar o processo da API (evita 502 Bad Gateway no login/projetos);
+  // as rotas de checkout validam assertAsaasConfigured() individualmente.
+  warnings.push(...billingErrors);
 
   return {
     valid: errors.length === 0,

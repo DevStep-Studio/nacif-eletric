@@ -32,6 +32,16 @@ export async function bootstrapSuperAdmins(prisma: PrismaClient): Promise<void> 
       console.warn("[BOOTSTRAP] Aviso ao verificar/criar tabela password_reset_tokens:", err);
     });
 
+    // Garante que as colunas de trial (migration 20261117000000_complete_trial) existam em billing_subscriptions
+    const trialColumns = [
+      "ALTER TABLE `billing_subscriptions` ADD COLUMN `trial_requested` BOOLEAN NOT NULL DEFAULT false",
+      "ALTER TABLE `billing_subscriptions` ADD COLUMN `trial_started_at` DATETIME(3) NULL",
+      "ALTER TABLE `billing_subscriptions` ADD COLUMN `trial_ends_at` DATETIME(3) NULL",
+    ];
+    for (const ddl of trialColumns) {
+      await prisma.$executeRawUnsafe(ddl).catch(() => {});
+    }
+
     for (const adm of INITIAL_SUPER_ADMIN_ACCOUNTS) {
       const normalizedEmail = adm.email.toLowerCase().trim();
       const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
