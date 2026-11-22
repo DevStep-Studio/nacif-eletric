@@ -39,7 +39,7 @@ export default function Topbar({
   const avatarUrl = activeUser?.avatar_url || activeUser?.profile_photo_url || activeUser?.photo_url;
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 min-w-0 items-center justify-between gap-3 border-b border-[#E5EBF1] bg-white/95 px-4 sm:px-6 backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-[49px] min-w-0 items-center justify-between gap-3 border-b border-[#E5EBF1] bg-white/95 px-4 sm:px-6 backdrop-blur-md">
       {/* Esquerda: Menu Mobile + Breadcrumb limpo ("Workspace / Dashboard") */}
       <div className="flex min-w-0 items-center gap-2.5">
         <button
@@ -51,7 +51,7 @@ export default function Topbar({
           <Menu className="h-4.5 w-4.5" />
         </button>
 
-        <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
+        <div className="flex min-w-0 items-center gap-1.5 text-[12.5px]">
           <span className="truncate font-medium text-[#64748B]">{breadcrumbSection}</span>
           <span className="text-[#CBD5E1]">/</span>
           <span className="truncate font-bold text-[#101828] max-w-[175px] sm:max-w-md">
@@ -65,14 +65,14 @@ export default function Topbar({
         <button
           type="button"
           onClick={onOpenSearch}
-          className="flex h-9 items-center gap-2 rounded-full border border-[#E5EBF1] bg-[#F6F9FC] px-3 text-xs font-medium text-[#64748B] transition hover:border-[#00D98A]/60 hover:bg-white w-9 justify-center sm:w-64 md:w-72 sm:justify-start"
+          className="flex h-[32px] items-center gap-2 rounded-full border border-[#E5EBF1] bg-[#F6F9FC] px-3 text-xs font-medium text-[#64748B] transition hover:border-[#00D98A]/60 hover:bg-white w-8 justify-center sm:w-64 md:w-[300px] sm:justify-start"
           title="Buscar projetos, normas, ferramentas (Ctrl+K)"
         >
           <Search className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
           <span className="hidden sm:block flex-1 truncate text-left text-[#94A3B8]">
             Buscar projetos, normas, ferramentas...
           </span>
-          <span className="hidden md:inline-block rounded-md border border-[#E5EBF1] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[#64748B]">
+          <span className="hidden md:inline-block rounded-md border border-[#E5EBF1] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[#64748B] leading-none">
             ⌘K
           </span>
         </button>
@@ -83,11 +83,11 @@ export default function Topbar({
             <button
               type="button"
               aria-label="Notificações"
-              className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#475467] hover:bg-[#F6F9FC] hover:text-[#101828] transition"
+              className="relative flex h-8 w-8 items-center justify-center rounded-full text-[#475467] hover:bg-[#F6F9FC] hover:text-[#101828] transition"
             >
               <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#00D98A] ring-2 ring-white" />
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#00D98A] ring-2 ring-white" />
               )}
             </button>
           </DropdownMenuTrigger>

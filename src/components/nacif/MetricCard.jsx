@@ -28,18 +28,18 @@ export default function MetricCard({
       type={onClick ? "button" : undefined}
       onClick={onClick}
       className={cn(
-        "group relative flex w-full items-center gap-3 rounded-2xl border border-[#E5EBF1] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,40,0.03)] transition-all duration-150 hover:border-[#CBEAD9] hover:shadow-[0_4px_12px_rgba(3,25,35,0.05)]",
+        "group relative flex h-[62px] w-full items-center gap-3 rounded-2xl border border-[#E5EBF1] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,40,0.03)] transition-all duration-150 hover:border-[#CBEAD9] hover:shadow-[0_4px_12px_rgba(3,25,35,0.05)]",
         onClick && "cursor-pointer",
         className
       )}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#DDFCF0] text-[#00A86B] transition-transform duration-150 group-hover:scale-105">
-        {Icon && <Icon className="h-4.5 w-4.5" />}
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#E1FCEF] text-[#00A86B] transition-transform duration-150 group-hover:scale-105">
+        {Icon && <Icon className="h-[17px] w-[17px] stroke-[2.1]" />}
       </div>
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-1.5">
-          <span className="truncate text-[17px] sm:text-lg font-extrabold tracking-tight text-[#101828] tabular-nums leading-tight">
+          <span className="truncate text-[17px] font-extrabold tracking-tight text-[#101828] tabular-nums leading-tight">
             {value}
           </span>
 

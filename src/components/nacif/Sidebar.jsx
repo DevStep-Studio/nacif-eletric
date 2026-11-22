@@ -167,27 +167,27 @@ export default function Sidebar({
     const avatarUrl = activeUser?.avatar_url || activeUser?.profile_photo_url || activeUser?.photo_url;
 
     const navItemClass = (active) =>
-      `group flex items-center rounded-xl text-[12.5px] font-medium transition-all duration-150 ${
-        isCompact ? "mx-auto h-9 w-9 justify-center p-0" : "h-8 w-full justify-between px-2.5"
+      `group flex items-center rounded-[10px] text-[12.5px] font-medium transition-all duration-150 ${
+        isCompact ? "mx-auto h-9 w-9 justify-center p-0" : "h-[31px] w-full justify-between px-2.5"
       } ${
         active
-          ? "bg-gradient-to-r from-[#037B54] via-[#049768] to-[#00C480] text-white font-semibold shadow-[0_6px_16px_rgba(0,217,138,0.28)]"
+          ? "bg-gradient-to-r from-[#027A52] via-[#049768] to-[#00C882] text-white font-semibold shadow-[0_6px_16px_rgba(0,217,138,0.28)]"
           : "text-slate-300/90 hover:bg-[#082732] hover:text-white"
       }`;
 
     return (
       <div className="flex h-full flex-col bg-[#02161F] text-white">
-        {/* Topo Logo */}
+        {/* Topo Logo + Recolher Discreto Integrado na Borda Interna */}
         <div
-          className={`flex h-14 shrink-0 items-center ${
-            isCompact ? "justify-center px-2" : "justify-between px-4"
+          className={`flex h-[49px] shrink-0 items-center ${
+            isCompact ? "justify-center gap-1 px-1.5" : "justify-between px-4"
           }`}
         >
           <Link to="/" onClick={isMobile ? onCloseMobile : undefined} className="flex items-center">
             <SidebarBrandLogo branding={branding} collapsed={isCompact} />
           </Link>
 
-          {isMobile && (
+          {isMobile ? (
             <button
               type="button"
               onClick={onCloseMobile}
@@ -195,6 +195,18 @@ export default function Sidebar({
               className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-[#082732] hover:text-white"
             >
               <X className="h-5 w-5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
+              onClick={onToggleCollapsed}
+              title={collapsed ? "Expandir menu (Ctrl+B)" : "Recolher menu (Ctrl+B)"}
+              className={`flex items-center justify-center rounded-lg text-slate-400/75 transition hover:bg-[#082732] hover:text-[#00F0A0] ${
+                isCompact ? "h-6 w-6" : "h-7 w-7"
+              }`}
+            >
+              {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
             </button>
           )}
         </div>
@@ -295,12 +307,12 @@ export default function Sidebar({
           </div>
 
           {/* Card Plano Profissional */}
-          <div className="pt-1">
+          <div className="pt-0.5">
             <Link
               to="/subscription"
               onClick={isMobile ? onCloseMobile : undefined}
               title={isCompact ? subscription?.plan?.name || "Planos e Assinaturas" : undefined}
-              className={`group flex items-center rounded-xl border border-[#00D98A]/50 bg-gradient-to-r from-[#05362E] to-[#082B2E] transition hover:border-[#00F0A0] ${
+              className={`group flex items-center rounded-xl border border-[#00D98A]/55 bg-gradient-to-r from-[#04372D] via-[#06322F] to-[#082A2D] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[#00F0A0] ${
                 isCompact ? "mx-auto h-9 w-9 justify-center p-0" : "justify-between gap-2 px-2.5 py-2"
               }`}
             >
@@ -309,7 +321,7 @@ export default function Sidebar({
               ) : (
                 <>
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#00D98A]/15 text-amber-400">
+                    <span className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-lg bg-[#00D98A]/18 text-amber-400">
                       <Crown className="h-3.5 w-3.5" />
                     </span>
                     <div className="min-w-0">
@@ -463,19 +475,9 @@ export default function Sidebar({
     <>
       <aside
         className={`fixed inset-y-0 left-0 z-40 hidden border-r border-white/10 bg-[#02161F] transition-all duration-200 ease-in-out lg:flex lg:flex-col ${
-          collapsed ? "w-[72px]" : "w-[260px]"
+          collapsed ? "w-[72px]" : "w-[262px]"
         }`}
       >
-        <button
-          type="button"
-          aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
-          onClick={onToggleCollapsed}
-          title={collapsed ? "Expandir menu (Ctrl+B)" : "Recolher menu (Ctrl+B)"}
-          className="absolute -right-3 top-4 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-[#E5EBF1] bg-white text-[#101828] shadow-sm transition hover:border-[#00D98A] hover:bg-[#00D98A] hover:text-[#031923]"
-        >
-          {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-        </button>
-
         {renderSidebarBody(false)}
       </aside>
 

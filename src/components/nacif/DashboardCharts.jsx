@@ -5,6 +5,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
   XAxis,
@@ -60,20 +62,54 @@ function CustomAreaTooltip({ active, payload, metric }) {
 export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
   const series = charts?.series || [];
   const dataKey = unit === "kva" ? "powerKva" : "powerKw";
-  const maxVal = series.reduce((max, s) => Math.max(max, Number(s[dataKey] || 0)), 0);
+  const maxIndex = series.reduce((bestIdx, item, idx, arr) => {
+    return Number(item[dataKey] || 0) > Number(arr[bestIdx]?.[dataKey] ?? -1) ? idx : bestIdx;
+  }, 0);
+  const maxVal = Number(series[maxIndex]?.[dataKey] || 0);
+
+  const renderPeakPill = (props) => {
+    const { x = 0, y = 0, width = 0, value, index } = props;
+    if (index !== maxIndex || maxVal <= 0) return null;
+    const formatted = `${Number(value || 0).toLocaleString("pt-BR", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })} ${unit === "kva" ? "kVA" : "kW"}`;
+    const pillW = Math.max(54, formatted.length * 6.4 + 14);
+    const pillX = x + width / 2 - pillW / 2;
+    const pillY = Math.max(2, y - 24);
+    return (
+      <g pointerEvents="none">
+        <rect x={pillX} y={pillY} width={pillW} height={18} rx={9} fill="#031923" />
+        <polygon
+          points={`${x + width / 2 - 3.5},${pillY + 18} ${x + width / 2 + 3.5},${pillY + 18} ${x + width / 2},${pillY + 21.5}`}
+          fill="#031923"
+        />
+        <text
+          x={x + width / 2}
+          y={pillY + 12}
+          textAnchor="middle"
+          fill="#FFFFFF"
+          fontSize={9.5}
+          fontWeight={700}
+        >
+          {formatted}
+        </text>
+      </g>
+    );
+  };
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1 flex-wrap">
-            <h3 className="text-[13px] font-bold text-[#101828]">Cargas dimensionadas</h3>
-            <span className="text-[11px] font-medium text-[#64748B]">
+          <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
+            <h3 className="truncate text-[13px] font-bold text-[#101828]">Cargas dimensionadas</h3>
+            <span className="hidden 2xl:inline text-[11px] font-medium text-[#64748B]">
               ({unit === "kva" ? "Potência aparente" : "Potência ativa"})
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" aria-label="Sobre o gráfico de cargas" className="text-[#94A3B8] hover:text-[#101828]">
+                <button type="button" aria-label="Sobre o gráfico de cargas" className="shrink-0 text-[#94A3B8] hover:text-[#101828]">
                   <HelpCircle className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
@@ -94,7 +130,9 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
             type="button"
             onClick={() => onUnitChange?.("kva")}
             className={`rounded-full px-2.5 py-0.5 transition ${
-              unit === "kva" ? "bg-[#00D98A] text-[#031923]" : "text-[#64748B] hover:text-[#101828]"
+              unit === "kva"
+                ? "bg-[#00D98A] text-[#031923] shadow-[0_2px_6px_rgba(0,217,138,0.28)]"
+                : "text-[#64748B] hover:text-[#101828]"
             }`}
           >
             kVA
@@ -103,7 +141,9 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
             type="button"
             onClick={() => onUnitChange?.("kw")}
             className={`rounded-full px-2.5 py-0.5 transition ${
-              unit === "kw" ? "bg-[#00D98A] text-[#031923]" : "text-[#64748B] hover:text-[#101828]"
+              unit === "kw"
+                ? "bg-[#00D98A] text-[#031923] shadow-[0_2px_6px_rgba(0,217,138,0.28)]"
+                : "text-[#64748B] hover:text-[#101828]"
             }`}
           >
             kW
@@ -111,7 +151,7 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
         </div>
       </div>
 
-      <div className="mt-2 h-[120px] w-full">
+      <div className="mt-1 h-[118px] w-full">
         {charts?.isEmpty ? (
           <EmptyState
             title="Sem projetos no período"
@@ -120,8 +160,14 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
           />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={series} margin={{ top: 8, right: 6, left: -24, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5EBF1" />
+            <BarChart data={series} margin={{ top: 26, right: 8, left: -24, bottom: 0 }}>
+              <defs>
+                <linearGradient id="nacifActiveBarFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#00F0A0" />
+                  <stop offset="100%" stopColor="#00BD77" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EDF2F7" />
               <XAxis
                 dataKey="date"
                 axisLine={false}
@@ -131,14 +177,21 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
               <YAxis
                 axisLine={false}
                 tickLine={false}
+                domain={[0, (dataMax) => Math.max(0.5, Number((dataMax * 1.22).toFixed(2)))]}
                 tick={{ fill: "#64748B", fontSize: 10, fontWeight: 500 }}
               />
+              {series.length === 1 && maxVal > 0 && (
+                <ReferenceLine y={maxVal} stroke="#00D98A" strokeDasharray="4 4" strokeOpacity={0.35} />
+              )}
               <RechartsTooltip cursor={{ fill: "rgba(0, 217, 138, 0.06)" }} content={<CustomBarTooltip unit={unit} />} />
-              <Bar dataKey={dataKey} radius={[7, 7, 2, 2]} maxBarSize={24}>
-                {series.map((entry, idx) => {
-                  const isMax = Number(entry[dataKey] || 0) === maxVal && maxVal > 0;
-                  return <Cell key={entry.id || idx} fill={isMax ? "#00D98A" : "#C5F6E3"} />;
-                })}
+              <Bar dataKey={dataKey} radius={[8, 8, 2, 2]} maxBarSize={series.length <= 2 ? 32 : 22}>
+                <LabelList dataKey={dataKey} content={renderPeakPill} />
+                {series.map((entry, idx) => (
+                  <Cell
+                    key={entry.id || idx}
+                    fill={idx === maxIndex && maxVal > 0 ? "url(#nacifActiveBarFill)" : "#C5F6E3"}
+                  />
+                ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -152,12 +205,48 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
   const series = charts?.series || [];
   const canToggleBudget = Boolean(charts?.hasBudgetData);
   const activeMetric = metric === "cost" && canToggleBudget ? "cost" : "demand";
+  const areaDataKey = activeMetric === "cost" ? "budget" : "demandKw";
+  const peakIndex = series.reduce((bestIdx, item, idx, arr) => {
+    return Number(item[areaDataKey] || 0) >= Number(arr[bestIdx]?.[areaDataKey] ?? -1) ? idx : bestIdx;
+  }, 0);
+  const peakVal = Number(series[peakIndex]?.[areaDataKey] || 0);
+
+  const renderAreaPeakPill = (props) => {
+    const { x = 0, y = 0, value, index } = props;
+    if (index !== peakIndex || peakVal <= 0) return null;
+    const formatted =
+      activeMetric === "cost"
+        ? formatCurrencyBrl(value)
+        : `${Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`;
+    const pillW = Math.max(50, formatted.length * 6.3 + 14);
+    const pillX = Math.max(4, x - pillW / 2);
+    const pillY = Math.max(2, y - 26);
+    return (
+      <g pointerEvents="none">
+        <rect x={pillX} y={pillY} width={pillW} height={18} rx={9} fill="#031923" />
+        <polygon
+          points={`${x - 3.5},${pillY + 18} ${x + 3.5},${pillY + 18} ${x},${pillY + 21.5}`}
+          fill="#031923"
+        />
+        <text
+          x={pillX + pillW / 2}
+          y={pillY + 12}
+          textAnchor="middle"
+          fill="#FFFFFF"
+          fontSize={9.5}
+          fontWeight={700}
+        >
+          {formatted}
+        </text>
+      </g>
+    );
+  };
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 whitespace-nowrap">
             <h3 className="text-[13px] font-bold text-[#101828]">
               {activeMetric === "cost" ? "Orçamento médio estimado" : "Demanda média estimada"}
             </h3>
@@ -184,7 +273,9 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
             type="button"
             onClick={() => onMetricChange?.("demand")}
             className={`rounded-full px-2.5 py-0.5 transition ${
-              activeMetric === "demand" ? "bg-[#00D98A] text-[#031923]" : "text-[#64748B] hover:text-[#101828]"
+              activeMetric === "demand"
+                ? "bg-[#00D98A] text-[#031923] shadow-[0_2px_6px_rgba(0,217,138,0.28)]"
+                : "text-[#64748B] hover:text-[#101828]"
             }`}
           >
             kW
@@ -196,7 +287,7 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
             onClick={() => canToggleBudget && onMetricChange?.("cost")}
             className={`rounded-full px-2.5 py-0.5 transition ${
               activeMetric === "cost"
-                ? "bg-[#00D98A] text-[#031923]"
+                ? "bg-[#00D98A] text-[#031923] shadow-[0_2px_6px_rgba(0,217,138,0.28)]"
                 : canToggleBudget
                 ? "text-[#64748B] hover:text-[#101828]"
                 : "cursor-not-allowed opacity-45 text-[#94A3B8]"
@@ -207,7 +298,7 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
         </div>
       </div>
 
-      <div className="mt-2 h-[120px] w-full">
+      <div className="mt-1 h-[118px] w-full">
         {charts?.isEmpty ? (
           <EmptyState
             title="Sem série no período"
@@ -216,14 +307,14 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
           />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={series} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+            <AreaChart data={series} margin={{ top: 26, right: 12, left: -24, bottom: 0 }}>
               <defs>
                 <linearGradient id="nacifDemandGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00D98A" stopOpacity={0.3} />
+                  <stop offset="5%" stopColor="#00D98A" stopOpacity={0.34} />
                   <stop offset="95%" stopColor="#00D98A" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5EBF1" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EDF2F7" />
               <XAxis
                 dataKey="date"
                 axisLine={false}
@@ -233,19 +324,35 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
               <YAxis
                 axisLine={false}
                 tickLine={false}
+                domain={[0, (dataMax) => Math.max(0.5, Number((dataMax * 1.25).toFixed(2)))]}
                 tick={{ fill: "#64748B", fontSize: 10, fontWeight: 500 }}
               />
+              {series.length === 1 && peakVal > 0 && (
+                <ReferenceLine y={peakVal} stroke="#00D98A" strokeDasharray="4 4" strokeOpacity={0.42} />
+              )}
               <RechartsTooltip content={<CustomAreaTooltip metric={activeMetric} />} />
               <Area
                 type="monotone"
-                dataKey={activeMetric === "cost" ? "budget" : "demandKw"}
-                stroke="#00D98A"
+                dataKey={areaDataKey}
+                stroke="#00C87F"
                 strokeWidth={2.5}
                 fillOpacity={1}
                 fill="url(#nacifDemandGradient)"
-                dot={series.length <= 2 ? { r: 4, fill: "#00D98A", stroke: "#031923", strokeWidth: 2 } : false}
-                activeDot={{ r: 5, fill: "#031923", stroke: "#00F0A0", strokeWidth: 2 }}
-              />
+                dot={(dotProps) => {
+                  const { cx, cy, index } = dotProps;
+                  if (typeof cx !== "number" || typeof cy !== "number") return null;
+                  if (series.length > 2 && index !== peakIndex) return null;
+                  return (
+                    <g key={`dot-${index}`}>
+                      <circle cx={cx} cy={cy} r={9} fill="#00D98A" fillOpacity={0.22} />
+                      <circle cx={cx} cy={cy} r={4} fill="#00F0A0" stroke="#031923" strokeWidth={2} />
+                    </g>
+                  );
+                }}
+                activeDot={{ r: 5.5, fill: "#031923", stroke: "#00F0A0", strokeWidth: 2 }}
+              >
+                <LabelList dataKey={areaDataKey} content={renderAreaPeakPill} />
+              </Area>
             </AreaChart>
           </ResponsiveContainer>
         )}

@@ -49,16 +49,18 @@ export default function FeaturedProjectCard({
     : "Não calculado";
 
   return (
-    <div className="relative flex min-h-[234px] lg:h-[238px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-[#02262A] via-[#014234] to-[#00694A] px-5 py-4.5 sm:px-6 sm:py-5 text-white shadow-[0_12px_30px_rgba(2,38,42,0.16)]">
-      {/* Glow sutil de fundo verde-esmeralda */}
-      <div className="pointer-events-none absolute -bottom-20 left-6 h-48 w-64 rounded-full bg-[#00F0A0]/16 blur-3xl" />
+    <div className="relative flex min-h-[240px] lg:h-[252px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-[#012224] via-[#013B30] to-[#054A42] px-5 py-4 sm:px-6 sm:py-4.5 text-white shadow-[0_12px_30px_rgba(2,38,42,0.16)]">
+      {/* Glow sutil de fundo verde-esmeralda na base esquerda */}
+      <div className="pointer-events-none absolute -bottom-20 left-4 h-52 w-72 rounded-full bg-[#00F0A0]/18 blur-3xl" />
 
-      {/* Camada 3: Residência 3D Iluminada à Direita — sem véu preto encobrindo a casa */}
+      {/* Camada 3: Residência 3D Iluminada à Direita — transição orgânica multi-borda sem linha reta */}
       <div
-        className="pointer-events-none absolute inset-y-0 right-0 w-full md:w-[66%] lg:w-[64%] overflow-hidden"
+        className="pointer-events-none absolute inset-y-0 right-0 w-full md:w-[61%] lg:w-[60%] xl:w-[61%] overflow-hidden"
         style={{
-          WebkitMaskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.62) 10%, black 24%, black 100%)",
-          maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.62) 10%, black 24%, black 100%)",
+          WebkitMaskImage:
+            "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.03) 4%, rgba(0,0,0,0.22) 11%, rgba(0,0,0,0.68) 20%, rgba(0,0,0,0.95) 28%, black 36%, black 100%)",
+          maskImage:
+            "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.03) 4%, rgba(0,0,0,0.22) 11%, rgba(0,0,0,0.68) 20%, rgba(0,0,0,0.95) 28%, black 36%, black 100%)",
         }}
       >
         {loading ? (
@@ -70,7 +72,7 @@ export default function FeaturedProjectCard({
               src={banner.desktopSrc}
               alt={banner.alt}
               style={{ objectPosition: banner.objectPosition || FEATURED_PROJECT_ASSETS.defaultObjectPosition }}
-              className="h-full w-full object-cover opacity-100 brightness-[1.08] contrast-[1.04] saturate-[1.08]"
+              className="h-full w-full object-cover md:object-contain md:object-right opacity-100 brightness-[1.06] contrast-[1.04] saturate-[1.08]"
               onError={(e) => {
                 if (e.currentTarget.src !== banner.fallbackSrc) {
                   e.currentTarget.src = banner.fallbackSrc;
@@ -80,12 +82,13 @@ export default function FeaturedProjectCard({
           </picture>
         )}
 
-        {/* Proteção discreta apenas em telas pequenas onde texto e foto se sobrepõem verticalmente */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#02262A]/85 via-[#02262A]/45 to-transparent md:hidden" />
+        {/* Proteção para legibilidade em telas estreitas onde texto e foto se sobrepõem */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#012224]/92 via-[#012C29]/75 to-[#013D31]/35 md:hidden" />
       </div>
+      <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-[46%] bg-gradient-to-r from-[#012224]/95 via-[#012A27]/68 to-transparent md:block" />
 
       {/* Camada 4: Conteúdo HTML Real à Esquerda */}
-      <div className="relative z-10 flex h-full max-w-[430px] flex-col justify-between gap-2.5">
+      <div className="relative z-10 flex h-full max-w-[385px] flex-col justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00F0A0]/30 bg-[#053830]/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
             <span className="h-1.5 w-1.5 rounded-full bg-[#00F0A0] shadow-[0_0_8px_#00F0A0]" />

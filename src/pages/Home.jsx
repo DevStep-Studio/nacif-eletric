@@ -205,7 +205,7 @@ export default function Home() {
 
   return (
     <TooltipProvider>
-      <div className="mx-auto w-full max-w-[1440px] space-y-3.5 pb-4">
+      <div className="mx-auto w-full max-w-[1440px] space-y-3 pb-10">
         {/* Cabeçalho Principal Compacto */}
         <header className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -268,8 +268,8 @@ export default function Home() {
           <LoadingSkeleton variant="dashboard" />
         ) : (
           <>
-            {/* Linha 1: Projeto em Andamento (2/3) + Painel Nacif IA (1/3) */}
-            <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2.16fr)_minmax(300px,1fr)]">
+            {/* Linha 1: Projeto em Andamento + Painel Nacif IA */}
+            <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.95fr)_minmax(385px,1fr)] xl:grid-cols-[minmax(0,2.24fr)_minmax(392px,1fr)]">
               <FeaturedProjectCard
                 featuredItem={featuredItem}
                 allProjects={projects}
@@ -363,7 +363,7 @@ export default function Home() {
             )}
 
             {/* Linha 3: Cargas dimensionadas + Demanda média + Impacto do projeto */}
-            <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.05fr)_minmax(300px,1fr)]">
+            <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(385px,1fr)] xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1.12fr)_minmax(392px,1fr)]">
               <LoadsBarChartCard
                 charts={charts}
                 unit={leftChartUnit}
@@ -378,7 +378,7 @@ export default function Home() {
             </section>
 
             {/* Linha 4: Últimos projetos + Ações rápidas */}
-            <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2.16fr)_minmax(300px,1fr)]">
+            <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.95fr)_minmax(385px,1fr)] xl:grid-cols-[minmax(0,2.24fr)_minmax(392px,1fr)]">
               <RecentProjectsTable
                 projects={projects}
                 onRequestDelete={(proj) => setProjectToDeleteHome(proj)}

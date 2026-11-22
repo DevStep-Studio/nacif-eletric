@@ -10,14 +10,33 @@ export default function ProjectImpactCard({ sustainability }) {
   const available = Boolean(sustainability?.available);
 
   return (
-    <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#BEEAD2] bg-gradient-to-br from-[#F3FDF8] via-[#E9FAF0] to-[#DBF8E8] p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-      {/* Ilustração botânica no canto superior direito fiel à referência */}
-      <div className="pointer-events-none absolute -right-2 -top-2 h-24 w-24 opacity-85">
-        <svg viewBox="0 0 120 120" fill="none" aria-hidden="true" className="h-full w-full drop-shadow-xs">
-          <path d="M98 6C65 14 48 38 52 68C80 66 105 42 98 6Z" fill="#22A858" fillOpacity="0.88" />
-          <path d="M98 6C78 28 65 46 53 67" stroke="#136F3A" strokeWidth="1.5" strokeLinecap="round" />
-          <path d="M118 32C90 36 74 58 78 86C104 84 120 60 118 32Z" fill="#00D98A" fillOpacity="0.78" />
-          <path d="M72 4C54 14 44 30 48 48C66 44 76 26 72 4Z" fill="#46C978" fillOpacity="0.72" />
+    <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#BCEAD1] bg-gradient-to-br from-[#F3FDF8] via-[#E8FAEF] to-[#D6F6E4] px-4 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+      {/* Ilustração botânica em camadas vibrantes no canto superior direito */}
+      <div className="pointer-events-none absolute -right-2 -top-2 h-28 w-28 opacity-95">
+        <svg viewBox="0 0 140 140" fill="none" aria-hidden="true" className="h-full w-full drop-shadow-sm">
+          <defs>
+            <linearGradient id="leafMain" x1="120" y1="6" x2="45" y2="85" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#136F3A" />
+              <stop offset="55%" stopColor="#22A858" />
+              <stop offset="100%" stopColor="#5BE691" />
+            </linearGradient>
+            <linearGradient id="leafFront" x1="138" y1="34" x2="72" y2="108" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#0E5A30" />
+              <stop offset="60%" stopColor="#19964D" />
+              <stop offset="100%" stopColor="#00E091" />
+            </linearGradient>
+            <linearGradient id="leafSmall" x1="88" y1="-4" x2="36" y2="56" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#1A8847" />
+              <stop offset="100%" stopColor="#7CF0A8" />
+            </linearGradient>
+          </defs>
+          <path d="M84 -2C62 12 46 32 50 56C74 52 90 28 84 -2Z" fill="url(#leafSmall)" opacity="0.88" />
+          <path d="M84 -2C68 20 58 38 51 55" stroke="#0F522B" strokeOpacity="0.45" strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M122 4C84 14 58 44 62 84C98 82 128 50 122 4Z" fill="url(#leafMain)" />
+          <path d="M122 4C94 34 77 56 64 82" stroke="#0C4A26" strokeOpacity="0.55" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M106 24L91 22M94 38L77 36M82 54L69 53" stroke="#7CF0A8" strokeOpacity="0.45" strokeWidth="1" strokeLinecap="round" />
+          <path d="M142 36C106 42 84 68 88 106C122 104 144 74 142 36Z" fill="url(#leafFront)" />
+          <path d="M142 36C116 62 101 81 89 104" stroke="#093B1E" strokeOpacity="0.55" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       </div>
 

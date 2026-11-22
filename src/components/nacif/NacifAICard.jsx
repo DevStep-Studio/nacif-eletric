@@ -35,27 +35,27 @@ export default function NacifAICard({ project = null }) {
 
   return (
     <>
-      <div className="relative flex min-h-[234px] lg:h-[238px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-[#6148E8] via-[#4C62EB] to-[#3A84F6] p-4 sm:p-5 text-white shadow-[0_12px_30px_rgba(91,74,232,0.28)]">
-        {/* Glow decorativo IA */}
-        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-10 left-0 h-28 w-36 rounded-full bg-[#00F0A0]/15 blur-2xl" />
+      <div className="relative flex min-h-[240px] lg:h-[252px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-[#644AEF] via-[#4D61ED] to-[#3888F8] p-4 sm:p-5 text-white shadow-[0_12px_30px_rgba(91,74,232,0.28)]">
+        {/* Aura luminosa atrás do mascote */}
+        <div className="pointer-events-none absolute -right-4 -top-6 h-44 w-44 rounded-full bg-[#B9D2FF]/35 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-10 left-0 h-28 w-36 rounded-full bg-[#00F0A0]/16 blur-2xl" />
 
-        {/* Mascote Grande Integrado ao Topo Direito sem Cortes */}
-        <div className="pointer-events-none absolute right-1 top-1 z-10 h-[106px] w-[156px] sm:h-[112px] sm:w-[166px] select-none">
+        {/* Mascote Nítido em Alta Resolução Integrado ao Topo Direito */}
+        <div className="pointer-events-none absolute right-1 top-1 z-10 h-[144px] w-[144px] sm:h-[156px] sm:w-[156px] select-none">
           <img
             src={NACIF_AI_ASSETS.mascot}
             alt={NACIF_AI_ASSETS.mascotAlt}
-            className="h-full w-full object-contain object-top drop-shadow-[0_10px_18px_rgba(20,16,70,0.38)]"
+            className="h-full w-full object-contain object-top drop-shadow-[0_12px_22px_rgba(20,16,78,0.34)]"
           />
         </div>
 
         {/* Cabeçalho */}
-        <div className="relative z-20 max-w-[62%] pr-2">
+        <div className="relative z-20 max-w-[60%] pr-2">
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-4.5 w-4.5 text-[#DDFCF0]" />
-            <h2 className="text-[17px] font-extrabold tracking-tight text-white">Nacif IA</h2>
+            <h2 className="text-[18px] font-extrabold tracking-tight text-white leading-none">Nacif IA</h2>
           </div>
-          <p className="mt-1 text-[11px] font-medium leading-snug text-white/85">
+          <p className="mt-1.5 text-[11px] font-medium leading-snug text-white/88">
             Seu assistente em projetos elétricos
           </p>
         </div>
@@ -69,7 +69,7 @@ export default function NacifAICard({ project = null }) {
                 key={action.id}
                 type="button"
                 onClick={() => handleOpenMode(action.id)}
-                className="group flex h-[34px] w-full items-center justify-between gap-2 rounded-xl bg-[#F8FAFF] px-3 text-left text-[12px] font-semibold text-[#101828] shadow-xs transition-all duration-150 hover:bg-white hover:translate-x-0.5 active:scale-[0.99]"
+                className="group flex h-[36px] w-full items-center justify-between gap-2 rounded-xl bg-[#F8FAFF] px-3 text-left text-[12px] font-semibold text-[#101828] shadow-[0_2px_8px_rgba(22,36,104,0.1)] transition-all duration-150 hover:bg-white hover:translate-x-0.5 active:scale-[0.99]"
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <Icon className={`h-3.5 w-3.5 shrink-0 ${action.iconColor}`} />

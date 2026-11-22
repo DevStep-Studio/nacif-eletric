@@ -125,7 +125,7 @@ export default function SupportWhatsAppWidget() {
     <div
       ref={containerRef}
       data-html2canvas-ignore="true"
-      className="no-print fixed bottom-4 right-4 z-50 flex flex-col items-end print:hidden"
+      className="no-print fixed bottom-1.5 right-3 z-50 flex flex-col items-end print:hidden"
     >
       {/* Mini-Aba / Card de Suporte (Estado Aberto) */}
       <AnimatePresence>
@@ -261,32 +261,32 @@ export default function SupportWhatsAppWidget() {
         )}
       </AnimatePresence>
 
-      {/* Botão Disparador Flutuante */}
+      {/* Botão Disparador Compacto */}
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
         aria-label="Suporte Nacif via WhatsApp"
         title="Suporte Nacif"
-        className="group relative flex h-12 items-center justify-center rounded-full border border-[#00D98A]/45 bg-[#031923] px-2.5 text-white shadow-xl transition-all duration-300 hover:border-[#00F0A0] hover:bg-[#082732] hover:shadow-2xl active:scale-95"
+        className="group relative flex h-9 items-center justify-center rounded-full border border-[#00D98A]/45 bg-[#031923]/95 px-1.5 text-white shadow-lg transition-all duration-300 hover:border-[#00F0A0] hover:bg-[#082732] hover:shadow-xl active:scale-95"
       >
         {/* Indicador visual de status online (ponto verde pulsante) */}
-        <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5">
+        <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00F0A0] opacity-75" />
-          <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-white bg-[#00D98A]" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full border-2 border-white bg-[#00D98A]" />
         </span>
 
         {/* Círculo com ícone oficial do WhatsApp */}
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#00D98A] text-[#031923] transition-transform duration-200 group-hover:scale-105">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#00D98A] text-[#031923] transition-transform duration-200 group-hover:scale-105">
           {isOpen ? (
-            <X className="h-4 w-4 stroke-[2.5]" />
+            <X className="h-3.5 w-3.5 stroke-[2.5]" />
           ) : (
-            <WhatsAppIcon className="h-4 w-4" />
+            <WhatsAppIcon className="h-3.5 w-3.5" />
           )}
         </span>
 
         {/* Rótulo expansível no hover */}
-        <span className="ml-0 max-w-0 overflow-hidden whitespace-nowrap text-xs font-black tracking-tight text-white opacity-0 transition-all duration-300 ease-out group-hover:ml-2 group-hover:max-w-[110px] group-hover:pr-1.5 group-hover:opacity-100">
+        <span className="ml-0 max-w-0 overflow-hidden whitespace-nowrap text-[11px] font-black tracking-tight text-white opacity-0 transition-all duration-300 ease-out group-hover:ml-1.5 group-hover:max-w-[105px] group-hover:pr-1.5 group-hover:opacity-100">
           Suporte Nacif
         </span>
       </button>

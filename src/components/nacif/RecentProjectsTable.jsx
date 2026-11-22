@@ -54,7 +54,7 @@ export default function RecentProjectsTable({
   }, [projects, sortBy, maxRows]);
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white px-5 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       <div>
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-[14px] font-bold text-[#101828]">Últimos projetos</h3>
@@ -67,32 +67,32 @@ export default function RecentProjectsTable({
           </Link>
         </div>
 
-        <div className="mt-2.5 overflow-x-auto">
-          <table className="w-full min-w-[520px] text-left text-xs">
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[500px] table-fixed text-left text-xs">
             <thead>
               <tr className="border-b border-[#E5EBF1] text-[11px] font-semibold text-[#64748B]">
-                <th className="py-2 pr-3">
+                <th className="w-[27%] py-1.5 pr-2">
                   <button type="button" onClick={() => setSortBy("name")} className="hover:text-[#101828]">
                     Projeto
                   </button>
                 </th>
-                <th className="py-2 px-2">Status</th>
-                <th className="py-2 px-2">
+                <th className="w-[18%] py-1.5 px-1.5">Status</th>
+                <th className="w-[13%] py-1.5 px-1.5">
                   <button type="button" onClick={() => setSortBy("demand")} className="hover:text-[#101828]">
                     Demanda
                   </button>
                 </th>
-                <th className="py-2 px-2">
+                <th className="w-[16%] py-1.5 px-1.5">
                   <button type="button" onClick={() => setSortBy("budget")} className="hover:text-[#101828]">
                     Orçamento
                   </button>
                 </th>
-                <th className="py-2 px-2">
+                <th className="w-[16%] py-1.5 px-1.5">
                   <button type="button" onClick={() => setSortBy("updated")} className="hover:text-[#101828]">
                     Atualizado em
                   </button>
                 </th>
-                <th className="py-2 pl-2 text-right w-14"></th>
+                <th className="w-[10%] py-1.5 pl-1 text-right"></th>
               </tr>
             </thead>
 
@@ -203,6 +203,23 @@ export default function RecentProjectsTable({
           </table>
         </div>
       </div>
+
+      {rows.length > 0 && rows.length < 3 && (
+        <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl border border-[#E9F3EE] bg-[#F8FCFA] px-3 py-2 text-[11px] text-[#64748B]">
+          <span>
+            {projects.length === 1
+              ? "1 projeto ativo no workspace."
+              : `${projects.length} projetos disponíveis no workspace.`}{" "}
+            Cadastre novos estudos para acompanhar histórico comparativo.
+          </span>
+          <Link
+            to="/projects/new"
+            className="shrink-0 font-bold text-[#00A86B] hover:text-[#006F51] whitespace-nowrap"
+          >
+            + Novo projeto
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
