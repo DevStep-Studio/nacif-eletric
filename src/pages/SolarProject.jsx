@@ -1851,16 +1851,13 @@ export default function SolarProject() {
             <ArrowLeft className="h-4 w-4 shrink-0" />
           </Link>
 
-          {/* Logo Oficial Nacif Energy + Badge Solar */}
-          <div className="flex items-center gap-2 pr-2.5 border-r border-white/15 shrink-0">
+          {/* Logo Oficial Nacif Energy */}
+          <div className="flex items-center pr-2.5 border-r border-white/15 shrink-0">
             <img
               src={brandLogoDarkmode || brandLogoEnergy}
               alt="NACIF Energy"
               className="h-6 max-w-[116px] object-contain shrink-0"
             />
-            <span className="px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-[#00D98A]/15 text-[#00F0A0] border border-[#00D98A]/40 rounded-md whitespace-nowrap shrink-0">
-              SOLAR
-            </span>
           </div>
 
           {/* Seletor do Projeto com Dropdown */}
