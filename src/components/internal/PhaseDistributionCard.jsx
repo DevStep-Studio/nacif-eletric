@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 const formatPhaseAmp = (value) =>
   `${Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} A`;
 
-function getPhaseDiagnosis(metrics) {
+function getPhaseDiagnosis(metrics, supplyType = "") {
   const imbalance = Number(metrics?.imbalance_pct) || 0;
   const loads = ["A", "B", "C"].map((phase) => ({
     phase,
@@ -15,6 +15,14 @@ function getPhaseDiagnosis(metrics) {
 
   const activePhases = loads.filter((p) => p.load > 0);
   const highest = [...loads].sort((a, b) => b.load - a.load)[0];
+  const isMono = /mono/i.test(String(supplyType || ""));
+
+  if (isMono && activePhases.length <= 1) {
+    return {
+      tone: "info",
+      text: `Fornecimento monofásico: demanda integral atendida pela fase ${activePhases[0]?.phase || "A"}.`,
+    };
+  }
 
   if (imbalance <= 5) {
     return {
@@ -40,16 +48,19 @@ function getPhaseDiagnosis(metrics) {
 /**
  * Painel de distribuição de cargas por fase A/B/C com barra proporcional, diagnóstico factual e neutro estimado.
  */
-export default function PhaseDistributionCard({ metrics, hasCircuits = true }) {
+export default function PhaseDistributionCard({ metrics, hasCircuits = true, supplyType = "" }) {
   const phaseLoad = metrics?.phaseLoad || { A: 0, B: 0, C: 0 };
   const totalPhaseCurrent = (Number(phaseLoad.A) || 0) + (Number(phaseLoad.B) || 0) + (Number(phaseLoad.C) || 0);
   const maxLoad = Math.max(Number(phaseLoad.A) || 0, Number(phaseLoad.B) || 0, Number(phaseLoad.C) || 0, 1);
   const imbalance = Number(metrics?.imbalance_pct) || 0;
-  const diagnosis = hasCircuits ? getPhaseDiagnosis(metrics) : null;
+  const diagnosis = hasCircuits ? getPhaseDiagnosis(metrics, supplyType) : null;
+  const isMonoSinglePhase = diagnosis?.tone === "info";
 
   const badgeTone =
     !hasCircuits || totalPhaseCurrent <= 0
       ? "border-[#E5EBF1] bg-[#F6F9FC] text-[#64748B]"
+      : isMonoSinglePhase
+      ? "border-blue-200 bg-[#EDF5FF] text-blue-700"
       : imbalance > 10
       ? "border-red-200 bg-red-50 text-[#EF4444]"
       : imbalance > 5
@@ -75,7 +86,11 @@ export default function PhaseDistributionCard({ metrics, hasCircuits = true }) {
           </div>
 
           <span className={cn("shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-extrabold tabular-nums", badgeTone)}>
-            {hasCircuits && totalPhaseCurrent > 0 ? `${imbalance}% desequilíbrio` : "Sem cargas"}
+            {!hasCircuits || totalPhaseCurrent <= 0
+              ? "Sem cargas"
+              : isMonoSinglePhase
+              ? "Sistema monofásico"
+              : `${imbalance}% desequilíbrio`}
           </span>
         </div>
 
@@ -88,6 +103,8 @@ export default function PhaseDistributionCard({ metrics, hasCircuits = true }) {
                 ? "border-red-200 bg-[#FEF2F2] text-red-700"
                 : diagnosis.tone === "warning"
                 ? "border-amber-200 bg-[#FFF3E6] text-amber-800"
+                : diagnosis.tone === "info"
+                ? "border-blue-200 bg-[#EDF5FF] text-blue-700"
                 : "border-[#BEEAD2] bg-[#E5FBF2] text-[#006B50]"
             )}
           >
@@ -106,6 +123,8 @@ export default function PhaseDistributionCard({ metrics, hasCircuits = true }) {
             const statusState =
               load <= 0
                 ? { bar: "#CBD5E1", text: "text-[#64748B]", label: "Sem carga" }
+                : isMonoSinglePhase
+                ? { bar: "#00D98A", text: "text-[#006B50]", label: "Fase única ativa" }
                 : imbalance > 10 && load === maxLoad
                 ? { bar: "#EF4444", text: "text-[#EF4444]", label: "Sobrecarga relativa" }
                 : imbalance > 5 && load === maxLoad

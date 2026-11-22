@@ -177,7 +177,7 @@ export default function CircuitList({
             </Select>
 
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 w-full lg:w-[140px] rounded-xl border-[#E5EBF1] bg-[#F6F9FC] text-xs font-semibold">
+              <SelectTrigger className="h-9 w-full lg:w-[156px] rounded-xl border-[#E5EBF1] bg-[#F6F9FC] text-xs font-semibold">
                 <SelectValue placeholder="Verificação" />
               </SelectTrigger>
               <SelectContent>
@@ -188,7 +188,7 @@ export default function CircuitList({
             </Select>
 
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="h-9 w-full lg:w-[145px] rounded-xl border-[#E5EBF1] bg-[#F6F9FC] text-xs font-semibold">
+              <SelectTrigger className="h-9 w-full lg:w-[154px] rounded-xl border-[#E5EBF1] bg-[#F6F9FC] text-xs font-semibold">
                 <SelectValue placeholder="Ordenar" />
               </SelectTrigger>
               <SelectContent>

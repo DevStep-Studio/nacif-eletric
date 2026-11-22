@@ -524,7 +524,11 @@ export default function CircuitEditor() {
 
               {/* Distribuição de Fases + Revisões NBR */}
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
-                <PhaseDistributionCard metrics={m} hasCircuits={circuits.length > 0} />
+                <PhaseDistributionCard
+                  metrics={m}
+                  hasCircuits={circuits.length > 0}
+                  supplyType={project.supply_type}
+                />
                 <TechnicalReviewCard
                   hasCircuits={circuits.length > 0}
                   validations={m.validations || []}

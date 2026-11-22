@@ -104,7 +104,7 @@ export default function ProjectContextBar({
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-[#64748B]">
             <span className="truncate">
               {project.client_name || "Cliente não informado"} · {project.supply_type || "Fornecimento não definido"}
-              {project.voltage ? ` (${project.voltage} V)` : ""}
+              {project.voltage ? ` (${String(project.voltage).trim().replace(/\s*v$/i, "")} V)` : ""}
             </span>
           </div>
         </div>
