@@ -72,7 +72,7 @@ export default function Layout() {
     if (currentProjectId && typeof window !== "undefined") {
       try {
         window.localStorage.setItem("voltai_active_project_id", currentProjectId);
-      } catch {}
+      } catch { }
     }
   }, [currentProjectId]);
 
@@ -83,7 +83,7 @@ export default function Layout() {
   useEffect(() => {
     try {
       window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarCollapsed));
-    } catch {}
+    } catch { }
   }, [sidebarCollapsed]);
 
   useEffect(() => {
@@ -113,7 +113,7 @@ export default function Layout() {
       .then((data) => {
         if (!cancelled && data) setCurrentProject(data);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       cancelled = true;
     };
@@ -180,7 +180,7 @@ export default function Layout() {
     setOnboardingOpen(false);
     try {
       window.sessionStorage.setItem("onboarding_dismissed", "true");
-    } catch {}
+    } catch { }
   };
 
   const breadcrumbInfo = useMemo(() => {
@@ -219,7 +219,7 @@ export default function Layout() {
     try {
       if (projectId) window.localStorage.setItem("voltai_active_project_id", projectId);
       else window.localStorage.removeItem("voltai_active_project_id");
-    } catch {}
+    } catch { }
   };
 
   const isImmersiveStudioRoute = location.pathname === "/planta-ia" || location.pathname === "/panel-generator";
@@ -243,7 +243,7 @@ export default function Layout() {
   return (
     <div
       className={`min-h-screen overflow-x-hidden bg-[#F6F9FC] font-sans text-[#101828] transition-all duration-200 ease-in-out ${
-        sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[252px]"
+        sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[260px]"
       }`}
     >
       <OnboardingModal user={activeUser} open={onboardingOpen} onComplete={handleCloseOnboarding} />
@@ -302,10 +302,10 @@ export default function Layout() {
 
         <motion.div
           key={`${location.pathname}${location.search}`}
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-          className="app-page-enter flex-1 min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8"
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="app-page-enter flex-1 min-w-0 overflow-x-hidden px-4 py-3.5 sm:px-6 sm:py-4"
         >
           <Outlet />
         </motion.div>

@@ -11,8 +11,8 @@ export default function QuickActionsCard({ activeProjectId = null }) {
       to: "/projects/new",
       icon: Plus,
       bg: "bg-[#ECFDF5] hover:bg-[#DDFCF0]",
-      border: "border-[#A7F3D0]",
-      iconBg: "bg-[#00D98A] text-[#031923]",
+      border: "border-[#BBEFD7]",
+      iconBg: "bg-[#00D98A]/20 text-[#006F51]",
     },
     {
       title: "Calculadora",
@@ -44,12 +44,10 @@ export default function QuickActionsCard({ activeProjectId = null }) {
   ];
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-      <div className="mb-3.5 flex items-center gap-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#DDFCF0] text-[#006F51]">
-          <Zap className="h-4 w-4" />
-        </span>
-        <h3 className="text-sm font-bold text-[#101828]">Ações rápidas</h3>
+    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+      <div className="mb-3 flex items-center gap-2">
+        <Zap className="h-4 w-4 text-[#00A86B]" />
+        <h3 className="text-[14px] font-bold text-[#101828]">Ações rápidas</h3>
       </div>
 
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -59,16 +57,18 @@ export default function QuickActionsCard({ activeProjectId = null }) {
             <Link
               key={tile.title}
               to={tile.to}
-              className={`group flex items-center gap-3 rounded-2xl border p-3.5 transition-all duration-150 ${tile.bg} ${tile.border}`}
+              className={`group flex items-center gap-2.5 rounded-xl border p-2.5 transition-all duration-150 ${tile.bg} ${tile.border}`}
             >
               <span
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105 ${tile.iconBg}`}
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform group-hover:scale-105 ${tile.iconBg}`}
               >
                 <Icon className="h-4 w-4" />
               </span>
               <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-[#101828]">{tile.title}</p>
-                <p className="mt-0.5 truncate text-[11px] font-medium text-[#64748B]">{tile.subtitle}</p>
+                <p className="truncate text-xs font-bold text-[#101828] leading-tight">{tile.title}</p>
+                <p className="mt-0.5 truncate text-[10.5px] font-medium text-[#64748B] leading-tight">
+                  {tile.subtitle}
+                </p>
               </div>
             </Link>
           );

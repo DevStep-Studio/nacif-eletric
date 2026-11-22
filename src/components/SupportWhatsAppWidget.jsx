@@ -125,7 +125,7 @@ export default function SupportWhatsAppWidget() {
     <div
       ref={containerRef}
       data-html2canvas-ignore="true"
-      className="no-print fixed bottom-6 right-6 z-50 flex flex-col items-end print:hidden"
+      className="no-print fixed bottom-4 right-4 z-50 flex flex-col items-end print:hidden"
     >
       {/* Mini-Aba / Card de Suporte (Estado Aberto) */}
       <AnimatePresence>

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   Calendar,
   ChevronDown,
-  DollarSign,
+  CircleDollarSign,
   Download,
   FolderOpen,
   Gauge,
@@ -45,7 +45,6 @@ import {
 import ProjectImpactCard from "@/components/nacif/ProjectImpactCard";
 import RecentProjectsTable from "@/components/nacif/RecentProjectsTable";
 import QuickActionsCard from "@/components/nacif/QuickActionsCard";
-import ProjectHealthCard from "@/components/nacif/ProjectHealthCard";
 import LoadingSkeleton from "@/components/nacif/LoadingSkeleton";
 
 const PERIOD_LABELS = {
@@ -206,14 +205,14 @@ export default function Home() {
 
   return (
     <TooltipProvider>
-      <div className="mx-auto w-full max-w-[1440px] space-y-6 pb-8">
-        {/* Cabeçalho Principal */}
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto w-full max-w-[1440px] space-y-3.5 pb-4">
+        {/* Cabeçalho Principal Compacto */}
+        <header className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight text-[#101828]">
+            <h1 className="text-[22px] font-extrabold tracking-tight text-[#101828] leading-tight">
               Painel Geral
             </h1>
-            <p className="mt-0.5 text-xs sm:text-sm font-medium text-[#64748B]">
+            <p className="mt-0.5 text-xs font-medium text-[#64748B]">
               Gerencie projetos, dimensionamentos e análises elétricas com inteligência.
             </p>
           </div>
@@ -223,9 +222,9 @@ export default function Home() {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#E5EBF1] bg-white px-3.5 text-xs font-semibold text-[#101828] shadow-xs transition hover:border-[#CBD5E1] hover:bg-[#F6F9FC]"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#E5EBF1] bg-white px-3 text-xs font-semibold text-[#101828] shadow-2xs transition hover:border-[#CBD5E1] hover:bg-[#F6F9FC]"
                 >
-                  <Calendar className="h-3.5 w-3.5 text-[#006F51]" />
+                  <Calendar className="h-3.5 w-3.5 text-[#64748B]" />
                   <span>{PERIOD_LABELS[chartPeriod]}</span>
                   <ChevronDown className="h-3.5 w-3.5 text-[#64748B]" />
                 </button>
@@ -247,7 +246,7 @@ export default function Home() {
               type="button"
               variant="outline"
               onClick={() => exportDashboardCSV(projects, chartPeriod)}
-              className="h-10 rounded-xl border-[#E5EBF1] bg-white px-3.5 text-xs font-semibold text-[#101828] shadow-xs hover:bg-[#F6F9FC]"
+              className="h-9 rounded-xl border-[#E5EBF1] bg-white px-3 text-xs font-semibold text-[#101828] shadow-2xs hover:bg-[#F6F9FC]"
             >
               <Download className="mr-1.5 h-3.5 w-3.5 text-[#64748B]" />
               Exportar CSV
@@ -255,10 +254,10 @@ export default function Home() {
 
             <Button
               asChild
-              className="h-10 rounded-xl bg-gradient-to-r from-[#00D98A] to-[#00F0A0] px-4 text-xs font-extrabold text-[#031923] shadow-[0_6px_18px_rgba(0,217,138,0.28)] hover:brightness-105 transition"
+              className="h-9 rounded-xl bg-gradient-to-r from-[#00D98A] to-[#00C87F] px-3.5 text-xs font-extrabold text-white shadow-[0_4px_14px_rgba(0,217,138,0.28)] hover:brightness-105 transition"
             >
               <Link to="/projects/new">
-                <Plus className="mr-1.5 h-4 w-4" />
+                <Plus className="mr-1 h-3.5 w-3.5" />
                 Novo Projeto
               </Link>
             </Button>
@@ -269,26 +268,20 @@ export default function Home() {
           <LoadingSkeleton variant="dashboard" />
         ) : (
           <>
-            {/* Hero Row: Projeto em Andamento + Painel Nacif IA */}
-            <section className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-              <div className="lg:col-span-8">
-                <FeaturedProjectCard
-                  featuredItem={featuredItem}
-                  allProjects={projects}
-                  onSelectProject={handleSelectFeaturedProject}
-                />
-              </div>
-              <div className="lg:col-span-4">
-                <NacifAICard project={featuredItem?.project || null} />
-              </div>
+            {/* Linha 1: Projeto em Andamento (2/3) + Painel Nacif IA (1/3) */}
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2.16fr)_minmax(300px,1fr)]">
+              <FeaturedProjectCard
+                featuredItem={featuredItem}
+                allProjects={projects}
+                onSelectProject={handleSelectFeaturedProject}
+              />
+              <NacifAICard project={featuredItem?.project || null} />
             </section>
 
-            {/* 5 Cards de Indicadores */}
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+            {/* Linha 2: 5 Indicadores Compactos */}
+            <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <MetricCard
                 icon={Zap}
-                iconBg="bg-[#DDFCF0]"
-                iconColor="text-[#006F51]"
                 value={`${kpis.demandKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
                 label="Demanda total"
                 hint={`Carga instalada no período: ${kpis.installedKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
@@ -297,8 +290,6 @@ export default function Home() {
 
               <MetricCard
                 icon={GitBranch}
-                iconBg="bg-[#EFF6FF]"
-                iconColor="text-[#2563EB]"
                 value={kpis.circuits.toLocaleString("pt-BR")}
                 label="Circuitos"
                 hint="Total de circuitos terminais cadastrados nos projetos do período."
@@ -307,8 +298,6 @@ export default function Home() {
 
               <MetricCard
                 icon={FolderOpen}
-                iconBg="bg-[#ECFDF5]"
-                iconColor="text-[#006F51]"
                 value={kpis.activeProjects.toLocaleString("pt-BR")}
                 label="Projetos ativos"
                 hint="Projetos em elaboração, andamento ou análise técnica no período."
@@ -316,9 +305,7 @@ export default function Home() {
               />
 
               <MetricCard
-                icon={DollarSign}
-                iconBg="bg-[#F0FDF4]"
-                iconColor="text-[#15803D]"
+                icon={CircleDollarSign}
                 value={kpis.hasBudgetData ? formatCurrencyBR(kpis.budgetTotal) : "Não calculado"}
                 label="Orçamento total"
                 hint="Consolidado de materiais elétricos e orçamentos calculados no período."
@@ -327,44 +314,43 @@ export default function Home() {
 
               <MetricCard
                 icon={Gauge}
-                iconBg="bg-[#F5F3FF]"
-                iconColor="text-[#5B4AE8]"
                 value={`${kpis.demandKva.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kVA`}
                 label="Cargas dimensionadas"
                 hint="Potência aparente agregada calculada a partir dos fatores de demanda NBR 5410."
                 delta={kpis.deltas.demandKva}
+                className="col-span-2 sm:col-span-1"
               />
             </section>
 
             {/* Estado Inicial Guiado quando ainda não há projetos cadastrados */}
             {projects.length === 0 && (
-              <section className="rounded-2xl border border-dashed border-[#00D98A]/50 bg-white p-8 text-center shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                <div className="mx-auto max-w-lg space-y-4">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#DDFCF0] text-[#006F51]">
-                    <FolderOpen className="h-7 w-7" />
+              <section className="rounded-2xl border border-dashed border-[#00D98A]/50 bg-white p-6 text-center shadow-2xs">
+                <div className="mx-auto max-w-lg space-y-3">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#DDFCF0] text-[#006F51]">
+                    <FolderOpen className="h-6 w-6" />
                   </div>
-                  <div className="space-y-1.5">
-                    <h2 className="text-lg font-extrabold text-[#101828]">
+                  <div className="space-y-1">
+                    <h2 className="text-base font-extrabold text-[#101828]">
                       Bem-vindo ao Nacif Electric!
                     </h2>
                     <p className="text-xs font-medium leading-relaxed text-[#64748B]">
                       Você ainda não possui projetos cadastrados. Comece criando seu primeiro dimensionamento elétrico em conformidade com a ABNT NBR 5410.
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
                     <Button
                       asChild
-                      className="h-10 rounded-xl bg-[#00D98A] px-5 text-xs font-bold text-[#031923] hover:bg-[#00C47C]"
+                      className="h-9 rounded-xl bg-[#00D98A] px-4 text-xs font-bold text-[#031923] hover:bg-[#00C47C]"
                     >
                       <Link to="/projects/new">
-                        <Plus className="mr-1.5 h-4 w-4" />
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
                         Criar Primeiro Projeto
                       </Link>
                     </Button>
                     <Button
                       asChild
                       variant="outline"
-                      className="h-10 rounded-xl border-[#E5EBF1] bg-white px-4 text-xs font-semibold text-[#101828] hover:bg-[#F6F9FC]"
+                      className="h-9 rounded-xl border-[#E5EBF1] bg-white px-4 text-xs font-semibold text-[#101828] hover:bg-[#F6F9FC]"
                     >
                       <Link to="/ajuda">
                         <HelpCircle className="mr-1.5 h-3.5 w-3.5 text-[#006F51]" />
@@ -376,43 +362,28 @@ export default function Home() {
               </section>
             )}
 
-            {/* Linha de Gráficos + Impacto Ambiental */}
-            <section className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-              <div className="lg:col-span-4">
-                <LoadsBarChartCard
-                  charts={charts}
-                  unit={leftChartUnit}
-                  onUnitChange={setLeftChartUnit}
-                />
-              </div>
-              <div className="lg:col-span-5">
-                <AverageDemandAreaChartCard
-                  charts={charts}
-                  metric={rightChartMetric}
-                  onMetricChange={setRightChartMetric}
-                />
-              </div>
-              <div className="lg:col-span-3">
-                <ProjectImpactCard sustainability={sustainability} />
-              </div>
+            {/* Linha 3: Cargas dimensionadas + Demanda média + Impacto do projeto */}
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.05fr)_minmax(300px,1fr)]">
+              <LoadsBarChartCard
+                charts={charts}
+                unit={leftChartUnit}
+                onUnitChange={setLeftChartUnit}
+              />
+              <AverageDemandAreaChartCard
+                charts={charts}
+                metric={rightChartMetric}
+                onMetricChange={setRightChartMetric}
+              />
+              <ProjectImpactCard sustainability={sustainability} />
             </section>
 
-            {/* Saúde Técnica do Projeto em Destaque */}
-            {featuredItem?.project && (
-              <ProjectHealthCard project={featuredItem.project} />
-            )}
-
-            {/* Últimos Projetos + Ações Rápidas */}
-            <section className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-              <div className="lg:col-span-7">
-                <RecentProjectsTable
-                  projects={projects}
-                  onRequestDelete={(proj) => setProjectToDeleteHome(proj)}
-                />
-              </div>
-              <div className="lg:col-span-5">
-                <QuickActionsCard activeProjectId={featuredItem?.project?.id || null} />
-              </div>
+            {/* Linha 4: Últimos projetos + Ações rápidas */}
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2.16fr)_minmax(300px,1fr)]">
+              <RecentProjectsTable
+                projects={projects}
+                onRequestDelete={(proj) => setProjectToDeleteHome(proj)}
+              />
+              <QuickActionsCard activeProjectId={featuredItem?.project?.id || null} />
             </section>
           </>
         )}

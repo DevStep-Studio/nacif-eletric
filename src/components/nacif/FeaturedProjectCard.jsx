@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, ChevronDown, FileSpreadsheet, GitBranch, Plus, Sparkles, Zap } from "lucide-react";
+import { ArrowRight, ChevronDown, FileText, GitBranch, Plus, Sparkles, Zap } from "lucide-react";
 import { FEATURED_PROJECT_ASSETS, resolveFeaturedProjectBanner } from "@/lib/dashboardAssets";
 import { computeProjectMetricsSafe, isProjectCompleted } from "@/lib/projectAnalytics";
 import {
@@ -49,12 +49,20 @@ export default function FeaturedProjectCard({
     : "Não calculado";
 
   return (
-    <div className="relative flex min-h-[258px] flex-col justify-between overflow-hidden rounded-[22px] border border-[#0D3A46] bg-[#031923] p-5 sm:p-7 text-white shadow-[0_14px_34px_rgba(3,25,35,0.16)]">
-      {/* Glow verde-tecnológico ao fundo */}
-      <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-72 rounded-full bg-[#00D98A]/18 blur-3xl" />
-      <div className="pointer-events-none absolute right-0 top-0 h-full w-full lg:w-[64%] overflow-hidden">
+    <div className="relative flex min-h-[234px] lg:h-[238px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-[#02262A] via-[#014234] to-[#00694A] px-5 py-4.5 sm:px-6 sm:py-5 text-white shadow-[0_12px_30px_rgba(2,38,42,0.16)]">
+      {/* Glow sutil de fundo verde-esmeralda */}
+      <div className="pointer-events-none absolute -bottom-20 left-6 h-48 w-64 rounded-full bg-[#00F0A0]/16 blur-3xl" />
+
+      {/* Camada 3: Residência 3D Iluminada à Direita — sem véu preto encobrindo a casa */}
+      <div
+        className="pointer-events-none absolute inset-y-0 right-0 w-full md:w-[66%] lg:w-[64%] overflow-hidden"
+        style={{
+          WebkitMaskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.62) 10%, black 24%, black 100%)",
+          maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.62) 10%, black 24%, black 100%)",
+        }}
+      >
         {loading ? (
-          <div className="h-full w-full animate-pulse bg-[#082732]/80" />
+          <div className="h-full w-full animate-pulse bg-[#063A32]/60" />
         ) : (
           <picture className="block h-full w-full">
             <source media="(max-width: 767px)" srcSet={banner.mobileSrc} />
@@ -62,7 +70,7 @@ export default function FeaturedProjectCard({
               src={banner.desktopSrc}
               alt={banner.alt}
               style={{ objectPosition: banner.objectPosition || FEATURED_PROJECT_ASSETS.defaultObjectPosition }}
-              className="h-full w-full object-cover opacity-75 sm:opacity-90 lg:opacity-95 transition-transform duration-700"
+              className="h-full w-full object-cover opacity-100 brightness-[1.08] contrast-[1.04] saturate-[1.08]"
               onError={(e) => {
                 if (e.currentTarget.src !== banner.fallbackSrc) {
                   e.currentTarget.src = banner.fallbackSrc;
@@ -72,15 +80,14 @@ export default function FeaturedProjectCard({
           </picture>
         )}
 
-        {/* Máscara para manter legibilidade perfeita do conteúdo textual à esquerda */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#031923] via-[#031923]/85 sm:via-[#031923]/70 to-transparent" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#031923]/80 via-transparent to-[#031923]/30 lg:hidden" />
+        {/* Proteção discreta apenas em telas pequenas onde texto e foto se sobrepõem verticalmente */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#02262A]/85 via-[#02262A]/45 to-transparent md:hidden" />
       </div>
 
-      {/* Camada HTML real à esquerda */}
-      <div className="relative z-10 flex max-w-xl flex-col justify-between gap-4">
+      {/* Camada 4: Conteúdo HTML Real à Esquerda */}
+      <div className="relative z-10 flex h-full max-w-[430px] flex-col justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00D98A]/35 bg-[#082732]/90 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[#00F0A0] backdrop-blur-sm">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00F0A0]/30 bg-[#053830]/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
             <span className="h-1.5 w-1.5 rounded-full bg-[#00F0A0] shadow-[0_0_8px_#00F0A0]" />
             <span>{badgeLabel}</span>
           </span>
@@ -90,18 +97,18 @@ export default function FeaturedProjectCard({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/90 hover:bg-white/20 transition backdrop-blur-sm"
+                  className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/90 hover:bg-white/20 transition backdrop-blur-sm"
                 >
-                  <span>Trocar destaque</span>
+                  <span>Trocar</span>
                   <ChevronDown className="h-3 w-3 opacity-80" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64 rounded-xl border-[#E5EBF1] bg-white p-1.5 shadow-xl">
+              <DropdownMenuContent align="start" className="w-60 rounded-xl border-[#E5EBF1] bg-white p-1.5 shadow-xl">
                 {allProjects.slice(0, 8).map((p) => (
                   <DropdownMenuItem
                     key={p.id}
                     onClick={() => onSelectProject(p.id)}
-                    className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold cursor-pointer ${
+                    className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold cursor-pointer ${
                       p.id === project?.id ? "bg-[#DDFCF0] text-[#006F51]" : "text-[#101828]"
                     }`}
                   >
@@ -116,70 +123,70 @@ export default function FeaturedProjectCard({
         {project ? (
           <>
             <div>
-              <h2 className="text-2xl sm:text-[28px] font-extrabold tracking-tight text-white leading-tight">
+              <h2 className="truncate text-[22px] sm:text-[26px] font-extrabold tracking-tight text-white leading-tight">
                 {project.name}
               </h2>
-              <p className="mt-1 text-xs sm:text-sm font-medium text-slate-300">
+              <p className="mt-0.5 text-xs font-medium text-emerald-100/80">
                 {computed.installationTypeLabel} • {computed.voltageLabel}
               </p>
             </div>
 
-            {/* Barra de Progresso Real */}
-            <div className="flex max-w-sm items-center gap-3">
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/15">
+            {/* Barra de Progresso Fina e Brilhante */}
+            <div className="flex max-w-[330px] items-center gap-3">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/30">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#00D98A] to-[#00F0A0] transition-all duration-500 shadow-[0_0_10px_rgba(0,240,160,0.45)]"
+                  className="h-full rounded-full bg-gradient-to-r from-[#00D98A] to-[#00F0A0] transition-all duration-500 shadow-[0_0_8px_rgba(0,240,160,0.5)]"
                   style={{ width: `${Math.max(4, progressPct)}%` }}
                 />
               </div>
-              <span className="shrink-0 text-xs font-bold text-slate-200 tabular-nums">
+              <span className="shrink-0 text-[11px] font-semibold text-emerald-50/90 tabular-nums">
                 {progressPct}% concluído
               </span>
             </div>
 
-            {/* Indicadores Técnicos Reais */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
-              <div className="flex items-center gap-2.5 rounded-xl border border-white/12 bg-[#082732]/85 px-3 py-2 backdrop-blur-md">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00D98A]/15 text-[#00F0A0]">
-                  <Zap className="h-3.5 w-3.5" />
+            {/* Indicadores Internos Limpos — Sem Caixas com Bordas Pesadas */}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 py-0.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#00F0A0]/16 text-[#00F0A0]">
+                  <Zap className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-xs font-extrabold text-white leading-none tabular-nums">{demandDisplay}</p>
-                  <p className="mt-1 text-[10px] font-medium text-slate-300 leading-none">Carga total</p>
+                  <p className="text-[13px] font-extrabold text-white leading-tight tabular-nums">{demandDisplay}</p>
+                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">Carga total</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 rounded-xl border border-white/12 bg-[#082732]/85 px-3 py-2 backdrop-blur-md">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00D98A]/15 text-[#00F0A0]">
-                  <GitBranch className="h-3.5 w-3.5" />
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#00F0A0]/16 text-[#00F0A0]">
+                  <GitBranch className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-xs font-extrabold text-white leading-none tabular-nums">{circuitsCount}</p>
-                  <p className="mt-1 text-[10px] font-medium text-slate-300 leading-none">
+                  <p className="text-[13px] font-extrabold text-white leading-tight tabular-nums">{circuitsCount}</p>
+                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">
                     {circuitsCount === 1 ? "Circuito" : "Circuitos"}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 rounded-xl border border-white/12 bg-[#082732]/85 px-3 py-2 backdrop-blur-md">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00D98A]/15 text-[#00F0A0]">
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#00F0A0]/16 text-[#00F0A0]">
+                  <FileText className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-xs font-extrabold text-white leading-none tabular-nums">{budgetDisplay}</p>
-                  <p className="mt-1 text-[10px] font-medium text-slate-300 leading-none">Orçamento</p>
+                  <p className="text-[13px] font-extrabold text-white leading-tight tabular-nums">{budgetDisplay}</p>
+                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">Orçamento</p>
                 </div>
               </div>
             </div>
 
-            <div className="pt-1">
+            <div>
               <Button
                 asChild
-                className="h-10 rounded-full bg-gradient-to-r from-[#00D98A] to-[#00F0A0] px-5 text-xs font-extrabold text-[#031923] shadow-[0_6px_18px_rgba(0,217,138,0.32)] hover:brightness-105 transition"
+                className="h-9 rounded-full bg-gradient-to-r from-[#00D98A] to-[#00F0A0] px-5 text-xs font-extrabold text-[#031923] shadow-[0_6px_16px_rgba(0,240,160,0.34)] hover:brightness-105 transition"
               >
                 <Link to={`/projects/${project.id}`}>
                   <span>Abrir projeto</span>
-                  <ArrowRight className="ml-1.5 h-4 w-4" />
+                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Link>
               </Button>
             </div>
@@ -190,14 +197,14 @@ export default function FeaturedProjectCard({
               <h2 className="text-2xl font-extrabold tracking-tight text-white">
                 Inicie seu primeiro projeto elétrico
               </h2>
-              <p className="mt-1 text-xs sm:text-sm font-medium text-slate-300 max-w-md">
+              <p className="mt-1 text-xs font-medium text-emerald-100/80 max-w-md">
                 Dimensione circuitos conforme NBR 5410, monte quadros DIN e acompanhe cargas em tempo real.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
               <Button
                 asChild
-                className="h-10 rounded-full bg-gradient-to-r from-[#00D98A] to-[#00F0A0] px-5 text-xs font-extrabold text-[#031923] shadow-[0_6px_18px_rgba(0,217,138,0.32)] hover:brightness-105"
+                className="h-9 rounded-full bg-gradient-to-r from-[#00D98A] to-[#00F0A0] px-5 text-xs font-extrabold text-[#031923] shadow-[0_6px_16px_rgba(0,240,160,0.34)] hover:brightness-105"
               >
                 <Link to="/projects/new">
                   <Plus className="mr-1.5 h-4 w-4" />
@@ -207,7 +214,7 @@ export default function FeaturedProjectCard({
               <Button
                 asChild
                 variant="outline"
-                className="h-10 rounded-full border-white/25 bg-white/10 px-4 text-xs font-bold text-white hover:bg-white/20"
+                className="h-9 rounded-full border-white/25 bg-white/10 px-4 text-xs font-bold text-white hover:bg-white/20"
               >
                 <Link to="/calculator">
                   <Sparkles className="mr-1.5 h-3.5 w-3.5 text-[#00F0A0]" />

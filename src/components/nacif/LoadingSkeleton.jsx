@@ -7,30 +7,30 @@ export function SkeletonBox({ className = "" }) {
 export default function LoadingSkeleton({ variant = "dashboard" }) {
   if (variant === "table") {
     return (
-      <div className="space-y-3 rounded-2xl border border-[#E5EBF1] bg-white p-5">
-        <SkeletonBox className="h-6 w-48" />
-        <SkeletonBox className="h-10 w-full" />
-        <SkeletonBox className="h-10 w-full" />
-        <SkeletonBox className="h-10 w-full" />
+      <div className="space-y-3 rounded-2xl border border-[#E5EBF1] bg-white p-4">
+        <SkeletonBox className="h-5 w-48" />
+        <SkeletonBox className="h-9 w-full" />
+        <SkeletonBox className="h-9 w-full" />
+        <SkeletonBox className="h-9 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        <SkeletonBox className="h-64 rounded-3xl lg:col-span-8" />
-        <SkeletonBox className="h-64 rounded-3xl lg:col-span-4" />
+    <div className="space-y-3.5">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2.16fr)_minmax(300px,1fr)]">
+        <SkeletonBox className="h-[238px] rounded-[18px]" />
+        <SkeletonBox className="h-[238px] rounded-[18px]" />
       </div>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
-          <SkeletonBox key={i} className="h-20 rounded-2xl" />
+          <SkeletonBox key={i} className="h-[60px] rounded-2xl" />
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        <SkeletonBox className="h-64 rounded-2xl lg:col-span-4" />
-        <SkeletonBox className="h-64 rounded-2xl lg:col-span-5" />
-        <SkeletonBox className="h-64 rounded-2xl lg:col-span-3" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.05fr)_minmax(300px,1fr)]">
+        <SkeletonBox className="h-[200px] rounded-2xl" />
+        <SkeletonBox className="h-[200px] rounded-2xl" />
+        <SkeletonBox className="h-[200px] rounded-2xl" />
       </div>
     </div>
   );

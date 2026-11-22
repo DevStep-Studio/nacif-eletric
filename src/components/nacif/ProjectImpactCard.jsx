@@ -1,33 +1,37 @@
 import { Link } from "react-router-dom";
-import { Cloud, Info, Leaf, Sun, TreePine } from "lucide-react";
+import { ArrowRight, Cloud, Info, Leaf, Sun, TreePine } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 
 export default function ProjectImpactCard({ sustainability }) {
   const available = Boolean(sustainability?.available);
 
   return (
-    <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-      {/* Detalhe botânico sutil no canto direito inferior/superior sem cobrir textos */}
-      <div className="pointer-events-none absolute -right-4 top-0 h-28 w-28 opacity-15">
-        <svg viewBox="0 0 120 120" fill="none" aria-hidden="true" className="h-full w-full">
-          <path d="M95 10C65 18 48 42 52 72C78 72 102 48 95 10Z" fill="#00D98A" />
-          <path d="M115 38C88 42 74 64 78 90C102 88 118 66 115 38Z" fill="#006F51" />
+    <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#BEEAD2] bg-gradient-to-br from-[#F3FDF8] via-[#E9FAF0] to-[#DBF8E8] p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+      {/* Ilustração botânica no canto superior direito fiel à referência */}
+      <div className="pointer-events-none absolute -right-2 -top-2 h-24 w-24 opacity-85">
+        <svg viewBox="0 0 120 120" fill="none" aria-hidden="true" className="h-full w-full drop-shadow-xs">
+          <path d="M98 6C65 14 48 38 52 68C80 66 105 42 98 6Z" fill="#22A858" fillOpacity="0.88" />
+          <path d="M98 6C78 28 65 46 53 67" stroke="#136F3A" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M118 32C90 36 74 58 78 86C104 84 120 60 118 32Z" fill="#00D98A" fillOpacity="0.78" />
+          <path d="M72 4C54 14 44 30 48 48C66 44 76 26 72 4Z" fill="#46C978" fillOpacity="0.72" />
         </svg>
       </div>
 
-      <div className="relative z-10 flex items-start justify-between gap-2">
+      {/* Cabeçalho */}
+      <div className="relative z-10 flex items-start justify-between gap-2 pr-14">
         <div className="flex items-start gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#DDFCF0] text-[#006F51]">
-            <Leaf className="h-4 w-4" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/90 text-[#00A86B] shadow-2xs">
+            <Leaf className="h-3.5 w-3.5" />
           </span>
           <div>
-            <h3 className="text-sm font-bold text-[#101828]">Impacto do projeto</h3>
-            <p className="text-xs font-medium text-[#64748B]">Sustentabilidade e eficiência</p>
+            <h3 className="text-[13px] font-bold text-[#101828] leading-tight">Impacto do projeto</h3>
+            <p className="mt-0.5 text-[11px] font-medium text-[#64748B] leading-tight">
+              Sustentabilidade e eficiência
+            </p>
           </div>
         </div>
 
@@ -36,9 +40,9 @@ export default function ProjectImpactCard({ sustainability }) {
             <button
               type="button"
               aria-label="Metodologia de impacto ambiental"
-              className="flex h-6 w-6 items-center justify-center rounded-full text-[#94A3B8] hover:bg-[#F6F9FC] hover:text-[#101828]"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/75 text-[#64748B] hover:bg-white hover:text-[#101828]"
             >
-              <Info className="h-3.5 w-3.5" />
+              <Info className="h-3 w-3" />
             </button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs text-xs">
@@ -49,52 +53,53 @@ export default function ProjectImpactCard({ sustainability }) {
       </div>
 
       {available ? (
-        <div className="relative z-10 mt-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-[#DDFCF0] bg-[#F4FDF9] p-3.5">
-              <div className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-[#DDFCF0] text-[#006F51]">
+        <div className="relative z-10 mt-3 space-y-2">
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="rounded-xl border border-[#C3F0D9] bg-white/80 p-3 backdrop-blur-xs">
+              <div className="mb-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#DDFCF0] text-[#006F51]">
                 <Cloud className="h-3.5 w-3.5" />
               </div>
-              <p className="text-xl font-extrabold tracking-tight text-[#101828] tabular-nums">
+              <p className="text-lg font-extrabold tracking-tight text-[#101828] tabular-nums leading-tight">
                 -{sustainability.avoidedCo2KgYear.toLocaleString("pt-BR")}{" "}
                 <span className="text-xs font-bold text-[#64748B]">kg</span>
               </p>
-              <p className="mt-0.5 text-[11px] font-medium text-[#64748B]">CO₂ evitada/ano</p>
+              <p className="mt-0.5 text-[10px] font-medium text-[#64748B]">CO₂ evitada/ano</p>
             </div>
 
-            <div className="rounded-2xl border border-[#DDFCF0] bg-[#F4FDF9] p-3.5">
-              <div className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-[#DDFCF0] text-[#006F51]">
+            <div className="rounded-xl border border-[#C3F0D9] bg-white/80 p-3 backdrop-blur-xs">
+              <div className="mb-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#DDFCF0] text-[#006F51]">
                 <TreePine className="h-3.5 w-3.5" />
               </div>
-              <p className="text-xl font-extrabold tracking-tight text-[#101828] tabular-nums">
+              <p className="text-lg font-extrabold tracking-tight text-[#101828] tabular-nums leading-tight">
                 {sustainability.treesEquivalent.toLocaleString("pt-BR")}
               </p>
-              <p className="mt-0.5 text-[11px] font-medium text-[#64748B]">Árvores equivalentes</p>
+              <p className="mt-0.5 text-[10px] font-medium text-[#64748B]">Árvores equivalentes</p>
             </div>
           </div>
 
-          <p className="text-[11px] font-medium text-[#64748B] leading-relaxed">
+          <p className="text-[10px] font-medium text-[#476E5A] leading-snug">
             Base: {sustainability.solarProjectsCount}{" "}
-            {sustainability.solarProjectsCount === 1 ? "sistema solar" : "sistemas solares"} ({sustainability.totalSolarKwp.toLocaleString("pt-BR")} kWp · fator SIN {sustainability.emissionFactorKgKwh} kg CO₂/kWh).
+            {sustainability.solarProjectsCount === 1 ? "sistema solar" : "sistemas solares"} ({sustainability.totalSolarKwp.toLocaleString("pt-BR")} kWp · SIN {sustainability.emissionFactorKgKwh} kg/kWh).
           </p>
         </div>
       ) : (
-        <div className="relative z-10 mt-4 rounded-2xl border border-dashed border-[#E5EBF1] bg-[#F6F9FC] p-4 space-y-2.5">
-          <div className="flex items-center gap-2 text-xs font-bold text-[#101828]">
-            <Sun className="h-4 w-4 text-[#006F51]" />
-            <span>Sem geração solar calculada</span>
+        <div className="relative z-10 mt-3 flex flex-col justify-between gap-2.5 rounded-xl border border-[#C3F0D9] bg-white/75 p-3 backdrop-blur-xs">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#006F51]">
+              <Sun className="h-3.5 w-3.5 shrink-0" />
+              <span>Impacto ambiental ainda não calculado</span>
+            </div>
+            <p className="text-[11px] leading-snug text-[#4B6B5A]">
+              Dimensione um sistema solar para visualizar estimativas de economia e emissões evitadas.
+            </p>
           </div>
-          <p className="text-[11px] leading-relaxed text-[#64748B]">
-            Os indicadores de CO₂ evitado e árvores equivalentes são exibidos após dimensionar um sistema solar nos seus projetos.
-          </p>
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className="h-8 rounded-xl border-[#E5EBF1] bg-white px-3 text-xs font-bold text-[#006F51] hover:bg-[#DDFCF0]/60"
+          <Link
+            to="/solar-project"
+            className="inline-flex h-8 w-fit items-center gap-1.5 rounded-xl bg-[#00D98A] px-3 text-[11px] font-extrabold text-[#031923] shadow-2xs transition hover:bg-[#00C47C]"
           >
-            <Link to="/solar-project">Simular sistema solar</Link>
-          </Button>
+            <span>Simular sistema solar</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
       )}
     </div>
