@@ -18,7 +18,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
 import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import SolarDesignerMap from "@/components/solar/SolarDesignerMap";
-import Solar3DView from "@/components/solar/Solar3DView";
 import SolarReportsDialog from "@/components/solar/SolarReportsDialog";
 import SolarProjectParametersModal from "@/components/solar/SolarProjectParametersModal";
 import SolarBudgetPanel from "@/components/solar/SolarBudgetPanel";
@@ -2037,30 +2036,6 @@ export default function SolarProject() {
             </button>
           </div>
 
-          {/* Alternância 2D / 3D (visível fora da aba Orçamento) */}
-          {appMode !== "budget" && (
-          <div className="flex h-8 items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs shrink-0 whitespace-nowrap">
-            <button
-              type="button"
-              onClick={() => setViewMode("map")}
-              className={`h-full px-2.5 rounded-md font-bold whitespace-nowrap flex items-center justify-center transition ${
-                viewMode === "map" ? "bg-white text-slate-950 font-black shadow-xs" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              2D
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("3d")}
-              className={`h-full px-2.5 rounded-md font-bold whitespace-nowrap flex items-center justify-center transition ${
-                viewMode === "3d" ? "bg-white text-slate-950 font-black shadow-xs" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              3D
-            </button>
-          </div>
-          )}
-
           <span className="h-5 w-px bg-slate-200 shrink-0" />
 
           {/* Botão Modo Foco */}
@@ -3518,67 +3493,56 @@ export default function SolarProject() {
             </div>
           )}
 
-          {/* Renderizador 2D ou 3D */}
-          {viewMode === "3d" ? (
-            <Solar3DView
-              config={config}
-              areas={multiAreaLayouts}
-              sizing={visualSizing}
-              panelPolygons={allVisiblePanelPolygons}
-              onAreaSelect={setSelectedAreaId}
-            />
-          ) : (
-            <SolarDesignerMap
-              className="h-full w-full"
-              config={config}
-              areas={multiAreaLayouts}
-              selectedAreaId={selectedAreaId}
-              viewMode={viewMode}
-              sizing={visualSizing}
-              editorMode={editorMode}
-              isPlacingObstacle={Boolean(pendingObstaclePreset)}
-              fitRoofRequest={fitRoofRequest}
-              viewportRequest={viewportRequest}
-              selectedObstacleId={selectedEntity?.type === "obstacle" ? selectedEntity.id : null}
-              selectedModuleIndex={selectedModuleIdx}
-              electricalMode={appMode === "electrical"}
-              strings={strings}
-              showBadges={true}
-              showMeasurements
-              onEditorModeChange={setEditorMode}
-              onSelectArea={handleSelectArea}
-              onSelectRoof={() => {
-                setSelectedEntity({ type: "roof", id: selectedArea?.id || "main" });
-                setSidebarOpen(true);
-              }}
-              onCreateArea={handleCreateArea}
-              onRoofChange={handleRoofGeometryChange}
-              onAlignToEdge={handleAlignToEdge}
-              onToggle3D={() => setViewMode("3d")}
-              onViewModeChange={setViewMode}
-              onViewportChange={({ center, zoom }) => {
-                setConfig((current) => ({
-                  ...current,
-                  map_center_lat: center.lat,
-                  map_center_lng: center.lng,
-                  map_zoom: zoom,
-                }));
-              }}
-              onFitRoof={() => setFitRoofRequest((n) => n + 1)}
-              onUpdateObstacle={handleUpdateObstacle}
-              onSelectObstacle={(id) => {
-                setSelectedEntity({ type: "obstacle", id });
-                setSidebarOpen(true);
-                setInspectorSections((prev) => ({ ...prev, obstacles: true }));
-              }}
-              onSelectModule={(idx) => {
-                setSelectedEntity({ type: "module", id: idx });
-                setSidebarOpen(true);
-              }}
-              onRemoveObstacle={handleRemoveObstacle}
-              onMapClick={handleMapClick}
-            />
-          )}
+          {/* Renderizador 2D */}
+          <SolarDesignerMap
+            className="h-full w-full"
+            config={config}
+            areas={multiAreaLayouts}
+            selectedAreaId={selectedAreaId}
+            viewMode={viewMode}
+            sizing={visualSizing}
+            editorMode={editorMode}
+            isPlacingObstacle={Boolean(pendingObstaclePreset)}
+            fitRoofRequest={fitRoofRequest}
+            viewportRequest={viewportRequest}
+            selectedObstacleId={selectedEntity?.type === "obstacle" ? selectedEntity.id : null}
+            selectedModuleIndex={selectedModuleIdx}
+            electricalMode={appMode === "electrical"}
+            strings={strings}
+            showBadges={true}
+            showMeasurements
+            onEditorModeChange={setEditorMode}
+            onSelectArea={handleSelectArea}
+            onSelectRoof={() => {
+              setSelectedEntity({ type: "roof", id: selectedArea?.id || "main" });
+              setSidebarOpen(true);
+            }}
+            onCreateArea={handleCreateArea}
+            onRoofChange={handleRoofGeometryChange}
+            onAlignToEdge={handleAlignToEdge}
+            onViewModeChange={setViewMode}
+            onViewportChange={({ center, zoom }) => {
+              setConfig((current) => ({
+                ...current,
+                map_center_lat: center.lat,
+                map_center_lng: center.lng,
+                map_zoom: zoom,
+              }));
+            }}
+            onFitRoof={() => setFitRoofRequest((n) => n + 1)}
+            onUpdateObstacle={handleUpdateObstacle}
+            onSelectObstacle={(id) => {
+              setSelectedEntity({ type: "obstacle", id });
+              setSidebarOpen(true);
+              setInspectorSections((prev) => ({ ...prev, obstacles: true }));
+            }}
+            onSelectModule={(idx) => {
+              setSelectedEntity({ type: "module", id: idx });
+              setSidebarOpen(true);
+            }}
+            onRemoveObstacle={handleRemoveObstacle}
+            onMapClick={handleMapClick}
+          />
 
           {/* RESUMO TÉCNICO INFERIOR UNIFICADO (CAD LIGHT THEME) */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[400] w-max max-w-[calc(100%-1.5rem)] flex flex-col items-center pointer-events-auto">

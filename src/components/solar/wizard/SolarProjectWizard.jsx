@@ -158,7 +158,7 @@ export default function SolarProjectWizard() {
       try { window.localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
       toast({
         title: "Projeto solar criado com sucesso!",
-        description: "Abrindo o projeto na visualização 3D e satélite.",
+        description: "Abrindo o projeto no editor de satélite.",
       });
       navigate(`/solar-project?project=${project.id}`);
     } catch (error) {
@@ -273,7 +273,7 @@ export default function SolarProjectWizard() {
           ) : (
             <>
               <Rocket className="h-4 w-4" />
-              Criar Projeto e Abrir Editor 3D →
+              Criar Projeto e Abrir Editor →
             </>
           )}
         </Button>
