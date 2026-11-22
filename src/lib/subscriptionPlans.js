@@ -336,12 +336,15 @@ export function formatLimitValue(value, featureKey) {
     const num = Number(value || 0);
     if (num >= 1000) {
       const gb = num / 1000;
-      return `${Number.isInteger(gb) ? gb : gb.toFixed(1)} GB`;
+      const decimals = Number.isInteger(gb) ? 0 : 1;
+      return `${gb.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: decimals })} GB`;
     }
-    return `${num} MB`;
+    const maxDecimals = num > 0 && num < 10 ? 2 : Number.isInteger(num) ? 0 : 1;
+    const minDecimals = num > 0 && num < 10 && !Number.isInteger(num) ? 2 : 0;
+    return `${num.toLocaleString("pt-BR", { minimumFractionDigits: minDecimals, maximumFractionDigits: maxDecimals })} MB`;
   }
   const suffix = USAGE_UNITS[featureKey] ? ` ${USAGE_UNITS[featureKey]}` : "";
-  return `${Number(value || 0).toLocaleString("pt-BR")}${suffix}`;
+  return `${Number(value || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}${suffix}`;
 }
 
 export function calculateAnnualSavings(plan) {
@@ -380,21 +383,24 @@ export function getUsageRows(plan, usage = {}) {
   return Object.values(FEATURE_KEYS).map((featureKey) => {
     const used = Number(usage[featureKey] || 0);
     const limit = getLimit(plan, featureKey);
-    const percent =
-      limit === Number.POSITIVE_INFINITY || limit <= 0
-        ? used > 0
-          ? 100
-          : 0
-        : Math.min(100, Math.round((used / limit) * 100));
-    const remaining = limit === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : Math.max(0, limit - used);
-    const state =
-      limit === Number.POSITIVE_INFINITY
-        ? "unlimited"
-        : percent >= 100
-        ? "limit"
-        : percent >= 80
-        ? "near"
-        : "normal";
+    const isUnlimited = limit === Number.POSITIVE_INFINITY;
+    const isZeroLimit = !isUnlimited && limit <= 0;
+
+    const percent = isUnlimited
+      ? null
+      : isZeroLimit
+      ? 0
+      : Math.min(100, Math.round((used / limit) * 100));
+    const remaining = isUnlimited ? Number.POSITIVE_INFINITY : isZeroLimit ? 0 : Math.max(0, limit - used);
+    const state = isUnlimited
+      ? "unlimited"
+      : isZeroLimit
+      ? "unavailable"
+      : used >= limit
+      ? "limit"
+      : percent >= 80
+      ? "near"
+      : "normal";
 
     return {
       key: featureKey,
@@ -402,11 +408,11 @@ export function getUsageRows(plan, usage = {}) {
       used,
       limit,
       remaining,
-      percent,
+      percent: percent ?? 0,
       state,
       usedLabel: formatLimitValue(used, featureKey),
-      limitLabel: formatLimitValue(limit, featureKey),
-      remainingLabel: formatLimitValue(remaining, featureKey),
+      limitLabel: isZeroLimit ? "Indisponível" : formatLimitValue(limit, featureKey),
+      remainingLabel: isUnlimited ? "Sem restrição" : isZeroLimit ? "Sem cota" : formatLimitValue(remaining, featureKey),
     };
   });
 }

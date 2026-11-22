@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
 import {
   autoBalancePhases,
@@ -8,26 +9,31 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Activity,
   AlertTriangle,
-  ChevronDown,
   CheckCircle2,
   CircleGauge,
   Edit3,
   Layers,
-  Plus,
   ShieldCheck,
-  Trash2,
   Zap,
 } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
-import CircuitFormDialog from "@/components/CircuitFormDialog";
-import PageHeader from "@/components/PageHeader";
-import WorkspaceProjectContextBar from "@/components/nacif/WorkspaceProjectContextBar";
-
-const PHASE_COLORS = { A: "text-amber-600", B: "text-blue-600", C: "text-emerald-600", ABC: "text-violet-600" };
-const PHASE_DOT = { A: "bg-amber-500", B: "bg-blue-500", C: "bg-emerald-500", ABC: "bg-violet-500" };
-const PHASE_BAR = { A: "#D97706", B: "#00d8b8", C: "#059669" };
+import InternalPageHeader from "@/components/internal/InternalPageHeader";
+import ProjectContextBar from "@/components/internal/ProjectContextBar";
+import TechnicalStatCard from "@/components/internal/TechnicalStatCard";
+import PhaseDistributionCard from "@/components/internal/PhaseDistributionCard";
+import TechnicalReviewCard from "@/components/internal/TechnicalReviewCard";
+import CircuitList from "@/components/internal/CircuitList";
 
 const numberFormatter = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 2,
@@ -38,12 +44,6 @@ function formatNumber(value, suffix = "") {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return `0${suffix}`;
   return `${numberFormatter.format(numeric)}${suffix}`;
-}
-
-function formatPower(watts = 0) {
-  const value = Number(watts) || 0;
-  if (value >= 1000) return `${formatNumber(value / 1000)} kW`;
-  return `${formatNumber(value)} W`;
 }
 
 const NBR_TARGET_IMBALANCE_PCT = 5;
@@ -61,7 +61,6 @@ function phaseExtremes(metrics) {
 
 const DEDICATED_LOAD_HINT = /chuveiro|ar cond|bomba|motor|aquecedor|forno|cooktop|torneira|secadora|m[aá]quina|boiler/i;
 
-// Frase de solução para o circuito que trava o balanceamento, adaptada ao tipo de carga.
 function blockerRemedy(blocker) {
   if (!blocker) return "";
   if (DEDICATED_LOAD_HINT.test(String(blocker.type || blocker.name || ""))) {
@@ -87,16 +86,16 @@ function buildNBRActionPlan(metrics, validations = []) {
       addAction(
         "phase_imbalance",
         "Reduzir o desequilíbrio de fases",
-        `O balanceamento automático já distribuiu os circuitos da melhor forma possível, mas a fase ${highest.phase} (${formatNumber(highest.load, " A")}) segue ${metrics.imbalance_pct}% acima da fase ${lowest.phase} (${formatNumber(lowest.load, " A")}). O peso está na carga monofásica "${blocker.name}" (${formatNumber(blocker.current_a, " A")}), que sozinha não cabe em uma fase sem desequilibrar. Para chegar a 100%: ${blockerRemedy(blocker)}.`,
-        tone,
+        `O balanceamento automático já distribuiu os circuitos da melhor forma possível, mas a fase ${highest.phase} (${formatNumber(highest.load, " A")}) segue ${metrics.imbalance_pct}% acima da fase ${lowest.phase} (${formatNumber(lowest.load, " A")}). O peso está na carga monofásica "${blocker.name}" (${formatNumber(blocker.current_a, " A")}). Para zerar: ${blockerRemedy(blocker)}.`,
+        tone
       );
     } else {
       const transfer = Math.max(0, (highest.load - lowest.load) / 2);
       addAction(
         "phase_imbalance",
         "Balancear as fases",
-        `A fase ${highest.phase} está com ${formatNumber(highest.load, " A")} e a fase ${lowest.phase} com ${formatNumber(lowest.load, " A")}. Clique em "Ajustar" para redistribuir cerca de ${formatNumber(transfer, " A")} de carga para a fase ${lowest.phase} e manter o desequilíbrio em até ${NBR_TARGET_IMBALANCE_PCT}%.`,
-        tone,
+        `A fase ${highest.phase} está com ${formatNumber(highest.load, " A")} e a fase ${lowest.phase} com ${formatNumber(lowest.load, " A")}. Utilize "Ajustar projeto" para redistribuir cerca de ${formatNumber(transfer, " A")} de carga para a fase ${lowest.phase}.`,
+        tone
       );
     }
   }
@@ -108,7 +107,7 @@ function buildNBRActionPlan(metrics, validations = []) {
         `voltage_drop-${validation.circuit_id || validation.msg}`,
         "Corrigir queda de tensão",
         `${validation.msg}. ${validation.action || "Aumente a seção do condutor, reduza o comprimento ou divida o circuito."}`,
-        "danger",
+        "danger"
       );
       return;
     }
@@ -116,7 +115,7 @@ function buildNBRActionPlan(metrics, validations = []) {
       addAction(
         `dr-${validation.circuit_id || validation.msg}`,
         "Prever DR 30 mA",
-        `${validation.msg}. ${validation.action || "Adicione proteção DR de 30 mA ao circuito indicado."}`,
+        `${validation.msg}. ${validation.action || "Adicione proteção DR de 30 mA ao circuito indicado."}`
       );
       return;
     }
@@ -124,397 +123,42 @@ function buildNBRActionPlan(metrics, validations = []) {
       addAction("dps_required", "Prever DPS no quadro", validation.action || validation.msg);
       return;
     }
-    addAction(validation.msg, "Revisar item NBR", validation.action || validation.msg, validation.severity === "error" ? "danger" : "warning");
+    addAction(
+      validation.msg,
+      "Revisar item NBR",
+      validation.action || validation.msg,
+      validation.severity === "error" ? "danger" : "warning"
+    );
   });
 
   return actions;
 }
 
-function getCircuitStatus(circuit) {
-  if (!circuit.voltage_drop_ok) {
-    return {
-      label: "Revisar queda de tensão",
-      description: `ΔU ${formatNumber(circuit.voltage_drop_pct, "%")} acima do limite`,
-      className: "border-red-200 bg-red-50 text-red-700",
-      icon: AlertTriangle,
-    };
-  }
-
-  return {
-    label: "Conforme",
-    description: "Proteção e dimensionamento calculados",
-    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    icon: ShieldCheck,
-  };
-}
-
-function getCircuitCriticals(circuit) {
-  const items = [];
-  if (!circuit.voltage_drop_ok) items.push({ label: "Queda de tensão", value: `${formatNumber(circuit.voltage_drop_pct, "%")}`, tone: "danger" });
-  if (circuit.needs_dr) items.push({ label: "DR", value: "30mA", tone: "ok" });
-  if (circuit.needs_dps) items.push({ label: "DPS", value: "Previsto", tone: "info" });
-  if (circuit.wet_area) items.push({ label: "Área molhada", value: "sim", tone: "warning" });
-  return items;
-}
-
-function Pill({ children, tone = "default" }) {
-  const tones = {
-    default: "border-[#CDEFE8] bg-white text-[#344054]",
-    info: "border-[#BCEEE5] bg-[#E8FCF8] text-[#00d8b8]",
-    ok: "border-emerald-100 bg-emerald-50 text-emerald-700",
-    warning: "border-amber-100 bg-amber-50 text-amber-700",
-    danger: "border-red-100 bg-red-50 text-red-700",
-  };
-  return (
-    <span className={`inline-flex min-h-8 items-center rounded-[10px] border px-3 text-[11px] font-extrabold leading-none ${tones[tone] || tones.default}`}>
-      {children}
-    </span>
-  );
-}
-
-function CompactStat({ label, value, tone = "text-[#101828]", className = "border-[#CDEFE8] bg-white" }) {
-  return (
-    <div className={`min-w-0 rounded-[13px] border px-4 py-3 ${className}`}>
-      <span className="block text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#667085]">{label}</span>
-      <span className={`mt-1 block truncate text-[17px] font-extrabold leading-tight ${tone}`}>{value}</span>
-    </div>
-  );
-}
-
-function DetailLine({ label, value, tone = "text-[#101828]" }) {
-  return (
-    <div className="flex min-w-0 items-center justify-between gap-3 rounded-[12px] border border-[#CDEFE8] bg-white px-3 py-2.5">
-      <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#667085]">{label}</span>
-      <span className={`min-w-0 truncate text-right text-sm font-extrabold leading-5 ${tone}`}>{value}</span>
-    </div>
-  );
-}
-
-function CircuitCard({ circuit, index, onEdit, onRemove, saving }) {
-  const [expanded, setExpanded] = useState(false);
-  const status = getCircuitStatus(circuit);
-  const StatusIcon = status.icon;
-  const phase = circuit.phase || "A";
-  const phaseLabel = circuit.phase === "ABC"
-    ? "Fases ABC"
-    : circuit.phase?.length === 2
-      ? `Fases ${circuit.phase.split("").join("/")}`
-      : `Fase ${circuit.phase || "A"}`;
-  const installedPower = Number(circuit.power_w) || 0;
-  const demandFactor = Number(circuit.demand_factor) !== undefined && !Number.isNaN(Number(circuit.demand_factor))
-    ? Number(circuit.demand_factor)
-    : 1;
-  const effectivePower = Number(circuit.demand_power_w) !== undefined && !Number.isNaN(Number(circuit.demand_power_w))
-    ? Number(circuit.demand_power_w)
-    : Math.round(installedPower * demandFactor);
-
-  return (
-    <article className="relative overflow-hidden rounded-[18px] border border-[#CDEFE8] bg-white shadow-[0_16px_40px_rgba(0,100,166,0.05)] transition hover:-translate-y-0.5 hover:border-[#BCEEE5] hover:shadow-[0_20px_48px_rgba(0,100,166,0.085)]">
-      <span className={`absolute inset-y-5 left-0 w-1 rounded-r-full ${circuit.voltage_drop_ok ? "bg-[#00d8b8]" : "bg-red-500"}`} />
-      <div className="p-4 sm:p-5">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-            <span className="inline-flex h-8 shrink-0 items-center rounded-[10px] border border-[#BCEEE5] bg-[#E8FCF8] px-3 text-[11px] font-extrabold text-[#00d8b8]">
-              C{String(index + 1).padStart(2, "0")}
-            </span>
-            <h3 className="min-w-0 truncate text-xl font-extrabold leading-tight text-[#101828]">
-              {circuit.name || "Circuito sem nome"}
-            </h3>
-            <Pill>{circuit.type || "Circuito"}</Pill>
-            <span className={`inline-flex min-h-8 items-center rounded-[10px] border border-[#CDEFE8] bg-white px-3 text-[11px] font-extrabold ${PHASE_COLORS[phase] || "text-slate-700"}`}>
-              <span className={`mr-1.5 h-2 w-2 rounded-[3px] ${PHASE_DOT[phase] || "bg-slate-400"}`} />
-              {phaseLabel}
-            </span>
-            <span className={`inline-flex min-h-8 items-center gap-1.5 rounded-[10px] border px-3 text-[11px] font-extrabold ${status.className}`}>
-              <StatusIcon className="h-3.5 w-3.5" />
-              {status.label}
-            </span>
-          </div>
-
-          {circuit.description && (
-            <p className="mt-2 max-w-4xl truncate text-sm font-medium text-[#667085]">{circuit.description}</p>
-          )}
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2 lg:justify-end">
-            <CircuitFormDialog
-              initialData={circuit}
-              onSave={onEdit}
-              trigger={
-                <Button variant="outline" size="sm" disabled={saving} className="h-11 rounded-[12px] border-[#CDEFE8] bg-white px-4 font-extrabold shadow-[0_10px_22px_rgba(0,100,166,0.06)] hover:bg-[#F2FFFC]">
-                  <Edit3 className="h-4 w-4" />
-                  Editar
-                </Button>
-              }
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              disabled={saving}
-              onClick={onRemove}
-              aria-label={`Excluir ${circuit.name || `circuito ${index + 1}`}`}
-              className="h-11 w-11 rounded-[12px] border-[#CDEFE8] bg-white text-[#667085] shadow-[0_10px_22px_rgba(0,100,166,0.05)] hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 border-t border-[#CDEFE8] pt-4">
-          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
-            <CompactStat
-              label="Demanda / Carga"
-              value={formatPower(effectivePower)}
-              className="border-[#BCEEE5] bg-[#F2FFFC]"
-              tone="text-[#101828]"
-            />
-            <CompactStat
-              label="Corrente (Ib)"
-              value={formatNumber(circuit.project_current_a, " A")}
-              className="border-cyan-100 bg-cyan-50/70"
-              tone="text-cyan-950"
-            />
-            <CompactStat
-              label="Proteção"
-              value={`${circuit.breaker_a}A ${circuit.breaker_poles}P/${circuit.breaker_curve}`}
-              className="border-emerald-100 bg-emerald-50/70"
-              tone="text-emerald-950"
-            />
-            <CompactStat
-              label="Condutor"
-              value={circuit.wire_gauge}
-              className="border-[#D8C8FF] bg-[#F6F2FF]"
-              tone="text-[#43268B]"
-            />
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setExpanded((value) => !value)}
-              className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[#CDEFE8] bg-white px-4 text-xs font-extrabold text-[#344054] transition hover:border-[#7DBDDF] hover:bg-[#F2FFFC] hover:text-[#00d8b8]"
-            >
-              {expanded ? "Ocultar detalhes" : "Ver mais detalhes"}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
-            </button>
-          </div>
-
-          {expanded && (
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              <DetailLine label="Potência instalada" value={`${installedPower} W (Fd ${demandFactor})`} />
-              <DetailLine label="Corrente nominal" value={`${formatNumber(circuit.nominal_current_a, " A")} (${formatNumber(circuit.corrected_current_a, " A")} corrigida)`} />
-              <DetailLine label="Queda ΔU" value={`${formatNumber(circuit.voltage_drop_pct, "%")} · ${formatNumber(circuit.voltage_drop_v, " V")}`} tone={circuit.voltage_drop_ok ? "text-slate-950" : "text-red-600"} />
-              <DetailLine label="Instalação" value={circuit.install_method || "A definir"} />
-              <DetailLine label="DR / DPS" value={`${circuit.needs_dr ? "DR 30mA" : "Sem DR"} · ${circuit.needs_dps ? "DPS previsto" : "Sem DPS"}`} />
-              <DetailLine label="Ambiente" value={`${circuit.temp_ambient || 30}°C · Ft ${formatNumber(circuit.temp_factor || 1)} · Fg ${formatNumber(circuit.group_factor || 1)}`} />
-              <DetailLine label="Alimentação" value={`${circuit.supply_type || "A definir"} · ${circuit.voltage || 220}V · fp ${formatNumber(circuit.power_factor || 1)}`} />
-              <DetailLine label="Quadro" value={`${circuit.din_modules || 1} DIN · ${circuit.group_count || 1} agrupado(s) · ${circuit.point_count || 1} ponto(s)`} />
-            </div>
-          )}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function ExecutiveMetric({ icon: Icon, label, value, sub, tone = "default" }) {
-  const toneClass = tone === "warning"
-    ? "border-red-200 bg-red-50"
-    : "border-[#BCEEE5] bg-[#F7FBFE]";
-
-  return (
-    <div className={`relative flex min-h-[110px] min-w-0 items-center gap-4 overflow-hidden rounded-[16px] border px-4 py-4 shadow-[0_14px_34px_rgba(0,100,166,0.055)] transition hover:-translate-y-0.5 hover:border-[#7DBDDF] hover:bg-white ${toneClass}`}>
-      <span className={`absolute inset-y-4 left-0 w-1 rounded-r-full ${tone === "warning" ? "bg-red-500" : "bg-[#00d8b8]"}`} />
-      <span className="ml-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-[13px] bg-white text-[#00d8b8] ring-1 ring-[#D6E8F3]">
-        <Icon className="h-5 w-5" />
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#667085]">{label}</span>
-        <span className="mt-1 block truncate text-[22px] font-extrabold leading-tight text-[#101828]">{value}</span>
-        <span className="mt-1 block truncate text-[13px] font-bold text-[#667085]">{sub}</span>
-      </span>
-    </div>
-  );
-}
-
-function PhaseReviewPanel({ metrics }) {
-  const max = Math.max(metrics.phaseLoad.A, metrics.phaseLoad.B, metrics.phaseLoad.C, 1);
-
-  return (
-    <section className="rounded-[18px] border border-[#BCEEE5] bg-[#F7FBFE] p-4 shadow-[0_16px_40px_rgba(0,100,166,0.055)]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="flex items-center gap-2 text-[18px] font-extrabold text-[#0f1728]">
-            <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-white text-[#00d8b8] ring-1 ring-[#D6E8F3]">
-              <Activity className="h-4 w-4" />
-            </span>
-            Distribuição de fases (Demanda NBR)
-          </h3>
-        </div>
-        <span className={`rounded-[10px] px-3 py-2 text-xs font-extrabold ${metrics.imbalance_pct > 10 ? "bg-red-50 text-red-600 ring-1 ring-red-100" : "bg-white text-[#00d8b8] ring-1 ring-[#D6E8F3]"}`}>
-          {metrics.imbalance_pct}% desequilíbrio
-        </span>
-      </div>
-
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        {["A", "B", "C"].map((ph) => {
-          const load = metrics.phaseLoad[ph] || 0;
-          return (
-            <div key={ph} className="rounded-[14px] border border-[#CDEFE8] bg-white p-4">
-              <div className="flex justify-between text-xs font-extrabold">
-                <span className={PHASE_COLORS[ph] || ""}>Fase {ph}</span>
-                <span className="text-[#687386]">{load.toFixed(1)}A</span>
-              </div>
-              <div className="mt-3 h-2.5 overflow-hidden rounded-md bg-[#EEF2F6]">
-                <div
-                  className="h-full rounded-md transition-[width]"
-                  style={{ width: `${(load / max) * 100}%`, background: PHASE_BAR[ph] }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-3 rounded-[14px] border border-[#CDEFE8] bg-white px-4 py-3 text-sm font-bold text-[#687386]">
-        Neutro estimado: <span className="text-[#0f1728]">{formatNumber(metrics.neutral_a, " A")}</span>
-      </div>
-    </section>
-  );
-}
-
-function ValidationPanel({ metrics, validations, onAutoFix, saving = false, canAutoFix = false, feedback = null }) {
-  const errorCount = validations.filter((item) => item.severity === "error").length;
-  const warningCount = validations.filter((item) => item.severity === "warning").length;
-  const actionPlan = buildNBRActionPlan(metrics, validations);
-  const feedbackClass = feedback?.tone === "danger"
-    ? "border-red-200 bg-red-50 text-red-700"
-    : feedback?.tone === "warning"
-      ? "border-amber-200 bg-amber-50 text-amber-800"
-      : "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-  return (
-    <section className="rounded-[18px] border border-[#BCEEE5] bg-white p-4 shadow-[0_16px_40px_rgba(0,100,166,0.055)]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="flex items-center gap-2 text-[18px] font-extrabold text-[#0f1728]">
-            <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-[#F2FFFC] text-[#00d8b8] ring-1 ring-[#D6E8F3]">
-              <AlertTriangle className="h-4 w-4" />
-            </span>
-            Revisões NBR
-          </h3>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-[10px] bg-[#E8FCF8] px-3 py-2 text-xs font-extrabold text-[#00d8b8] ring-1 ring-[#D6E8F3]">
-            {errorCount} erros · {warningCount} avisos
-          </span>
-          {canAutoFix && (
-            <Button
-              type="button"
-              size="sm"
-              disabled={saving}
-              onClick={onAutoFix}
-              className="h-9 rounded-[10px] bg-[#00d8b8] px-3 text-[11px] font-extrabold hover:bg-[#00a98e]"
-            >
-              <Zap className="h-3.5 w-3.5" />
-              {saving ? "Ajustando..." : "Ajustar projeto"}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {feedback && (
-        <div className={`mt-4 rounded-[14px] border px-4 py-3 text-sm font-bold ${feedbackClass}`}>
-          {feedback.message}
-        </div>
-      )}
-
-      {validations.length === 0 && (metrics?.circuits?.length || 0) > 0 ? (
-        <div className="mt-4 rounded-[14px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-          ✓ Projeto com todas as verificações preliminares da NBR 5410 atendidas.
-        </div>
-      ) : validations.length === 0 && (metrics?.circuits?.length || 0) === 0 ? (
-        <div className="mt-4 rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-600">
-          Nenhuma carga cadastrada para auditoria normativa.
-        </div>
-      ) : (
-        <>
-          <div className="mt-4 rounded-[14px] border border-[#BCEEE5] bg-[#F2FFFC] p-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#0f4f49]">Plano de Ação NBR</p>
-              <span className="rounded-[9px] bg-white px-2.5 py-1 text-[10px] font-extrabold text-[#00a98e] ring-1 ring-[#D6E8F3]">
-                meta NBR 5410
-              </span>
-            </div>
-            <div className="mt-3 space-y-2">
-              {actionPlan.map((action, index) => (
-                <div
-                  key={action.key}
-                  className={`grid grid-cols-[24px_minmax(0,1fr)] gap-2 rounded-[12px] border bg-white px-3 py-2.5 ${
-                    action.tone === "danger" ? "border-red-100" : "border-[#CDEFE8]"
-                  }`}
-                >
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-[8px] text-[11px] font-black ${
-                    action.tone === "danger" ? "bg-red-50 text-red-600" : "bg-[#E8FCF8] text-[#00a98e]"
-                  }`}>
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-[12px] font-extrabold text-[#101828]">{action.title}</span>
-                    <span className="mt-0.5 block text-[12px] font-bold leading-snug text-[#667085]">{action.description}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-3 space-y-2">
-            {validations.map((v, i) => (
-              <div
-                key={`${v.code || "validation"}-${i}`}
-                className={`flex items-start gap-2 rounded-[12px] border px-3 py-3 text-sm font-bold ${
-                  v.severity === "error"
-                    ? "border-red-200 bg-red-50 text-red-600"
-                    : "border-amber-200 bg-amber-50 text-amber-700"
-                }`}
-              >
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span className="min-w-0">
-                  <span className="block">{v.msg}</span>
-                  {v.action && <span className="mt-1 block text-xs font-semibold opacity-80">{v.action}</span>}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      <p className="mt-4 border-t border-slate-100 pt-3 text-[11px] font-medium text-slate-500">
-        ℹ A aprovação final do projeto e o memorial descritivo requerem validação técnica e recolhimento de ART/RRT por Engenheiro Eletricista habilitado.
-      </p>
-    </section>
-  );
-}
-
 export default function CircuitEditor() {
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
-  const [selectedId, setSelectedId] = useState(() => (
-    searchParams.get("project")
-    || (typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : "")
-    || ""
-  ));
+  const [selectedId, setSelectedId] = useState(
+    () =>
+      searchParams.get("project") ||
+      (typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : "") ||
+      ""
+  );
   const [project, setProject] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState("idle");
+  const [saveError, setSaveError] = useState("");
   const [autoFixFeedback, setAutoFixFeedback] = useState(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
     const urlProjectId = searchParams.get("project");
     if (urlProjectId && urlProjectId !== selectedId) {
       setSelectedId(urlProjectId);
-      try { window.localStorage.setItem("voltai_active_project_id", urlProjectId); } catch {}
+      try {
+        window.localStorage.setItem("voltai_active_project_id", urlProjectId);
+      } catch {}
     }
   }, [searchParams]);
 
@@ -526,33 +170,45 @@ export default function CircuitEditor() {
       setProjects(safeList);
       const currentUrlId = searchParams.get("project");
       if (!currentUrlId && !selectedId && safeList.length > 0) {
-        const storedId = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
+        const storedId =
+          typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
         const target = safeList.find((p) => p.id === storedId) || safeList[0];
         if (target?.id) {
           setSelectedId(target.id);
-          try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch {}
+          try {
+            window.localStorage.setItem("voltai_active_project_id", target.id);
+          } catch {}
         }
       }
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSelectProject = (newId) => {
     setSelectedId(newId || "");
+    setSaveState("idle");
+    setSaveError("");
+    setHighlightedIndex(null);
     if (newId) {
-      try { window.localStorage.setItem("voltai_active_project_id", newId); } catch {}
+      try {
+        window.localStorage.setItem("voltai_active_project_id", newId);
+      } catch {}
     }
   };
 
   useEffect(() => {
     if (selectedId) {
-      backend.entities.Project.get(selectedId).then(p => {
-        setProject(p);
-        setMetrics(calcProjectMetrics(p));
-        setAutoFixFeedback(null);
-      }).catch((err) => {
-        console.error("Erro ao carregar projeto:", err);
-      });
+      backend.entities.Project.get(selectedId)
+        .then((p) => {
+          setProject(p);
+          setMetrics(calcProjectMetrics(p));
+          setAutoFixFeedback(null);
+        })
+        .catch((err) => {
+          console.error("Erro ao carregar projeto:", err);
+        });
     } else {
       setProject(null);
       setMetrics(null);
@@ -561,6 +217,8 @@ export default function CircuitEditor() {
 
   const saveCircuits = async (circuits) => {
     setSaving(true);
+    setSaveState("saving");
+    setSaveError("");
     setAutoFixFeedback(null);
     try {
       const balanced = autoBalancePhases(circuits);
@@ -570,6 +228,11 @@ export default function CircuitEditor() {
       );
       setProject(updated);
       setMetrics(calcProjectMetrics(updated));
+      setSaveState("saved");
+    } catch (err) {
+      setSaveState("error");
+      setSaveError(err?.message || "Erro ao salvar alterações.");
+      throw err;
     } finally {
       setSaving(false);
     }
@@ -578,6 +241,8 @@ export default function CircuitEditor() {
   const autoFixNBR = async () => {
     if (!project || !selectedId) return;
     setSaving(true);
+    setSaveState("saving");
+    setSaveError("");
     try {
       const storedCircuits = project.circuits || [];
       const before = metrics || calcProjectMetrics(project);
@@ -599,6 +264,7 @@ export default function CircuitEditor() {
       const after = calcProjectMetrics(updated);
       setProject(updated);
       setMetrics(after);
+      setSaveState("saved");
 
       const parts = [];
       if (moved.length) {
@@ -617,23 +283,25 @@ export default function CircuitEditor() {
 
       let tone = "ok";
       if (after.validations.length === 0) {
-        parts.push("Projeto em 100% de conformidade NBR.");
+        parts.push("Verificações preliminares atendidas.");
       } else {
         tone = "warning";
         const blocker = after.imbalanceBlocker;
         if (after.imbalance_pct > 5 && blocker) {
           parts.push(
-            `As fases já estão no melhor balanceamento possível: o desequilíbrio restante de ${after.imbalance_pct}% vem da carga monofásica "${blocker.name}" (${formatNumber(blocker.current_a, " A")}). Para zerar, ${blockerRemedy(blocker)}.`
+            `O desequilíbrio restante de ${after.imbalance_pct}% vem da carga monofásica "${blocker.name}" (${formatNumber(blocker.current_a, " A")}). Para reduzir: ${blockerRemedy(blocker)}.`
           );
         } else {
           parts.push(
-            `Conformidade atual: ${after.nbrScore}%. Os itens restantes precisam de ajuste manual no circuito — veja a lista abaixo.`
+            `Verificação automatizada em ${after.nbrScore}%. Revise os itens pendentes manualmente.`
           );
         }
       }
       setAutoFixFeedback({ tone, message: parts.join(" ") });
     } catch (error) {
       console.error(error);
+      setSaveState("error");
+      setSaveError("Falha ao aplicar ajuste automático.");
       setAutoFixFeedback({
         tone: "danger",
         message: "Não foi possível aplicar o ajuste automático. Tente novamente ou revise os circuitos manualmente.",
@@ -644,131 +312,272 @@ export default function CircuitEditor() {
   };
 
   const addCircuit = (calc) => saveCircuits([...(project?.circuits || []), calc]);
-  const updateCircuit = (index, calc) => saveCircuits((project?.circuits || []).map((item, idx) => idx === index ? calc : item));
-  const removeCircuit = (i) => saveCircuits((project?.circuits || []).filter((_, idx) => idx !== i));
+  const updateCircuit = (index, calc) =>
+    saveCircuits((project?.circuits || []).map((item, idx) => (idx === index ? calc : item)));
+
+  const confirmRemoveCircuit = async () => {
+    if (!pendingDelete) return;
+    const { index } = pendingDelete;
+    setPendingDelete(null);
+    await saveCircuits((project?.circuits || []).filter((_, idx) => idx !== index));
+  };
 
   const circuits = metrics?.circuits || project?.circuits || [];
   const m = metrics;
   const criticalCount = circuits.filter((c) => !c.voltage_drop_ok).length;
   const drCount = circuits.filter((c) => c.needs_dr).length;
+  const actionPlan = m ? buildNBRActionPlan(m, m.validations || []) : [];
+
+  const handleLocateCircuit = (validation) => {
+    let targetIdx = typeof validation.circuit_index === "number" ? validation.circuit_index : -1;
+    if (targetIdx < 0 && validation.circuit_id) {
+      targetIdx = circuits.findIndex((c) => c.id === validation.circuit_id);
+    }
+    if (targetIdx < 0 && validation.circuit_name) {
+      targetIdx = circuits.findIndex((c) => c.name === validation.circuit_name);
+    }
+    if (targetIdx < 0 && validation.msg) {
+      targetIdx = circuits.findIndex((c) => c.name && validation.msg.includes(c.name));
+    }
+    if (targetIdx >= 0) {
+      setHighlightedIndex(targetIdx);
+      const el = document.getElementById(`circuit-card-${targetIdx}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
 
   return (
-    <div className="mx-auto w-full max-w-[1520px] space-y-5 pb-20">
-      <PageHeader
+    <div className="mx-auto w-full max-w-[1440px] space-y-4 pb-16">
+      <InternalPageHeader
         icon={Edit3}
         title="Editor de Circuitos"
-        actions={selectedId && (
-          <>
-            <Button variant="outline" size="sm" asChild className="h-11 rounded-[12px] border-[#CDEFE8] bg-white px-4 font-extrabold shadow-[0_10px_24px_rgba(0,100,166,0.06)] hover:bg-[#F2FFFC]">
-              <Link to={`/panel-generator?project=${selectedId}`}><Zap className="h-4 w-4" />Quadro SVG</Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild className="h-11 rounded-[12px] border-[#CDEFE8] bg-white px-4 font-extrabold shadow-[0_10px_24px_rgba(0,100,166,0.06)] hover:bg-[#F2FFFC]">
-              <Link to={`/planta-ia?project=${selectedId}`}><Layers className="h-4 w-4" />Montar Planta</Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild className="h-11 rounded-[12px] border-[#CDEFE8] bg-white px-4 font-extrabold shadow-[0_10px_24px_rgba(0,100,166,0.06)] hover:bg-[#F2FFFC]">
-              <Link to={`/unifilar?project=${selectedId}`}><Activity className="h-4 w-4" />Diagrama</Link>
-            </Button>
-          </>
-        )}
-      >
-        <Select value={selectedId} onValueChange={handleSelectProject}>
-          <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
-            <SelectValue placeholder="Selecionar projeto..." />
-          </SelectTrigger>
-          <SelectContent>{projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-        </Select>
-      </PageHeader>
+        subtitle="Configure, dimensione e acompanhe os circuitos elétricos do seu projeto."
+        actions={
+          selectedId && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 rounded-xl border-[#E5EBF1] bg-white px-3 text-xs font-semibold text-[#101828] hover:border-[#00D98A] hover:bg-[#F6F9FC]"
+              >
+                <Link to={`/panel-generator?project=${selectedId}`}>
+                  <Zap className="mr-1.5 h-3.5 w-3.5 text-[#006B50]" />
+                  Quadro SVG
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 rounded-xl border-[#E5EBF1] bg-white px-3 text-xs font-semibold text-[#101828] hover:border-[#00D98A] hover:bg-[#F6F9FC]"
+              >
+                <Link to={`/planta-ia?project=${selectedId}`}>
+                  <Layers className="mr-1.5 h-3.5 w-3.5 text-[#006B50]" />
+                  Montar Planta
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 rounded-xl border-[#E5EBF1] bg-white px-3 text-xs font-semibold text-[#101828] hover:border-[#00D98A] hover:bg-[#F6F9FC]"
+              >
+                <Link to={`/unifilar?project=${selectedId}`}>
+                  <Activity className="mr-1.5 h-3.5 w-3.5 text-[#006B50]" />
+                  Diagrama
+                </Link>
+              </Button>
+            </>
+          )
+        }
+      />
 
       {!project ? (
-        <div className="rounded-2xl border border-dashed border-[#E5EBF1] bg-white px-6 py-12 text-center">
-          <Edit3 className="mx-auto mb-3 h-10 w-10 text-[#00D98A]" />
-          <p className="text-base font-extrabold text-[#101828]">Selecione um projeto</p>
+        <div className="rounded-2xl border border-[#E5EBF1] bg-white p-6 text-center shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+          <div className="mx-auto max-w-md space-y-3">
+            <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-[#E5FBF2] text-[#006B50]">
+              <Edit3 className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-extrabold text-[#101828]">Selecione um projeto para editar</p>
+              <p className="mt-0.5 text-xs font-medium text-[#64748B]">
+                Escolha o projeto ativo no workspace para visualizar cargas, fases e circuitos.
+              </p>
+            </div>
+            {projects.length > 0 && (
+              <Select value={selectedId} onValueChange={handleSelectProject}>
+                <SelectTrigger className="h-10 rounded-xl border-[#E5EBF1] bg-[#F6F9FC] text-xs font-bold">
+                  <SelectValue placeholder="Selecionar projeto..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
         </div>
       ) : (
         <>
-          <WorkspaceProjectContextBar project={project} activeTool="circuits" />
+          <ProjectContextBar
+            project={project}
+            projects={projects}
+            onSelectProject={handleSelectProject}
+            activeTool="circuits"
+            saveState={saveState}
+            saveError={saveError}
+          />
+
           {m && (
             <>
-              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <ExecutiveMetric
+              {/* 5 Indicadores Compactos */}
+              <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <TechnicalStatCard
                   icon={Zap}
-                  label="Carga & Demanda"
-                  value={circuits.length === 0 ? "0,00 kW" : formatNumber((m.totalDemandPower ?? m.totalPower) / 1000, " kW")}
-                  sub={circuits.length === 0 ? "Nenhuma carga cadastrada" : `${formatNumber(m.totalPower / 1000, " kW")} inst · ${formatNumber(m.generalCurrent, " A")} dem. geral`}
+                  label="Carga e demanda"
+                  value={
+                    circuits.length === 0
+                      ? "0,00 kW"
+                      : formatNumber((m.totalDemandPower ?? m.totalPower) / 1000, " kW")
+                  }
+                  subtext={
+                    circuits.length === 0
+                      ? "Sem cargas cadastradas"
+                      : `${formatNumber(m.totalPower / 1000, " kW")} instalada · ${formatNumber(m.generalCurrent, " A")}`
+                  }
                 />
-                <ExecutiveMetric
+
+                <TechnicalStatCard
                   icon={ShieldCheck}
-                  label="Proteção Geral"
-                  value={circuits.length === 0 || !m.generalBreaker ? "Dados insuficientes" : `${m.generalBreakerPoles || 2}P ${m.generalBreaker}A`}
-                  sub={circuits.length === 0 ? "Adicione cargas para dimensionar" : (m.mainProtection?.breaker?.statusMessage || `IDR ${m.generalDrPoles || 2}P ${m.generalDr}A 30mA · ${project.supply_type || "Alimentação"}`)}
+                  label="Proteção geral"
+                  value={
+                    circuits.length === 0 || !m.generalBreaker
+                      ? "Pendente"
+                      : `${m.generalBreakerPoles || 2}P ${m.generalBreaker}A`
+                  }
+                  subtext={
+                    circuits.length === 0
+                      ? "Adicione circuitos"
+                      : m.mainProtection?.breaker?.statusMessage ||
+                        (m.generalDr
+                          ? `IDR ${m.generalDrPoles || 2}P ${m.generalDr}A 30mA · ${project.supply_type || "Padrão"}`
+                          : `Padrão ${project.supply_type || "Mono/Bifásico"}`)
+                  }
                   tone={m.mainProtection?.breaker?.isOverloaded ? "danger" : "default"}
                 />
-                <ExecutiveMetric icon={Layers} label="Quadro" value={`${m.panelSize} DIN`} sub={circuits.length === 0 ? "Quadro padrão 12 DIN" : `${m.totalDins} módulos + reserva`} />
-                <ExecutiveMetric
-                  icon={CircleGauge}
-                  label="DR / críticos"
-                  value={`${drCount} / ${criticalCount}`}
-                  sub={criticalCount > 0 ? `${criticalCount} circuito(s) com atenção` : drCount > 0 ? `${drCount} circuito(s) com DR 30mA` : "Nenhum circuito crítico"}
-                  tone={criticalCount ? "warning" : "default"}
+
+                <TechnicalStatCard
+                  icon={Layers}
+                  label="Quadro elétrico"
+                  value={`${m.panelSize} DIN`}
+                  subtext={
+                    circuits.length === 0
+                      ? "Padrão inicial 12 DIN"
+                      : `${m.totalDins} módulo(s) + reserva`
+                  }
                 />
-                <ExecutiveMetric
-                  icon={circuits.length === 0 ? CircleGauge : m.nbrScore >= 90 ? CheckCircle2 : AlertTriangle}
-                  label="Conformidade NBR"
-                  value={circuits.length === 0 ? "Pendente" : `${m.nbrScore}%`}
-                  sub={circuits.length === 0 ? "Sem cargas para auditoria" : (m.audit?.statusText || (m.nbrScore >= 90 ? "Conforme NBR 5410" : "Revisar pendências"))}
-                  tone={circuits.length === 0 ? "warning" : m.nbrScore >= 90 ? "default" : "warning"}
+
+                <TechnicalStatCard
+                  icon={CircleGauge}
+                  label="DR e críticos"
+                  value={`${drCount} / ${criticalCount}`}
+                  subtext={
+                    criticalCount > 0
+                      ? `${criticalCount} circuito(s) com atenção`
+                      : drCount > 0
+                      ? `${drCount} com DR 30mA · 0 críticos`
+                      : "Nenhum circuito com DR ou crítico"
+                  }
+                  tone={criticalCount > 0 ? "warning" : "default"}
+                />
+
+                <TechnicalStatCard
+                  icon={
+                    circuits.length === 0
+                      ? CircleGauge
+                      : (m.validations || []).length === 0
+                      ? CheckCircle2
+                      : AlertTriangle
+                  }
+                  label="Verificações técnicas"
+                  value={circuits.length === 0 ? "Sem cargas" : `${m.nbrScore}%`}
+                  subtext={
+                    circuits.length === 0
+                      ? "Aguardando circuitos"
+                      : (m.validations || []).length === 0
+                      ? "Preliminar NBR 5410 OK"
+                      : `${m.validations.length} apontamento(s) preliminar(es)`
+                  }
+                  tone={
+                    circuits.length === 0
+                      ? "default"
+                      : (m.validations || []).length === 0
+                      ? "default"
+                      : "warning"
+                  }
                 />
               </section>
 
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-                <PhaseReviewPanel metrics={m} />
-                <ValidationPanel
-                  metrics={m}
+              {/* Distribuição de Fases + Revisões NBR */}
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
+                <PhaseDistributionCard metrics={m} hasCircuits={circuits.length > 0} />
+                <TechnicalReviewCard
+                  hasCircuits={circuits.length > 0}
                   validations={m.validations || []}
+                  actionPlan={actionPlan}
                   onAutoFix={autoFixNBR}
                   saving={saving}
                   canAutoFix={(m.validations || []).length > 0}
                   feedback={autoFixFeedback}
+                  onLocateCircuit={handleLocateCircuit}
                 />
               </div>
             </>
           )}
 
-          <div className="flex flex-col gap-3 rounded-[18px] border border-[#BCEEE5] bg-[#E8FCF8] px-4 py-4 shadow-[0_14px_34px_rgba(0,100,166,0.055)] sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[12px] font-extrabold uppercase tracking-[0.14em] text-[#00d8b8]">Circuitos</p>
-              <h2 className="mt-1 text-[24px] font-extrabold leading-tight text-[#101828]">
-                {circuits.length} circuito{circuits.length === 1 ? "" : "s"} configurado{circuits.length === 1 ? "" : "s"}
-              </h2>
-            </div>
-            <CircuitFormDialog
-              onSave={addCircuit}
-              trigger={<Button size="sm" disabled={saving} className="h-11 rounded-[12px] px-5 font-extrabold"><Plus className="w-4 h-4 mr-2" />Novo circuito</Button>}
-            />
-          </div>
-
-          {circuits.length === 0 ? (
-            <div className="rounded-[18px] border border-dashed border-[#BCEEE5] bg-[#F7FBFE] px-6 py-12 text-center shadow-[0_14px_34px_rgba(0,100,166,0.04)]">
-              <Edit3 className="mx-auto mb-3 h-10 w-10 text-[#00d8b8]" />
-              <p className="text-base font-extrabold text-[#0f1728]">Nenhum circuito cadastrado</p>
-              <p className="mt-1 text-sm font-medium text-[#667085]">Adicione circuitos para calcular proteção, fases e conformidade NBR.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {circuits.map((c, i) => (
-                <CircuitCard
-                  key={`${c.name}-${i}`}
-                  circuit={c}
-                  index={i}
-                  saving={saving}
-                  onEdit={(calc) => updateCircuit(i, calc)}
-                  onRemove={() => removeCircuit(i)}
-                />
-              ))}
-            </div>
-          )}
+          {/* Lista Operacional de Circuitos */}
+          <CircuitList
+            circuits={circuits}
+            saving={saving}
+            onAddCircuit={addCircuit}
+            onEditCircuit={updateCircuit}
+            onRemoveCircuit={(index, circuit) => setPendingDelete({ index, circuit })}
+            highlightedIndex={highlightedIndex}
+          />
         </>
       )}
+
+      {/* Confirmação Segura de Exclusão */}
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <AlertDialogContent className="rounded-2xl border-[#E5EBF1] bg-white p-6 shadow-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base font-extrabold text-[#101828]">
+              Excluir circuito "{pendingDelete?.circuit?.name || "selecionado"}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs font-medium leading-relaxed text-[#64748B]">
+              Os cálculos de demanda, distribuição de fases e quadro elétrico do projeto serão recalculados automaticamente sem este circuito.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-3 gap-2">
+            <AlertDialogCancel className="h-9 rounded-xl border-[#E5EBF1] bg-white text-xs font-semibold text-[#101828]">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmRemoveCircuit}
+              className="h-9 rounded-xl bg-[#EF4444] text-xs font-bold text-white hover:bg-red-600"
+            >
+              Excluir circuito
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

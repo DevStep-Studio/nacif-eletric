@@ -91,25 +91,27 @@ function suggestFromKnowledge(name) {
   };
 }
 
-function PreviewItem({ icon: Icon, label, value, detail, tone = "text-slate-950" }) {
+function PreviewItem({ icon: Icon, label, value, detail, tone = "text-[#101828]" }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-      <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
-        <Icon className="h-3.5 w-3.5 text-slate-500" />
+    <div className="rounded-xl border border-[#E5EBF1] bg-white px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+        <Icon className="h-3.5 w-3.5 text-[#006B50]" />
         {label}
       </div>
-      <p className={`mt-1 text-base font-extrabold leading-tight ${tone}`}>{value}</p>
-      {detail && <p className="mt-0.5 text-[11px] font-semibold text-slate-500">{detail}</p>}
+      <p className={`mt-1 text-sm font-extrabold leading-tight tabular-nums ${tone}`}>{value}</p>
+      {detail && <p className="mt-0.5 text-[11px] font-medium text-[#64748B]">{detail}</p>}
     </div>
   );
 }
 
-export default function CircuitFormDialog({ onSave, initialData, trigger, disabled = false }) {
+export default function CircuitFormDialog({ onSave, initialData, trigger, disabled = false, saving = false }) {
   const [form, setForm] = useState(() => getInitialForm(initialData));
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
@@ -197,9 +199,11 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
     }
   };
 
-  const canSave = form.name.trim() && form.voltage && form.supply_type;
+  const canSave = Boolean(form.name.trim() && form.voltage && form.supply_type);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!canSave || submitting || saving) return;
+    setSaveError("");
     const calc = calcCircuit({
       ...form,
       power_w: Number(form.power_w) || 0,
@@ -214,122 +218,134 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
       temp_ambient: Number(form.temp_ambient) || 30,
     });
 
-    onSave(calc);
-    setForm(getInitialForm(null));
-    setOpen(false);
+    setSubmitting(true);
+    try {
+      await onSave(calc);
+      setForm(getInitialForm(null));
+      setOpen(false);
+    } catch (err) {
+      setSaveError(err?.message || "Não foi possível salvar o circuito. Tente novamente.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const currentEffectivePower = Math.round((Number(form.power_w) || 0) * (Number(form.demand_factor) || 1));
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (!submitting) {
+        setSaveError("");
+        setOpen(nextOpen);
+      }
+    }}>
       <DialogTrigger asChild disabled={disabled}>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border-[#E5EBF1] bg-white">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-primary" />
-            {initialData ? "Editar circuito" : "Novo circuito"}
+          <DialogTitle className="flex items-center gap-2 text-lg font-extrabold text-[#101828]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#E5FBF2] text-[#006B50]">
+              <Zap className="h-4 w-4" />
+            </span>
+            <span>{initialData ? "Editar circuito" : "Novo circuito"}</span>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5">
-          <div className="flex items-center gap-3 rounded-xl border border-[#CDEFE8] bg-[#F8FBFD] p-3">
-            <Sparkles className="w-4 h-4 text-primary shrink-0" />
+        <div className="space-y-5 pt-1">
+          <div className="flex flex-col gap-2.5 rounded-xl border border-[#BEEAD2] bg-[#E5FBF2] p-3.5 sm:flex-row sm:items-center">
+            <Sparkles className="h-4 w-4 shrink-0 text-[#006B50]" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-extrabold text-[#0f1728]">Sugestão técnica automática</p>
+              <p className="text-xs font-extrabold text-[#101828]">Sugestão técnica automática</p>
               {aiSuggestion
-                ? <p className="text-[11px] font-medium text-[#687386]">{aiSuggestion.justification || `${aiSuggestion.power_w}W · ${aiSuggestion.voltage}V · ${aiSuggestion.supply_type} (Fd: ${aiSuggestion.demand_factor || form.demand_factor}) - parâmetros aplicados`}</p>
-                : <p className="text-[11px] font-medium text-[#687386]">Digite o nome do circuito/equipamento e clique em sugerir para preencher potência, tensão, fp e demanda.</p>}
+                ? <p className="text-[11px] font-medium text-[#006B50]">{aiSuggestion.justification || `${aiSuggestion.power_w}W · ${aiSuggestion.voltage}V · ${aiSuggestion.supply_type} (Fd: ${aiSuggestion.demand_factor || form.demand_factor}) - parâmetros aplicados`}</p>
+                : <p className="text-[11px] font-medium text-[#006B50]">Informe o nome do circuito ou equipamento para sugerir potência, tensão, fp e demanda.</p>}
             </div>
             <button
               type="button"
               onClick={applyAiSuggestion}
               disabled={aiLoading || !form.name.trim()}
-              className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white text-xs font-extrabold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="shrink-0 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00D98A] px-3 text-xs font-extrabold text-[#031923] hover:bg-[#00C987] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
               {aiLoading ? "Calculando..." : "Sugerir"}
             </button>
           </div>
 
-          <section>
-            <h3 className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Identificação</h3>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="col-span-2 space-y-1">
-                <Label>Nome do Circuito *</Label>
-                <Input placeholder="Ex: Tomadas Cozinha" value={form.name} onChange={e => set("name", e.target.value)} />
+          <section className="rounded-xl border border-[#E5EBF1] bg-[#F8FAFC] p-4 space-y-3">
+            <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[#64748B]">
+              1. Identificação
+            </h3>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="md:col-span-2 space-y-1">
+                <Label className="text-xs font-bold text-[#101828]">Nome do Circuito *</Label>
+                <Input placeholder="Ex: Tomadas Cozinha" value={form.name} onChange={e => set("name", e.target.value)} className="h-9 rounded-xl border-[#E5EBF1] bg-white" />
               </div>
-              <div className="col-span-2 space-y-1">
-                <Label>Descrição</Label>
-                <Input placeholder="Descrição técnica do circuito" value={form.description} onChange={e => set("description", e.target.value)} />
+              <div className="md:col-span-2 space-y-1">
+                <Label className="text-xs font-bold text-[#101828]">Descrição</Label>
+                <Input placeholder="Descrição técnica ou localização do circuito" value={form.description} onChange={e => set("description", e.target.value)} className="h-9 rounded-xl border-[#E5EBF1] bg-white" />
               </div>
               <div className="space-y-1">
-                <Label>Categoria</Label>
+                <Label className="text-xs font-bold text-[#101828]">Tipo / Categoria</Label>
                 <Select value={form.type} onValueChange={handleCategoryChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 rounded-xl border-[#E5EBF1] bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent>{CIRCUIT_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Quantidade de Pontos</Label>
-                <Input type="number" min="1" value={form.point_count} onChange={e => set("point_count", Number(e.target.value))} />
+                <Label className="text-xs font-bold text-[#101828]">Quantidade de Pontos</Label>
+                <Input type="number" min="1" value={form.point_count} onChange={e => set("point_count", Number(e.target.value))} className="h-9 rounded-xl border-[#E5EBF1] bg-white" />
               </div>
-              <div className="col-span-2 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="md:col-span-2 flex items-center gap-3 rounded-xl border border-[#E5EBF1] bg-white p-3">
                 <input
                   type="checkbox"
                   id="wet_area"
                   checked={!!form.wet_area}
                   onChange={e => set("wet_area", e.target.checked)}
-                  className="w-4 h-4 rounded accent-primary"
+                  className="h-4 w-4 rounded accent-[#006B50]"
                 />
                 <div>
-                  <label htmlFor="wet_area" className="text-sm font-extrabold cursor-pointer text-[#0f1728]">Área molhada</label>
-                  <p className="text-[11px] font-medium text-muted-foreground">Banheiro, cozinha, lavanderia, área externa ou piscina. Reforça a exigência de DR 30mA.</p>
+                  <label htmlFor="wet_area" className="text-xs font-extrabold cursor-pointer text-[#101828]">Área molhada</label>
+                  <p className="text-[11px] font-medium text-[#64748B]">Banheiro, cozinha, lavanderia ou área externa. Prevê proteção DR de 30 mA.</p>
                 </div>
               </div>
             </div>
           </section>
 
-          <section>
-            <h3 className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
-              Alimentação elétrica
-            </h3>
-            <div className="grid gap-3 rounded-xl border border-[#CDEFE8] bg-[#F8FBFD] p-4 md:grid-cols-2">
+          <section className="rounded-xl border border-[#E5EBF1] bg-[#F8FAFC] p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[#64748B]">
+                2. Dados elétricos e demanda (NBR 5410)
+              </h3>
+              {preview?.power_w > 0 && (
+                <span className="rounded-md border border-[#BEEAD2] bg-[#E5FBF2] px-2 py-0.5 text-[11px] font-bold text-[#006B50] tabular-nums">
+                  {preview.power_w} W ({preview.power_va} VA) · Demanda {preview.demand_power_w} W
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="space-y-1">
-                <Label>Tipo de Alimentação *</Label>
+                <Label className="text-xs font-bold text-[#101828]">Tipo de Alimentação *</Label>
                 <Select value={form.supply_type} onValueChange={v => set("supply_type", v)}>
-                  <SelectTrigger className={!form.supply_type ? "border-destructive" : ""}>
+                  <SelectTrigger className={`h-9 rounded-xl bg-white ${!form.supply_type ? "border-[#EF4444]" : "border-[#E5EBF1]"}`}>
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>{SUPPLY_TYPES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
-                {!form.supply_type && <p className="text-[10px] text-destructive">Campo obrigatório</p>}
+                {!form.supply_type && <p className="text-[10.5px] font-semibold text-[#EF4444]">Campo obrigatório</p>}
               </div>
               <div className="space-y-1">
-                <Label>Tensão do Circuito *</Label>
+                <Label className="text-xs font-bold text-[#101828]">Tensão (V) *</Label>
                 <Select value={String(form.voltage)} onValueChange={v => set("voltage", v)}>
-                  <SelectTrigger className={!form.voltage ? "border-destructive" : ""}>
+                  <SelectTrigger className={`h-9 rounded-xl bg-white ${!form.voltage ? "border-[#EF4444]" : "border-[#E5EBF1]"}`}>
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
-                  <SelectContent>{VOLTAGES.map(v => <SelectItem key={v} value={String(v)}>{v}V</SelectItem>)}</SelectContent>
+                  <SelectContent>{VOLTAGES.map(v => <SelectItem key={v} value={String(v)}>{v} V</SelectItem>)}</SelectContent>
                 </Select>
-                {!form.voltage && <p className="text-[10px] text-destructive">Campo obrigatório</p>}
+                {!form.voltage && <p className="text-[10.5px] font-semibold text-[#EF4444]">Campo obrigatório</p>}
               </div>
             </div>
-          </section>
 
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Carga e demanda (NBR 5410)</h3>
-              {preview?.power_w > 0 && (
-                <span className="text-xs font-bold text-primary">
-                  {preview.power_w} W ({preview.power_va} VA) · Demanda: {preview.demand_power_w} W
-                </span>
-              )}
-            </div>
-            <div className="grid gap-3 md:grid-cols-4">
-              <div className="space-y-1 col-span-2">
-                <Label>Potência Instalada</Label>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="space-y-1 md:col-span-2">
+                <Label className="text-xs font-bold text-[#101828]">Potência Instalada</Label>
                 <div className="flex gap-2">
                   <Input
                     type="number"
@@ -338,10 +354,10 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
                     placeholder="Ex: 2000"
                     value={form.power_w}
                     onChange={e => set("power_w", e.target.value)}
-                    className="flex-1"
+                    className="h-9 flex-1 rounded-xl border-[#E5EBF1] bg-white"
                   />
                   <Select value={form.power_unit || "W"} onValueChange={v => set("power_unit", v)}>
-                    <SelectTrigger className="w-24">
+                    <SelectTrigger className="h-9 w-24 rounded-xl border-[#E5EBF1] bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -351,22 +367,22 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
                 </div>
               </div>
               <div className="space-y-1">
-                <Label>Fator de Potência (fp)</Label>
-                <Input type="number" step="0.01" min="0.1" max="1" placeholder="Ex: 0.92" value={form.power_factor} onChange={e => set("power_factor", e.target.value)} />
+                <Label className="text-xs font-bold text-[#101828]">Fator de Potência</Label>
+                <Input type="number" step="0.01" min="0.1" max="1" placeholder="0.92" value={form.power_factor} onChange={e => set("power_factor", e.target.value)} className="h-9 rounded-xl border-[#E5EBF1] bg-white" />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <Label>Fator Demanda (Fd)</Label>
-                  <span className="text-[10px] font-bold text-slate-500">Padrão: {getDefaultDemandFactor(form.type, form.name)}</span>
+                  <Label className="text-xs font-bold text-[#101828]">Fator Demanda</Label>
+                  <span className="text-[10px] font-semibold text-[#64748B]">Padrão: {getDefaultDemandFactor(form.type, form.name)}</span>
                 </div>
-                <Input type="number" step="0.05" min="0.05" max="1" placeholder="Ex: 0.70" value={form.demand_factor} onChange={e => set("demand_factor", e.target.value)} />
+                <Input type="number" step="0.05" min="0.05" max="1" placeholder="0.70" value={form.demand_factor} onChange={e => set("demand_factor", e.target.value)} className="h-9 rounded-xl border-[#E5EBF1] bg-white" />
               </div>
 
               {(["cv", "HP"].includes(form.power_unit) || ["Motor", "Bomba Hidráulica"].includes(form.type)) && (
-                <div className="space-y-1 col-span-2">
+                <div className="space-y-1 md:col-span-2">
                   <div className="flex items-center justify-between">
-                    <Label>Rendimento do Motor (η)</Label>
-                    <span className="text-[10px] font-bold text-slate-500">Ex: 0.85 = 85%</span>
+                    <Label className="text-xs font-bold text-[#101828]">Rendimento do Motor (η)</Label>
+                    <span className="text-[10px] font-semibold text-[#64748B]">Ex: 0.85 = 85%</span>
                   </div>
                   <Input
                     type="number"
@@ -376,22 +392,23 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
                     placeholder="0.85"
                     value={form.efficiency ?? 0.85}
                     onChange={e => set("efficiency", Number(e.target.value))}
+                    className="h-9 rounded-xl border-[#E5EBF1] bg-white"
                   />
                 </div>
               )}
             </div>
 
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-slate-500 mr-1">Atalhos Fd:</span>
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="mr-1 text-[11px] font-medium text-[#64748B]">Atalhos Fd:</span>
               {DEMAND_PRESETS.map((preset) => (
                 <button
                   key={preset.value}
                   type="button"
                   onClick={() => set("demand_factor", preset.value)}
-                  className={`rounded-md border px-2 py-1 text-[10px] font-bold transition-colors ${
+                  className={`rounded-lg border px-2 py-1 text-[10.5px] font-bold transition-colors ${
                     Number(form.demand_factor) === preset.value
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      ? "border-[#00D98A] bg-[#E5FBF2] text-[#006B50]"
+                      : "border-[#E5EBF1] bg-white text-[#64748B] hover:border-[#BEEAD2] hover:text-[#101828]"
                   }`}
                 >
                   {preset.value}
@@ -400,76 +417,114 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
             </div>
           </section>
 
-          <section>
-            <h3 className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Instalação</h3>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1 col-span-2">
-                <Label>Método de Instalação</Label>
+          <section className="rounded-xl border border-[#E5EBF1] bg-[#F8FAFC] p-4 space-y-3">
+            <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[#64748B]">
+              3. Condutores e instalação
+            </h3>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="md:col-span-2 space-y-1">
+                <Label className="text-xs font-bold text-[#101828]">Método de Instalação</Label>
                 <Select value={form.install_method} onValueChange={v => set("install_method", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 rounded-xl border-[#E5EBF1] bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent>{METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Distância / Comprimento (m)</Label>
-                <Input type="number" min="1" placeholder="Ex: 15" value={form.length_m} onChange={e => set("length_m", e.target.value)} />
+                <Label className="text-xs font-bold text-[#101828]">Comprimento (m)</Label>
+                <Input type="number" min="1" placeholder="Ex: 15" value={form.length_m} onChange={e => set("length_m", e.target.value)} className="h-9 rounded-xl border-[#E5EBF1] bg-white" />
               </div>
               <div className="space-y-1">
-                <Label>Temperatura Ambiente (°C)</Label>
+                <Label className="text-xs font-bold text-[#101828]">Temperatura Ambiente (°C)</Label>
                 <Select value={String(form.temp_ambient)} onValueChange={v => set("temp_ambient", Number(v))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 rounded-xl border-[#E5EBF1] bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent>{TEMPS.map(t => <SelectItem key={t} value={String(t)}>{t}°C</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Quantidade de Circuitos Agrupados</Label>
-                <Input type="number" min="1" max="9" value={form.group_count} onChange={e => set("group_count", Number(e.target.value))} />
+                <Label className="text-xs font-bold text-[#101828]">Circuitos Agrupados</Label>
+                <Input type="number" min="1" max="9" value={form.group_count} onChange={e => set("group_count", Number(e.target.value))} className="h-9 rounded-xl border-[#E5EBF1] bg-white" />
               </div>
             </div>
           </section>
 
           {preview && (
-            <section className="space-y-3 rounded-2xl border border-[#E5EBF1] bg-[#F6F9FC] p-4">
+            <section className="space-y-3 rounded-xl border border-[#E5EBF1] bg-[#F8FAFC] p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-extrabold text-[#101828]">Dimensionamento NBR 5410</h3>
-                <div className="flex flex-wrap gap-2">
-                  <Badge className="bg-[#DDFCF0] text-[#006F51] text-[10px]">
-                    Demanda: {preview.demand_power_w} W (Fd {preview.demand_factor})
+                <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[#64748B]">
+                  4. Proteção e verificações NBR 5410
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge className="rounded-md border border-[#BEEAD2] bg-[#E5FBF2] text-[#006B50] text-[10.5px]">
+                    Demanda {preview.demand_power_w} W
                   </Badge>
-                  {preview.needs_dr && <Badge className="bg-[#DDFCF0] text-[#006F51] text-[10px]">DR 30mA</Badge>}
-                  <Badge className="bg-blue-50 text-blue-700 text-[10px]">DPS previsto</Badge>
-                  <Badge className={preview.voltage_drop_ok ? "bg-[#DDFCF0] text-[#006F51] text-[10px]" : "bg-red-50 text-[#EF4444] text-[10px]"}>
-                    Queda {preview.voltage_drop_ok ? "OK" : "revisar"}
+                  {preview.needs_dr && (
+                    <Badge className="rounded-md border border-[#BEEAD2] bg-[#E5FBF2] text-[#006B50] text-[10.5px]">
+                      DR 30 mA
+                    </Badge>
+                  )}
+                  <Badge className="rounded-md border border-blue-200 bg-[#EDF5FF] text-blue-700 text-[10.5px]">
+                    DPS previsto
+                  </Badge>
+                  <Badge className={`rounded-md border text-[10.5px] ${preview.voltage_drop_ok ? "border-[#BEEAD2] bg-[#E5FBF2] text-[#006B50]" : "border-red-200 bg-[#FEF2F2] text-[#EF4444]"}`}>
+                    Queda ΔU {preview.voltage_drop_ok ? "OK" : "Revisar"}
                   </Badge>
                 </div>
               </div>
-              <div className="grid gap-3 text-xs md:grid-cols-4">
+              <div className="grid grid-cols-1 gap-2.5 text-xs md:grid-cols-3">
                 <PreviewItem
                   icon={CircleGauge}
                   label="Corrente de Projeto (Ib)"
                   value={`${preview.project_current_a} A`}
-                  detail={`${preview.nominal_current_a} A nominal (${preview.corrected_current_a} A corrigida)`}
-                  tone="text-primary"
+                  detail={`${preview.nominal_current_a} A nom. · ${preview.corrected_current_a} A corr.`}
+                  tone="text-[#006B50]"
                 />
-                <PreviewItem icon={Cable} label="Condutor" value={preview.wire_gauge} detail={`mín. ${preview.minimum_wire_area}mm²`} />
-                <PreviewItem icon={ShieldCheck} label="Proteção" value={`${preview.breaker_a}A ${preview.breaker_poles}P/${preview.breaker_curve}`} detail={`${preview.breaking_capacity_ka} kA`} />
+                <PreviewItem icon={Cable} label="Condutor" value={preview.wire_gauge} detail={`Seção mínima ${preview.minimum_wire_area} mm²`} />
+                <PreviewItem icon={ShieldCheck} label="Proteção" value={`${preview.breaker_a}A ${preview.breaker_poles}P/${preview.breaker_curve}`} detail={`Icn ${preview.breaking_capacity_ka} kA · ${preview.din_modules} DIN`} />
                 <PreviewItem
                   icon={Zap}
-                  label="Queda ΔU"
+                  label="Queda de tensão (ΔU)"
                   value={`${preview.voltage_drop_pct}%`}
                   detail={`${preview.voltage_drop_v} V em ${Number(form.length_m) || 15} m`}
-                  tone={preview.voltage_drop_ok ? "text-slate-950" : "text-red-600"}
+                  tone={preview.voltage_drop_ok ? "text-[#101828]" : "text-[#EF4444]"}
                 />
-                <PreviewItem icon={Sparkles} label="Correções" value={`Ft ${preview.temp_factor}`} detail={`Fg ${preview.group_factor}`} />
-                <PreviewItem icon={Plus} label="Quadro" value={`${preview.din_modules} DIN`} detail="ocupação estimada" />
+                <PreviewItem icon={Sparkles} label="Fatores de correção" value={`Ft ${preview.temp_factor} · Fg ${preview.group_factor}`} detail={`Temperatura ${form.temp_ambient || 30}°C`} />
+                <PreviewItem icon={Plus} label="Ocupação no quadro" value={`${preview.din_modules} DIN`} detail={`${form.point_count || 1} ponto(s) no circuito`} />
               </div>
             </section>
           )}
 
-          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => setOpen(false)} className="font-bold">Cancelar</Button>
-            <Button onClick={handleSave} disabled={!canSave} className="font-extrabold">
-              <Plus className="w-4 h-4 mr-1" />{initialData ? "Atualizar circuito" : "Salvar circuito"}
+          {saveError && (
+            <p role="alert" className="rounded-xl border border-red-200 bg-[#FEF2F2] px-3.5 py-2.5 text-xs font-semibold text-[#EF4444]">
+              {saveError}
+            </p>
+          )}
+
+          <div className="flex flex-col-reverse gap-2 border-t border-[#E5EBF1] pt-4 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting || saving}
+              onClick={() => setOpen(false)}
+              className="h-9 rounded-xl border-[#E5EBF1] px-4 text-xs font-bold text-[#101828]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave || submitting || saving}
+              className="h-9 rounded-xl bg-[#00D98A] px-4 text-xs font-extrabold text-[#031923] hover:bg-[#00C987]"
+            >
+              {submitting || saving ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {submitting || saving
+                ? "Salvando..."
+                : initialData
+                ? "Atualizar circuito"
+                : "Salvar circuito"}
             </Button>
           </div>
         </div>

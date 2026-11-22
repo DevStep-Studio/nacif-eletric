@@ -1,73 +1,45 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  CheckCircle2,
-  CreditCard,
-  FolderOpen,
-  ShieldCheck,
-  GraduationCap,
-  Sparkles,
-  Settings,
-  Loader2,
-  Clock,
-  Lock,
-} from "lucide-react";
+import { CheckCircle2, CreditCard, FolderOpen, Settings, ShieldCheck } from "lucide-react";
 import { backend } from "@/api/backendClient";
 import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import PageHeader from "@/components/PageHeader";
 import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import BillingCheckoutModal from "@/components/subscription/BillingCheckoutModal";
-import {
-  FEATURE_KEYS,
-  applyRemotePlanCatalog,
-  PLAN_COMPARISON_ROWS,
-  buildUsageFromProjects,
-  getUsageRows,
-  normalizeSubscription,
-  formatPlanPrice,
-  calculateAnnualSavings,
-} from "@/lib/subscriptionPlans";
 import AcademicVerificationModal from "@/components/subscription/AcademicVerificationModal";
 import PlanChangeModal from "@/components/subscription/PlanChangeModal";
 import ManageSubscriptionModal from "@/components/subscription/ManageSubscriptionModal";
-import { verifyCheckoutSession, syncSubscription } from "@/lib/billingApi";
+import InternalPageHeader from "@/components/internal/InternalPageHeader";
+import SubscriptionOverview from "@/components/internal/SubscriptionOverview";
+import BillingNotice from "@/components/internal/BillingNotice";
+import UsageMetricCard from "@/components/internal/UsageMetricCard";
+import PricingCard from "@/components/internal/PricingCard";
+import PlanComparison from "@/components/internal/PlanComparison";
+import BillingHistoryCard from "@/components/internal/BillingHistoryCard";
+import {
+  FEATURE_KEYS,
+  applyRemotePlanCatalog,
+  buildUsageFromProjects,
+  formatPlanPrice,
+  getUsageRows,
+  normalizeSubscription,
+} from "@/lib/subscriptionPlans";
+import { syncSubscription, verifyCheckoutSession } from "@/lib/billingApi";
 
-const featureDescriptions = {
+const FEATURE_DESCRIPTIONS = {
   [FEATURE_KEYS.PROJECTS]: "Quantidade de projetos ativos no workspace.",
-  [FEATURE_KEYS.STORAGE_MB]: "Arquivos, importações e anexos associados aos projetos.",
-  [FEATURE_KEYS.TEAM_MEMBERS]: "Usuários que podem participar da organização.",
-  [FEATURE_KEYS.EXPORTS]: "Geração de PDF, memorial, listas e documentação.",
-  [FEATURE_KEYS.AI_SCANS]: "Processamentos de imagem e leitura assistida por IA.",
-  [FEATURE_KEYS.CUSTOM_TEMPLATES]: "Modelos criados pela organização.",
-};
-
-const stateStyles = {
-  normal: "text-[#0f4f49] bg-[#E8FCF8] border-[#BCEEE5]",
-  near: "text-amber-800 bg-amber-50 border-amber-200",
-  limit: "text-rose-800 bg-rose-50 border-rose-200",
-  unlimited: "text-[#0f4f49] bg-[#E8FCF8] border-[#BCEEE5]",
-};
-
-const usageCardStyles = {
-  normal: "border-[#E4E7EC] bg-white",
-  near: "border-amber-200 bg-amber-50/30",
-  limit: "border-rose-200 bg-rose-50/30",
-  unlimited: "border-[#E4E7EC] bg-white",
+  [FEATURE_KEYS.STORAGE_MB]: "Arquivos, plantas e anexos vinculados.",
+  [FEATURE_KEYS.TEAM_MEMBERS]: "Usuários participantes da organização.",
+  [FEATURE_KEYS.EXPORTS]: "PDFs técnicos, memoriais e planilhas no ciclo.",
+  [FEATURE_KEYS.AI_SCANS]: "Leituras e análises assistidas por IA no ciclo.",
+  [FEATURE_KEYS.CUSTOM_TEMPLATES]: "Modelos personalizados da organização.",
 };
 
 const formatIsoDate = (iso) => {
-  if (!iso) return "Não informada";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return String(iso);
-    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-  } catch {
-    return String(iso);
-  }
+  if (!iso) return null;
+  const d = new Date(String(iso).length === 10 ? `${iso}T12:00:00` : iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
 export default function Subscription() {
@@ -83,7 +55,6 @@ export default function Subscription() {
   const [billingData, setBillingData] = useState({ subscription: null, payments: [] });
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
-  // Modais
   const [isPlanChangeOpen, setIsPlanChangeOpen] = useState(false);
   const [selectedTargetPlan, setSelectedTargetPlan] = useState(null);
   const [isAcademicModalOpen, setIsAcademicModalOpen] = useState(false);
@@ -105,7 +76,7 @@ export default function Subscription() {
       setServerUsage(status.usage || {});
       setBillingData(status.billing || { subscription: null, payments: [] });
       applyRemotePlanCatalog(plans.plans);
-      setCatalog(plans.plans.filter(p => p.code !== "free"));
+      setCatalog(plans.plans.filter((p) => p.code !== "free"));
       setLoadError("");
       setActiveUser(me || user);
       setProjects(Array.isArray(projectList) ? projectList : []);
@@ -121,14 +92,27 @@ export default function Subscription() {
   }, [user]);
 
   const subscription = normalizeSubscription(activeUser);
-  const hasBillingInProgress = billingData.subscription && !["cancelled", "failed"].includes(billingData.subscription.status);
+  const hasBillingInProgress =
+    billingData.subscription && !["cancelled", "failed"].includes(billingData.subscription.status);
   const canStartTrial = subscription.trialEligible && !subscription.hasAccess && !hasBillingInProgress;
-  const usage = useMemo(() => ({ ...buildUsageFromProjects(projects, {}, activeUser), ...serverUsage }), [projects, activeUser, serverUsage]);
+
+  const usage = useMemo(
+    () => ({ ...buildUsageFromProjects(projects, {}, activeUser), ...serverUsage }),
+    [projects, activeUser, serverUsage]
+  );
   const usageRows = useMemo(() => getUsageRows(subscription.plan, usage), [subscription.plan, usage]);
 
+  const completoPlan = catalog.find((p) => p.code === "completo");
+  const trialPriceLabel = completoPlan ? `${formatPlanPrice(completoPlan, "monthly")}/mês` : "R$ 210,00/mês";
 
   const handlePlanChangeSuccess = (newPlan, result) => {
-    setBillingMessage(`Alteração para ${newPlan.name} agendada para ${result?.effectiveDate ? new Date(`${result.effectiveDate}T12:00:00`).toLocaleDateString("pt-BR") : "o próximo ciclo"}.`);
+    setBillingMessage(
+      `Alteração para ${newPlan.name} agendada para ${
+        result?.effectiveDate
+          ? new Date(`${result.effectiveDate}T12:00:00`).toLocaleDateString("pt-BR")
+          : "o próximo ciclo"
+      }.`
+    );
     loadData();
     setTimeout(() => setBillingMessage(""), 5000);
   };
@@ -168,7 +152,11 @@ export default function Subscription() {
         await refreshBilling();
         if (stopped) return;
         if (returned) {
-          setBillingMessage(paid ? "Pagamento confirmado pelo Asaas. Seu plano está disponível." : "Pagamento em processamento. O plano será liberado após a confirmação do Asaas.");
+          setBillingMessage(
+            paid
+              ? "Pagamento confirmado pelo Asaas. Seu plano está disponível."
+              : "Pagamento em processamento. O plano será liberado após a confirmação."
+          );
           if (!paid && subscriptionId && attempt < 9) timer = setTimeout(() => poll(attempt + 1), 3000);
           else window.history.replaceState({}, document.title, window.location.pathname);
         }
@@ -180,40 +168,73 @@ export default function Subscription() {
       }
     };
     poll();
-    return () => { stopped = true; clearTimeout(timer); };
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
   }, [user?.id]);
 
-  const handleSubscription = planCode => {
-    const target = catalog.find(plan => plan.code === planCode);
+  const handleSubscription = (planCode) => {
+    const target = catalog.find((plan) => plan.code === planCode);
     if (!target) return;
     if (target.isPendingRelease || target.code === "estudante") {
-      setBillingMessage("O plano Estudante está temporariamente em aguardo e será liberado nas próximas atualizações do aplicativo.");
+      setBillingMessage(
+        "O plano Estudante está temporariamente em aguardo e será liberado nas próximas atualizações."
+      );
       return;
     }
     setSelectedTargetPlan(target);
     const current = billingData.subscription;
     if (current && !["cancelled", "failed"].includes(current.status)) {
-      if (["active", "past_due"].includes(current.status) && !current.cancelRequested) setIsPlanChangeOpen(true);
-      else { setBillingMessage("Você já possui uma contratação em andamento. Consulte suas cobranças."); setIsManageModalOpen(true); }
-    } else setIsCheckoutOpen(true);
+      if (["active", "past_due"].includes(current.status) && !current.cancelRequested) {
+        setIsPlanChangeOpen(true);
+      } else {
+        setBillingMessage("Você já possui uma contratação em andamento. Consulte suas cobranças.");
+        setIsManageModalOpen(true);
+      }
+    } else {
+      setIsCheckoutOpen(true);
+    }
   };
-  const handleCustomerPortal = () => setIsManageModalOpen(true);
 
-  if (loadError) return <div role="alert" className="p-6"><p>{loadError}</p><button type="button" onClick={loadData}>Tentar novamente</button></div>;
+  const scrollToPlans = () => {
+    const el = document.querySelector("#compare-plans");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+  };
+
+  if (loadError) {
+    return (
+      <div role="alert" className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-white p-6 text-center">
+        <p className="text-sm font-bold text-[#EF4444]">{loadError}</p>
+        <Button type="button" onClick={loadData} className="mt-3 h-9 rounded-xl bg-[#00D98A] text-xs font-extrabold text-[#031923]">
+          Tentar novamente
+        </Button>
+      </div>
+    );
+  }
   if (loading && !catalog.length) return <BrandLoadingScreen />;
 
+  const renewalLabel = subscription.hasActiveTrial
+    ? formatIsoDate(subscription.trialEndDate)
+    : subscription.hasPaidSubscription
+    ? formatIsoDate(subscription.renewalDate)
+    : null;
+
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-7 pb-20">
-      {/* 3.1 Cabeçalho */}
-      <PageHeader
+    <div className="mx-auto w-full max-w-[1440px] space-y-5 pb-16">
+      {/* Cabeçalho Unificado */}
+      <InternalPageHeader
         icon={CreditCard}
         title="Assinatura e uso"
-        subtitle="Gerencie seu plano, acompanhe seu consumo e escolha os recursos ideais para seus projetos."
-        actionsPlacement="right"
+        subtitle="Gerencie seu plano, acompanhe seus recursos e escolha a melhor opção para seus projetos."
         actions={
-          <Button asChild variant="outline" className="h-10 rounded-[8px] border-[#D0D5DD] font-extrabold text-[#344054]">
+          <Button
+            asChild
+            variant="outline"
+            className="h-9 rounded-xl border-[#E5EBF1] bg-white px-3.5 text-xs font-bold text-[#101828] hover:border-[#00D98A] hover:bg-[#F6F9FC]"
+          >
             <Link to="/settings">
-              <Settings className="mr-1.5 h-4 w-4 text-[#667085]" />
+              <Settings className="mr-1.5 h-3.5 w-3.5 text-[#64748B]" />
               Configurações da conta
             </Link>
           </Button>
@@ -221,218 +242,99 @@ export default function Subscription() {
       />
 
       {billingMessage && (
-        <section className="flex items-center justify-between rounded-[10px] border border-[#BCEEE5] bg-[#F7FBFE] p-4 text-sm font-semibold text-[#0f4f49]">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="h-5 w-5 text-[#00d8b8]" />
+        <section className="flex items-center justify-between gap-3 rounded-2xl border border-[#BEEAD2] bg-[#E5FBF2] px-4 py-3 text-xs font-semibold text-[#006B50]">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
             <span>{billingMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setBillingMessage("")}
-            className="text-xs font-bold text-[#667085] hover:text-[#101828]"
+            className="shrink-0 font-bold text-[#006B50] hover:underline"
           >
             Fechar
           </button>
         </section>
       )}
 
-      {canStartTrial && <section className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm">
-        <strong>Experimente o Completo grátis por 7 dias com cartão.</strong>
-        <p>Depois do teste, R$ 210,00/mês. Cancele antes da primeira cobrança para não pagar.</p>
-        <Button className="mt-3" onClick={() => { setCycle("monthly"); handleSubscription("completo"); }}>Testar Completo por 7 dias</Button>
-      </section>}
-      {subscription.hasActiveTrial && <section className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm">
-        <strong>Teste grátis do Completo até {formatIsoDate(subscription.trialEndDate)}.</strong>
-        <p>{subscription.autoRenew ? `Primeira cobrança de R$ 210,00/mês em ${formatIsoDate(`${subscription.firstChargeDate}T12:00:00`)}. Cancele em Gerenciar assinatura antes dessa data para evitar a cobrança.` : "Renovação cancelada. Você mantém o teste até o término, sem novas cobranças."}</p>
-      </section>}
-      {/* 3.2 Plano Atual e Uso no Período */}
-      <section className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-        {/* Bloco Plano Atual */}
-        <article className="rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-          <div className="flex items-start justify-between gap-3">
+      {/* Aviso de Teste Grátis (Compacto, sólido e transparente) */}
+      <BillingNotice
+        canStartTrial={canStartTrial}
+        hasActiveTrial={subscription.hasActiveTrial}
+        trialEndDate={subscription.trialEndDate}
+        firstChargeDate={subscription.firstChargeDate}
+        autoRenew={subscription.autoRenew}
+        trialPriceLabel={trialPriceLabel}
+        onStartTrial={() => {
+          setCycle("monthly");
+          handleSubscription("completo");
+        }}
+        onManageTrial={() => setIsManageModalOpen(true)}
+      />
+
+      {/* Plano Atual + Uso do seu plano */}
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <SubscriptionOverview
+          subscription={subscription}
+          activeUser={activeUser}
+          billingRecord={billingData.subscription}
+          hasBillingPayments={(billingData.payments || []).length > 0}
+          portalLoading={portalLoading}
+          onManageSubscription={() => setIsManageModalOpen(true)}
+          onViewPlans={scrollToPlans}
+          onOpenAcademicModal={() => setIsAcademicModalOpen(true)}
+        />
+
+        <article className="min-w-0 rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+          <div className="flex flex-col gap-2 border-b border-[#E5EBF1] pb-3.5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Plano atual</p>
-              <h2 className="mt-1.5 text-2xl font-extrabold text-[#101828]">{subscription.hasAccess ? subscription.plan.name : "Sem plano"}</h2>
-              <p className="mt-1 text-xs font-medium leading-5 text-[#64748B]">{subscription.hasAccess ? subscription.plan.commercialTagline : "Você ainda não contratou um plano. Escolha uma opção abaixo para assinar."}</p>
-            </div>
-            <Badge className="rounded-full border border-[#00D98A]/35 bg-[#DDFCF0] text-xs font-bold text-[#006F51] hover:bg-[#DDFCF0]">
-              {subscription.hasActiveTrial ? "Teste grátis" : subscription.hasPaidSubscription ? "Atual" : "Sem plano"}
-            </Badge>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-3.5 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-[#101828]">Status da assinatura:</span>
-              <Badge className="rounded-[4px] bg-emerald-100 text-emerald-800 text-[11px] font-bold hover:bg-emerald-100">
-                {({ none: "Sem plano", trialing: "Teste grátis", active: "Ativa", pending: "Aguardando pagamento", past_due: "Pagamento atrasado", cancelled: "Cancelada", expired: "Expirada" })[subscription.status] || subscription.status}
-              </Badge>
-            </div>
-
-            <div className="mt-2.5 flex items-center justify-between">
-              <span className="text-[#667085]">{subscription.hasActiveTrial ? "Valor após o teste:" : "Valor contratado:"}</span>
-              <span className="font-extrabold text-[#101828]">
-                {subscription.hasAccess ? `${formatPlanPrice(subscription.plan, subscription.cycle)} / ${subscription.cycle === "annual" ? "ano" : "mês"}` : "Nenhum"}
-              </span>
-            </div>
-
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-[#667085]">Periodicidade:</span>
-              <span className="font-bold text-[#344054] capitalize">
-                {!subscription.hasAccess ? "Não contratada" : subscription.cycle === "annual" ? "Anual (-30% OFF)" : "Mensal"}
-              </span>
-            </div>
-
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-[#667085]">Início do contrato:</span>
-              <span className="font-semibold text-[#344054]">
-                {subscription.hasActiveTrial ? formatIsoDate(activeUser.trial_start_date) : subscription.hasPaidSubscription ? formatIsoDate(subscription.startDate) : "—"}
-              </span>
-            </div>
-
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-[#667085]">{subscription.hasActiveTrial ? subscription.autoRenew ? "Primeira cobrança:" : "Término do teste:" : "Próxima renovação:"}</span>
-              <span className="font-semibold text-[#344054]">
-                {subscription.hasActiveTrial ? formatIsoDate(subscription.trialEndDate) : subscription.hasPaidSubscription ? formatIsoDate(subscription.renewalDate) : "—"}
-              </span>
-            </div>
-
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-[#667085]">Renovação automática:</span>
-              <span className={`font-semibold ${subscription.autoRenew ? "text-emerald-700" : "text-amber-700"}`}>
-                {subscription.autoRenew ? subscription.billingType === "CREDIT_CARD" ? "Ativa no cartão" : "Cobrança periódica com pagamento manual" : "Desativada"}
-              </span>
-            </div>
-          </div>
-
-          {/* Vínculo acadêmico para plano Estudante */}
-          {subscription.plan.isAcademic && (
-            <div className="mt-3.5 rounded-[8px] border border-blue-200 bg-blue-50/60 p-3 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 font-bold text-blue-900">
-                  <GraduationCap className="h-4 w-4 text-blue-700" />
-                  Elegibilidade Acadêmica
-                </span>
-                <span className="font-extrabold text-blue-800">
-                  {subscription.academicStatus === "approved"
-                    ? "Aprovada"
-                    : subscription.academicStatus === "pending_review"
-                    ? "Em Análise"
-                    : "Pendente"}
-                </span>
-              </div>
-              <p className="mt-1 text-[11px] text-blue-800">
-                {subscription.academicInstitution
-                  ? `${subscription.academicInstitution} (${subscription.academicCourse})`
-                  : "Necessário enviar comprovante de matrícula ativo."}
+              <h2 className="text-base font-extrabold text-[#101828]">Uso do seu plano</h2>
+              <p className="mt-0.5 text-xs font-medium text-[#64748B]">
+                {loading ? "Atualizando consumo..." : "Medição consolidada de recursos e espaço no workspace."}
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsAcademicModalOpen(true)}
-                className="mt-2 h-7 w-full rounded-[6px] border-blue-300 bg-white text-xs font-bold text-blue-900 hover:bg-blue-100"
-              >
-                {subscription.academicStatus === "approved" ? "Atualizar Documento" : "Enviar Comprovante"}
-              </Button>
             </div>
-          )}
-
-          <Button
-            type="button"
-            disabled={portalLoading}
-            onClick={handleCustomerPortal}
-            className="mt-4 h-10 w-full rounded-[8px] border border-[#D0D5DD] bg-white font-extrabold text-[#344054] hover:bg-[#F9FAFB]"
-          >
-            {portalLoading ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-[#00d8b8]" />
-                Atualizando cobrança...
+            {renewalLabel && (
+              <span className="w-fit rounded-md border border-[#E5EBF1] bg-[#F6F9FC] px-2.5 py-1 text-[11px] font-bold text-[#101828] tabular-nums">
+                Renovação: {renewalLabel}
               </span>
-            ) : (
-              "Gerenciar assinatura"
             )}
-          </Button>
-        </article>
-
-        {/* Bloco 6. Uso no período */}
-        <article className="rounded-[12px] border border-[#E4E7EC] bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-extrabold text-[#101828]">Uso no período</h2>
-              <p className="mt-0.5 text-xs font-medium text-[#667085]">
-                {loading ? "Calculando consumo real..." : "Consumo informado pelo servidor."}
-              </p>
-            </div>
-            <Badge variant="outline" className="w-fit rounded-[6px] border-[#D0D5DD] text-xs font-bold text-[#344054]">
-              Renovação: {subscription.hasActiveTrial ? formatIsoDate(subscription.trialEndDate) : subscription.hasPaidSubscription ? formatIsoDate(subscription.renewalDate) : "—"}
-            </Badge>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
             {usageRows.map((row) => (
-              <div
+              <UsageMetricCard
                 key={row.key}
-                className={`rounded-[10px] border p-3.5 transition-all ${usageCardStyles[row.state] || usageCardStyles.normal}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-extrabold text-[#101828]">{row.label}</p>
-                    <p className="mt-0.5 text-[11px] leading-4 text-[#667085] line-clamp-1" title={featureDescriptions[row.key]}>
-                      {featureDescriptions[row.key]}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-[4px] border px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.05em] ${
-                      stateStyles[row.state] || stateStyles.normal
-                    }`}
-                  >
-                    {row.state === "unlimited"
-                      ? "Ilimitado"
-                      : row.state === "limit"
-                      ? "Limite"
-                      : row.state === "near"
-                      ? "Próximo"
-                      : "Normal"}
-                  </span>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between text-xs font-bold text-[#344054]">
-                  <span>{row.usedLabel} usado</span>
-                  <span>{row.limitLabel}</span>
-                </div>
-
-                <Progress
-                  value={row.limit === Number.POSITIVE_INFINITY ? 15 : row.percent}
-                  className="mt-1.5 h-1.5 bg-[#EAECF0]"
-                />
-
-                <p className="mt-1.5 text-[11px] font-semibold text-[#667085]">
-                  Restante: {row.remainingLabel}
-                </p>
-              </div>
+                row={row}
+                description={FEATURE_DESCRIPTIONS[row.key]}
+              />
             ))}
           </div>
         </article>
       </section>
 
-      {/* 3.3 Comparação de Planos (4 Cards Minimalistas) */}
-      <section id="compare-plans" className="scroll-mt-8 rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-slate-100">
+      {/* Escolha seu plano */}
+      <section
+        id="compare-plans"
+        className="scroll-mt-8 rounded-2xl border border-[#E5EBF1] bg-white p-5 sm:p-6 shadow-[0_1px_2px_rgba(16,24,40,0.03)]"
+      >
+        <div className="flex flex-col gap-3 border-b border-[#E5EBF1] pb-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Planos & Assinaturas</h2>
-            <p className="mt-1 text-xs sm:text-sm text-slate-500">
-              Escolha a estrutura ideal para a sua rotina técnica. Altere ou cancele a qualquer momento.
+            <h2 className="text-lg font-extrabold tracking-tight text-[#101828]">
+              Escolha seu plano
+            </h2>
+            <p className="mt-0.5 text-xs font-medium text-[#64748B]">
+              Encontre os recursos ideais para seus projetos.
             </p>
           </div>
 
-          {/* Seletor Mensal / Anual */}
-          <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 p-1 self-start sm:self-auto">
+          <div className="inline-flex w-fit items-center gap-1 rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-1">
             <button
               type="button"
               onClick={() => setCycle("monthly")}
-              className={`h-8 rounded-full px-4 text-xs font-bold transition-all ${
+              className={`h-8 rounded-lg px-3.5 text-xs font-bold transition ${
                 cycle === "monthly"
-                  ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white text-[#101828] shadow-2xs"
+                  : "text-[#64748B] hover:text-[#101828]"
               }`}
             >
               Mensal
@@ -440,320 +342,120 @@ export default function Subscription() {
             <button
               type="button"
               onClick={() => setCycle("annual")}
-              className={`flex items-center gap-1.5 h-8 rounded-full px-4 text-xs font-bold transition-all ${
+              className={`flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-xs font-bold transition ${
                 cycle === "annual"
-                  ? "bg-[#00d8b8] text-slate-950 font-extrabold shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-[#00D98A] text-[#031923] font-extrabold shadow-2xs"
+                  : "text-[#64748B] hover:text-[#101828]"
               }`}
             >
               <span>Anual</span>
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${cycle === "annual" ? "bg-slate-950 text-[#00d8b8]" : "bg-emerald-100 text-emerald-800"}`}>
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${
+                  cycle === "annual"
+                    ? "bg-[#031923] text-[#00F0A0]"
+                    : "bg-[#E5FBF2] text-[#006B50]"
+                }`}
+              >
                 -30% OFF
               </span>
             </button>
           </div>
         </div>
 
-        {/* Grid dos 4 Cards Minimalistas */}
-        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {catalog.map((plan) => {
-            const isCurrent = plan.code === subscription.planCode && (plan.code === "estudante" || cycle === subscription.cycle);
-            const isCompleto = plan.code === "completo";
-            const showTrialOffer = isCompleto && cycle === "monthly" && canStartTrial;
+            const isCurrent =
+              plan.code === subscription.planCode &&
+              (plan.code === "estudante" || cycle === subscription.cycle);
+            const isRecommended = Boolean(plan.recommended || plan.code === "completo");
+            const showTrialOffer = plan.code === "completo" && cycle === "monthly" && canStartTrial;
             const isEstudante = plan.code === "estudante" || Boolean(plan.isPendingRelease);
             const isPendingRelease = Boolean(plan.isPendingRelease || (isEstudante && !isCurrent));
-            const annualSavings = calculateAnnualSavings(plan);
-            const isSubscribingThis = subscribingPriceId === plan.code;
-
-            const highlights = plan.features.slice(0, 4);
-            const subtitle = plan.description;
 
             return (
-              <article
+              <PricingCard
                 key={plan.code}
-                className={`relative flex flex-col justify-between rounded-2xl border p-5 sm:p-6 transition-all duration-200 ${
-                  isCompleto
-                    ? "border-[#00d8b8] bg-gradient-to-b from-white via-white to-[#F0FDFA]/40 shadow-[0_12px_32px_-10px_rgba(0,216,184,0.18)] ring-1 ring-[#00d8b8]"
-                    : isCurrent
-                    ? "border-teal-300 bg-[#F7FBFE] shadow-xs"
-                    : isPendingRelease
-                    ? "border-amber-200/90 bg-gradient-to-b from-amber-50/25 via-white to-slate-50/50 shadow-xs"
-                    : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
-                }`}
-              >
-                <div>
-                  {/* Top badges */}
-                  <div className="flex items-center justify-between gap-2 min-h-[26px]">
-                    {isCurrent ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 border border-teal-200 px-2.5 py-0.5 text-[11px] font-bold text-[#0f4f49]">
-                        <CheckCircle2 className="h-3 w-3 text-[#009b84]" />
-                        Seu plano atual
-                      </span>
-                    ) : isCompleto ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#E8FCF8] border border-[#BCEEE5] px-2.5 py-0.5 text-[11px] font-extrabold text-[#0f4f49]">
-                        <Sparkles className="h-3 w-3 text-[#009b84]" />
-                        {showTrialOffer ? "7 dias grátis com cartão" : "Mais Completo"}
-                      </span>
-                    ) : isPendingRelease ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
-                        <Clock className="h-3 w-3 text-amber-600" />
-                        Em aguardo • Futuras atualizações
-                      </span>
-                    ) : (
-                      <span />
-                    )}
-                  </div>
-
-                  {/* Nome e subtítulo */}
-                  <div className="mt-3">
-                    <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">{plan.name}</h3>
-                    <p className="mt-1 text-xs text-slate-500 leading-relaxed min-h-[32px]">
-                      {subtitle}
-                    </p>
-                  </div>
-
-                  {/* Preço */}
-                  <div className="mt-4 pb-5 border-b border-slate-100">
-                    {isPendingRelease ? (
-                      <div>
-                        <div className="flex items-baseline gap-1 opacity-80">
-                          <span className="text-3xl font-extrabold text-slate-800 tracking-tight">
-                            R$ {plan.monthlyPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-500">/mês</span>
-                        </div>
-                        <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-amber-200/70 bg-amber-50/80 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
-                          <Lock className="h-3 w-3 shrink-0 text-amber-600" />
-                          <span>Bloqueado temporariamente para próximas atualizações</span>
-                        </div>
-                      </div>
-                    ) : cycle === "annual" && plan.hasAnnualOption ? (
-                      <div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                            R$ {annualSavings.monthlyEquiv.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-500">/mês</span>
-                        </div>
-                        <p className="mt-1 text-[11px] font-bold text-emerald-700">
-                          R$ {plan.annualPrice?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} /ano (-30% OFF)
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                            R$ {plan.monthlyPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-500">/mês</span>
-                        </div>
-                        {cycle === "annual" && !plan.hasAnnualOption && (
-                          <p className="mt-1 text-[11px] font-medium text-amber-700">
-                            Apenas faturamento mensal
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Botão de Ação */}
-                  <div className="mt-5">
-                    <Button
-                      type="button"
-                      disabled={isCurrent || subscribingPriceId !== null || isPendingRelease}
-                      onClick={() => {
-                        if (isPendingRelease) return;
-                        if (plan.isAcademic && (!activeUser?.academic_status || activeUser?.academic_status === "not_submitted" || activeUser?.academic_status === "rejected" || activeUser?.academic_status === "expired" || (activeUser?.academic_valid_until && Date.parse(activeUser.academic_valid_until) <= Date.now()))) {
-                          setIsAcademicModalOpen(true);
-                          return;
-                        }
-                        handleSubscription(plan.code);
-                      }}
-                      className={`h-11 w-full rounded-xl font-bold text-xs transition-all ${
-                        isCurrent
-                          ? "bg-slate-100 text-slate-400 hover:bg-slate-100 cursor-default border border-slate-200"
-                          : isPendingRelease
-                          ? "bg-slate-100/90 text-slate-500 hover:bg-slate-100 cursor-not-allowed border border-slate-200 shadow-none font-semibold"
-                          : isCompleto
-                          ? "bg-[#00d8b8] text-slate-950 font-extrabold hover:bg-[#00bda1] shadow-xs hover:shadow"
-                          : "bg-slate-900 text-white hover:bg-slate-800"
-                      }`}
-                    >
-                      {isSubscribingThis ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Redirecionando...
-                        </span>
-                      ) : isCurrent ? (
-                        "Plano em uso"
-                      ) : isPendingRelease ? (
-                        <span className="flex items-center justify-center gap-1.5">
-                          <Lock className="h-3.5 w-3.5 text-amber-600" />
-                          Em aguardo • Próximas atualizações
-                        </span>
-                      ) : showTrialOffer ? (
-                        "Testar grátis por 7 dias"
-                      ) : plan.isAcademic ? (
-                        "Contratar com documento"
-                      ) : (
-                        subscription.hasAccess ? "Fazer upgrade" : "Assinar plano"
-                      )}
-                    </Button>
-                    {showTrialOffer && <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                      Depois, {formatPlanPrice(plan, "monthly")}/mês. Cancele antes da primeira cobrança para não pagar.
-                    </p>}
-                  </div>
-
-                  {/* Lista de Recursos Principais (Minimalista) */}
-                  <div className="mt-6 space-y-2.5">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      Incluso neste plano:
-                    </p>
-                    <ul className="space-y-2.5">
-                      {highlights.map((feature) => (
-                        <li key={feature} className="flex items-start gap-2.5 text-xs text-slate-700">
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#00d8b8]" />
-                          <span className="leading-snug">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Link para comparação completa no rodapé do card */}
-                <div className="mt-6 pt-3 border-t border-slate-100">
-                  <a
-                    href="#tabela-comparativa"
-                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 flex items-center gap-1 transition-colors"
-                  >
-                    <span>Ver limites e detalhes</span>
-                    <span>→</span>
-                  </a>
-                </div>
-              </article>
+                plan={plan}
+                cycle={cycle}
+                isCurrent={isCurrent}
+                isRecommended={isRecommended}
+                isPendingRelease={isPendingRelease}
+                showTrialOffer={showTrialOffer}
+                subscribing={subscribingPriceId === plan.code}
+                hasAccess={subscription.hasAccess}
+                onSelect={() => {
+                  if (isPendingRelease) return;
+                  const academicExpired =
+                    activeUser?.academic_valid_until &&
+                    Date.parse(activeUser.academic_valid_until) <= Date.now();
+                  if (
+                    plan.isAcademic &&
+                    (!activeUser?.academic_status ||
+                      activeUser.academic_status === "not_submitted" ||
+                      activeUser.academic_status === "rejected" ||
+                      activeUser.academic_status === "expired" ||
+                      academicExpired)
+                  ) {
+                    setIsAcademicModalOpen(true);
+                    return;
+                  }
+                  handleSubscription(plan.code);
+                }}
+              />
             );
           })}
         </div>
       </section>
 
-      {/* 4. Nova Tabela Comparativa de Limites e Recursos */}
-      <section id="tabela-comparativa" className="scroll-mt-8 overflow-hidden rounded-[12px] border border-[#E4E7EC] bg-white shadow-sm">
-        <div className="border-b border-[#EAECF0] px-5 py-4">
-          <h2 className="text-lg font-extrabold text-[#101828]">Tabela de limites</h2>
-          <p className="mt-0.5 text-xs font-medium text-[#667085]">
-            Fonte única usada pelo dashboard, sidebar e feature gating do Nacif Energy.
-          </p>
-        </div>
+      {/* Comparação Detalhada de Recursos */}
+      <PlanComparison />
 
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-[#F9FAFB] hover:bg-[#F9FAFB]">
-              <TableHead className="px-5 text-xs font-extrabold uppercase tracking-[0.06em] text-[#667085]">
-                Recurso
-              </TableHead>
-              <TableHead className="px-5 text-xs font-extrabold uppercase tracking-[0.06em] text-[#667085]">
-                <div className="flex items-center gap-1.5">
-                  <span>Estudante</span>
-                  <span className="rounded-[4px] border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 tracking-normal normal-case">
-                    Em breve
-                  </span>
-                </div>
-              </TableHead>
-              <TableHead className="px-5 text-xs font-extrabold uppercase tracking-[0.06em] text-[#667085]">
-                Elétrico
-              </TableHead>
-              <TableHead className="px-5 text-xs font-extrabold uppercase tracking-[0.06em] text-[#667085]">
-                Solar
-              </TableHead>
-              <TableHead className="px-5 text-xs font-extrabold uppercase tracking-[0.06em] text-[#0f4f49]">
-                Completo
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {PLAN_COMPARISON_ROWS.map((row) => {
-              const renderValueBadge = (val, isCompleto = false) => {
-                if (val === "Completo" || val === "Sim" || val === "Ilimitado") {
-                  return (
-                    <span className={`inline-flex items-center rounded-[4px] px-2 py-0.5 text-xs font-extrabold ${isCompleto ? "bg-[#E8FCF8] text-[#0f4f49]" : "bg-[#F0FDF4] text-[#166534]"}`}>
-                      {val}
-                    </span>
-                  );
-                }
-                if (val === "Acadêmico") {
-                  return (
-                    <span className="inline-flex items-center rounded-[4px] bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-800">
-                      Acadêmico
-                    </span>
-                  );
-                }
-                if (val === "Restrito") {
-                  return (
-                    <span className="inline-flex items-center rounded-[4px] bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800">
-                      Restrito
-                    </span>
-                  );
-                }
-                if (val === "Não incluído" || val === "Não") {
-                  return (
-                    <span className="inline-flex items-center rounded-[4px] bg-[#F1F5F9] px-2 py-0.5 text-xs font-medium text-[#64748B]">
-                      {val}
-                    </span>
-                  );
-                }
-                return <span className="font-semibold text-[#344054]">{val}</span>;
-              };
+      {/* Histórico e Faturas */}
+      <BillingHistoryCard
+        billingData={billingData}
+        hasActiveTrial={subscription.hasActiveTrial}
+        onManage={() => setIsManageModalOpen(true)}
+      />
 
-              return (
-                <TableRow key={row.key} className="hover:bg-[#F9FAFB]">
-                  <TableCell className="px-5 py-3.5">
-                    <p className="text-xs font-extrabold text-[#101828]">{row.label}</p>
-                    <p className="mt-0.5 text-[11px] font-medium text-[#667085]">{row.description}</p>
-                  </TableCell>
-                  <TableCell className="px-5 py-3.5 text-xs">
-                    {renderValueBadge(row.values.estudante)}
-                  </TableCell>
-                  <TableCell className="px-5 py-3.5 text-xs">
-                    {renderValueBadge(row.values.eletrico)}
-                  </TableCell>
-                  <TableCell className="px-5 py-3.5 text-xs">
-                    {renderValueBadge(row.values.solar)}
-                  </TableCell>
-                  <TableCell className="px-5 py-3.5 text-xs">
-                    {renderValueBadge(row.values.completo, true)}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </section>
-
-      {/* Feature Gating e Retenção de Projetos */}
-      <section className="rounded-[12px] border border-[#E4E7EC] bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#E8FCF8] text-[#00d8b8]">
-              <ShieldCheck className="h-5 w-5 text-[#0f4f49]" />
-            </span>
-            <div>
-              <h2 className="text-base font-extrabold text-[#101828]">Feature gating e retenção de dados</h2>
-              <p className="mt-0.5 text-xs font-medium leading-5 text-[#667085]">
-                A criação de novos bloqueios usa a camada unificada de planos. Downgrades ou alterações nunca apagam projetos, plantas ou orçamentos existentes, preservando o trabalho realizado.
-              </p>
-            </div>
+      {/* Política de Retenção de Projetos */}
+      <section className="flex flex-col gap-3 rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)] md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#E5FBF2] text-[#006B50]">
+            <ShieldCheck className="h-[18px] w-[18px] stroke-[2.1]" />
+          </span>
+          <div>
+            <h2 className="text-sm font-extrabold text-[#101828]">Retenção e preservação de projetos</h2>
+            <p className="mt-0.5 text-xs font-medium leading-relaxed text-[#64748B]">
+              Alterações ou cancelamentos de plano nunca apagam projetos, plantas elétricas ou orçamentos existentes. Seus dados continuam acessíveis para consulta e exportação.
+            </p>
           </div>
-          <Button asChild variant="outline" className="h-10 rounded-[8px] border-[#D0D5DD] font-extrabold text-[#344054]">
-            <Link to="/projects">
-              <FolderOpen className="mr-1.5 h-4 w-4" />
-              Ver projetos
-            </Link>
-          </Button>
         </div>
+        <Button
+          asChild
+          variant="outline"
+          className="h-9 shrink-0 rounded-xl border-[#E5EBF1] bg-white px-3.5 text-xs font-bold text-[#101828] hover:border-[#00D98A] hover:bg-[#F6F9FC]"
+        >
+          <Link to="/projects">
+            <FolderOpen className="mr-1.5 h-3.5 w-3.5 text-[#006B50]" />
+            Ver meus projetos
+          </Link>
+        </Button>
       </section>
 
-      <BillingCheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} targetPlan={selectedTargetPlan} cycle={cycle} user={activeUser} onSuccess={async () => { await refreshBilling(); await loadData(); setBillingMessage("Cartão validado. Seu teste grátis do Completo está ativo."); }} />
-      {/* Modais de Fluxo Funcional */}
+      {/* Modais Funcionais Preservados */}
+      <BillingCheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        targetPlan={selectedTargetPlan}
+        cycle={cycle}
+        user={activeUser}
+        onSuccess={async () => {
+          await refreshBilling();
+          await loadData();
+          setBillingMessage("Cartão validado. Seu teste grátis do Completo está ativo.");
+        }}
+      />
+
       <PlanChangeModal
         isOpen={isPlanChangeOpen}
         onClose={() => setIsPlanChangeOpen(false)}
@@ -777,10 +479,7 @@ export default function Subscription() {
         billingData={billingData}
         onRefresh={refreshBilling}
         user={activeUser}
-        onChangePlanClick={() => {
-          const el = document.querySelector("#compare-plans");
-          if (el) el.scrollIntoView({ behavior: "smooth" });
-        }}
+        onChangePlanClick={scrollToPlans}
         onVerifyStudentClick={() => setIsAcademicModalOpen(true)}
       />
     </div>
