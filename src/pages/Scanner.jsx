@@ -82,21 +82,21 @@ Base nas normas NBR 5410.`,
       />
 
       <div className="mx-auto w-full max-w-3xl space-y-6">
-      <div className="p-6 rounded-2xl bg-card border border-border/50 text-center space-y-4">
+      <div className="p-6 rounded-2xl bg-white border border-[#E5EBF1] shadow-[0_1px_2px_rgba(16,24,40,0.04)] text-center space-y-4">
         {image ? (
           <img src={image} alt="Ambiente" className="rounded-xl max-h-64 mx-auto object-cover" />
         ) : (
-          <div className="py-12 border-2 border-dashed border-border rounded-xl">
-            <ScanLine className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground text-sm">Envie uma foto do ambiente</p>
+          <div className="py-12 border-2 border-dashed border-[#E5EBF1] bg-[#F6F9FC] rounded-2xl">
+            <ScanLine className="w-12 h-12 mx-auto text-[#006F51]/40 mb-3" />
+            <p className="text-[#64748B] font-medium text-sm">Envie uma foto do ambiente ou planta para análise</p>
           </div>
         )}
         <div className="flex gap-3 justify-center">
-          <Button variant="outline" asChild>
-            <label className="cursor-pointer"><Upload className="w-4 h-4 mr-2" />Enviar Foto<input type="file" accept="image/*" className="hidden" onChange={handleUpload} /></label>
+          <Button variant="outline" className="rounded-xl border-[#E5EBF1] font-semibold" asChild>
+            <label className="cursor-pointer"><Upload className="w-4 h-4 mr-2 text-[#006F51]" />Enviar Foto<input type="file" accept="image/*" className="hidden" onChange={handleUpload} /></label>
           </Button>
           {imageUrl && (
-            <Button onClick={analyze} disabled={loading}>
+            <Button onClick={analyze} disabled={loading} className="rounded-xl bg-[#5B4AE8] text-white font-bold hover:bg-[#4b3bd4]">
               {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analisando...</> : <><Zap className="w-4 h-4 mr-2" />Analisar com IA</>}
             </Button>
           )}
@@ -105,17 +105,17 @@ Base nas normas NBR 5410.`,
 
       {result && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-          <p className="text-sm text-muted-foreground">{result.summary}</p>
+          <p className="text-sm font-medium text-[#64748B]">{result.summary}</p>
           {result.equipments?.map((eq, i) => (
-            <div key={i} className="p-4 rounded-xl bg-card border border-border/50">
-              <h3 className="font-semibold">{eq.name}</h3>
-              <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+            <div key={i} className="p-4 rounded-2xl bg-white border border-[#E5EBF1] shadow-xs">
+              <h3 className="font-bold text-[#101828]">{eq.name}</h3>
+              <div className="flex flex-wrap gap-3 mt-2 text-xs text-[#64748B]">
                 <span>{eq.power_w}W</span>
                 <span>{eq.current_a}A</span>
                 <span>{eq.circuit_type}</span>
                 <span>Fio: {eq.wire_gauge}</span>
-                {eq.needs_dr && <span className="text-amber-400">DR necessário</span>}
-                {eq.needs_dps && <span className="text-primary">DPS necessário</span>}
+                {eq.needs_dr && <span className="font-semibold text-amber-600">DR necessário</span>}
+                {eq.needs_dps && <span className="font-semibold text-[#006F51]">DPS necessário</span>}
               </div>
             </div>
           ))}

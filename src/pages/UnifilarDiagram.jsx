@@ -5,6 +5,7 @@ import { drawInteractiveNodesUnifilarPdf } from "@/lib/unifilarPdfDrawer";
 import { svgElementToHighResPngDataUrl } from "@/lib/pdfSvgHelper";
 import ProfessionalBoardSheetSVG from "@/components/ProfessionalBoardSheetSVG";
 import QgbtDiagramSheetSVG from "@/components/QgbtDiagramSheetSVG";
+import WorkspaceProjectContextBar from "@/components/nacif/WorkspaceProjectContextBar";
 import { buildProfessionalPanelBoardSheets, calcPeConductor, getPhaseColor } from "@/lib/professionalPanelBoardLibrary";
 import { useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
@@ -2328,7 +2329,7 @@ export default function UnifilarDiagram() {
         }
       >
         <Select value={selectedId} onValueChange={handleSelectProject}>
-          <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+          <SelectTrigger className="h-11 min-w-0 flex-1 rounded-xl border-[#E5EBF1] bg-white text-sm font-bold shadow-xs">
             <SelectValue placeholder="Selecionar projeto..." />
           </SelectTrigger>
           <SelectContent>
@@ -2337,7 +2338,7 @@ export default function UnifilarDiagram() {
         </Select>
         
         {/* Toggle de Modo: Editor Interativo vs. CADs Legados */}
-        <div className="flex w-full shrink-0 flex-col gap-1 rounded-[14px] border border-[#BCEEE5] bg-white p-1 text-xs shadow-[0_8px_24px_rgba(15,23,42,0.04)] sm:w-auto sm:flex-row">
+        <div className="flex w-full shrink-0 flex-col gap-1 rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-1 text-xs sm:w-auto sm:flex-row">
           {[
             { id: "interactive", label: "Editor" },
             { id: "unifilar", label: "Unifilar" }
@@ -2347,11 +2348,11 @@ export default function UnifilarDiagram() {
               type="button"
               aria-pressed={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              style={activeTab === tab.id ? { backgroundColor: "#00d8b8", color: "#ffffff" } : undefined}
-              className={`h-9 rounded-[10px] px-4 font-extrabold transition-colors sm:min-w-[112px] ${
+              style={activeTab === tab.id ? { backgroundColor: "#00D98A", color: "#031923" } : undefined}
+              className={`h-9 rounded-lg px-4 font-extrabold transition-colors sm:min-w-[112px] ${
                 activeTab === tab.id
-                  ? "shadow-sm"
-                  : "text-[#64748B] hover:bg-[#F2FFFC] hover:text-[#0f1728]"
+                  ? "shadow-xs"
+                  : "text-[#64748B] hover:bg-white hover:text-[#101828]"
               }`}
             >
               {tab.label}
@@ -2359,6 +2360,8 @@ export default function UnifilarDiagram() {
           ))}
         </div>
       </PageHeader>
+
+      {project && <WorkspaceProjectContextBar project={project} activeTool="unifilar" />}
 
       {/* MÉTRICAS GERAIS */}
       {metrics && (

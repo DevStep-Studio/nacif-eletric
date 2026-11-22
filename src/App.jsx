@@ -26,6 +26,8 @@ const MemorialDescritivo = React.lazy(() => import('./pages/MemorialDescritivo')
 const PlantaIA = React.lazy(() => import('./pages/PlantaIA'));
 const MaterialsList = React.lazy(() => import('./pages/MaterialsList'));
 const SolarProject = React.lazy(() => import('./pages/SolarProject'));
+const Simulations = React.lazy(() => import('./pages/Simulations'));
+const Notifications = React.lazy(() => import('./pages/Notifications'));
 const SettingsPage = React.lazy(() => import('./pages/Settings'));
 const Subscription = React.lazy(() => import('./pages/Subscription'));
 const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
@@ -211,6 +213,8 @@ const AuthenticatedApp = () => {
           <Route path="/planta-ia" element={<ModuleAccessGate moduleKey="plant" moduleTitle="Planta Elétrica" immersive><PlantaIA /></ModuleAccessGate>} />
           <Route path="/materials" element={<MaterialsList />} />
           <Route path="/solar-project" element={<ModuleAccessGate moduleKey="solar" moduleTitle="Projeto Solar" immersive><SolarProject /></ModuleAccessGate>} />
+          <Route path="/simulations" element={<Simulations />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/billing" element={<Subscription />} />
           <Route path="/billing/plans" element={<Subscription />} />

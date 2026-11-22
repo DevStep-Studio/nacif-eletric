@@ -306,21 +306,21 @@ export default function Projects() {
         );
       })()}
 
-      <section className="rounded-[12px] border border-[#E4E7EC] bg-white">
-        <div className="flex flex-col gap-3 border-b border-[#EAECF0] p-4 lg:flex-row lg:items-center lg:justify-between">
+      <section className="rounded-2xl border border-[#E5EBF1] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="flex flex-col gap-3 border-b border-[#E5EBF1] p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-1 flex-col gap-3 md:flex-row md:items-center">
             <label className="relative min-w-0 flex-1 md:max-w-md">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar por projeto, cliente ou tipo"
-                className="h-10 rounded-[8px] border-[#D0D5DD] pl-9 text-sm"
+                className="h-10 rounded-xl border-[#E5EBF1] bg-[#F6F9FC] pl-9 text-sm focus:bg-white"
               />
             </label>
 
-            <label className="flex h-10 items-center gap-2 rounded-[8px] border border-[#D0D5DD] bg-white px-3 text-sm font-semibold text-[#344054]">
-              <SlidersHorizontal className="h-4 w-4 text-[#667085]" />
+            <label className="flex h-10 items-center gap-2 rounded-xl border border-[#E5EBF1] bg-white px-3 text-sm font-semibold text-[#101828]">
+              <SlidersHorizontal className="h-4 w-4 text-[#64748B]" />
               <select
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
@@ -342,7 +342,7 @@ export default function Projects() {
                 <Button
                   variant="outline"
                   onClick={() => navigate(`/projects/${selectedIds[0]}`)}
-                  className="h-10 rounded-[8px] border-[#00d8b8] bg-[#E8FCF8] text-sm font-extrabold text-[#009b84] hover:bg-[#d0f7ee]"
+                  className="h-10 rounded-xl border-[#00D98A] bg-[#DDFCF0] text-sm font-bold text-[#006F51] hover:bg-[#c5f9e5]"
                 >
                   <FolderOpen className="h-4 w-4 mr-1.5" />
                   Abrir
@@ -353,34 +353,34 @@ export default function Projects() {
                     const p = projects.find((item) => item.id === selectedIds[0]);
                     if (p) handleEdit(p);
                   }}
-                  className="h-10 rounded-[8px] border-[#D0D5DD] bg-white text-sm font-extrabold text-[#344054] hover:bg-[#F9FAFB]"
+                  className="h-10 rounded-xl border-[#E5EBF1] bg-white text-sm font-bold text-[#101828] hover:bg-[#F6F9FC]"
                 >
-                  <Edit3 className="h-4 w-4 mr-1.5 text-[#00d8b8]" />
+                  <Edit3 className="h-4 w-4 mr-1.5 text-[#006F51]" />
                   Editar
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => handleDuplicate(selectedIds[0])}
                   disabled={duplicating}
-                  className="h-10 rounded-[8px] border-[#D0D5DD] bg-white text-sm font-extrabold text-[#344054] hover:bg-[#F9FAFB]"
+                  className="h-10 rounded-xl border-[#E5EBF1] bg-white text-sm font-bold text-[#101828] hover:bg-[#F6F9FC]"
                 >
-                  <Copy className="h-4 w-4 mr-1.5 text-[#00d8b8]" />
+                  <Copy className="h-4 w-4 mr-1.5 text-[#006F51]" />
                   Duplicar
                 </Button>
               </div>
             )}
             {selectedIds.length > 0 && (
-              <Button variant="outline" onClick={handleBulkDelete} className="h-10 rounded-[8px] border-red-200 text-sm font-extrabold text-red-600 hover:bg-red-50">
+              <Button variant="outline" onClick={handleBulkDelete} className="h-10 rounded-xl border-red-200 text-sm font-bold text-[#EF4444] hover:bg-red-50">
                 <Trash2 className="h-4 w-4" />
                 Excluir {selectedIds.length}
               </Button>
             )}
-            <div className="flex rounded-[8px] border border-[#D0D5DD] bg-white p-1">
+            <div className="flex rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-1">
               <button
                 type="button"
                 aria-label="Visualização em tabela"
                 onClick={() => setViewMode("table")}
-                className={`flex h-8 w-8 items-center justify-center rounded-[6px] ${viewMode === "table" ? "bg-[#E8FCF8] text-[#00d8b8]" : "text-[#667085]"}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg ${viewMode === "table" ? "bg-white text-[#006F51] shadow-xs" : "text-[#64748B]"}`}
               >
                 <List className="h-4 w-4" />
               </button>
@@ -388,7 +388,7 @@ export default function Projects() {
                 type="button"
                 aria-label="Visualização em cartões"
                 onClick={() => setViewMode("cards")}
-                className={`flex h-8 w-8 items-center justify-center rounded-[6px] ${viewMode === "cards" ? "bg-[#E8FCF8] text-[#00d8b8]" : "text-[#667085]"}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg ${viewMode === "cards" ? "bg-white text-[#006F51] shadow-xs" : "text-[#64748B]"}`}
               >
                 <LayoutGrid className="h-4 w-4" />
               </button>

@@ -221,13 +221,13 @@ export default function AvisosErros() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-16 font-sans">
+    <div className="min-h-screen bg-[#F6F9FC] pb-16 font-sans">
       {/* Container Principal */}
       <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8 space-y-6">
         {/* Cabeçalho da Página */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#E2E8F0] pb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#E5EBF1] pb-6">
           <div className="space-y-1">
-            <h1 className="text-2xl font-black text-[#0F172A] tracking-tight">
+            <h1 className="text-2xl font-extrabold text-[#101828] tracking-tight">
               Avisos e Erros
             </h1>
             <p className="text-xs sm:text-sm text-[#64748B] max-w-2xl">
@@ -239,7 +239,7 @@ export default function AvisosErros() {
             <Button
               type="button"
               onClick={() => setReportModalOpen(true)}
-              className="h-10 rounded-xl bg-[#00d8b8] hover:bg-[#00c4a7] text-[#0F172A] font-black text-xs px-5 shadow-sm gap-2"
+              className="h-10 rounded-xl bg-[#00D98A] hover:bg-[#00C47C] text-[#031923] font-extrabold text-xs px-5 shadow-xs gap-2"
             >
               <Plus className="h-4 w-4 stroke-[3]" />
               Reportar problema
@@ -249,19 +249,19 @@ export default function AvisosErros() {
 
         {/* Abas para Administradores (Meus Relatos / Painel Administrativo) */}
         {isAdmin && (
-          <div className="flex border-b border-[#E2E8F0] gap-4">
+          <div className="flex border-b border-[#E5EBF1] gap-4">
             <button
               type="button"
               onClick={() => setActiveTab("admin")}
-              className={`pb-3 text-xs font-black transition-all border-b-2 flex items-center gap-2 ${
+              className={`pb-3 text-xs font-extrabold transition-all border-b-2 flex items-center gap-2 ${
                 activeTab === "admin"
-                  ? "border-[#00d8b8] text-[#0F172A]"
-                  : "border-transparent text-[#64748B] hover:text-[#0F172A]"
+                  ? "border-[#00D98A] text-[#101828]"
+                  : "border-transparent text-[#64748B] hover:text-[#101828]"
               }`}
             >
-              <ShieldAlert className="h-4 w-4 text-[#009b84]" />
+              <ShieldAlert className="h-4 w-4 text-[#006F51]" />
               Painel Administrativo
-              <span className="rounded-md bg-[#E8FCF8] text-[#009b84] px-1.5 py-0.5 text-[10px] font-black">
+              <span className="rounded-full bg-[#DDFCF0] text-[#006F51] px-2 py-0.5 text-[10px] font-bold">
                 {issues.length}
               </span>
             </button>
@@ -269,10 +269,10 @@ export default function AvisosErros() {
             <button
               type="button"
               onClick={() => setActiveTab("user")}
-              className={`pb-3 text-xs font-black transition-all border-b-2 flex items-center gap-2 ${
+              className={`pb-3 text-xs font-extrabold transition-all border-b-2 flex items-center gap-2 ${
                 activeTab === "user"
-                  ? "border-[#00d8b8] text-[#0F172A]"
-                  : "border-transparent text-[#64748B] hover:text-[#0F172A]"
+                  ? "border-[#00D98A] text-[#101828]"
+                  : "border-transparent text-[#64748B] hover:text-[#101828]"
               }`}
             >
               Meus Relatos
@@ -282,29 +282,29 @@ export default function AvisosErros() {
 
         {/* Cards de Métricas / Resumo */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm space-y-1">
-            <p className="text-[11px] font-bold text-[#64748B]">Total Registrado</p>
-            <p className="text-xl font-black text-[#0F172A]">{stats.total}</p>
+          <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] space-y-1">
+            <p className="text-[11px] font-semibold text-[#64748B]">Total Registrado</p>
+            <p className="text-xl font-extrabold text-[#101828]">{stats.total}</p>
           </div>
 
-          <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm space-y-1">
-            <p className="text-[11px] font-bold text-slate-600">Recebidos</p>
-            <p className="text-xl font-black text-slate-800">{stats.recebidos}</p>
+          <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] space-y-1">
+            <p className="text-[11px] font-semibold text-slate-600">Recebidos</p>
+            <p className="text-xl font-extrabold text-slate-800">{stats.recebidos}</p>
           </div>
 
-          <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm space-y-1">
-            <p className="text-[11px] font-bold text-blue-600">Em Análise</p>
-            <p className="text-xl font-black text-blue-700">{stats.emAnalise}</p>
+          <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] space-y-1">
+            <p className="text-[11px] font-semibold text-blue-600">Em Análise</p>
+            <p className="text-xl font-extrabold text-blue-700">{stats.emAnalise}</p>
           </div>
 
-          <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm space-y-1">
-            <p className="text-[11px] font-bold text-amber-600">Em Correção</p>
-            <p className="text-xl font-black text-amber-700">{stats.emCorrecao}</p>
+          <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] space-y-1">
+            <p className="text-[11px] font-semibold text-amber-600">Em Correção</p>
+            <p className="text-xl font-extrabold text-amber-700">{stats.emCorrecao}</p>
           </div>
 
-          <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm space-y-1 col-span-2 sm:col-span-1">
-            <p className="text-[11px] font-bold text-[#009b84]">Resolvidos</p>
-            <p className="text-xl font-black text-[#009b84]">{stats.resolvidos}</p>
+          <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] space-y-1 col-span-2 sm:col-span-1">
+            <p className="text-[11px] font-semibold text-[#006F51]">Resolvidos</p>
+            <p className="text-xl font-extrabold text-[#006F51]">{stats.resolvidos}</p>
           </div>
         </div>
 

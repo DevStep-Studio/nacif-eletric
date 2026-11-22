@@ -219,10 +219,10 @@ export default function SettingsPage() {
       />
 
       {/* Perfil Cadastral */}
-      <section className="mx-auto w-full max-w-5xl rounded-[22px] border border-[#CDEFE8] bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+      <section className="mx-auto w-full max-w-5xl rounded-2xl border border-[#E5EBF1] bg-white p-5 sm:p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-primary/25 bg-primary/10 text-xl font-extrabold text-primary">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#00D98A]/35 bg-[#DDFCF0] text-xl font-extrabold text-[#006F51]">
               {form.avatar_url ? (
                 <img src={form.avatar_url} alt="Foto de perfil" className="h-full w-full object-cover" />
               ) : (
@@ -230,12 +230,12 @@ export default function SettingsPage() {
               )}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-lg font-extrabold text-[#0f1728]">{form.full_name || user?.email}</p>
-              <p className="truncate text-sm font-medium text-[#5f6877]">{user?.email}</p>
-              <Badge className="mt-2 w-fit rounded-[10px] bg-primary text-primary-foreground capitalize">
+              <p className="truncate text-lg font-extrabold text-[#101828]">{form.full_name || user?.email}</p>
+              <p className="truncate text-sm font-medium text-[#64748B]">{user?.email}</p>
+              <Badge className="mt-2 w-fit rounded-full bg-[#DDFCF0] text-[#006F51] capitalize">
                 {getPlanByCode(user?.plan)?.name || user?.plan || "Gratuito"}
               </Badge>
-              <p className="mt-2 text-xs font-bold uppercase tracking-[0.08em] text-[#7a8495]">
+              <p className="mt-2 text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">
                 {professionLabel(form.profession || user?.profession || user?.profissao)}
               </p>
             </div>
@@ -243,7 +243,7 @@ export default function SettingsPage() {
           <div className="flex flex-wrap gap-2">
             <Label
               htmlFor="settings-avatar-upload"
-              className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-primary px-4 text-sm font-extrabold text-primary-foreground transition hover:bg-primary/90"
+              className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#00D98A] px-4 text-xs font-bold text-[#031923] transition hover:bg-[#00C47C]"
             >
               <Upload className="h-4 w-4" />
               Trocar foto

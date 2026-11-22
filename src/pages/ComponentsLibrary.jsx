@@ -151,21 +151,21 @@ export default function ComponentsLibrary() {
         </TabsList>
       </Tabs>
 
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground text-sm">Nenhum componente encontrado</div>
+          <div className="text-center py-12 text-[#64748B] text-sm">Nenhum componente encontrado</div>
         )}
         {filtered.map((c, i) => (
-          <div key={i} className="p-4 rounded-xl bg-card border border-border/50 hover:border-primary/30 transition-colors">
+          <div key={i} className="p-4 rounded-2xl bg-white border border-[#E5EBF1] shadow-[0_1px_2px_rgba(16,24,40,0.04)] hover:border-[#00D98A]/60 transition-colors">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">{c.name}</span>
+                  <span className="font-bold text-sm text-[#101828]">{c.name}</span>
                   <Badge className={`text-[10px] border ${TYPE_COLORS[c.type] || ""}`}>{c.type}</Badge>
                 </div>
-                <div className="flex gap-3 mt-2 flex-wrap text-xs text-muted-foreground">
-                  <span className="font-mono text-primary">{c.model}</span>
-                  <span>Cód: <span className="text-foreground">{c.code}</span></span>
+                <div className="flex gap-3 mt-2 flex-wrap text-xs text-[#64748B]">
+                  <span className="font-mono font-semibold text-[#006F51]">{c.model}</span>
+                  <span>Cód: <span className="text-[#101828] font-medium">{c.code}</span></span>
                   {c.poles && <span>{c.poles}P</span>}
                   {c.current && typeof c.current === "number" && <span>{c.current}A</span>}
                   {c.current && typeof c.current === "string" && <span>{c.current}A</span>}
@@ -177,8 +177,8 @@ export default function ComponentsLibrary() {
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <p className="font-bold text-primary text-sm">R$ {c.price.toFixed(2)}</p>
-                <p className="text-[10px] text-muted-foreground">WEG · {c.type}</p>
+                <p className="font-extrabold text-[#006F51] text-sm">R$ {c.price.toFixed(2)}</p>
+                <p className="text-[10px] text-[#64748B]">WEG · {c.type}</p>
               </div>
             </div>
           </div>

@@ -65,6 +65,7 @@ import {
 } from "@/lib/solarReportGenerator";
 import { preloadSolarReportImages } from "@/lib/solarLayoutImageRenderer";
 import brandLogoEnergy from "@/assets/brand-logo-principal.png";
+import brandLogoDarkmode from "@/assets/brand-logo-darkmode.png";
 import {
   Activity,
   AlertTriangle,
@@ -1836,28 +1837,28 @@ export default function SolarProject() {
     : null;
 
   return (
-    <div className="fixed inset-0 z-[45] flex flex-col overflow-hidden bg-[#F8FAFC] font-inter text-slate-900 antialiased select-none">
-      {/* 1. TOP BAR COMPACTA & PROFISSIONAL (3 GRUPOS FUNCIONAIS) */}
-      <header className={`flex h-12 shrink-0 items-center justify-between gap-3 border-b border-[#E2E8F0] bg-white px-3.5 z-30 shadow-xs transition-all ${focusMode ? "hidden" : ""}`}>
+    <div className="fixed inset-0 z-[45] flex flex-col overflow-hidden bg-[#F6F9FC] font-sans text-[#101828] antialiased select-none">
+      {/* 1. TOP BAR COMPACTA & PROFISSIONAL (Dark Emerald Nacif Energy) */}
+      <header className={`flex h-12 shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#031923] px-3.5 text-white z-30 shadow-xs transition-all ${focusMode ? "hidden" : ""}`}>
         {/* GRUPO ESQUERDO: IDENTIFICAÇÃO (Voltar, Logo, Nome do Projeto, Estado de Salvamento) */}
         <div className="flex items-center gap-2 min-w-0 shrink-0">
           {/* Voltar */}
           <Link
             to="/projects"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50/70 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-[#082732] text-slate-200 hover:border-[#00D98A] hover:text-[#00F0A0] transition"
             title="Voltar aos Projetos"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" />
           </Link>
 
-          {/* Logo Oficial Nacif Electric + Badge Solar */}
-          <div className="flex items-center gap-2 pr-2.5 border-r border-slate-200 shrink-0">
+          {/* Logo Oficial Nacif Energy + Badge Solar */}
+          <div className="flex items-center gap-2 pr-2.5 border-r border-white/15 shrink-0">
             <img
-              src={brandLogoEnergy}
+              src={brandLogoDarkmode || brandLogoEnergy}
               alt="NACIF Energy"
               className="h-6 max-w-[116px] object-contain shrink-0"
             />
-            <span className="px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-[#E6FAF7] text-[#009b84] border border-[#00d8b8]/40 rounded-md whitespace-nowrap shrink-0">
+            <span className="px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-[#00D98A]/15 text-[#00F0A0] border border-[#00D98A]/40 rounded-md whitespace-nowrap shrink-0">
               SOLAR
             </span>
           </div>
@@ -1867,15 +1868,15 @@ export default function SolarProject() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex h-8 items-center gap-1.5 bg-slate-50 hover:bg-slate-100 transition px-2.5 rounded-lg border border-slate-200 text-left whitespace-nowrap shrink-0"
+                className="flex h-8 items-center gap-1.5 bg-[#082732] hover:bg-[#0B323F] transition px-2.5 rounded-lg border border-white/15 text-left whitespace-nowrap shrink-0"
                 title="Clique para alternar projeto solar"
               >
-                <span className="text-xs font-bold text-slate-900 truncate max-w-[120px] sm:max-w-[160px] xl:max-w-[200px]">
+                <span className="text-xs font-bold text-white truncate max-w-[120px] sm:max-w-[160px] xl:max-w-[200px]">
                   {project?.name || "Projeto Solar"}
                 </span>
                 <ChevronDown className="h-3 w-3 text-slate-400 shrink-0" />
-                <span className="h-3.5 w-px bg-slate-200 mx-0.5 hidden sm:inline shrink-0" />
-                <span className="text-[11px] font-bold text-[#009b84] whitespace-nowrap hidden sm:inline shrink-0">
+                <span className="h-3.5 w-px bg-white/15 mx-0.5 hidden sm:inline shrink-0" />
+                <span className="text-[11px] font-bold text-[#00F0A0] whitespace-nowrap hidden sm:inline shrink-0">
                   {multiAreaLayouts.length} {multiAreaLayouts.length === 1 ? "Área" : "Áreas"} · {visualSizing.panelCount} un
                 </span>
               </button>

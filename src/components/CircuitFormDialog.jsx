@@ -429,16 +429,16 @@ export default function CircuitFormDialog({ onSave, initialData, trigger, disabl
           </section>
 
           {preview && (
-            <section className="space-y-3 rounded-xl border border-[#CDEFE8] bg-[#F8FBFD] p-4">
+            <section className="space-y-3 rounded-2xl border border-[#E5EBF1] bg-[#F6F9FC] p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-extrabold text-[#0f1728]">Dimensionamento NBR 5410</h3>
+                <h3 className="text-sm font-extrabold text-[#101828]">Dimensionamento NBR 5410</h3>
                 <div className="flex flex-wrap gap-2">
-                  <Badge className="bg-emerald-50 text-emerald-700 text-[10px]">
+                  <Badge className="bg-[#DDFCF0] text-[#006F51] text-[10px]">
                     Demanda: {preview.demand_power_w} W (Fd {preview.demand_factor})
                   </Badge>
-                  {preview.needs_dr && <Badge className="bg-emerald-50 text-emerald-700 text-[10px]">DR 30mA</Badge>}
+                  {preview.needs_dr && <Badge className="bg-[#DDFCF0] text-[#006F51] text-[10px]">DR 30mA</Badge>}
                   <Badge className="bg-blue-50 text-blue-700 text-[10px]">DPS previsto</Badge>
-                  <Badge className={preview.voltage_drop_ok ? "bg-emerald-50 text-emerald-700 text-[10px]" : "bg-red-50 text-red-700 text-[10px]"}>
+                  <Badge className={preview.voltage_drop_ok ? "bg-[#DDFCF0] text-[#006F51] text-[10px]" : "bg-red-50 text-[#EF4444] text-[10px]"}>
                     Queda {preview.voltage_drop_ok ? "OK" : "revisar"}
                   </Badge>
                 </div>

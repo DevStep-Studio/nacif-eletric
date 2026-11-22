@@ -269,24 +269,24 @@ export default function SolarBudgetPanel({
   };
 
   return (
-    <div className="flex-1 h-full overflow-y-auto bg-[#F8FAFC] p-5 lg:p-7">
+    <div className="flex-1 h-full overflow-y-auto bg-[#F6F9FC] p-5 lg:p-7">
       <div className="mx-auto max-w-[1440px] space-y-5">
         {/* Cabeçalho Minimalista (sem gradiente) */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border border-slate-200 bg-white px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#E5EBF1] bg-white px-5 py-4 shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center bg-[#0E1726] text-[#00D8B8]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#031923] text-[#00D98A]">
               <Calculator className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-black tracking-tight text-slate-950">
+                <h2 className="text-base font-extrabold tracking-tight text-[#101828]">
                   Orçamento Solar Detalhado
                 </h2>
-                <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                <span className="rounded-full border border-[#E5EBF1] bg-[#DDFCF0] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#006F51]">
                   {budget.dcPowerKw.toFixed(2)} kWp · {budget.panelCount} módulos
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[#64748B]">
                 Defina o preço do equipamento, serviços de engenharia e a margem solicitada para emitir a proposta.
               </p>
             </div>
@@ -298,7 +298,7 @@ export default function SolarBudgetPanel({
               variant="outline"
               size="sm"
               onClick={handleResetDefaults}
-              className="h-9 rounded-none border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="h-9 rounded-xl border-[#E5EBF1] bg-white text-xs font-semibold text-[#101828] hover:bg-[#F6F9FC]"
             >
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Recalcular Itens
             </Button>
@@ -308,9 +308,9 @@ export default function SolarBudgetPanel({
               variant="outline"
               size="sm"
               onClick={() => navigate(`/budget${project?.id ? `?project=${project.id}` : ""}`)}
-              className="h-9 rounded-none border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="h-9 rounded-xl border-[#E5EBF1] bg-white text-xs font-semibold text-[#101828] hover:bg-[#F6F9FC]"
             >
-              <ArrowUpRight className="mr-1.5 h-3.5 w-3.5 text-[#009b84]" /> Módulo Orçamentos
+              <ArrowUpRight className="mr-1.5 h-3.5 w-3.5 text-[#006F51]" /> Módulo Orçamentos
             </Button>
 
             <Button
@@ -319,7 +319,7 @@ export default function SolarBudgetPanel({
               size="sm"
               disabled={saving}
               onClick={handleSave}
-              className="h-9 rounded-none border-slate-900 bg-white text-xs font-black text-slate-900 hover:bg-slate-100"
+              className="h-9 rounded-xl border-[#031923] bg-white text-xs font-bold text-[#031923] hover:bg-[#F6F9FC]"
             >
               {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
               Salvar no Projeto
@@ -330,9 +330,9 @@ export default function SolarBudgetPanel({
               size="sm"
               disabled={generatingPdf}
               onClick={handleExportProposalPdf}
-              className="h-9 rounded-none bg-[#0E1726] hover:bg-slate-900 text-white text-xs font-black px-4"
+              className="h-9 rounded-xl bg-[#031923] hover:bg-[#082732] text-white text-xs font-bold px-4"
             >
-              {generatingPdf ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin text-[#00D8B8]" /> : <Download className="mr-1.5 h-3.5 w-3.5 text-[#00D8B8]" />}
+              {generatingPdf ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin text-[#00D98A]" /> : <Download className="mr-1.5 h-3.5 w-3.5 text-[#00D98A]" />}
               Gerar Proposta Comercial (PDF)
             </Button>
           </div>

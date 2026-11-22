@@ -20,13 +20,13 @@ import {
   Zap,
 } from "lucide-react";
 import { backend } from "@/api/backendClient";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import CircuitFormDialog from "@/components/CircuitFormDialog";
 import EditProjectModal from "@/components/EditProjectModal";
 import PageHeader from "@/components/PageHeader";
 import NextStepCard from "@/components/navigation/NextStepCard";
 import ProjectProgress from "@/components/navigation/ProjectProgress";
+import ProjectHealthCard from "@/components/nacif/ProjectHealthCard";
 import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import ProjectStatusBadge from "@/components/ProjectStatusBadge";
 import { autoBalancePhases, buildProjectElectricalSyncPayload, calcCircuit, calcProjectMetrics } from "@/lib/electricalEngine";
@@ -424,10 +424,11 @@ export default function ProjectDetail() {
       {/* Card Contextual de Próxima Etapa (Modo Guiado) */}
       <NextStepCard project={project} />
 
-      {/* Progresso Geral do Projeto */}
+      {/* Saúde Técnica NBR 5410 & Progresso Geral do Projeto */}
+      <ProjectHealthCard project={project} />
       <ProjectProgress project={project} variant="card" />
 
-      <section className="rounded-[18px] border border-[#BCEEE5] bg-[#F7FBFE] p-2 shadow-[0_16px_44px_rgba(0,100,166,0.06)]">
+      <section className="rounded-2xl border border-[#E5EBF1] bg-white p-2 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <nav className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Navegação do projeto">
             <div className="flex min-w-max items-center gap-1.5">
@@ -437,9 +438,9 @@ export default function ProjectDetail() {
                   <Link
                     key={item.label}
                     to={item.href(projectId)}
-                    className="inline-flex h-11 items-center gap-2 rounded-[12px] px-4 text-sm font-extrabold text-[#344054] transition hover:bg-white hover:text-[#00d8b8] hover:shadow-[0_8px_20px_rgba(0,100,166,0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-xs sm:text-sm font-bold text-[#101828] transition hover:bg-[#DDFCF0] hover:text-[#006F51] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
-                    <ItemIcon className="h-4 w-4" />
+                    <ItemIcon className="h-4 w-4 text-[#006F51]" />
                     {item.label}
                   </Link>
                 );
@@ -447,20 +448,20 @@ export default function ProjectDetail() {
             </div>
           </nav>
 
-          <div className="flex shrink-0 items-center gap-2 border-t border-[#CDEFE8] pt-2 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
-            <span className="inline-flex h-10 items-center rounded-[11px] bg-white px-3 text-xs font-extrabold text-[#344054] ring-1 ring-[#D6E8F3]">
+          <div className="flex shrink-0 items-center gap-2 border-t border-[#E5EBF1] pt-2 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
+            <span className="inline-flex h-9 items-center rounded-xl bg-[#F6F9FC] px-3 text-xs font-bold text-[#101828] ring-1 ring-[#E5EBF1]">
               {circuits.length} circuito{circuits.length === 1 ? "" : "s"}
             </span>
-            <ProjectStatusBadge status={project.status} size="lg" className="h-10 px-3.5" />
+            <ProjectStatusBadge status={project.status} size="lg" className="h-9 px-3.5" />
           </div>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[18px] border border-[#BCEEE5] bg-white shadow-[0_18px_48px_rgba(0,100,166,0.06)]">
-        <div className="flex min-w-0 flex-col gap-4 border-b border-[#CDEFE8] bg-[#E8FCF8] px-4 py-4 sm:px-5 xl:flex-row xl:items-center xl:justify-between">
+      <section className="overflow-hidden rounded-2xl border border-[#E5EBF1] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="flex min-w-0 flex-col gap-4 border-b border-[#E5EBF1] bg-[#F6F9FC] px-4 py-4 sm:px-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-[12px] font-extrabold uppercase tracking-[0.14em] text-[#00d8b8]">Resumo técnico</p>
-            <h2 className="mt-1 text-[22px] font-extrabold leading-tight text-[#101828]">
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#006F51]">Resumo técnico</p>
+            <h2 className="mt-1 text-xl font-extrabold leading-tight text-[#101828]">
               Visão geral do projeto
             </h2>
           </div>

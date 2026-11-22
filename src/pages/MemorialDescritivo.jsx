@@ -855,7 +855,7 @@ export default function MemorialDescritivo() {
         subtitle="Geração automática em PDF · NBR 5410:2004 · detalhes de instalação · ART"
       >
         <Select value={selectedId} onValueChange={handleSelectProject}>
-          <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+          <SelectTrigger className="h-11 min-w-0 flex-1 rounded-xl border-[#E5EBF1] bg-white text-sm font-bold shadow-xs">
             <SelectValue placeholder="Escolha o projeto para gerar o memorial..." />
           </SelectTrigger>
           <SelectContent>
@@ -871,22 +871,22 @@ export default function MemorialDescritivo() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { icon: Cpu,           label: "Potência Total",    value: `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW` },
-              { icon: Shield,        label: "NBR Score",         value: `${metrics?.nbrScore || 0}/100`, color: Number(metrics?.nbrScore || 0) >= 70 ? "text-primary" : "text-red-600" },
+              { icon: Shield,        label: "NBR Score",         value: `${metrics?.nbrScore || 0}/100`, color: Number(metrics?.nbrScore || 0) >= 70 ? "text-[#006F51]" : "text-[#EF4444]" },
               { icon: BookOpen,      label: "Circuitos",         value: `${(metrics?.circuits || []).length}` },
               { icon: FileText,      label: "Material (est.)",   value: `R$ ${Number(totalBOM || 0).toFixed(0)}` },
             ].map(k => (
-              <div key={k.label} className="bg-card border border-border/50 rounded-xl p-4">
+              <div key={k.label} className="bg-white border border-[#E5EBF1] rounded-2xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
                 <div className="flex items-center gap-2 mb-1">
-                  <k.icon className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">{k.label}</span>
+                  <k.icon className="w-4 h-4 text-[#006F51]" />
+                  <span className="text-xs font-semibold text-[#64748B]">{k.label}</span>
                 </div>
-                <p className={`text-xl font-bold ${k.color || "text-foreground"}`}>{k.value}</p>
+                <p className={`text-xl font-extrabold ${k.color || "text-[#101828]"}`}>{k.value}</p>
               </div>
             ))}
           </div>
 
-          <div className="grid gap-4 rounded-2xl border border-[#BCEEE5] bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.045)] lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="flex min-h-[112px] items-center justify-center rounded-xl border border-[#CDEFE8] bg-[#F8FFFD] p-4">
+          <div className="grid gap-4 rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] lg:grid-cols-[220px_minmax(0,1fr)]">
+            <div className="flex min-h-[112px] items-center justify-center rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-4">
               {logoUrl ? (
                 <img
                   src={logoUrl}

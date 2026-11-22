@@ -12,7 +12,7 @@ export default function BrandLoadingScreen({
   className = "",
 }) {
   const containerClass = fullScreen
-    ? "fixed inset-0 z-50 flex items-center justify-center bg-[#FAFCFC]/95 backdrop-blur-sm"
+    ? "fixed inset-0 z-50 flex items-center justify-center bg-[#F6F9FC]/95 backdrop-blur-sm"
     : compact
       ? "flex w-full items-center justify-center py-8"
       : "flex min-h-[60vh] w-full items-center justify-center";
@@ -27,11 +27,11 @@ export default function BrandLoadingScreen({
       className={cn(containerClass, className)}
     >
       <div className={cn("relative flex items-center justify-center", ringSize)}>
-        <div className="absolute inset-0 rounded-full border-2 border-slate-200/80" />
+        <div className="absolute inset-0 rounded-full border-2 border-[#E5EBF1]" />
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1.15, repeat: Infinity, ease: "linear" }}
-          className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#00D8B8] border-r-[#00D8B8]/40"
+          className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#00D98A] border-r-[#00F0A0]/50"
         />
         <motion.img
           src={brandSymbol}

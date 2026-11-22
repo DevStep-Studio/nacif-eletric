@@ -289,29 +289,29 @@ export default function SuperAdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-16 font-sans">
+    <div className="min-h-screen bg-[#F6F9FC] pb-16 font-sans">
       {/* Barra de Topo do Super Admin */}
-      <div className="border-b border-[#0F172A] bg-[#0F172A] text-white">
+      <div className="border-b border-white/10 bg-[#031923] text-white">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Button
               asChild
               variant="ghost"
               size="sm"
-              className="h-8 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 text-xs gap-1.5"
+              className="h-8 rounded-lg text-slate-300 hover:text-white hover:bg-[#082732] text-xs gap-1.5"
             >
               <Link to="/">
                 <ArrowLeft className="h-4 w-4" />
                 Voltar ao App
               </Link>
             </Button>
-            <div className="h-4 w-px bg-slate-700" />
+            <div className="h-4 w-px bg-white/15" />
             <div className="flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-[#00d8b8]" />
+              <ShieldAlert className="h-5 w-5 text-[#00F0A0]" />
               <span className="font-extrabold text-sm tracking-tight text-white">
                 PAINEL SUPER ADMINISTRADOR
               </span>
-              <span className="rounded-full bg-[#00d8b8]/20 text-[#00d8b8] border border-[#00d8b8]/30 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
+              <span className="rounded-full bg-[#00D98A]/15 text-[#00F0A0] border border-[#00D98A]/35 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                 Nível 1 • Autoridade Máxima
               </span>
             </div>

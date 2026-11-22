@@ -382,13 +382,15 @@ export default function CalculatorPage() {
       />
 
       {/* Seletor de Projeto e Circuito Ativo */}
-      <div className="p-4 rounded-xl bg-card border border-border/50 flex flex-wrap items-center justify-between gap-4">
+      <div className="p-4 rounded-2xl bg-white border border-[#E5EBF1] shadow-[0_1px_2px_rgba(16,24,40,0.04)] flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <FolderOpen className="w-5 h-5 text-[#00d8b8]" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#DDFCF0] text-[#006F51]">
+            <FolderOpen className="w-5 h-5" />
+          </div>
           <div>
-            <p className="text-xs text-muted-foreground font-medium">Projeto Conectado</p>
+            <p className="text-xs text-[#64748B] font-semibold">Projeto Conectado</p>
             <Select value={selectedProjectId} onValueChange={(id) => setSelectedProjectId(id)}>
-              <SelectTrigger className="w-[260px] h-9 mt-1 bg-background text-sm">
+              <SelectTrigger className="w-[260px] h-9 mt-1 bg-[#F6F9FC] border-[#E5EBF1] text-sm">
                 <SelectValue placeholder="Selecione um projeto..." />
               </SelectTrigger>
               <SelectContent>

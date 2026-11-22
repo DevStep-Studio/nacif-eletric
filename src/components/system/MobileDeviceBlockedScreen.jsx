@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Check, Copy, Laptop, Tablet, Monitor } from "lucide-react";
+import { Check, Copy, Tablet, Monitor } from "lucide-react";
 import brandLogoEnergy from "@/assets/brand-logo-principal.png";
 
 /**

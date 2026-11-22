@@ -311,7 +311,7 @@ export default function Register() {
           <Button
             type="submit"
             disabled={loading}
-            className="h-[48px] w-full rounded-[8px] bg-[#00d8b8] hover:bg-[#00c5a7] active:bg-[#00b397] text-slate-950 font-bold text-sm tracking-wide shadow-[0_4px_14px_rgba(0,216,184,0.25)] hover:shadow-[0_6px_20px_rgba(0,216,184,0.35)] transition-all disabled:opacity-60 disabled:cursor-not-allowed border-0"
+            className="h-[48px] w-full rounded-xl bg-[#00D98A] hover:bg-[#00C47C] active:bg-[#00B270] text-[#031923] font-bold text-sm tracking-wide shadow-[0_4px_14px_rgba(0,217,138,0.28)] hover:shadow-[0_6px_20px_rgba(0,217,138,0.38)] transition-all disabled:opacity-60 disabled:cursor-not-allowed border-0"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">

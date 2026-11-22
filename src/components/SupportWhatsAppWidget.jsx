@@ -141,26 +141,26 @@ export default function SupportWhatsAppWidget() {
             className="mb-3.5 w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#e2e8f0] bg-[#ffffff] text-[#0f172a] shadow-2xl"
           >
             {/* Cabeçalho Institucional */}
-            <div className="relative overflow-hidden bg-[#0f172a] px-4 py-3.5 text-white">
+            <div className="relative overflow-hidden bg-[#031923] px-4 py-3.5 text-white">
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#00d8b8]/20 blur-xl"
+                className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#00D98A]/20 blur-xl"
               />
               <div className="relative flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#00d8b8]/15 text-[#00d8b8] ring-1 ring-[#00d8b8]/30">
+                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#00D98A]/15 text-[#00F0A0] ring-1 ring-[#00D98A]/35">
                     <Headphones className="h-4 w-4" />
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#10b981] opacity-75" />
-                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full border-2 border-[#0f172a] bg-[#10b981]" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00F0A0] opacity-75" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full border-2 border-[#031923] bg-[#00D98A]" />
                     </span>
                   </div>
                   <div className="min-w-0">
-                    <h3 className="truncate text-xs font-black tracking-tight text-white">
+                    <h3 className="truncate text-xs font-extrabold tracking-tight text-white">
                       Suporte Nacif Energy
                     </h3>
                     <p className="flex items-center gap-1.5 truncate text-[11px] font-medium text-slate-300">
-                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#00F0A0]" />
                       Online • Atendimento técnico e comercial
                     </p>
                   </div>
@@ -251,7 +251,7 @@ export default function SupportWhatsAppWidget() {
               {/* Botão de Ação Principal */}
               <button
                 type="submit"
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#00d8b8] px-4 text-xs font-black text-slate-950 shadow-md transition-all hover:bg-[#10b981] hover:text-white active:scale-[0.99]"
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#00D98A] px-4 text-xs font-extrabold text-[#031923] shadow-md transition-all hover:bg-[#00C47C] active:scale-[0.99]"
               >
                 <WhatsAppIcon className="h-4 w-4 shrink-0" />
                 <span>Iniciar conversa no WhatsApp</span>
@@ -268,16 +268,16 @@ export default function SupportWhatsAppWidget() {
         aria-expanded={isOpen}
         aria-label="Suporte Nacif via WhatsApp"
         title="Suporte Nacif"
-        className="group relative flex h-12 items-center justify-center rounded-full border border-[#00d8b8]/40 bg-[#0f172a] px-2.5 text-white shadow-xl transition-all duration-300 hover:border-[#00d8b8] hover:bg-[#0f172a] hover:shadow-2xl active:scale-95"
+        className="group relative flex h-12 items-center justify-center rounded-full border border-[#00D98A]/45 bg-[#031923] px-2.5 text-white shadow-xl transition-all duration-300 hover:border-[#00F0A0] hover:bg-[#082732] hover:shadow-2xl active:scale-95"
       >
         {/* Indicador visual de status online (ponto verde pulsante) */}
         <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#10b981] opacity-75" />
-          <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-white bg-[#10b981]" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00F0A0] opacity-75" />
+          <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-white bg-[#00D98A]" />
         </span>
 
         {/* Círculo com ícone oficial do WhatsApp */}
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#00d8b8] text-slate-950 transition-transform duration-200 group-hover:scale-105">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#00D98A] text-[#031923] transition-transform duration-200 group-hover:scale-105">
           {isOpen ? (
             <X className="h-4 w-4 stroke-[2.5]" />
           ) : (

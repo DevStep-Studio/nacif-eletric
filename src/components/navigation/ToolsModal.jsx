@@ -30,6 +30,7 @@ export const TOOLS_LIST = [
   {
     category: "Inteligência Artificial & Automação",
     items: [
+      { path: "/simulations", icon: Sparkles, label: "Simulações & Nacif IA", desc: "Cenários NBR 5410, simulação solar e parecer técnico assistido." },
       { path: "/scanner", icon: ScanLine, label: "Scanner IA de Plantas", desc: "Digitalização e vetorização de plantas em imagem/PDF." },
       { path: "/ai-assistant", icon: Sparkles, label: "Assistente IA Técnico", desc: "Tire dúvidas sobre normas NBR e dimensionamento." },
     ],
@@ -66,13 +67,13 @@ export default function ToolsModal({ open, onOpenChange, mode = "tools" }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl overflow-hidden rounded-[16px] border-[#E4E7EC] bg-white p-6 shadow-2xl">
+      <DialogContent className="max-w-2xl overflow-hidden rounded-2xl border-[#E5EBF1] bg-white p-6 shadow-2xl">
         <DialogHeader>
-          <DialogTitle className="text-lg font-black text-[#101828] flex items-center gap-2">
-            {isLibrary ? <BookOpen className="h-5 w-5 text-[#00d8b8]" /> : <Calculator className="h-5 w-5 text-[#00d8b8]" />}
+          <DialogTitle className="text-lg font-extrabold text-[#101828] flex items-center gap-2">
+            {isLibrary ? <BookOpen className="h-5 w-5 text-[#00D98A]" /> : <Calculator className="h-5 w-5 text-[#00D98A]" />}
             {title}
           </DialogTitle>
-          <p className="text-xs font-medium text-[#667085]">
+          <p className="text-xs font-medium text-[#64748B]">
             {isLibrary
               ? "Consulte normas da ABNT, listas de materiais e especificações técnicas."
               : "Calculadoras auxiliares e recursos de automação com inteligência artificial."}
@@ -82,7 +83,7 @@ export default function ToolsModal({ open, onOpenChange, mode = "tools" }) {
         <div className="mt-4 space-y-5 max-h-[65vh] overflow-y-auto pr-1">
           {list.map((group) => (
             <div key={group.category} className="space-y-2">
-              <p className="text-[11px] font-black uppercase tracking-wider text-[#98A2B3]">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#64748B]">
                 {group.category}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -93,9 +94,9 @@ export default function ToolsModal({ open, onOpenChange, mode = "tools" }) {
                       key={item.path}
                       to={item.path}
                       onClick={() => onOpenChange(false)}
-                      className="group flex items-start gap-3 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] p-3 transition hover:border-[#00d8b8]/60 hover:bg-[#E8FCF8]/40 shadow-none"
+                      className="group flex items-start gap-3 rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-3 transition hover:border-[#00D98A]/60 hover:bg-[#DDFCF0]/45 shadow-none"
                     >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white border border-[#EAECF0] text-[#00d8b8] group-hover:bg-[#00d8b8] group-hover:text-slate-950 transition">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white border border-[#E5EBF1] text-[#006F51] group-hover:bg-[#00D98A] group-hover:text-[#031923] transition">
                         <Icon className="h-4 w-4" />
                       </span>
                       <div className="min-w-0 flex-1">

@@ -54,11 +54,11 @@ export default function Login() {
       title="Acesse sua conta"
       subtitle="Entre para continuar seus projetos."
       footer={
-        <p className="text-center text-xs text-slate-500">
+        <p className="text-center text-xs text-[#64748B]">
           Não tem conta?{" "}
           <Link 
             to="/register" 
-            className="font-semibold text-slate-900 hover:text-[#00a98e] underline underline-offset-4 transition-colors"
+            className="font-semibold text-[#101828] hover:text-[#006F51] underline underline-offset-4 transition-colors"
           >
             Criar conta grátis
           </Link>
@@ -189,7 +189,7 @@ export default function Login() {
           <Button
             type="submit"
             disabled={loading}
-            className="h-[48px] w-full rounded-[8px] bg-[#00d8b8] hover:bg-[#00c5a7] active:bg-[#00b397] text-slate-950 font-bold text-sm tracking-wide shadow-[0_4px_14px_rgba(0,216,184,0.25)] hover:shadow-[0_6px_20px_rgba(0,216,184,0.35)] transition-all disabled:opacity-60 disabled:cursor-not-allowed border-0"
+            className="h-[48px] w-full rounded-xl bg-[#00D98A] hover:bg-[#00C47C] active:bg-[#00B270] text-[#031923] font-bold text-sm tracking-wide shadow-[0_4px_14px_rgba(0,217,138,0.28)] hover:shadow-[0_6px_20px_rgba(0,217,138,0.38)] transition-all disabled:opacity-60 disabled:cursor-not-allowed border-0"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">

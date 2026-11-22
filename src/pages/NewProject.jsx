@@ -123,16 +123,16 @@ export default function NewProject() {
                 onClick={() => setForm({ ...form, project_type: item.value })}
                 className={`group relative flex items-start justify-between rounded-2xl p-4 text-left transition-all duration-200 cursor-pointer ${
                   active
-                    ? "border-2 border-[#00d8b8] bg-white shadow-[0_2px_10px_rgba(0,216,184,0.08)]"
-                    : "border border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/50 shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
+                    ? "border-2 border-[#00D98A] bg-[#DDFCF0]/30 shadow-[0_4px_14px_rgba(0,217,138,0.12)]"
+                    : "border border-[#E5EBF1] bg-white hover:border-[#CBD5E1] hover:bg-[#F6F9FC] shadow-xs"
                 }`}
               >
                 <div className="flex items-start gap-3.5 pr-2">
                   <span
                     className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
                       active
-                        ? "bg-[#00d8b8] text-white"
-                        : "bg-slate-100 text-slate-500 group-hover:bg-slate-200/70 group-hover:text-slate-700"
+                        ? "bg-[#00D98A] text-[#031923]"
+                        : "bg-[#F6F9FC] text-[#64748B] group-hover:bg-[#E5EBF1] group-hover:text-[#101828]"
                     }`}
                   >
                     <Icon className="h-5 w-5" />

@@ -196,7 +196,7 @@ export default function Diagram() {
         subtitle="Geração automática conforme NBR 5410"
       >
         <Select value={selected} onValueChange={setSelected}>
-          <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+          <SelectTrigger className="h-11 min-w-0 flex-1 rounded-xl border-[#E5EBF1] bg-white text-sm font-bold shadow-xs">
             <SelectValue placeholder="Selecionar projeto..." />
           </SelectTrigger>
           <SelectContent>{projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>

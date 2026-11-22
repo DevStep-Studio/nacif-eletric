@@ -248,19 +248,19 @@ export default function Subscription() {
       {/* 3.2 Plano Atual e Uso no Período */}
       <section className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
         {/* Bloco Plano Atual */}
-        <article className="rounded-[12px] border border-[#E4E7EC] bg-white p-5 shadow-sm">
+        <article className="rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-[#667085]">Plano atual</p>
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748B]">Plano atual</p>
               <h2 className="mt-1.5 text-2xl font-extrabold text-[#101828]">{subscription.hasAccess ? subscription.plan.name : "Sem plano"}</h2>
-              <p className="mt-1 text-xs font-medium leading-5 text-[#667085]">{subscription.hasAccess ? subscription.plan.commercialTagline : "Você ainda não contratou um plano. Escolha uma opção abaixo para assinar."}</p>
+              <p className="mt-1 text-xs font-medium leading-5 text-[#64748B]">{subscription.hasAccess ? subscription.plan.commercialTagline : "Você ainda não contratou um plano. Escolha uma opção abaixo para assinar."}</p>
             </div>
-            <Badge className="rounded-[6px] border border-[#BCEEE5] bg-[#E8FCF8] text-xs font-extrabold text-[#0f4f49] hover:bg-[#E8FCF8]">
+            <Badge className="rounded-full border border-[#00D98A]/35 bg-[#DDFCF0] text-xs font-bold text-[#006F51] hover:bg-[#DDFCF0]">
               {subscription.hasActiveTrial ? "Teste grátis" : subscription.hasPaidSubscription ? "Atual" : "Sem plano"}
             </Badge>
           </div>
 
-          <div className="mt-4 rounded-[10px] border border-[#EAECF0] bg-[#F9FAFB] p-3.5 text-xs">
+          <div className="mt-4 rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-3.5 text-xs">
             <div className="flex items-center justify-between">
               <span className="font-extrabold text-[#101828]">Status da assinatura:</span>
               <Badge className="rounded-[4px] bg-emerald-100 text-emerald-800 text-[11px] font-bold hover:bg-emerald-100">

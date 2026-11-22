@@ -593,7 +593,7 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
         }
       >
         <Select value={selected} onValueChange={handleSelectProject}>
-          <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+          <SelectTrigger className="h-11 min-w-0 flex-1 rounded-xl border-[#E5EBF1] bg-white text-sm font-bold shadow-xs">
             <SelectValue placeholder="Selecionar projeto..." />
           </SelectTrigger>
           <SelectContent>{projects.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent>
@@ -603,7 +603,7 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
       {project ? (
         <>
           {isPanelAssemblyOnly && (
-            <div className="min-w-0 rounded-[16px] border border-[#CDEFE8] bg-[#F2FFFC] px-4 py-3 text-sm font-semibold text-[#004E82]">
+            <div className="min-w-0 rounded-2xl border border-[#00D98A]/35 bg-[#DDFCF0]/40 px-4 py-3 text-sm font-semibold text-[#006F51]">
               Escopo: montagem de quadro. A lista traz apenas o material do quadro — itens de infraestrutura (eletrodutos, caixas, tomadas, cabeamento) aparecem depois que a planta baixa for criada.
             </div>
           )}
@@ -614,13 +614,15 @@ Melhor compra consolidada: ${localInsight.bestSingleSupplier.name} ${formatCurre
               { label: "Economia IA", value: formatCurrency(recommendation.mixedSaving), icon: TrendingDown },
               { label: "Fornecedor destaque", value: bestSupplierName, icon: Store },
             ].map((item) => (
-              <div key={item.label} className="min-w-0 rounded-[18px] border border-[#CDEFE8] bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.05)] sm:rounded-[20px] sm:p-5">
+              <div key={item.label} className="min-w-0 rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-5">
                 <div className="flex items-center justify-between gap-3">
-                  <item.icon className="h-5 w-5 text-primary" />
-                  <span className="rounded-[9px] bg-primary/10 px-2.5 py-1 text-xs font-extrabold text-primary">IA</span>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#DDFCF0] text-[#006F51]">
+                    <item.icon className="h-4.5 w-4.5" />
+                  </span>
+                  <span className="rounded-full bg-[#5B4AE8]/10 px-2.5 py-0.5 text-[11px] font-bold text-[#5B4AE8]">IA</span>
                 </div>
-                <p className="mt-4 truncate text-2xl font-extrabold text-[#0f1728]">{item.value}</p>
-                <p className="mt-1 text-sm font-semibold text-[#687386]">{item.label}</p>
+                <p className="mt-4 truncate text-2xl font-extrabold text-[#101828]">{item.value}</p>
+                <p className="mt-1 text-xs font-semibold text-[#64748B]">{item.label}</p>
               </div>
             ))}
           </div>

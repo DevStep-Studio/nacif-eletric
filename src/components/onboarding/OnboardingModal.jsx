@@ -359,7 +359,7 @@ export default function OnboardingModal({ user, open, onComplete }) {
                   type="button"
                   onClick={handleFinish}
                   disabled={saving}
-                  className="h-10 rounded-xl bg-[#00d8b8] text-xs font-black text-slate-950 hover:bg-[#00d8b8]/90 shadow-sm px-6"
+                  className="h-10 rounded-xl bg-[#00D98A] text-xs font-bold text-[#031923] hover:bg-[#00C47C] shadow-xs px-6"
                 >
                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4 stroke-[3]" />}
                   Concluir e Acessar

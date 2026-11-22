@@ -82,11 +82,11 @@ export default function EditProjectModal({ isOpen, onClose, project, onSuccess }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg rounded-2xl p-6 bg-white border border-slate-200 shadow-xl">
+      <DialogContent className="max-w-lg rounded-2xl p-6 bg-white border border-[#E5EBF1] shadow-xl">
         <DialogHeader className="space-y-1">
-          <div className="flex items-center gap-2 text-primary font-black">
-            <Edit3 className="h-5 w-5 text-[#00d8b8]" />
-            <DialogTitle className="text-lg font-black text-[#0F172A]">
+          <div className="flex items-center gap-2 text-[#006F51] font-bold">
+            <Edit3 className="h-5 w-5 text-[#00D98A]" />
+            <DialogTitle className="text-lg font-extrabold text-[#101828]">
               Editar Informações do Projeto
             </DialogTitle>
           </div>

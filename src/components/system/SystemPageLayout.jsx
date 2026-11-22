@@ -40,16 +40,16 @@ export default function SystemPageLayout({
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8FAFC] text-[#0F172A] font-inter">
+    <div className="min-h-screen flex flex-col bg-[#F6F9FC] text-[#101828] font-sans">
       {/* Top Navbar */}
       {showHeader && (
-        <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-[#E2E8F0] bg-white/95 px-4 sm:px-8 backdrop-blur-md">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="inline-flex items-center" title={brandName}>
+        <header className="sticky top-0 z-40 flex h-16 max-w-full items-center justify-between gap-2 overflow-hidden border-b border-[#E5EBF1] bg-white/95 px-3 sm:px-8 backdrop-blur-md">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link to="/" className="inline-flex min-w-0 items-center" title={brandName}>
               <img
                 src={logoSrc}
                 alt={brandName}
-                className="h-8 max-w-[170px] object-contain object-left"
+                className="h-7 sm:h-8 max-w-[130px] sm:max-w-[170px] object-contain object-left"
                 onError={(e) => {
                   if (e.currentTarget.src !== brandLogoEnergy) {
                     e.currentTarget.src = brandLogoEnergy;
@@ -59,17 +59,18 @@ export default function SystemPageLayout({
             </Link>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <Button asChild variant="ghost" size="sm" className="text-xs font-bold text-[#64748B] hover:text-[#0F172A]">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
+            <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex text-xs font-semibold text-[#64748B] hover:text-[#101828]">
               <Link to="/ajuda">Ajuda</Link>
             </Button>
-            <Button asChild variant="ghost" size="sm" className="text-xs font-bold text-[#64748B] hover:text-[#0F172A]">
+            <Button asChild variant="ghost" size="sm" className="hidden md:inline-flex text-xs font-semibold text-[#64748B] hover:text-[#101828]">
               <Link to="/contato">Contato</Link>
             </Button>
-            <Button asChild size="sm" className="h-9 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-bold">
+            <Button asChild size="sm" className="h-9 rounded-xl bg-[#031923] hover:bg-[#082732] text-white text-xs font-semibold px-3">
               <Link to="/">
-                <Home className="h-3.5 w-3.5 mr-1.5" />
-                Ir para o Início
+                <Home className="h-3.5 w-3.5 text-[#00D98A]" />
+                <span className="hidden sm:inline ml-1.5">Ir para o Início</span>
+                <span className="sm:hidden ml-1">Início</span>
               </Link>
             </Button>
           </div>
@@ -81,13 +82,13 @@ export default function SystemPageLayout({
         <div className={`mx-auto w-full ${maxWidth} px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8`}>
           {/* Header section if provided */}
           {(title || showBackButton) && (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[#E2E8F0]">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[#E5EBF1]">
               <div className="flex items-start gap-3.5">
                 {showBackButton && (
                   <button
                     type="button"
                     onClick={handleBack}
-                    className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] transition"
+                    className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#E5EBF1] bg-white text-[#64748B] hover:bg-[#F6F9FC] hover:text-[#101828] transition"
                     title="Voltar"
                     aria-label="Voltar para página anterior"
                   >
@@ -96,13 +97,13 @@ export default function SystemPageLayout({
                 )}
                 <div className="space-y-1">
                   {badge && (
-                    <div className="inline-block rounded-md bg-[#E8FCF8] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#0f4f49]">
+                    <div className="inline-block rounded-full bg-[#DDFCF0] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#006F51]">
                       {badge}
                     </div>
                   )}
                   {title && (
-                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0F172A] flex items-center gap-2">
-                      {Icon && <Icon className="h-6 w-6 text-[#00d8b8]" />}
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#101828] flex items-center gap-2.5">
+                      {Icon && <Icon className="h-6 w-6 text-[#00D98A]" />}
                       {title}
                     </h1>
                   )}

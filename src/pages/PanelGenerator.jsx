@@ -10678,9 +10678,9 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
   };
 
   return (
-    <div className="flex h-screen w-screen min-h-screen flex-col overflow-y-auto bg-[#F5F7FA]">
-      {/* ── Studio Top Bar (Compact & Sleek) ── */}
-      <div className="sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[#CDEFE8] bg-white px-3 shadow-sm">
+    <div className="flex h-screen w-screen min-h-screen flex-col overflow-y-auto bg-[#F6F9FC]">
+      {/* ── Studio Top Bar (Dark Emerald Nacif Energy) ── */}
+      <div className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#031923] px-3 text-white shadow-sm">
         {/* Esquerda: Botão Voltar para a Home & Seletor de Projeto */}
         <div className="flex items-center gap-2">
           <Button
@@ -10690,18 +10690,18 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
               flushPendingPanelSave();
               navigate("/");
             }}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] bg-[#E8FCF8] px-2.5 text-xs font-black text-[#0f4f49] transition hover:bg-[#00d8b8] hover:text-white"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-white/15 bg-[#082732] px-2.5 text-xs font-bold text-white transition hover:border-[#00D98A] hover:bg-[#00D98A] hover:text-[#031923]"
             title="Voltar para a Home"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Voltar para a Home</span>
           </Button>
 
-          <div className="h-5 w-px bg-[#CDEFE8] mx-1" />
+          <div className="h-5 w-px bg-white/15 mx-1" />
 
           <Select value={selectedId} onValueChange={handleSelectProject}>
             <SelectTrigger
-              className="h-8 min-w-[180px] max-w-[280px] sm:max-w-[360px] md:max-w-[420px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none"
+              className="h-8 min-w-[180px] max-w-[280px] sm:max-w-[360px] md:max-w-[420px] rounded-lg border-white/15 bg-[#082732] text-xs font-bold text-white shadow-none"
               title={activeProjectDisplayName}
             >
               <SelectValue placeholder="Selecionar projeto..." />
@@ -10717,10 +10717,10 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
 
           {project && (
             <span
-              className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] px-2.5 py-0.5 text-[11px] font-bold text-[#0f4f49] lg:flex"
+              className="hidden items-center gap-1.5 rounded-full border border-[#00D98A]/35 bg-[#082732] px-2.5 py-0.5 text-[11px] font-bold text-[#00F0A0] lg:flex"
               title={activeBoardDisplayLocation ? `${activeBoardDisplayName} · ${activeBoardDisplayLocation}` : activeBoardDisplayName}
             >
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00d8b8]" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00F0A0]" />
               <span className="truncate max-w-[200px]">
                 {activeBoardDisplayName}
                 {activeBoardDisplayLocation ? ` · ${activeBoardDisplayLocation}` : ""}
@@ -10733,34 +10733,34 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
         <div className="flex items-center gap-1.5">
           <Button
             size="sm"
-            className="h-8 rounded-lg bg-[#00d8b8] px-3 text-xs font-black text-white hover:bg-[#00bda1] shadow-sm"
+            className="h-8 rounded-lg bg-[#00D98A] px-3 text-xs font-extrabold text-[#031923] hover:bg-[#00F0A0] shadow-xs"
             onClick={handleSavePanelLayout}
             disabled={!selectedId || savingLayout}
             title="Salvar alterações no projeto"
           >
-            {savingLayout ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : savedLayout ? <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-white" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+            {savingLayout ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : savedLayout ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> : <Save className="mr-1 h-3.5 w-3.5" />}
             <span>{savingLayout ? "Salvando..." : savedLayout ? "Salvo" : "Salvar"}</span>
           </Button>
 
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
+            className="h-8 rounded-lg border-white/15 bg-[#082732] px-2.5 text-xs font-bold text-white hover:bg-white/15 hover:text-white"
             onClick={handleExportSvg}
             title="Exportar Imagem do Quadro"
           >
-            <Download className="mr-1 h-3.5 w-3.5" />
+            <Download className="mr-1 h-3.5 w-3.5 text-[#00F0A0]" />
             <span className="hidden sm:inline">Exportar</span>
           </Button>
 
           <Button
             size="sm"
             variant="outline"
-            className="h-8 rounded-lg border-[#CDEFE8] px-2.5 text-xs font-bold text-[#0f4f49]"
+            className="h-8 rounded-lg border-white/15 bg-[#082732] px-2.5 text-xs font-bold text-white hover:bg-white/15 hover:text-white"
             onClick={() => navigate(selectedId ? `/planta-ia?project=${selectedId}` : "/planta-ia")}
             title="Abrir Planta Elétrica"
           >
-            <LayoutGrid className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+            <LayoutGrid className="mr-1 h-3.5 w-3.5 text-[#00F0A0]" />
             <span className="hidden md:inline">Planta IA</span>
           </Button>
         </div>

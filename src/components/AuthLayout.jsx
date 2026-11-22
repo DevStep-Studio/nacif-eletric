@@ -17,7 +17,7 @@ export default function AuthLayout({ title, subtitle, footer, children }) {
   const currentYear = new Date().getFullYear();
 
   return (
-    <div className="min-h-screen bg-[#FAFCFC] text-slate-900 flex flex-col justify-between selection:bg-[#00d8b8]/20 selection:text-slate-950 overflow-hidden">
+    <div className="min-h-screen bg-[#F6F9FC] text-[#101828] flex flex-col justify-between selection:bg-[#00D98A]/25 selection:text-[#031923] overflow-hidden">
       {/* Container Principal de 2 Colunas */}
       <main className="flex-1 flex items-center justify-center px-4 py-8 sm:px-6 sm:py-12 lg:px-8 xl:px-12">
         <div className="w-full max-w-[1020px] mx-auto grid grid-cols-1 lg:grid-cols-[1.12fr_0.88fr] xl:grid-cols-[1.18fr_0.82fr] gap-8 lg:gap-14 xl:gap-20 items-center">
@@ -32,7 +32,7 @@ export default function AuthLayout({ title, subtitle, footer, children }) {
             animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
             transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ scale: 1.015, transition: { duration: 0.35 } }}
-            className="hidden lg:flex relative overflow-hidden rounded-[24px] border border-slate-200/80 shadow-[0_20px_50px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.02)] w-full max-w-[490px] h-[640px] xl:h-[660px] mx-auto bg-slate-900 group cursor-default"
+            className="hidden lg:flex relative overflow-hidden rounded-[24px] border border-[#E5EBF1] shadow-[0_20px_50px_rgba(3,25,35,0.08)] w-full max-w-[490px] h-[640px] xl:h-[660px] mx-auto bg-[#031923] group cursor-default"
           >
             <img
               src={authCardHero}

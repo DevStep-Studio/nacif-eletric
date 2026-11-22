@@ -7,6 +7,7 @@ import { Activity, AlertTriangle, CheckCircle2, Zap, ArrowLeftRight } from "luci
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import PageHeader from "@/components/PageHeader";
+import WorkspaceProjectContextBar from "@/components/nacif/WorkspaceProjectContextBar";
 
 const PHASES = ["A", "B", "C"];
 const PH_COLOR = { A: "#00d8b8", B: "#00d8b8", C: "#16a34a" };
@@ -129,7 +130,7 @@ export default function PhaseBalance() {
         subtitle="Distribuição automática A, B, C · NBR 5410"
       >
         <Select value={selected} onValueChange={handleSelectProject}>
-          <SelectTrigger className="h-12 min-w-0 flex-1 rounded-[14px] border-[#BCEEE5] bg-white text-sm font-bold shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+          <SelectTrigger className="h-11 min-w-0 flex-1 rounded-xl border-[#E5EBF1] bg-white text-sm font-bold shadow-xs">
             <SelectValue placeholder="Selecionar projeto..." />
           </SelectTrigger>
           <SelectContent>{projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
@@ -137,20 +138,21 @@ export default function PhaseBalance() {
       </PageHeader>
 
       {!project ? (
-        <div className="rounded-[18px] border border-dashed border-[#BCEEE5] bg-[#F2FFFC] px-6 py-14 text-center shadow-[0_14px_34px_rgba(0,100,166,0.04)]">
-          <ArrowLeftRight className="mx-auto mb-3 h-10 w-10 text-[#00d8b8]" />
+        <div className="rounded-2xl border border-dashed border-[#E5EBF1] bg-white px-6 py-14 text-center shadow-xs">
+          <ArrowLeftRight className="mx-auto mb-3 h-10 w-10 text-[#00D98A]" />
           <p className="text-base font-extrabold text-[#101828]">Selecione um projeto</p>
-          <p className="mt-1 text-sm font-medium text-[#667085]">Escolha um projeto para visualizar a distribuição entre fases.</p>
+          <p className="mt-1 text-sm font-medium text-[#64748B]">Escolha um projeto para visualizar a distribuição entre fases.</p>
         </div>
       ) : (
         <>
+          <WorkspaceProjectContextBar project={project} activeTool="overview" />
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="overflow-hidden rounded-[18px] border border-[#BCEEE5] bg-white shadow-[0_18px_45px_rgba(0,100,166,0.06)]">
-              <div className="border-b border-[#CDEFE8] bg-[#E8FCF8] px-5 py-4">
-                <p className="text-[12px] font-extrabold uppercase tracking-[0.14em] text-[#00d8b8]">
+            <div className="overflow-hidden rounded-2xl border border-[#E5EBF1] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <div className="border-b border-[#E5EBF1] bg-[#F6F9FC] px-5 py-4">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#006F51]">
                   Resumo técnico
                 </p>
-                <h2 className="mt-1 text-[22px] font-extrabold leading-tight text-[#101828]">
+                <h2 className="mt-1 text-xl font-extrabold leading-tight text-[#101828]">
                   Balanceamento do quadro
                 </h2>
               </div>

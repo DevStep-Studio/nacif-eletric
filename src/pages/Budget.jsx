@@ -814,12 +814,12 @@ export default function BudgetPage() {
                   type="button"
                   onClick={handleSaveBudget}
                   disabled={saveStatus === "saving"}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold shadow-sm transition ${
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold shadow-xs transition ${
                     saveStatus === "saved"
-                      ? "bg-emerald-600 text-white"
+                      ? "bg-[#00D98A] text-[#031923]"
                       : saveStatus === "error"
-                      ? "bg-red-600 text-white"
-                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                      ? "bg-[#EF4444] text-white"
+                      : "bg-[#031923] text-white hover:bg-[#082732]"
                   }`}
                   title="Salvar alterações no orçamento ativo"
                 >
@@ -890,13 +890,13 @@ export default function BudgetPage() {
       <div className="mx-auto grid w-full max-w-7xl gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
         {/* Painel lateral: Projetos */}
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-border/50 bg-card p-4 shadow-xs">
+          <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-black text-[#0f172a]">Projetos</h3>
-                <p className="text-xs font-semibold text-muted-foreground">Selecione para ver orçamentos</p>
+                <h3 className="text-sm font-extrabold text-[#101828]">Projetos</h3>
+                <p className="text-xs font-medium text-[#64748B]">Selecione para ver orçamentos</p>
               </div>
-              <FolderOpen className="h-5 w-5 text-primary" />
+              <FolderOpen className="h-5 w-5 text-[#006F51]" />
             </div>
 
             <div className="mb-3">

@@ -233,24 +233,26 @@ export default function AdminPanel() {
           { label: "Profissional", value: planCounts.profissional, icon: CreditCard },
           { label: "Notificações", value: unreadCount, icon: BellRing },
         ].map((s) => (
-          <div key={s.label} className="rounded-[18px] border border-[#CDEFE8] bg-white p-5 shadow-[0_16px_45px_rgba(15,23,42,0.05)]">
+          <div key={s.label} className="rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
             <div className="flex items-center justify-between">
-              <s.icon className="h-5 w-5 text-primary" />
-              <span className="rounded-[9px] bg-primary/10 px-2.5 py-1 text-xs font-extrabold text-primary">Ativo</span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#DDFCF0] text-[#006F51]">
+                <s.icon className="h-4.5 w-4.5" />
+              </span>
+              <span className="rounded-full bg-[#DDFCF0] px-2.5 py-0.5 text-[11px] font-bold text-[#006F51]">Ativo</span>
             </div>
-            <p className="mt-4 text-3xl font-extrabold text-[#0f1728]">{s.value}</p>
-            <p className="mt-1 text-sm font-semibold text-[#687386]">{s.label}</p>
+            <p className="mt-4 text-3xl font-extrabold text-[#101828]">{s.value}</p>
+            <p className="mt-1 text-xs font-semibold text-[#64748B]">{s.label}</p>
           </div>
         ))}
       </div>
 
       <Tabs defaultValue="appearance" className="space-y-5">
-        <TabsList className="h-auto flex-wrap justify-start rounded-[14px] border border-[#CDEFE8] bg-white p-1">
-          <TabsTrigger value="subscriptions" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Assinaturas & Planos</TabsTrigger>
-          <TabsTrigger value="appearance" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Aparência</TabsTrigger>
-          <TabsTrigger value="notifications" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Notificações</TabsTrigger>
-          <TabsTrigger value="users" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Usuários</TabsTrigger>
-          <TabsTrigger value="projects" className="rounded-[10px] px-4 py-2.5 text-sm font-extrabold">Projetos</TabsTrigger>
+        <TabsList className="h-auto flex-wrap justify-start rounded-xl border border-[#E5EBF1] bg-white p-1">
+          <TabsTrigger value="subscriptions" className="rounded-lg px-4 py-2 text-xs font-bold">Assinaturas & Planos</TabsTrigger>
+          <TabsTrigger value="appearance" className="rounded-lg px-4 py-2 text-xs font-bold">Aparência</TabsTrigger>
+          <TabsTrigger value="notifications" className="rounded-lg px-4 py-2 text-xs font-bold">Notificações</TabsTrigger>
+          <TabsTrigger value="users" className="rounded-lg px-4 py-2 text-xs font-bold">Usuários</TabsTrigger>
+          <TabsTrigger value="projects" className="rounded-lg px-4 py-2 text-xs font-bold">Projetos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="subscriptions" className="space-y-5">

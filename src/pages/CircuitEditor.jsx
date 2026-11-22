@@ -23,6 +23,7 @@ import {
 import { Link, useSearchParams } from "react-router-dom";
 import CircuitFormDialog from "@/components/CircuitFormDialog";
 import PageHeader from "@/components/PageHeader";
+import WorkspaceProjectContextBar from "@/components/nacif/WorkspaceProjectContextBar";
 
 const PHASE_COLORS = { A: "text-amber-600", B: "text-blue-600", C: "text-emerald-600", ABC: "text-violet-600" };
 const PHASE_DOT = { A: "bg-amber-500", B: "bg-blue-500", C: "bg-emerald-500", ABC: "bg-violet-500" };
@@ -679,12 +680,13 @@ export default function CircuitEditor() {
       </PageHeader>
 
       {!project ? (
-        <div className="rounded-[18px] border border-dashed border-[#BCEEE5] bg-[#F2FFFC] px-6 py-12 text-center">
-          <Edit3 className="mx-auto mb-3 h-10 w-10 text-primary" />
-          <p className="text-base font-extrabold text-[#0f1728]">Selecione um projeto</p>
+        <div className="rounded-2xl border border-dashed border-[#E5EBF1] bg-white px-6 py-12 text-center">
+          <Edit3 className="mx-auto mb-3 h-10 w-10 text-[#00D98A]" />
+          <p className="text-base font-extrabold text-[#101828]">Selecione um projeto</p>
         </div>
       ) : (
         <>
+          <WorkspaceProjectContextBar project={project} activeTool="circuits" />
           {m && (
             <>
               <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">

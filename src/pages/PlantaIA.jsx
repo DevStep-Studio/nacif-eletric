@@ -5362,23 +5362,23 @@ export default function PlantaIA() {
   }, [routeToolActive, routeDraft, selectedElement, selectedRoute, selectedRoutePointIndex, undoDesign, redoDesign, deleteSelected]);
 
   return (
-    <div className="flex h-screen w-screen min-h-screen flex-col overflow-hidden bg-[#F2FFFC]">
-      {/* ── Studio Top Bar (Compact & Sleek) ── */}
-      <div className="z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[#CDEFE8] bg-white px-3 shadow-sm">
+    <div className="flex h-screen w-screen min-h-screen flex-col overflow-hidden bg-[#F6F9FC]">
+      {/* ── Studio Top Bar (Dark Emerald Nacif Energy) ── */}
+      <div className="z-30 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#031923] px-3 text-white shadow-sm">
         {/* Esquerda: Botão Voltar para a Home & Seletor de Projeto */}
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleBackToHome}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-[#BCEEE5] bg-[#E8FCF8] px-2.5 text-xs font-black text-[#0f4f49] transition hover:bg-[#00d8b8] hover:text-white"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-white/15 bg-[#082732] px-2.5 text-xs font-bold text-white transition hover:border-[#00D98A] hover:bg-[#00D98A] hover:text-[#031923]"
             title="Voltar para a Home"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Voltar para a Home</span>
           </Button>
 
-          <div className="h-5 w-px bg-[#CDEFE8] mx-1" />
+          <div className="h-5 w-px bg-white/15 mx-1" />
 
           <Select
             value={selectedProject}
@@ -5394,7 +5394,7 @@ export default function PlantaIA() {
               if (open) loadProjects();
             }}
           >
-            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-[#BCEEE5] bg-[#F8FBFD] text-xs font-bold shadow-none">
+            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-white/15 bg-[#082732] text-xs font-bold text-white shadow-none">
               <SelectValue placeholder="Selecionar projeto..." />
             </SelectTrigger>
             <SelectContent>
@@ -5407,8 +5407,8 @@ export default function PlantaIA() {
           </Select>
 
           {selectedProjectName && (
-            <span className="hidden items-center gap-1.5 rounded-md bg-[#E8FCF8] px-2 py-0.5 text-[11px] font-bold text-[#0f4f49] md:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#00d8b8]" />
+            <span className="hidden items-center gap-1.5 rounded-full border border-[#00D98A]/35 bg-[#082732] px-2.5 py-0.5 text-[11px] font-bold text-[#00F0A0] md:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#00F0A0]" />
               <span className="truncate max-w-[140px]">{selectedProjectName}</span>
             </span>
           )}
@@ -5419,69 +5419,69 @@ export default function PlantaIA() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
+            className="h-8 rounded-lg px-2 text-xs font-semibold text-slate-200 hover:bg-[#082732] hover:text-white"
             onClick={loadHouseTemplate}
             title="Carregar Modelo Casa"
           >
-            <House className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+            <House className="mr-1 h-3.5 w-3.5 text-[#00F0A0]" />
             <span className="hidden sm:inline">Modelo Casa</span>
           </Button>
 
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
+            className="h-8 rounded-lg px-2 text-xs font-semibold text-slate-200 hover:bg-[#082732] hover:text-white"
             onClick={startBlankArchitecturalPlan}
             title="Limpar e desenhar do zero"
           >
-            <Minus className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+            <Minus className="mr-1 h-3.5 w-3.5 text-[#00F0A0]" />
             <span className="hidden sm:inline">Desenhar do zero</span>
           </Button>
 
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 rounded-lg px-2 text-xs font-bold text-[#344054] hover:bg-[#F2F4F7]"
+            className="h-8 rounded-lg px-2 text-xs font-semibold text-slate-200 hover:bg-[#082732] hover:text-white"
             onClick={() => fileInputRef.current?.click()}
             title="Importar imagem ou PDF de planta"
           >
-            <Upload className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+            <Upload className="mr-1 h-3.5 w-3.5 text-[#00F0A0]" />
             <span className="hidden sm:inline">{importedFileName ? "Trocar Planta" : "Importar"}</span>
           </Button>
           <input ref={fileInputRef} type="file" className="hidden" accept={IMPORTABLE_PLAN_TYPES} onChange={handleFileUpload} />
 
           <Button
             size="sm"
-            className="h-8 rounded-lg bg-[#00d8b8] px-3 text-xs font-black text-white hover:bg-[#00bda1] shadow-sm"
+            className="h-8 rounded-lg bg-[#00D98A] px-3 text-xs font-extrabold text-[#031923] hover:bg-[#00F0A0] shadow-xs"
             onClick={handleSavePlantDesign}
             disabled={saving}
             title="Salvar alterações no projeto"
           >
-            {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : saved ? <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-white" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+            {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : saved ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> : <Save className="mr-1 h-3.5 w-3.5" />}
             <span>{saving ? "Salvando..." : saved ? "Salvo" : "Salvar"}</span>
           </Button>
 
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
+            className="h-8 rounded-lg border-white/15 bg-[#082732] px-2.5 text-xs font-bold text-white hover:bg-white/15 hover:text-white"
             onClick={exportFloorPlanPdf}
             disabled={exporting}
             title="Exportar planta em prancha A0"
           >
-            <Download className="mr-1 h-3.5 w-3.5" />
+            <Download className="mr-1 h-3.5 w-3.5 text-[#00F0A0]" />
             <span className="hidden sm:inline">Baixar A0</span>
           </Button>
 
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-lg border-[#BCEEE5] px-2.5 text-xs font-extrabold text-[#0f4f49]"
+            className="h-8 rounded-lg border-white/15 bg-[#082732] px-2.5 text-xs font-bold text-white hover:bg-white/15 hover:text-white"
             onClick={handlePrintFloorPlan}
             disabled={exporting}
             title="Imprimir planta baixa técnica"
           >
-            <Printer className="mr-1 h-3.5 w-3.5" />
+            <Printer className="mr-1 h-3.5 w-3.5 text-[#00F0A0]" />
             <span className="hidden sm:inline">Imprimir</span>
           </Button>
 
@@ -5489,11 +5489,11 @@ export default function PlantaIA() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 rounded-lg border-[#CDEFE8] px-2.5 text-xs font-bold text-[#0f4f49]"
+              className="h-8 rounded-lg border-white/15 bg-[#082732] px-2.5 text-xs font-bold text-white hover:bg-white/15 hover:text-white"
               onClick={() => navigate(selectedProject ? `/unifilar?project=${selectedProject}` : "/unifilar")}
               title="Ver Diagrama Unifilar"
             >
-              <GitBranch className="mr-1 h-3.5 w-3.5 text-[#00d8b8]" />
+              <GitBranch className="mr-1 h-3.5 w-3.5 text-[#00F0A0]" />
               <span className="hidden md:inline">Diagrama</span>
             </Button>
           )}
