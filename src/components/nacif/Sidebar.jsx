@@ -167,12 +167,12 @@ export default function Sidebar({
     const avatarUrl = activeUser?.avatar_url || activeUser?.profile_photo_url || activeUser?.photo_url;
 
     const navItemClass = (active) =>
-      `group flex items-center rounded-[10px] text-[12.5px] font-medium transition-all duration-150 ${
+      `group flex items-center rounded-[10px] border text-[12.5px] font-medium transition-all duration-150 ${
         isCompact ? "mx-auto h-9 w-9 justify-center p-0" : "h-[31px] w-full justify-between px-2.5"
       } ${
         active
-          ? "bg-gradient-to-r from-[#027A52] via-[#049768] to-[#00C882] text-white font-semibold shadow-[0_6px_16px_rgba(0,217,138,0.28)]"
-          : "text-slate-300/90 hover:bg-[#082732] hover:text-white"
+          ? "border-[#00D98A]/35 bg-[#073B33] text-white font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+          : "border-transparent text-slate-300/90 hover:bg-[#082732] hover:text-white"
       }`;
 
     return (
@@ -246,8 +246,8 @@ export default function Sidebar({
                   >
                     <div className={`flex items-center ${isCompact ? "justify-center" : "gap-2.5 min-w-0"}`}>
                       <Icon
-                        className={`h-4 w-4 shrink-0 ${
-                          active ? "text-white" : "text-slate-400 group-hover:text-[#00F0A0]"
+                        className={`h-4 w-4 shrink-0 transition-colors ${
+                          active ? "text-[#00F0A0]" : "text-slate-400 group-hover:text-[#00F0A0]"
                         }`}
                       />
                       {!isCompact && <span className="truncate">{item.label}</span>}
@@ -286,8 +286,8 @@ export default function Sidebar({
                   >
                     <div className={`flex items-center ${isCompact ? "justify-center" : "gap-2.5 min-w-0"}`}>
                       <Icon
-                        className={`h-4 w-4 shrink-0 ${
-                          active ? "text-white" : "text-slate-400 group-hover:text-[#00F0A0]"
+                        className={`h-4 w-4 shrink-0 transition-colors ${
+                          active ? "text-[#00F0A0]" : "text-slate-400 group-hover:text-[#00F0A0]"
                         }`}
                       />
                       {!isCompact && <span className="truncate">{item.label}</span>}
@@ -312,7 +312,7 @@ export default function Sidebar({
               to="/subscription"
               onClick={isMobile ? onCloseMobile : undefined}
               title={isCompact ? subscription?.plan?.name || "Planos e Assinaturas" : undefined}
-              className={`group flex items-center rounded-xl border border-[#00D98A]/55 bg-gradient-to-r from-[#04372D] via-[#06322F] to-[#082A2D] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[#00F0A0] ${
+              className={`group flex items-center rounded-xl border border-[#00D98A]/45 bg-[#053029] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition hover:border-[#00F0A0] hover:bg-[#073C33] ${
                 isCompact ? "mx-auto h-9 w-9 justify-center p-0" : "justify-between gap-2 px-2.5 py-2"
               }`}
             >
@@ -349,7 +349,11 @@ export default function Sidebar({
             className={navItemClass(isItemActive("/notifications"))}
           >
             <div className={`flex items-center ${isCompact ? "justify-center" : "gap-2.5 min-w-0"}`}>
-              <Bell className="h-4 w-4 shrink-0 text-slate-400" />
+              <Bell
+                className={`h-4 w-4 shrink-0 transition-colors ${
+                  isItemActive("/notifications") ? "text-[#00F0A0]" : "text-slate-400 group-hover:text-[#00F0A0]"
+                }`}
+              />
               {!isCompact && <span className="truncate">Notificações</span>}
             </div>
             {!isCompact && unreadNotificationsCount > 0 && (
@@ -366,7 +370,11 @@ export default function Sidebar({
             className={navItemClass(isItemActive("/settings"))}
           >
             <div className={`flex items-center ${isCompact ? "justify-center" : "gap-2.5 min-w-0"}`}>
-              <Settings className="h-4 w-4 shrink-0 text-slate-400" />
+              <Settings
+                className={`h-4 w-4 shrink-0 transition-colors ${
+                  isItemActive("/settings") ? "text-[#00F0A0]" : "text-slate-400 group-hover:text-[#00F0A0]"
+                }`}
+              />
               {!isCompact && <span className="truncate">Configurações</span>}
             </div>
           </Link>
@@ -378,7 +386,11 @@ export default function Sidebar({
             className={navItemClass(isItemActive("/ajuda"))}
           >
             <div className={`flex items-center ${isCompact ? "justify-center" : "gap-2.5 min-w-0"}`}>
-              <HelpCircle className="h-4 w-4 shrink-0 text-slate-400" />
+              <HelpCircle
+                className={`h-4 w-4 shrink-0 transition-colors ${
+                  isItemActive("/ajuda") ? "text-[#00F0A0]" : "text-slate-400 group-hover:text-[#00F0A0]"
+                }`}
+              />
               {!isCompact && <span className="truncate">Ajuda e Suporte</span>}
             </div>
           </Link>
