@@ -89,25 +89,15 @@ export default function ProjectStatusBadge({
   const config = getProjectStatusConfig(status);
 
   const sizeStyles = {
-    sm: "px-2.5 py-0.5 text-[11px] gap-1.5 rounded-full",
-    md: "px-3 py-1 text-xs gap-1.5 rounded-full",
-    lg: "px-3.5 py-1.5 text-xs gap-2 rounded-full",
-  }[size] || "px-3 py-1 text-xs gap-1.5 rounded-full";
+    sm: "px-2 py-1 text-[11px] rounded-md",
+    md: "px-2.5 py-1 text-xs rounded-lg",
+    lg: "px-3 py-1.5 text-xs rounded-lg",
+  }[size] || "px-2.5 py-1 text-xs rounded-lg";
 
   return (
     <span
       className={`inline-flex items-center font-semibold tracking-tight border select-none transition-all ${config.badgeStyle} ${sizeStyles} ${className}`}
     >
-      <span className="relative flex h-2 w-2 items-center justify-center shrink-0">
-        {config.ping && (
-          <span
-            className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${config.dotStyle}`}
-          />
-        )}
-        <span
-          className={`relative inline-flex h-1.5 w-1.5 rounded-full ${config.dotStyle}`}
-        />
-      </span>
       <span className="leading-none whitespace-nowrap">{config.label}</span>
     </span>
   );

@@ -90,8 +90,7 @@ export default function FeaturedProjectCard({
       {/* Camada 4: Conteúdo HTML Real à Esquerda */}
       <div className="relative z-10 flex h-full max-w-[385px] flex-col justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00F0A0]/30 bg-[#053830]/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#00F0A0] shadow-[0_0_8px_#00F0A0]" />
+          <span className="inline-flex items-center rounded-md border border-[#00F0A0]/35 bg-[#053830]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
             <span>{badgeLabel}</span>
           </span>
 
@@ -100,7 +99,7 @@ export default function FeaturedProjectCard({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/90 hover:bg-white/20 transition backdrop-blur-sm"
+                  className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[10px] font-semibold text-white/90 hover:bg-white/20 transition backdrop-blur-sm"
                 >
                   <span>Trocar</span>
                   <ChevronDown className="h-3 w-3 opacity-80" />
