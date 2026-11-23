@@ -125,19 +125,11 @@ export default function Login() {
       <main className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center px-4 py-6 sm:px-8 sm:py-10 lg:justify-end lg:px-8 lg:py-10 xl:pr-[84px] 2xl:pr-[126px]">
         <section
           aria-labelledby="login-heading"
-          className="flex w-full max-w-[440px] flex-col justify-between rounded-[28px] bg-white p-6 shadow-[0_24px_64px_rgba(3,25,35,0.24)] ring-1 ring-black/[0.06] sm:max-w-[480px] sm:rounded-[32px] sm:p-9 lg:w-[445px] lg:max-w-[445px] lg:p-8 xl:w-[495px] xl:max-w-[495px] xl:rounded-[34px] xl:p-10 2xl:min-h-[700px] 2xl:w-[530px] 2xl:max-w-[530px] 2xl:rounded-[36px] 2xl:px-11 2xl:py-10"
+          className="flex w-full max-w-[440px] flex-col justify-between rounded-[28px] bg-white p-6 shadow-[0_24px_64px_rgba(3,25,35,0.24)] ring-1 ring-black/[0.06] sm:max-w-[480px] sm:rounded-[32px] sm:p-9 lg:w-[445px] lg:max-w-[445px] lg:p-8 xl:w-[495px] xl:max-w-[495px] xl:rounded-[34px] xl:p-10 2xl:w-[530px] 2xl:max-w-[530px] 2xl:rounded-[36px] 2xl:px-11 2xl:py-11"
         >
           <div>
-            {/* Badge #00d8b8 */}
-            <div className="flex justify-start">
-              <span className="inline-flex items-center justify-center gap-2 rounded-full bg-[#00d8b8]/15 px-3.5 py-1.5 text-xs font-bold text-[#008773]">
-                <Lock className="h-3.5 w-3.5 shrink-0 text-[#00B89C]" aria-hidden="true" />
-                <span>Acesso seguro aos seus projetos</span>
-              </span>
-            </div>
-
             {/* Título e Descrição */}
-            <header className="mt-5 text-left">
+            <header className="text-left">
               <h1
                 id="login-heading"
                 className="text-[30px] font-extrabold leading-[1.1] tracking-[-0.03em] text-[#081827] sm:text-[36px] 2xl:text-[42px]"
