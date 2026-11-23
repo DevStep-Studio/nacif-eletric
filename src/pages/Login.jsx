@@ -102,14 +102,15 @@ export default function Login() {
   };
 
   return (
-    <div className="relative min-h-[100dvh] w-full overflow-x-hidden bg-[#031923] font-sans text-[#101828] antialiased selection:bg-[#00D98A]/25 selection:text-[#031923]">
+    <div className="relative min-h-[100dvh] w-full overflow-x-hidden bg-[#031923] font-sans text-[#101828] antialiased selection:bg-[#00d8b8]/25 selection:text-[#031923]">
       {/* Imagem arquitetônica oficial fullscreen sem distorção ou blur:
-          - Desktop >= 1280px: centralizada preservando toda a composição 16:9
-          - Notebook 1024-1279px: ancorada à esquerda para preservar logo e chamada sem cortes
-          - Tablet / Mobile < 1024px: ancorada à direita sobre arquitetura/pôr do sol evitando texto cortado */}
+          - 2xl >= 1536px: centralizada preservando toda a composição 16:9 (1672x941+)
+          - xl 1280-1535px: enquadramento 12% para não cortar logotipo e diferenciais à esquerda
+          - lg 1024-1279px: enquadramento à esquerda mantendo texto/casa livres ao lado do card
+          - < 1024px: ancorada à direita sobre pôr do sol e paisagem evitando recortes de texto */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 min-h-full bg-cover bg-no-repeat bg-right lg:bg-left xl:bg-center"
+        className="pointer-events-none absolute inset-0 min-h-full bg-cover bg-no-repeat bg-right lg:bg-[position:4%_center] xl:bg-[position:12%_center] 2xl:bg-center"
         style={{ backgroundImage: `url(${loginBackground})` }}
       />
 
@@ -120,17 +121,17 @@ export default function Login() {
         mais eficiência e valor.
       </div>
 
-      {/* Área principal posicionando o card flutuante à direita no desktop e centralizado em telas menores */}
-      <main className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center px-4 py-6 sm:px-8 sm:py-10 lg:justify-end lg:px-10 lg:py-10 xl:pr-[92px] 2xl:pr-[128px]">
+      {/* Área principal com o card flutuante à direita no desktop e centralizado em telas menores */}
+      <main className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center px-4 py-6 sm:px-8 sm:py-10 lg:justify-end lg:px-8 lg:py-10 xl:pr-[84px] 2xl:pr-[126px]">
         <section
           aria-labelledby="login-heading"
-          className="flex w-full max-w-[440px] flex-col justify-between rounded-[28px] bg-white p-6 shadow-[0_24px_64px_rgba(3,25,35,0.28)] sm:max-w-[480px] sm:rounded-[32px] sm:p-9 lg:w-[465px] lg:max-w-[465px] xl:w-[505px] xl:max-w-[505px] xl:rounded-[34px] xl:p-10 2xl:min-h-[700px] 2xl:w-[530px] 2xl:max-w-[530px] 2xl:rounded-[36px] 2xl:px-11 2xl:py-10"
+          className="flex w-full max-w-[440px] flex-col justify-between rounded-[28px] bg-white p-6 shadow-[0_24px_64px_rgba(3,25,35,0.24)] ring-1 ring-black/[0.06] sm:max-w-[480px] sm:rounded-[32px] sm:p-9 lg:w-[445px] lg:max-w-[445px] lg:p-8 xl:w-[495px] xl:max-w-[495px] xl:rounded-[34px] xl:p-10 2xl:min-h-[700px] 2xl:w-[530px] 2xl:max-w-[530px] 2xl:rounded-[36px] 2xl:px-11 2xl:py-10"
         >
           <div>
-            {/* Badge verde-claro */}
+            {/* Badge #00d8b8 */}
             <div className="flex justify-start">
-              <span className="inline-flex items-center justify-center gap-2 rounded-full bg-[#DDF9EC] px-3.5 py-1.5 text-xs font-bold text-[#006B50]">
-                <Lock className="h-3.5 w-3.5 shrink-0 text-[#006B50]" aria-hidden="true" />
+              <span className="inline-flex items-center justify-center gap-2 rounded-full bg-[#00d8b8]/15 px-3.5 py-1.5 text-xs font-bold text-[#008773]">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-[#00B89C]" aria-hidden="true" />
                 <span>Acesso seguro aos seus projetos</span>
               </span>
             </div>
@@ -194,7 +195,7 @@ export default function Login() {
                     className={`h-12 rounded-xl border bg-white pl-11 pr-4 text-sm font-medium text-[#101828] placeholder:text-[#94A3B8] shadow-none transition-colors focus-visible:ring-2 ${
                       fieldErrors.email
                         ? "border-red-400 focus-visible:border-red-500 focus-visible:ring-red-200"
-                        : "border-[#DCE4EC] focus-visible:border-[#006B50] focus-visible:ring-[#00D98A]/25"
+                        : "border-[#DCE4EC] focus-visible:border-[#00d8b8] focus-visible:ring-[#00d8b8]/25"
                     }`}
                     required
                   />
@@ -217,7 +218,7 @@ export default function Login() {
                   </Label>
                   <Link
                     to="/forgot-password"
-                    className="text-[13px] font-bold text-[#006B50] transition-colors hover:text-[#004D39] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006B50] rounded"
+                    className="rounded text-[13px] font-bold text-[#009E86] transition-colors hover:text-[#007D6A] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8]"
                   >
                     Esqueceu a senha?
                   </Link>
@@ -246,7 +247,7 @@ export default function Login() {
                     className={`h-12 rounded-xl border bg-white pl-11 pr-11 text-sm font-medium text-[#101828] placeholder:text-[#94A3B8] shadow-none transition-colors focus-visible:ring-2 ${
                       fieldErrors.password
                         ? "border-red-400 focus-visible:border-red-500 focus-visible:ring-red-200"
-                        : "border-[#DCE4EC] focus-visible:border-[#006B50] focus-visible:ring-[#00D98A]/25"
+                        : "border-[#DCE4EC] focus-visible:border-[#00d8b8] focus-visible:ring-[#00d8b8]/25"
                     }`}
                     required
                   />
@@ -256,7 +257,7 @@ export default function Login() {
                     aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                     aria-pressed={showPassword}
                     onClick={() => setShowPassword((visible) => !visible)}
-                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#64748B] transition-colors hover:bg-[#F1F5F9] hover:text-[#101828] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006B50]"
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#64748B] transition-colors hover:bg-[#F1F5F9] hover:text-[#101828] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8]"
                   >
                     {showPassword ? (
                       <EyeOff className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -278,7 +279,7 @@ export default function Login() {
                   id="remember"
                   checked={rememberMe}
                   onCheckedChange={(checked) => setRememberMe(checked === true)}
-                  className="h-4 w-4 rounded-[4px] border-[#CBD5E1] data-[state=checked]:border-[#006B50] data-[state=checked]:bg-[#006B50] data-[state=checked]:text-white"
+                  className="h-4 w-4 rounded-[4px] border-[#CBD5E1] data-[state=checked]:border-[#00d8b8] data-[state=checked]:bg-[#00d8b8] data-[state=checked]:text-[#031923]"
                 />
                 <label
                   htmlFor="remember"
@@ -288,12 +289,12 @@ export default function Login() {
                 </label>
               </div>
 
-              {/* Botão Principal Entrar (sólido, sem gradiente) */}
+              {/* Botão Principal Entrar com cor primária oficial #00d8b8 (sólido, sem gradiente) */}
               <div className="pt-1.5">
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="h-[54px] w-full rounded-[12px] border-0 bg-[#007A55] px-5 text-[15px] font-bold text-white shadow-[0_8px_20px_rgba(0,107,80,0.22)] transition-colors hover:bg-[#006B50] active:bg-[#005842] focus-visible:ring-2 focus-visible:ring-[#00D98A] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-65 sm:h-[56px]"
+                  className="h-[54px] w-full rounded-[12px] border-0 bg-[#00d8b8] px-5 text-[15px] font-extrabold text-[#031923] shadow-[0_8px_20px_rgba(0,216,184,0.28)] transition-colors hover:bg-[#00c4a7] active:bg-[#00b095] focus-visible:ring-2 focus-visible:ring-[#00d8b8] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-65 sm:h-[56px]"
                 >
                   {loading ? (
                     <span className="inline-flex items-center justify-center gap-2">
@@ -320,7 +321,7 @@ export default function Login() {
             <Button
               asChild
               variant="outline"
-              className="h-[52px] w-full rounded-[12px] border-[#DCE4EC] bg-white text-[15px] font-bold text-[#081827] shadow-none transition-colors hover:border-[#CBD5E1] hover:bg-[#F8FAFC] hover:text-[#081827] sm:h-[54px]"
+              className="h-[52px] w-full rounded-[12px] border-[#DCE4EC] bg-white text-[15px] font-bold text-[#081827] shadow-none transition-colors hover:border-[#00d8b8]/60 hover:bg-[#00d8b8]/5 hover:text-[#081827] sm:h-[54px]"
             >
               <Link to="/register" className="inline-flex items-center justify-center gap-2">
                 <UserPlus className="h-[18px] w-[18px] text-[#081827]" aria-hidden="true" />
