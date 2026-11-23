@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Mail } from "lucide-react";
 import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 
 export default function ForgotPassword() {
@@ -36,45 +36,65 @@ export default function ForgotPassword() {
 
   return (
     <AuthLayout
-      title="Redefinir senha"
-      subtitle="Enviaremos um link para você definir uma nova senha."
-      footer={
-        <p className="text-center text-xs text-slate-500">
-          <Link 
-            to="/login" 
-            className="inline-flex items-center gap-1.5 font-semibold text-slate-900 hover:text-[#00a98e] underline underline-offset-4 transition-colors"
+      headingId="forgot-heading"
+      title="Recuperar senha"
+      subtitle={
+        sent
+          ? emailSent
+            ? "Verifique sua caixa de entrada para continuar com a redefinição."
+            : "Solicitação registrada para o endereço informado."
+          : "Informe seu e-mail cadastrado e enviaremos um link para você definir uma nova senha."
+      }
+      error={error}
+      afterContent={
+        <>
+          <div className="my-5 flex items-center gap-3">
+            <span className="h-px flex-1 bg-[#DCE4EC]" aria-hidden="true" />
+            <span className="text-xs font-medium text-[#64748B]">ou</span>
+            <span className="h-px flex-1 bg-[#DCE4EC]" aria-hidden="true" />
+          </div>
+
+          <Button
+            asChild
+            variant="outline"
+            className="h-[52px] w-full rounded-[12px] border-[#DCE4EC] bg-white text-[15px] font-bold text-[#081827] shadow-none transition-colors hover:border-[#00d8b8]/60 hover:bg-[#00d8b8]/5 hover:text-[#081827] sm:h-[54px]"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Voltar para o login
-          </Link>
-        </p>
+            <Link to="/login" className="inline-flex items-center justify-center gap-2">
+              <ArrowLeft className="h-[18px] w-[18px] text-[#081827]" aria-hidden="true" />
+              <span>Voltar para o login</span>
+            </Link>
+          </Button>
+        </>
       }
     >
-      {error && (
-        <div role="alert" className="mb-5 rounded-[8px] border border-red-200/80 bg-red-50 p-3 text-xs font-semibold text-red-600 animate-in fade-in">
-          {error}
-        </div>
-      )}
-
       {sent ? (
-        <div className="space-y-4 text-center animate-in fade-in">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#00d8b8]/15 text-[#00a98e]">
-            <CheckCircle2 className="h-6 w-6" />
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-[#00d8b8]/35 bg-[#00d8b8]/10 p-4 text-left">
+            <CheckCircle2
+              className="mt-0.5 h-5 w-5 shrink-0 text-[#008C77]"
+              aria-hidden="true"
+            />
+            <p className="text-sm font-medium leading-relaxed text-[#081827]">
+              Se existir uma conta com o e-mail informado, você receberá o link de
+              redefinição em instantes.
+            </p>
           </div>
-          <p className="text-sm font-medium text-slate-700 leading-relaxed">
-            Se existir uma conta com o e-mail informado, você receberá o link de redefinição em instantes.
-          </p>
+
           {recoveryLink && (
-            <div className="rounded-[12px] border border-[#00d8b8]/30 bg-[#00d8b8]/5 p-4 text-left">
-              <p className="text-xs font-bold text-slate-900">Link direto de recuperação</p>
-              <p className="mt-1 text-xs text-slate-600">
-                Se o e-mail não chegar em sua caixa de entrada ou se o serviço SMTP ainda estiver em configuração, você pode acessar diretamente pelo link abaixo:
+            <div className="rounded-xl border border-[#DCE4EC] bg-[#F8FAFC] p-4 text-left">
+              <p className="text-xs font-bold text-[#081827]">
+                Link direto de recuperação
               </p>
-              <a 
-                href={recoveryLink} 
-                className="mt-3 inline-block text-xs font-bold text-[#00a98e] hover:underline"
+              <p className="mt-1 text-xs leading-relaxed text-[#64748B]">
+                Se o e-mail não chegar em sua caixa de entrada ou se o serviço SMTP ainda
+                estiver em configuração, acesse diretamente pelo link abaixo:
+              </p>
+              <a
+                href={recoveryLink}
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#009E86] hover:text-[#007D6A] hover:underline"
               >
-                Redefinir senha agora →
+                <span>Redefinir senha agora</span>
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
               </a>
             </div>
           )}
@@ -82,11 +102,14 @@ export default function ForgotPassword() {
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5 text-left">
-            <Label htmlFor="email" className="text-xs font-semibold text-slate-700">
+            <Label htmlFor="email" className="text-[13px] font-bold text-[#101828]">
               E-mail
             </Label>
             <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" aria-hidden="true" />
+              <Mail
+                className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#64748B]"
+                aria-hidden="true"
+              />
               <Input
                 id="email"
                 type="email"
@@ -95,25 +118,28 @@ export default function ForgotPassword() {
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-[48px] rounded-[8px] border-slate-200 bg-slate-50/90 pl-10 pr-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#00d8b8] focus-visible:ring-2 focus-visible:ring-[#00d8b8]/20 transition-all outline-none shadow-none"
+                className="h-12 rounded-xl border-[#DCE4EC] bg-white pl-11 pr-4 text-sm font-medium text-[#101828] placeholder:text-[#94A3B8] shadow-none transition-colors focus-visible:border-[#00d8b8] focus-visible:ring-2 focus-visible:ring-[#00d8b8]/25"
                 required
               />
             </div>
           </div>
 
-          <div className="pt-2">
-            <Button 
-              type="submit" 
+          <div className="pt-1.5">
+            <Button
+              type="submit"
               disabled={loading}
-              className="h-[48px] w-full rounded-xl bg-[#00D98A] hover:bg-[#00C47C] active:bg-[#00B270] text-[#031923] font-bold text-sm tracking-wide shadow-[0_4px_14px_rgba(0,217,138,0.28)] hover:shadow-[0_6px_20px_rgba(0,217,138,0.38)] transition-all disabled:opacity-60 disabled:cursor-not-allowed border-0"
+              className="h-[54px] w-full rounded-[12px] border-0 bg-[#00d8b8] px-5 text-[15px] font-extrabold text-[#031923] shadow-[0_8px_20px_rgba(0,216,184,0.28)] transition-colors hover:bg-[#00c4a7] active:bg-[#00b095] focus-visible:ring-2 focus-visible:ring-[#00d8b8] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-65 sm:h-[56px]"
             >
               {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-slate-950" />
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" />
                   <span>Enviando...</span>
                 </span>
               ) : (
-                "Enviar link de recuperação"
+                <span className="inline-flex items-center justify-center gap-2">
+                  <span>Enviar link de recuperação</span>
+                  <ArrowRight className="h-[18px] w-[18px]" aria-hidden="true" />
+                </span>
               )}
             </Button>
           </div>

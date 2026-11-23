@@ -1,140 +1,118 @@
 import React from "react";
-import { motion } from "framer-motion";
-import authCardHero from "@/assets/auth-card-hero.jpg";
+import { Link } from "react-router-dom";
+import { AlertCircle } from "lucide-react";
 import { useBranding } from "@/lib/appPreferences";
+import loginBackground from "@/assets/nacif_energy_login_fundo_sem_modal.webp";
 
 /**
  * AuthLayout
- * 
- * Layout unificado para as páginas de autenticação (Login, Cadastro, Recuperação de Senha)
- * com efeito de abertura cinematográfico e movimentação fluida (Framer Motion):
- * - Painel esquerdo com entrada tridimensional (scale + blur reveal) e varredura de luz.
- * - Formulário à direita com deslizamento lateral suave e harmonioso.
+ *
+ * Layout fullscreen unificado para todas as telas de autenticação
+ * (Login, Criar conta, Recuperação e Redefinição de senha),
+ * com fotografia oficial ao fundo e modal branco flutuante à direita no desktop.
  */
-export default function AuthLayout({ title, subtitle, footer, children }) {
+export default function AuthLayout({
+  headingId = "auth-heading",
+  title,
+  subtitle,
+  error = "",
+  afterContent = null,
+  footer = null,
+  children,
+}) {
   const { branding } = useBranding();
-  const brandName = [branding?.appName, branding?.appSuffix].filter(Boolean).join(" ") || "NACIF Energy";
+  const brandName =
+    [branding?.appName, branding?.appSuffix].filter(Boolean).join(" ") ||
+    "NACIF Energy";
   const currentYear = new Date().getFullYear();
 
   return (
-    <div className="min-h-screen bg-[#F6F9FC] text-[#101828] flex flex-col justify-between selection:bg-[#00D98A]/25 selection:text-[#031923] overflow-hidden">
-      {/* Container Principal de 2 Colunas */}
-      <main className="flex-1 flex items-center justify-center px-4 py-8 sm:px-6 sm:py-12 lg:px-8 xl:px-12">
-        <div className="w-full max-w-[1020px] mx-auto grid grid-cols-1 lg:grid-cols-[1.12fr_0.88fr] xl:grid-cols-[1.18fr_0.82fr] gap-8 lg:gap-14 xl:gap-20 items-center">
-          
-          {/* ─────────────────────────────────────────────────────────────
-              PAINEL ESQUERDO (Desktop):
-              Card visual com a imagem oficial da Nacif Energy e 
-              animação de abertura com feixe de luz reflexivo
-             ───────────────────────────────────────────────────────────── */}
-          <motion.aside
-            initial={{ opacity: 0, scale: 0.94, y: 36, filter: "blur(6px)" }}
-            animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
-            transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
-            whileHover={{ scale: 1.015, transition: { duration: 0.35 } }}
-            className="hidden lg:flex relative overflow-hidden rounded-[24px] border border-[#E5EBF1] shadow-[0_20px_50px_rgba(3,25,35,0.08)] w-full max-w-[490px] h-[640px] xl:h-[660px] mx-auto bg-[#031923] group cursor-default"
-          >
-            <img
-              src={authCardHero}
-              alt="Nacif Energy — Grandes projetos começam aqui"
-              className="h-full w-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-            />
-            {/* Feixe animado de iluminação que varre o card na abertura */}
-            <motion.div
-              initial={{ x: "-100%", opacity: 0 }}
-              animate={{ x: "200%", opacity: [0, 0.65, 0] }}
-              transition={{ duration: 1.6, delay: 0.25, ease: "easeInOut" }}
-              className="absolute inset-0 w-1/2 h-full bg-gradient-to-r from-transparent via-white/25 to-transparent skew-x-[-20deg] pointer-events-none"
-            />
-          </motion.aside>
+    <div className="relative min-h-[100dvh] w-full overflow-x-hidden bg-[#031923] font-sans text-[#101828] antialiased selection:bg-[#00d8b8]/25 selection:text-[#031923]">
+      {/* Imagem arquitetônica oficial fullscreen sem distorção, blur ou gradientes */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 min-h-full bg-cover bg-no-repeat bg-right lg:bg-[position:4%_center] xl:bg-[position:12%_center] 2xl:bg-center"
+        style={{ backgroundImage: `url(${loginBackground})` }}
+      />
 
-          {/* ─────────────────────────────────────────────────────────────
-              COLUNA DIREITA: Formulário Compacto com Entrada Deslizante
-             ───────────────────────────────────────────────────────────── */}
-          <motion.section
-            initial={{ opacity: 0, x: 28, y: 16 }}
-            animate={{ opacity: 1, x: 0, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full max-w-[360px] mx-auto flex flex-col justify-center"
-          >
-            
-            {/* Versão compacta para Mobile (< lg): Banner com animação suave */}
-            <motion.div
-              initial={{ opacity: 0, y: -16, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="lg:hidden mb-6 flex flex-col items-center text-center"
-            >
-              <div className="w-full relative h-[210px] overflow-hidden rounded-[18px] border border-slate-200/80 shadow-md">
-                <img
-                  src={authCardHero}
-                  alt="Nacif Energy"
-                  className="h-full w-full object-cover object-center"
-                />
-              </div>
-            </motion.div>
+      {/* Alternativa acessível para leitores de tela referente à arte de fundo */}
+      <div className="sr-only">
+        {brandName} — Grandes projetos começam aqui. Da planta ao sol, dê vida às
+        suas ideias. Energia limpa e inteligente, projetos de alto desempenho e
+        mais eficiência e valor.
+      </div>
 
-            {/* Cabeçalho do Formulário (Centralizado) */}
+      {/* Card flutuante branco à direita no desktop e centralizado em telas menores */}
+      <main className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center px-4 py-6 sm:px-8 sm:py-8 lg:justify-end lg:px-8 lg:py-8 xl:pr-[84px] 2xl:pr-[126px]">
+        <section
+          aria-labelledby={title ? headingId : undefined}
+          className="flex w-full max-w-[440px] flex-col justify-between rounded-[28px] bg-white p-6 shadow-[0_24px_64px_rgba(3,25,35,0.24)] ring-1 ring-black/[0.06] sm:max-w-[480px] sm:rounded-[32px] sm:p-9 lg:w-[445px] lg:max-w-[445px] lg:p-8 xl:w-[495px] xl:max-w-[495px] xl:rounded-[34px] xl:p-10 2xl:w-[530px] 2xl:max-w-[530px] 2xl:rounded-[36px] 2xl:px-11 2xl:py-10"
+        >
+          <div>
             {(title || subtitle) && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                className="mb-7 text-center"
-              >
+              <header className="text-left">
                 {title && (
-                  <h1 className="text-[25px] sm:text-[27px] font-extrabold tracking-tight text-slate-900">
+                  <h1
+                    id={headingId}
+                    className="text-[28px] font-extrabold leading-[1.1] tracking-[-0.03em] text-[#081827] sm:text-[34px] 2xl:text-[40px]"
+                  >
                     {title}
                   </h1>
                 )}
                 {subtitle && (
-                  <p className="mt-1.5 text-xs sm:text-sm font-normal text-slate-500">
+                  <p className="mt-2.5 text-sm font-medium leading-[1.55] text-[#64748B] sm:text-[15px]">
                     {subtitle}
                   </p>
                 )}
-              </motion.div>
+              </header>
             )}
 
-            {/* Conteúdo do Formulário */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {children}
-            </motion.div>
-
-            {/* Rodapé auxiliar do formulário (ex: Links de Alternância) */}
-            {footer && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: 0.4 }}
-                className="mt-6 text-center text-xs font-normal text-slate-500"
+            {error && (
+              <div
+                role="alert"
+                className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-xs font-semibold text-red-700"
               >
-                {footer}
-              </motion.div>
+                <AlertCircle
+                  className="mt-0.5 h-4 w-4 shrink-0 text-red-600"
+                  aria-hidden="true"
+                />
+                <span>{error}</span>
+              </div>
             )}
-          </motion.section>
-        </div>
-      </main>
 
-      {/* ─────────────────────────────────────────────────────────────
-          RODAPÉ DISCRETO: Centralizado abaixo da composição
-         ───────────────────────────────────────────────────────────── */}
-      <footer className="mt-auto py-6 text-center text-[11px] font-normal text-slate-400">
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-          <span>© {currentYear} {brandName}</span>
-          <span className="text-slate-300">•</span>
-          <a href="/privacidade" className="hover:text-slate-600 transition-colors">
-            Privacidade
-          </a>
-          <span className="text-slate-300">•</span>
-          <a href="/termos" className="hover:text-slate-600 transition-colors">
-            Termos
-          </a>
-        </div>
-      </footer>
+            <div className={title || subtitle ? "mt-6" : ""}>{children}</div>
+
+            {(afterContent || footer) && (
+              <div className="mt-5">
+                {afterContent}
+                {!afterContent && footer}
+              </div>
+            )}
+          </div>
+
+          <footer className="mt-6 border-t border-[#F1F5F9] pt-4 text-center text-xs font-medium text-[#64748B]">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <span>
+                © {currentYear} {brandName}
+              </span>
+              <span aria-hidden="true" className="h-3 w-px bg-[#DCE4EC]" />
+              <Link
+                to="/privacidade"
+                className="transition-colors hover:text-[#081827] hover:underline"
+              >
+                Privacidade
+              </Link>
+              <span aria-hidden="true" className="h-3 w-px bg-[#DCE4EC]" />
+              <Link
+                to="/termos"
+                className="transition-colors hover:text-[#081827] hover:underline"
+              >
+                Termos
+              </Link>
+            </div>
+          </footer>
+        </section>
+      </main>
     </div>
   );
 }
