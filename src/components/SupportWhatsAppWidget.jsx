@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Headphones, MessageSquareText, Sparkles, X } from "lucide-react";
+import { Check, MessageSquareText, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
 const DEFAULT_SUPPORT_WHATSAPP = "5521985814035";
@@ -125,7 +125,7 @@ export default function SupportWhatsAppWidget() {
     <div
       ref={containerRef}
       data-html2canvas-ignore="true"
-      className="no-print fixed bottom-1.5 right-3 z-50 flex flex-col items-end print:hidden"
+      className="no-print fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex flex-col items-end print:hidden"
     >
       {/* Mini-Aba / Card de Suporte (Estado Aberto) */}
       <AnimatePresence>
@@ -148,8 +148,8 @@ export default function SupportWhatsAppWidget() {
               />
               <div className="relative flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#00D98A]/15 text-[#00F0A0] ring-1 ring-[#00D98A]/35">
-                    <Headphones className="h-4 w-4" />
+                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#25D366]/20 text-[#25D366] ring-1 ring-[#25D366]/40">
+                    <WhatsAppIcon className="h-5 w-5" />
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00F0A0] opacity-75" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full border-2 border-[#031923] bg-[#00D98A]" />
@@ -161,7 +161,7 @@ export default function SupportWhatsAppWidget() {
                     </h3>
                     <p className="flex items-center gap-1.5 truncate text-[11px] font-medium text-slate-300">
                       <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#00F0A0]" />
-                      Online • Atendimento técnico e comercial
+                      Online • Atendimento via WhatsApp
                     </p>
                   </div>
                 </div>
@@ -251,9 +251,9 @@ export default function SupportWhatsAppWidget() {
               {/* Botão de Ação Principal */}
               <button
                 type="submit"
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#00D98A] px-4 text-xs font-extrabold text-[#031923] shadow-md transition-all hover:bg-[#00C47C] active:scale-[0.99]"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 text-xs sm:text-sm font-extrabold text-white shadow-md shadow-[#25D366]/25 transition-all hover:bg-[#20BD5A] active:scale-[0.99]"
               >
-                <WhatsAppIcon className="h-4 w-4 shrink-0" />
+                <WhatsAppIcon className="h-5 w-5 shrink-0" />
                 <span>Iniciar conversa no WhatsApp</span>
               </button>
             </form>
@@ -261,35 +261,45 @@ export default function SupportWhatsAppWidget() {
         )}
       </AnimatePresence>
 
-      {/* Botão Disparador Compacto */}
-      <button
+      {/* Botão Disparador em Destaque */}
+      <motion.button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
         aria-label="Suporte Nacif via WhatsApp"
-        title="Suporte Nacif"
-        className="group relative flex h-9 items-center justify-center rounded-full border border-[#00D98A]/45 bg-[#031923]/95 px-1.5 text-white shadow-lg transition-all duration-300 hover:border-[#00F0A0] hover:bg-[#082732] hover:shadow-xl active:scale-95"
+        title="Suporte Nacif via WhatsApp"
+        whileHover={{ scale: 1.04 }}
+        whileTap={{ scale: 0.96 }}
+        className="group relative flex h-12 sm:h-13 items-center gap-2.5 rounded-full border-2 border-[#00D98A]/50 bg-[#031923] p-1.5 pl-1.5 pr-4 text-white shadow-xl shadow-black/30 backdrop-blur transition-all duration-300 hover:border-[#00F0A0] hover:bg-[#062431] hover:shadow-2xl hover:shadow-[#00D98A]/25"
       >
         {/* Indicador visual de status online (ponto verde pulsante) */}
-        <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00F0A0] opacity-75" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full border-2 border-white bg-[#00D98A]" />
+        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00F0A0] opacity-80" />
+          <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-[#031923] bg-[#00D98A]" />
         </span>
 
         {/* Círculo com ícone oficial do WhatsApp */}
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#00D98A] text-[#031923] transition-transform duration-200 group-hover:scale-105">
+        <span className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white shadow-md shadow-[#25D366]/40 transition-transform duration-200 group-hover:scale-105">
           {isOpen ? (
-            <X className="h-3.5 w-3.5 stroke-[2.5]" />
+            <X className="h-5 w-5 stroke-[2.5]" />
           ) : (
-            <WhatsAppIcon className="h-3.5 w-3.5" />
+            <WhatsAppIcon className="h-5 w-5 sm:h-5.5 sm:w-5.5 text-white" />
           )}
         </span>
 
-        {/* Rótulo expansível no hover */}
-        <span className="ml-0 max-w-0 overflow-hidden whitespace-nowrap text-[11px] font-black tracking-tight text-white opacity-0 transition-all duration-300 ease-out group-hover:ml-1.5 group-hover:max-w-[105px] group-hover:pr-1.5 group-hover:opacity-100">
-          Suporte Nacif
-        </span>
-      </button>
+        {/* Rótulo de Suporte Evidente */}
+        <div className="flex flex-col items-start text-left leading-tight">
+          <span className="text-[12px] sm:text-[13px] font-black tracking-tight text-white flex items-center gap-1.5">
+            {isOpen ? "Fechar" : "Suporte WhatsApp"}
+          </span>
+          {!isOpen && (
+            <span className="text-[10px] font-semibold text-[#00F0A0] flex items-center gap-1">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#00F0A0] animate-pulse" />
+              Online agora
+            </span>
+          )}
+        </div>
+      </motion.button>
     </div>
   );
 }
