@@ -1,207 +1,356 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import {
+  AlertCircle,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
+  Mail,
+  UserPlus,
+} from "lucide-react";
 import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Lock, Mail, Loader2 } from "lucide-react";
-import AuthLayout from "@/components/AuthLayout";
 import { getDefaultAuthenticatedRoute } from "@/lib/professionalAccess";
+import { useBranding } from "@/lib/appPreferences";
+import loginBackground from "@/assets/nacif_energy_login_fundo_sem_modal.webp";
 
 const REMEMBER_EMAIL_KEY = "voltai_remembered_login_email";
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const readRememberedEmail = () => {
   if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(REMEMBER_EMAIL_KEY) || "";
+  try {
+    return window.localStorage.getItem(REMEMBER_EMAIL_KEY) || "";
+  } catch {
+    return "";
+  }
 };
 
 export default function Login() {
+  const { branding } = useBranding();
+  const brandName =
+    [branding?.appName, branding?.appSuffix].filter(Boolean).join(" ") ||
+    "NACIF Energy";
+  const currentYear = new Date().getFullYear();
+
   const [email, setEmail] = useState(readRememberedEmail);
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(() => Boolean(readRememberedEmail()));
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
+
+  const validateFields = () => {
+    const trimmedEmail = email.trim();
+    const nextErrors = { email: "", password: "" };
+
+    if (!trimmedEmail) {
+      nextErrors.email = "Informe seu e-mail.";
+    } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
+      nextErrors.email = "Informe um endereço de e-mail válido.";
+    }
+
+    if (!password) {
+      nextErrors.password = "Informe sua senha.";
+    }
+
+    setFieldErrors(nextErrors);
+    return !nextErrors.email && !nextErrors.password;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!validateFields()) {
+      return;
+    }
+
+    const normalizedEmail = email.trim();
     setLoading(true);
     try {
-      const result = await backend.auth.loginViaEmailPassword(email, password);
+      const result = await backend.auth.loginViaEmailPassword(
+        normalizedEmail,
+        password
+      );
       if (result?.access_token) {
         backend.auth.setToken(result.access_token);
       }
       if (typeof window !== "undefined") {
-        if (rememberMe) {
-          window.localStorage.setItem(REMEMBER_EMAIL_KEY, email);
-        } else {
-          window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        try {
+          if (rememberMe) {
+            window.localStorage.setItem(REMEMBER_EMAIL_KEY, normalizedEmail);
+          } else {
+            window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
+          }
+        } catch {
+          // Storage indisponível não deve impedir autenticação concluída
         }
       }
       window.location.href = getDefaultAuthenticatedRoute(result?.user);
     } catch (err) {
-      setError(err.message || "Email ou senha inválidos.");
+      setError(err?.message || "E-mail ou senha inválidos.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AuthLayout
-      title="Acesse sua conta"
-      subtitle="Entre para continuar seus projetos."
-      footer={
-        <p className="text-center text-xs text-[#64748B]">
-          Não tem conta?{" "}
-          <Link 
-            to="/register" 
-            className="font-semibold text-[#101828] hover:text-[#006F51] underline underline-offset-4 transition-colors"
-          >
-            Criar conta grátis
-          </Link>
-        </p>
-      }
-    >
-      {/* Mensagem de Erro com alta legibilidade */}
-      {error && (
-        <div 
-          role="alert" 
-          className="mb-5 rounded-[8px] border border-red-200/80 bg-red-50 p-3 text-xs font-semibold text-red-600 animate-in fade-in"
-        >
-          {error}
-        </div>
-      )}
+    <div className="relative min-h-[100dvh] w-full overflow-x-hidden bg-[#031923] font-sans text-[#101828] antialiased selection:bg-[#00D98A]/25 selection:text-[#031923]">
+      {/* Imagem arquitetônica oficial fullscreen sem distorção ou blur:
+          - Desktop >= 1280px: centralizada preservando toda a composição 16:9
+          - Notebook 1024-1279px: ancorada à esquerda para preservar logo e chamada sem cortes
+          - Tablet / Mobile < 1024px: ancorada à direita sobre arquitetura/pôr do sol evitando texto cortado */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 min-h-full bg-cover bg-no-repeat bg-right lg:bg-left xl:bg-center"
+        style={{ backgroundImage: `url(${loginBackground})` }}
+      />
 
-      {/* Formulário com campos limpos e animação staggered com foco na cor primária #00d8b8 */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        
-        {/* Campo E-mail */}
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          className="space-y-1.5 text-left"
-        >
-          <Label htmlFor="email" className="text-xs font-semibold text-slate-700">
-            E-mail
-          </Label>
-          <div className="relative">
-            <Mail 
-              className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" 
-              aria-hidden="true" 
-            />
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              autoFocus
-              placeholder="seu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-[48px] rounded-[8px] border-slate-200 bg-slate-50/90 pl-10 pr-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#00d8b8] focus-visible:ring-2 focus-visible:ring-[#00d8b8]/20 transition-all outline-none shadow-none"
-              required
-            />
-          </div>
-        </motion.div>
+      {/* Alternativa acessível para leitores de tela referente à arte de fundo */}
+      <div className="sr-only">
+        {brandName} — Grandes projetos começam aqui. Da planta ao sol, dê vida às
+        suas ideias. Energia limpa e inteligente, projetos de alto desempenho e
+        mais eficiência e valor.
+      </div>
 
-        {/* Campo Senha */}
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
-          className="space-y-1.5 text-left"
+      {/* Área principal posicionando o card flutuante à direita no desktop e centralizado em telas menores */}
+      <main className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center px-4 py-6 sm:px-8 sm:py-10 lg:justify-end lg:px-10 lg:py-10 xl:pr-[92px] 2xl:pr-[128px]">
+        <section
+          aria-labelledby="login-heading"
+          className="flex w-full max-w-[440px] flex-col justify-between rounded-[28px] bg-white p-6 shadow-[0_24px_64px_rgba(3,25,35,0.28)] sm:max-w-[480px] sm:rounded-[32px] sm:p-9 lg:w-[465px] lg:max-w-[465px] xl:w-[505px] xl:max-w-[505px] xl:rounded-[34px] xl:p-10 2xl:min-h-[700px] 2xl:w-[530px] 2xl:max-w-[530px] 2xl:rounded-[36px] 2xl:px-11 2xl:py-10"
         >
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-xs font-semibold text-slate-700">
-              Senha
-            </Label>
-            <Link
-              to="/forgot-password"
-              className="text-xs font-medium text-slate-500 hover:text-slate-800 transition-colors"
-            >
-              Esqueceu a senha?
-            </Link>
-          </div>
-          <div className="relative">
-            <Lock 
-              className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" 
-              aria-hidden="true" 
-            />
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="h-[48px] rounded-[8px] border-slate-200 bg-slate-50/90 pl-10 pr-10 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#00d8b8] focus-visible:ring-2 focus-visible:ring-[#00d8b8]/20 transition-all outline-none shadow-none"
-              required
-            />
-            <button
-              type="button"
-              title={showPassword ? "Ocultar senha" : "Mostrar senha"}
-              aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-              onClick={() => setShowPassword((visible) => !visible)}
-              className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[6px] text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d8b8]/40"
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <Eye className="h-4 w-4" aria-hidden="true" />
-              )}
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Opção Lembrar de mim */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
-          className="flex items-center gap-2 pt-0.5"
-        >
-          <Checkbox
-            id="remember"
-            checked={rememberMe}
-            onCheckedChange={(checked) => setRememberMe(checked === true)}
-            className="h-4 w-4 rounded-[4px] border-slate-300 data-[state=checked]:bg-[#00d8b8] data-[state=checked]:border-[#00d8b8] data-[state=checked]:text-slate-950"
-          />
-          <label 
-            htmlFor="remember" 
-            className="text-xs font-normal text-slate-500 cursor-pointer select-none"
-          >
-            Lembrar de mim
-          </label>
-        </motion.div>
-
-        {/* Botão Principal com a cor #00d8b8 e animação de feedback ao toque */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.32, ease: [0.16, 1, 0.3, 1] }}
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.985 }}
-          className="pt-2"
-        >
-          <Button
-            type="submit"
-            disabled={loading}
-            className="h-[48px] w-full rounded-xl bg-[#00D98A] hover:bg-[#00C47C] active:bg-[#00B270] text-[#031923] font-bold text-sm tracking-wide shadow-[0_4px_14px_rgba(0,217,138,0.28)] hover:shadow-[0_6px_20px_rgba(0,217,138,0.38)] transition-all disabled:opacity-60 disabled:cursor-not-allowed border-0"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-slate-950" />
-                <span>Entrando...</span>
+          <div>
+            {/* Badge verde-claro */}
+            <div className="flex justify-start">
+              <span className="inline-flex items-center justify-center gap-2 rounded-full bg-[#DDF9EC] px-3.5 py-1.5 text-xs font-bold text-[#006B50]">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-[#006B50]" aria-hidden="true" />
+                <span>Acesso seguro aos seus projetos</span>
               </span>
-            ) : (
-              "Entrar"
+            </div>
+
+            {/* Título e Descrição */}
+            <header className="mt-5 text-left">
+              <h1
+                id="login-heading"
+                className="text-[30px] font-extrabold leading-[1.1] tracking-[-0.03em] text-[#081827] sm:text-[36px] 2xl:text-[42px]"
+              >
+                Acesse sua conta
+              </h1>
+              <p className="mt-2.5 text-sm font-medium leading-[1.55] text-[#64748B] sm:text-[15px]">
+                Entre para continuar seus projetos, acompanhar orçamentos e
+                gerenciar suas soluções em energia.
+              </p>
+            </header>
+
+            {/* Alerta real de erro de autenticação */}
+            {error && (
+              <div
+                role="alert"
+                className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-xs font-semibold text-red-700"
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
+                <span>{error}</span>
+              </div>
             )}
-          </Button>
-        </motion.div>
-      </form>
-    </AuthLayout>
+
+            {/* Formulário de Autenticação */}
+            <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
+              {/* Campo E-mail */}
+              <div className="space-y-1.5 text-left">
+                <Label
+                  htmlFor="email"
+                  className="text-[13px] font-bold text-[#101828]"
+                >
+                  E-mail
+                </Label>
+                <div className="relative">
+                  <Mail
+                    className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#64748B]"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    autoFocus
+                    placeholder="seu@email.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (fieldErrors.email) {
+                        setFieldErrors((prev) => ({ ...prev, email: "" }));
+                      }
+                    }}
+                    aria-invalid={Boolean(fieldErrors.email)}
+                    aria-describedby={fieldErrors.email ? "email-error" : undefined}
+                    className={`h-12 rounded-xl border bg-white pl-11 pr-4 text-sm font-medium text-[#101828] placeholder:text-[#94A3B8] shadow-none transition-colors focus-visible:ring-2 ${
+                      fieldErrors.email
+                        ? "border-red-400 focus-visible:border-red-500 focus-visible:ring-red-200"
+                        : "border-[#DCE4EC] focus-visible:border-[#006B50] focus-visible:ring-[#00D98A]/25"
+                    }`}
+                    required
+                  />
+                </div>
+                {fieldErrors.email && (
+                  <p id="email-error" className="text-xs font-semibold text-red-600">
+                    {fieldErrors.email}
+                  </p>
+                )}
+              </div>
+
+              {/* Campo Senha */}
+              <div className="space-y-1.5 text-left">
+                <div className="flex items-center justify-between gap-2">
+                  <Label
+                    htmlFor="password"
+                    className="text-[13px] font-bold text-[#101828]"
+                  >
+                    Senha
+                  </Label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-[13px] font-bold text-[#006B50] transition-colors hover:text-[#004D39] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006B50] rounded"
+                  >
+                    Esqueceu a senha?
+                  </Link>
+                </div>
+
+                <div className="relative">
+                  <Lock
+                    className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#64748B]"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (fieldErrors.password) {
+                        setFieldErrors((prev) => ({ ...prev, password: "" }));
+                      }
+                    }}
+                    aria-invalid={Boolean(fieldErrors.password)}
+                    aria-describedby={fieldErrors.password ? "password-error" : undefined}
+                    className={`h-12 rounded-xl border bg-white pl-11 pr-11 text-sm font-medium text-[#101828] placeholder:text-[#94A3B8] shadow-none transition-colors focus-visible:ring-2 ${
+                      fieldErrors.password
+                        ? "border-red-400 focus-visible:border-red-500 focus-visible:ring-red-200"
+                        : "border-[#DCE4EC] focus-visible:border-[#006B50] focus-visible:ring-[#00D98A]/25"
+                    }`}
+                    required
+                  />
+                  <button
+                    type="button"
+                    title={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#64748B] transition-colors hover:bg-[#F1F5F9] hover:text-[#101828] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006B50]"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-[18px] w-[18px]" aria-hidden="true" />
+                    ) : (
+                      <Eye className="h-[18px] w-[18px]" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                {fieldErrors.password && (
+                  <p id="password-error" className="text-xs font-semibold text-red-600">
+                    {fieldErrors.password}
+                  </p>
+                )}
+              </div>
+
+              {/* Checkbox Lembrar de mim */}
+              <div className="flex items-center gap-2.5 pt-0.5">
+                <Checkbox
+                  id="remember"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked === true)}
+                  className="h-4 w-4 rounded-[4px] border-[#CBD5E1] data-[state=checked]:border-[#006B50] data-[state=checked]:bg-[#006B50] data-[state=checked]:text-white"
+                />
+                <label
+                  htmlFor="remember"
+                  className="cursor-pointer select-none text-[13px] font-medium text-[#475569]"
+                >
+                  Lembrar de mim
+                </label>
+              </div>
+
+              {/* Botão Principal Entrar (sólido, sem gradiente) */}
+              <div className="pt-1.5">
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="h-[54px] w-full rounded-[12px] border-0 bg-[#007A55] px-5 text-[15px] font-bold text-white shadow-[0_8px_20px_rgba(0,107,80,0.22)] transition-colors hover:bg-[#006B50] active:bg-[#005842] focus-visible:ring-2 focus-visible:ring-[#00D98A] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-65 sm:h-[56px]"
+                >
+                  {loading ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" />
+                      <span>Entrando...</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <span>Entrar</span>
+                      <ArrowRight className="h-[18px] w-[18px]" aria-hidden="true" />
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </form>
+
+            {/* Divisor e Criação de Conta */}
+            <div className="my-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-[#DCE4EC]" aria-hidden="true" />
+              <span className="text-xs font-medium text-[#64748B]">ou</span>
+              <span className="h-px flex-1 bg-[#DCE4EC]" aria-hidden="true" />
+            </div>
+
+            <Button
+              asChild
+              variant="outline"
+              className="h-[52px] w-full rounded-[12px] border-[#DCE4EC] bg-white text-[15px] font-bold text-[#081827] shadow-none transition-colors hover:border-[#CBD5E1] hover:bg-[#F8FAFC] hover:text-[#081827] sm:h-[54px]"
+            >
+              <Link to="/register" className="inline-flex items-center justify-center gap-2">
+                <UserPlus className="h-[18px] w-[18px] text-[#081827]" aria-hidden="true" />
+                <span>Criar conta grátis</span>
+              </Link>
+            </Button>
+          </div>
+
+          {/* Rodapé integrado ao card */}
+          <footer className="mt-6 border-t border-[#F1F5F9] pt-4 text-center text-xs font-medium text-[#64748B]">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <span>© {currentYear} NACIF Energy</span>
+              <span aria-hidden="true" className="h-3 w-px bg-[#DCE4EC]" />
+              <Link
+                to="/privacidade"
+                className="transition-colors hover:text-[#081827] hover:underline"
+              >
+                Privacidade
+              </Link>
+              <span aria-hidden="true" className="h-3 w-px bg-[#DCE4EC]" />
+              <Link
+                to="/termos"
+                className="transition-colors hover:text-[#081827] hover:underline"
+              >
+                Termos
+              </Link>
+            </div>
+          </footer>
+        </section>
+      </main>
+    </div>
   );
 }
