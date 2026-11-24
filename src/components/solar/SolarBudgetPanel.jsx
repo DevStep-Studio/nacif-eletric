@@ -28,6 +28,7 @@ import {
 } from "@/lib/solarBudgetMath";
 import { downloadPdfBlob, generateCommercialProposalReport } from "@/lib/solarReportGenerator";
 import { authorizePlanExport, stampPdfWithPlanWatermark } from "@/lib/planEnforcement";
+import { maskPhone } from "@/lib/brFormatters";
 
 const brl = (v) =>
   Number(v || 0).toLocaleString("pt-BR", {
@@ -778,12 +779,18 @@ export default function SolarBudgetPanel({
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-[#64748B] block mb-1.5">Telefone / WhatsApp</label>
+                  <label htmlFor="budget-commercial-phone" className="text-[11px] font-semibold text-[#64748B] block mb-1.5">Telefone / WhatsApp</label>
                   <Input
+                    id="budget-commercial-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder="(00) 00000-0000"
+                    maxLength={15}
                     value={budget.commercialContact.phone}
                     onChange={(e) =>
                       patchBudget({
-                        commercialContact: { ...budget.commercialContact, phone: e.target.value },
+                        commercialContact: { ...budget.commercialContact, phone: maskPhone(e.target.value) },
                       })
                     }
                     className="h-9 rounded-xl border-[#E5EBF1] bg-[#F6F9FC] text-xs text-[#101828] focus:border-[#00D98A] focus:bg-white"

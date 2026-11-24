@@ -34,6 +34,7 @@ import {
   useNotifications,
 } from "@/lib/appPreferences";
 import { PROFESSIONS, professionLabel, isSuperAdmin } from "@/lib/professionalAccess";
+import { maskPhone } from "@/lib/brFormatters";
 import AdminSubscriptionManager from "@/components/subscription/AdminSubscriptionManager";
 import brandMarkEnergy from "@/assets/brand-mark-principal.png";
 
@@ -119,7 +120,7 @@ export default function AdminPanel() {
         full_name: me.full_name || "",
         company: me.company || "",
         crea: me.crea || "",
-        phone: me.phone || "",
+        phone: maskPhone(me.phone || ""),
         avatar_url: me.avatar_url || me.profile_photo_url || me.photo_url || "",
       });
 
@@ -171,7 +172,7 @@ export default function AdminPanel() {
       full_name: updated.full_name || "",
       company: updated.company || "",
       crea: updated.crea || "",
-      phone: updated.phone || "",
+      phone: maskPhone(updated.phone || ""),
       avatar_url: updated.avatar_url || "",
     });
     window.dispatchEvent(new CustomEvent("voltai:user-updated"));
@@ -562,10 +563,16 @@ export default function AdminPanel() {
                     />
                   </div>
                   <div>
-                    <Label>Telefone</Label>
+                    <Label htmlFor="admin-phone">Telefone</Label>
                     <Input
+                      id="admin-phone"
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel"
+                      placeholder="(00) 00000-0000"
+                      maxLength={15}
                       value={profileForm.phone}
-                      onChange={(event) => setProfileForm({ ...profileForm, phone: event.target.value })}
+                      onChange={(event) => setProfileForm({ ...profileForm, phone: maskPhone(event.target.value) })}
                       className="mt-2 h-11 rounded-[10px]"
                     />
                   </div>

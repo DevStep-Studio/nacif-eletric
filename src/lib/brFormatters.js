@@ -13,7 +13,12 @@ export function cleanDigits(value = "") {
 }
 
 export function maskPhone(value = "") {
-  const digits = String(value || "").replace(/\D/g, "").slice(0, 11);
+  let digits = String(value || "").replace(/\D/g, "");
+  // Se o valor contiver DDI 55 (ex: colado do WhatsApp ou formato internacional), normaliza removendo o 55
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    digits = digits.slice(2);
+  }
+  digits = digits.slice(0, 11);
   if (!digits) return "";
   if (digits.length <= 2) return `(${digits}`;
   if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
