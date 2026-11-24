@@ -97,6 +97,40 @@
     @apply border-border outline-ring/50;
   }
 
+  /* Barra de rolagem nativa e moderna para todos os navegadores */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.6);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-button {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
   html,
   body,
   #root {
@@ -107,6 +141,80 @@
   body {
     @apply overflow-x-hidden bg-background text-foreground;
   }
+}
+
+/* ==========================================================================
+   BARRA DE ROLAGEM DEDICADA DA BARRA LATERAL (SIDEBAR ESQUERDA)
+   Identidade Nacif Energy: Emerald (#00D98A) / Neon (#00F0A0) / Slate (#02161F)
+   ========================================================================== */
+.sidebar-scrollbar,
+aside nav,
+[data-sidebar-nav] {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 217, 138, 0.28) transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar,
+aside nav::-webkit-scrollbar,
+[data-sidebar-nav]::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track,
+aside nav::-webkit-scrollbar-track,
+[data-sidebar-nav]::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb,
+aside nav::-webkit-scrollbar-thumb,
+[data-sidebar-nav]::-webkit-scrollbar-thumb {
+  background: rgba(0, 217, 138, 0.24);
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 240, 160, 0.15);
+  transition: background 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Quando o usuário passa o mouse na barra lateral, a barra de rolagem ganha destaque */
+.sidebar-scrollbar:hover::-webkit-scrollbar-thumb,
+aside:hover nav::-webkit-scrollbar-thumb,
+[data-sidebar-nav]:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 217, 138, 0.5);
+  border-color: rgba(0, 240, 160, 0.3);
+}
+
+.sidebar-scrollbar:hover,
+aside:hover nav,
+[data-sidebar-nav]:hover {
+  scrollbar-color: rgba(0, 217, 138, 0.5) transparent;
+}
+
+/* Interação direta com a pílula de rolagem */
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover,
+aside nav::-webkit-scrollbar-thumb:hover,
+[data-sidebar-nav]::-webkit-scrollbar-thumb:hover {
+  background: #00D98A !important;
+  border-color: #00F0A0 !important;
+  box-shadow: 0 0 10px rgba(0, 240, 160, 0.55);
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:active,
+aside nav::-webkit-scrollbar-thumb:active,
+[data-sidebar-nav]::-webkit-scrollbar-thumb:active {
+  background: #00F0A0 !important;
+  box-shadow: 0 0 14px rgba(0, 240, 160, 0.85);
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-button,
+aside nav::-webkit-scrollbar-button,
+[data-sidebar-nav]::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Padronização de botões de ação técnicos (evita pílulas exageradas em botões de texto, mantendo botões de ícone e avatares circulares íntegros) */
