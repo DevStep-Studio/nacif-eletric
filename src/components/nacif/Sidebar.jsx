@@ -225,7 +225,12 @@ export default function Sidebar({
         </div>
 
         {/* Navegação Principal */}
-        <nav className={`flex-1 overflow-y-auto space-y-3 ${isCompact ? "px-2 py-1" : "px-3 py-1"}`}>
+        <nav
+          data-sidebar-nav="true"
+          className={`flex-1 overflow-y-auto overflow-x-hidden sidebar-scrollbar space-y-3 ${
+            isCompact ? "px-2 py-1" : "px-3 py-1"
+          }`}
+        >
           <div className="space-y-0.5">
             {!isCompact && (
               <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400/80">

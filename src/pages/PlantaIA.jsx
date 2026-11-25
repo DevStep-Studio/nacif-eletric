@@ -5394,7 +5394,10 @@ export default function PlantaIA() {
               if (open) loadProjects();
             }}
           >
-            <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-lg border-white/15 bg-[#082732] text-xs font-bold text-white shadow-none">
+            <SelectTrigger
+              title={selectedProjectName || undefined}
+              className="h-8 min-w-[170px] max-w-[260px] rounded-lg border-white/15 bg-[#082732] text-xs font-bold text-white shadow-none"
+            >
               <SelectValue placeholder="Selecionar projeto..." />
             </SelectTrigger>
             <SelectContent>
@@ -5405,13 +5408,6 @@ export default function PlantaIA() {
               ))}
             </SelectContent>
           </Select>
-
-          {selectedProjectName && (
-            <span className="hidden items-center gap-1.5 rounded-full border border-[#00D98A]/35 bg-[#082732] px-2.5 py-0.5 text-[11px] font-bold text-[#00F0A0] md:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#00F0A0]" />
-              <span className="truncate max-w-[140px]">{selectedProjectName}</span>
-            </span>
-          )}
         </div>
 
         {/* Direita: Ações Rápidas do Estúdio */}

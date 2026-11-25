@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PROFESSIONS, normalizeProfession, professionLabel, isAdminUser } from "@/lib/professionalAccess";
 import { getPlanByCode } from "@/lib/subscriptionPlans";
+import { maskPhone } from "@/lib/brFormatters";
 import {
   CreditCard,
   Users,
@@ -107,7 +108,7 @@ export default function SettingsPage() {
         profession: normalizeProfession(u.profession || u.profissao) || "projetista",
         company: u.company || "",
         crea: u.crea || "",
-        phone: u.phone || "",
+        phone: maskPhone(u.phone || ""),
         avatar_url: u.avatar_url || u.profile_photo_url || u.photo_url || "",
       });
       if (u.preferences) {
@@ -126,7 +127,7 @@ export default function SettingsPage() {
         profession: normalizeProfession(updated.profession || updated.profissao) || "projetista",
         company: updated.company || "",
         crea: updated.crea || "",
-        phone: updated.phone || "",
+        phone: maskPhone(updated.phone || ""),
         avatar_url: updated.avatar_url || "",
       });
       window.dispatchEvent(new CustomEvent("voltai:user-updated"));
@@ -280,8 +281,18 @@ export default function SettingsPage() {
             <Input value={form.crea} onChange={(event) => setForm({ ...form, crea: event.target.value })} className="mt-2 h-11 rounded-[10px]" />
           </div>
           <div>
-            <Label>Telefone</Label>
-            <Input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} className="mt-2 h-11 rounded-[10px]" />
+            <Label htmlFor="settings-phone">Telefone</Label>
+            <Input
+              id="settings-phone"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              placeholder="(00) 00000-0000"
+              maxLength={15}
+              value={form.phone}
+              onChange={(event) => setForm({ ...form, phone: maskPhone(event.target.value) })}
+              className="mt-2 h-11 rounded-[10px]"
+            />
           </div>
         </div>
 

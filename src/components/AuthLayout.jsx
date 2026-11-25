@@ -28,11 +28,28 @@ export default function AuthLayout({
 
   return (
     <div className="relative min-h-[100dvh] w-full overflow-x-hidden bg-[#031923] font-sans text-[#101828] antialiased selection:bg-[#00d8b8]/25 selection:text-[#031923]">
-      {/* Imagem arquitetônica oficial fullscreen sem distorção, blur ou gradientes */}
+      {/* Camada de fundo atmosférica: preenche as laterais em telas ultrawide */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 min-h-full bg-cover bg-no-repeat bg-right lg:bg-[position:4%_center] xl:bg-[position:12%_center] 2xl:bg-center"
+        className="pointer-events-none absolute inset-0 min-h-full bg-cover bg-right opacity-65"
         style={{ backgroundImage: `url(${loginBackground})` }}
+      />
+
+      {/* Camada arquitetônica principal com enquadramento proporcional perfeito:
+          - No desktop (lg+): ancorada à esquerda e dimensionada 100% pela altura (auto 100%),
+            garantindo que o logotipo no topo, a residência com energia solar no centro e
+            os diferenciais na base fiquem 100% visíveis sem cortes em qualquer resolução ou proporção de tela.
+          - No mobile/tablet (<lg): bg-cover centralizado com o card sobreposto harmoniosamente */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 min-h-full bg-cover bg-center lg:bg-no-repeat lg:bg-[size:auto_100%] lg:bg-left"
+        style={{ backgroundImage: `url(${loginBackground})` }}
+      />
+
+      {/* Gradiente sutil para harmonizar o contraste do card flutuante à direita */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 hidden bg-gradient-to-r from-transparent via-transparent to-[#031923]/45 lg:block"
       />
 
       {/* Alternativa acessível para leitores de tela referente à arte de fundo */}
@@ -43,10 +60,10 @@ export default function AuthLayout({
       </div>
 
       {/* Card flutuante branco à direita no desktop e centralizado em telas menores */}
-      <main className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center px-4 py-6 sm:px-8 sm:py-8 lg:justify-end lg:px-8 lg:py-8 xl:pr-[84px] 2xl:pr-[126px]">
+      <main className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center px-4 py-6 sm:px-8 sm:py-8 lg:justify-end lg:px-8 lg:py-8 xl:pr-14 2xl:pr-20">
         <section
           aria-labelledby={title ? headingId : undefined}
-          className="flex w-full max-w-[440px] flex-col justify-between rounded-[28px] bg-white p-6 shadow-[0_24px_64px_rgba(3,25,35,0.24)] ring-1 ring-black/[0.06] sm:max-w-[480px] sm:rounded-[32px] sm:p-9 lg:w-[445px] lg:max-w-[445px] lg:p-8 xl:w-[495px] xl:max-w-[495px] xl:rounded-[34px] xl:p-10 2xl:w-[530px] 2xl:max-w-[530px] 2xl:rounded-[36px] 2xl:px-11 2xl:py-10"
+          className="flex w-full max-w-[440px] flex-col justify-between rounded-[28px] bg-white p-6 shadow-[0_24px_64px_rgba(3,25,35,0.24)] ring-1 ring-black/[0.06] sm:max-w-[460px] sm:rounded-[32px] sm:p-9 lg:w-[420px] lg:max-w-[420px] lg:p-8 xl:w-[460px] xl:max-w-[460px] xl:rounded-[34px] xl:p-9 2xl:w-[480px] 2xl:max-w-[480px] 2xl:rounded-[36px] 2xl:px-10 2xl:py-9"
         >
           <div>
             {(title || subtitle) && (
