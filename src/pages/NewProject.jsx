@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { backend } from "@/api/backendClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,18 @@ import SolarProjectWizard from "@/components/solar/wizard/SolarProjectWizard";
 
 export default function NewProject() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const effectiveSub = resolveEffectiveSubscription(user);
-  const defaultDiscipline = effectiveSub.plan.code === "solar" ? "Solar" : "Instalações Elétricas";
+  const requestedType = searchParams.get("type");
+  const defaultDiscipline =
+    requestedType === "solar"
+      ? "Solar"
+      : requestedType === "eletrico"
+        ? "Instalações Elétricas"
+        : effectiveSub.plan.code === "solar"
+          ? "Solar"
+          : "Instalações Elétricas";
 
   const electricalAccess = useMemo(() => canAccessModule(user, "plant"), [user]);
   const solarAccess = useMemo(() => canAccessModule(user, "solar"), [user]);
