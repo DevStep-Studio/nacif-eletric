@@ -1470,6 +1470,10 @@ export function normalizeSolarAreas(rawAreas, fallbackConfig = {}) {
       .map((area, idx) => normalizeSolarArea(area, idx + 1, fallbackConfig));
   }
 
+  if (fallbackConfig?.roof_defined === false) {
+    return [];
+  }
+
   const legacyPolygon = serializeRoofPolygon(normalizeRoofPolygon(fallbackConfig.roof_polygon));
   if (legacyPolygon.length >= 3) {
     return [

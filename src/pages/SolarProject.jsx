@@ -188,17 +188,33 @@ const breakerForCurrent = (current) => {
 function normalizeSolarConfig(config = {}) {
   const merged = { ...defaultSolarConfig, ...(config || {}) };
   delete merged.layout_fill_mode;
-  
-  const normalizedAreas = normalizeSolarAreas(merged.areas, merged);
 
-  const legacyPolygon = serializeRoofPolygon(normalizeRoofPolygon(merged.roof_polygon));
+  const explicitlyClearedAreas =
+    Array.isArray(config?.areas) &&
+    config.areas.length === 0 &&
+    (config.roof_defined === false ||
+      (Array.isArray(config.roof_polygon) && config.roof_polygon.length === 0));
+
+  const normalizedAreas = explicitlyClearedAreas
+    ? []
+    : normalizeSolarAreas(merged.areas, merged);
+
+  const legacyPolygon = explicitlyClearedAreas
+    ? []
+    : serializeRoofPolygon(normalizeRoofPolygon(merged.roof_polygon));
   const primaryPolygon = normalizedAreas[0]?.polygon || legacyPolygon;
   const hasExplicitRoofState = Object.prototype.hasOwnProperty.call(config || {}, "roof_defined");
   const roofWidth = asNumber(merged.roof_width_m, defaultSolarConfig.roof_width_m);
   const roofHeight = asNumber(merged.roof_height_m, defaultSolarConfig.roof_height_m);
-  
+
   const totalAreasM2 = normalizedAreas.reduce((sum, a) => sum + (a.roof_area_m2 || 0), 0);
-  const polygonArea = totalAreasM2 > 0 ? totalAreasM2 : (primaryPolygon.length >= 3 ? getPolygonAreaSquareMeters(primaryPolygon) : null);
+  const polygonArea = explicitlyClearedAreas
+    ? 0
+    : totalAreasM2 > 0
+      ? totalAreasM2
+      : primaryPolygon.length >= 3
+        ? getPolygonAreaSquareMeters(primaryPolygon)
+        : null;
 
   const preset = getModulePreset(merged.module_preset_id || merged.module_model || merged.module_wp);
 
@@ -652,17 +668,10 @@ export default function SolarProject() {
     );
   }, [multiAreaLayouts, config.roof_polygon]);
 
-  // Define a área atualmente selecionada
+  // Define a área atualmente selecionada (retorna null quando nenhuma água está selecionada)
   const selectedArea = useMemo(() => {
-    if (!multiAreaLayouts.length) return null;
-    return multiAreaLayouts.find((a) => a.id === selectedAreaId) || multiAreaLayouts[0];
-  }, [multiAreaLayouts, selectedAreaId]);
-
-  // Se selectedAreaId ainda não foi definido, sincroniza com a primeira área
-  useEffect(() => {
-    if (!selectedAreaId && multiAreaLayouts.length > 0) {
-      setSelectedAreaId(multiAreaLayouts[0].id);
-    }
+    if (!multiAreaLayouts.length || !selectedAreaId) return null;
+    return multiAreaLayouts.find((a) => a.id === selectedAreaId) || null;
   }, [multiAreaLayouts, selectedAreaId]);
 
   // Reúne todos os painéis fotovoltaicos de todas as áreas
@@ -848,8 +857,19 @@ export default function SolarProject() {
   const undoRoofChange = useCallback(() => {
     if (roofHistoryIndexRef.current <= 0) return;
     roofHistoryIndexRef.current -= 1;
-    const restoredAreas = roofHistoryRef.current[roofHistoryIndexRef.current];
-    setConfig((prev) => normalizeSolarConfig({ ...prev, areas: restoredAreas }));
+    const restoredAreas = roofHistoryRef.current[roofHistoryIndexRef.current] || [];
+    const nextPrimaryPolygon = restoredAreas[0]?.polygon || [];
+    setConfig((prev) =>
+      normalizeSolarConfig({
+        ...prev,
+        areas: restoredAreas,
+        roof_polygon: nextPrimaryPolygon,
+        roof_defined: restoredAreas.length > 0,
+      })
+    );
+    setSelectedAreaId((prev) =>
+      restoredAreas.some((a) => a.id === prev) ? prev : restoredAreas[0]?.id || null
+    );
     setEditorMode("select");
     syncRoofHistoryState();
     toast({ title: "Alteração desfeita" });
@@ -858,8 +878,19 @@ export default function SolarProject() {
   const redoRoofChange = useCallback(() => {
     if (roofHistoryIndexRef.current >= roofHistoryRef.current.length - 1) return;
     roofHistoryIndexRef.current += 1;
-    const restoredAreas = roofHistoryRef.current[roofHistoryIndexRef.current];
-    setConfig((prev) => normalizeSolarConfig({ ...prev, areas: restoredAreas }));
+    const restoredAreas = roofHistoryRef.current[roofHistoryIndexRef.current] || [];
+    const nextPrimaryPolygon = restoredAreas[0]?.polygon || [];
+    setConfig((prev) =>
+      normalizeSolarConfig({
+        ...prev,
+        areas: restoredAreas,
+        roof_polygon: nextPrimaryPolygon,
+        roof_defined: restoredAreas.length > 0,
+      })
+    );
+    setSelectedAreaId((prev) =>
+      restoredAreas.some((a) => a.id === prev) ? prev : restoredAreas[0]?.id || null
+    );
     setEditorMode("select");
     syncRoofHistoryState();
     toast({ title: "Alteração refeita" });
@@ -887,7 +918,7 @@ export default function SolarProject() {
     if (Array.isArray(config.areas) && config.areas.length > 0) {
       return config.areas;
     }
-    if (Array.isArray(config.roof_polygon) && config.roof_polygon.length >= 3) {
+    if (config.roof_defined !== false && Array.isArray(config.roof_polygon) && config.roof_polygon.length >= 3) {
       return [
         createDefaultSolarArea(
           {
@@ -1153,25 +1184,65 @@ export default function SolarProject() {
     });
   };
 
-  // Exclusão de área solar
-  const handleDeleteArea = (areaId) => {
-    const target = config.areas.find((a) => a.id === areaId);
+  // Exclusão isolada de área solar ("Água" selecionada)
+  const handleDeleteArea = useCallback((areaIdToRemove = selectedAreaId) => {
+    const targetId =
+      areaIdToRemove ||
+      selectedAreaId ||
+      (selectedEntity?.type === "roof" ? selectedEntity.id : null);
+    if (!targetId) return;
+
+    const currentAreas = getSafeExistingAreas();
+    const target = currentAreas.find((a) => a.id === targetId);
     if (!target) return;
 
-    const nextAreas = config.areas.filter((a) => a.id !== areaId);
-    const nextConfig = normalizeSolarConfig({ ...config, areas: nextAreas });
+    const nextAreas = currentAreas.filter((a) => a.id !== targetId);
+    const nextPrimaryPolygon = nextAreas[0]?.polygon || [];
+
+    const nextConfig = normalizeSolarConfig({
+      ...config,
+      areas: nextAreas,
+      roof_polygon: nextPrimaryPolygon,
+      roof_defined: nextAreas.length > 0,
+      ...(nextAreas.length === 0 ? { roof_area_m2: 0 } : {}),
+    });
+
     setConfig(nextConfig);
 
-    if (selectedAreaId === areaId) {
-      setSelectedAreaId(nextAreas[0]?.id || null);
+    // Limpa a seleção atual após remover a água selecionada
+    if (selectedAreaId === targetId) {
+      setSelectedAreaId(null);
     }
+    if (
+      (selectedEntity?.type === "roof" && selectedEntity?.id === targetId) ||
+      selectedEntity?.type === "module"
+    ) {
+      setSelectedEntity({ type: "none", id: null });
+    }
+    if (editingAreaNameId === targetId) {
+      setEditingAreaNameId(null);
+      setTempAreaName("");
+    }
+    if (drawingTargetAreaId === targetId) {
+      setDrawingTargetAreaId(null);
+    }
+
     pushAreasHistory(nextAreas);
 
     toast({
       title: "Área removida",
-      description: `${target.name} e seus módulos foram removidos.`,
+      description: `${target.name || "Água"} e seus módulos foram removidos.`,
     });
-  };
+  }, [
+    config,
+    selectedAreaId,
+    selectedEntity,
+    editingAreaNameId,
+    drawingTargetAreaId,
+    getSafeExistingAreas,
+    pushAreasHistory,
+    toast,
+  ]);
 
 
 
@@ -1696,11 +1767,28 @@ export default function SolarProject() {
     });
   };
 
-  // Atalhos de teclado profissionais (V, A, F, M, R, Esc, Undo, Redo, Del)
+  // Atalhos de teclado profissionais (V, A, F, M, R, Esc, Undo, Redo, Del/Backspace)
   useEffect(() => {
     const handleKeyDown = (e) => {
       const target = e.target;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable) {
+      const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+      const isFormOrDialogElement = (el) =>
+        Boolean(
+          el &&
+            (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) ||
+              el.isContentEditable ||
+              el.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]'))
+        );
+
+      // Guarda crítica de inputs, formulários e modais abertos
+      if (
+        isFormOrDialogElement(target) ||
+        isFormOrDialogElement(activeEl) ||
+        editingAreaNameId !== null ||
+        projectParamsOpen ||
+        customModuleModalOpen ||
+        reportsOpen
+      ) {
         return;
       }
 
@@ -1730,8 +1818,9 @@ export default function SolarProject() {
           setAutoFvPreview(null);
           return;
         }
-        if (selectedEntity?.type !== "none") {
+        if (selectedEntity?.type !== "none" || selectedAreaId !== null) {
           setSelectedEntity({ type: "none", id: null });
+          setSelectedAreaId(null);
           return;
         }
         if (focusMode) {
@@ -1768,17 +1857,59 @@ export default function SolarProject() {
       }
 
       if (e.key === "Delete" || e.key === "Backspace") {
+        // Evita múltiplos disparos por tecla mantida pressionada ou fora da aba de Layout
+        if (e.repeat) return;
+        if (appMode !== "layout") return;
+
+        // Durante desenho de polígono ou régua, preserva o atalho local da camada de desenho
+        if (
+          editorMode === "draw-polygon" ||
+          editorMode === "draw-rectangle" ||
+          editorMode === "measure"
+        ) {
+          return;
+        }
+
+        // Se um obstáculo específico estiver selecionado, remove apenas o obstáculo
         if (selectedEntity?.type === "obstacle" && selectedEntity?.id) {
+          e.preventDefault();
           handleRemoveObstacle(selectedEntity.id);
-        } else if (selectedEntity?.type === "module" && selectedEntity?.id !== null) {
-          handleDeleteSelectedModule(Number(selectedEntity.id));
+          return;
+        }
+
+        // Exclusão isolada da "Água" (área de painéis solares) atualmente selecionada
+        const activeAreaId =
+          selectedAreaId ||
+          (selectedEntity?.type === "roof" && selectedEntity?.id ? selectedEntity.id : null);
+
+        if (activeAreaId && multiAreaLayouts.some((area) => area.id === activeAreaId)) {
+          e.preventDefault();
+          handleDeleteArea(activeAreaId);
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undoRoofChange, redoRoofChange, selectedEntity, editorMode, pendingObstaclePreset, autoFvPreview, focusMode, toggleFocusMode, handleTriggerAutoFv, handleDeleteSelectedModule]);
+  }, [
+    undoRoofChange,
+    redoRoofChange,
+    selectedEntity,
+    selectedAreaId,
+    multiAreaLayouts,
+    appMode,
+    editorMode,
+    pendingObstaclePreset,
+    autoFvPreview,
+    focusMode,
+    editingAreaNameId,
+    projectParamsOpen,
+    customModuleModalOpen,
+    reportsOpen,
+    toggleFocusMode,
+    handleTriggerAutoFv,
+    handleDeleteArea,
+  ]);
 
   if (loadingProject && !project) {
     return (
@@ -2469,16 +2600,14 @@ export default function SolarProject() {
                                 >
                                   <Copy className="h-3 w-3" />
                                 </button>
-                                {multiAreaLayouts.length > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteArea(area.id)}
-                                    className="h-5 w-5 flex items-center justify-center rounded hover:bg-rose-100 text-rose-500 hover:text-rose-700"
-                                    title="Excluir área"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteArea(area.id)}
+                                  className="h-5 w-5 flex items-center justify-center rounded hover:bg-rose-100 text-rose-500 hover:text-rose-700"
+                                  title="Excluir área (Delete)"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
                               </div>
                             </div>
 
