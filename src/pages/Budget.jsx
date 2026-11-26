@@ -12,6 +12,7 @@ import {
   Sparkles,
   Trash2,
   Sun,
+  Zap,
   Download,
   FileSpreadsheet,
   Copy,
@@ -81,12 +82,15 @@ function BrandLogoUploaderDisplay({ logoUrl }) {
   );
 }
 
+const isSolarProjectType = (proj) =>
+  String(proj?.project_type || "").toLowerCase().includes("solar") || Boolean(proj?.solar_config);
+
 function ProjectThumbBadge({ project, size = "md", customLogo = null }) {
   const [hasError, setHasError] = useState(false);
   const rawLogo = customLogo || project?.logo_url || project?.logoUrl || project?.project_logo || project?.logo;
-  const isSolar = String(project?.project_type || "").toLowerCase().includes("solar");
+  const isSolar = isSolarProjectType(project);
 
-  const sizeClasses = size === "lg" ? "h-14 w-14" : "h-12 w-12";
+  const sizeClasses = size === "lg" ? "h-14 w-14" : "h-10 w-10";
   const iconSize = size === "lg" ? "h-7 w-7" : "h-5 w-5";
 
   if (rawLogo && typeof rawLogo === "string" && !hasError) {
@@ -103,15 +107,17 @@ function ProjectThumbBadge({ project, size = "md", customLogo = null }) {
   }
 
   return (
-    <span className={`flex shrink-0 items-center justify-center rounded-xl border border-[#CDEFE8] bg-[#F2FFFC] ${sizeClasses}`}>
+    <span
+      className={`flex shrink-0 items-center justify-center rounded-xl border ${
+        isSolar
+          ? "border-amber-200 bg-amber-50 text-amber-600"
+          : "border-blue-200 bg-blue-50 text-blue-600"
+      } ${sizeClasses}`}
+    >
       {isSolar ? (
         <Sun className={`${iconSize} text-amber-500`} />
       ) : (
-        <img
-          src={brandMarkEnergy}
-          alt="NACIF Energy"
-          className={`${iconSize} object-contain`}
-        />
+        <Zap className={`${iconSize} text-blue-600`} />
       )}
     </span>
   );
@@ -124,13 +130,23 @@ const formatUnit = (unit = "un") => {
 };
 
 // Exemplos de serviços elétricos rápidos
-const QUICK_SERVICE_TEMPLATES = [
+const QUICK_ELECTRICAL_SERVICE_TEMPLATES = [
   { name: "Montagem e estruturação de QDC (Quadro de Distribuição)", unit: "vb.", price: 650 },
   { name: "Passagem de condutores e fiação de circuitos", unit: "m", price: 6.5 },
   { name: "Instalação e ligação de tomadas e interruptores", unit: "pt.", price: 25 },
   { name: "Sistema de aterramento e instalação de DPS", unit: "vb.", price: 450 },
-  { name: "Emissão de ART / Laudo Técnico de Conformidade", unit: "un.", price: 350 },
+  { name: "Emissão de ART / Laudo Técnico de Conformidade NBR 5410", unit: "un.", price: 350 },
   { name: "Instalação de luminárias e pontos de luz", unit: "pt.", price: 30 },
+];
+
+// Exemplos de serviços solares rápidos
+const QUICK_SOLAR_SERVICE_TEMPLATES = [
+  { name: "Instalação de estrutura de fixação e módulos fotovoltaicos", unit: "vb.", price: 1800 },
+  { name: "Montagem de inversor, String Box CC/CA e proteções", unit: "vb.", price: 950 },
+  { name: "Projeto executivo e homologação junto à concessionária", unit: "vb.", price: 1200 },
+  { name: "Cabeamento solar CC/CA e aterramento equipotencial", unit: "vb.", price: 650 },
+  { name: "Comissionamento, testes de geração e configuração de monitoramento", unit: "vb.", price: 450 },
+  { name: "Emissão de ART de Geração Distribuída Fotovoltaica", unit: "un.", price: 350 },
 ];
 
 export default function BudgetPage() {
@@ -182,8 +198,9 @@ export default function BudgetPage() {
   const [newServiceUnit, setNewServiceUnit] = useState("vb.");
   const [newServicePrice, setNewServicePrice] = useState(350);
 
-  // Filtro de busca na lista de projetos
+  // Filtro de busca e categoria na lista de projetos
   const [projectSearch, setProjectSearch] = useState("");
+  const [budgetCategoryFilter, setBudgetCategoryFilter] = useState("split"); // "split" | "electrical" | "solar"
 
   // Referência para controlar se o orçamento foi modificado
   const hasUnsavedChanges = useRef(false);
@@ -774,7 +791,7 @@ export default function BudgetPage() {
     }
   };
 
-  // Filtragem de projetos na barra lateral
+  // Filtragem de projetos na barra lateral e separação Elétrico vs Solar
   const filteredProjects = useMemo(() => {
     if (!projectSearch.trim()) return projects;
     const q = projectSearch.toLowerCase();
@@ -784,6 +801,31 @@ export default function BudgetPage() {
         (p.client_name && p.client_name.toLowerCase().includes(q))
     );
   }, [projects, projectSearch]);
+
+  const allElectricalProjects = useMemo(
+    () => projects.filter((p) => !isSolarProjectType(p)),
+    [projects]
+  );
+
+  const allSolarProjects = useMemo(
+    () => projects.filter((p) => isSolarProjectType(p)),
+    [projects]
+  );
+
+  const electricalProjects = useMemo(
+    () => filteredProjects.filter((p) => !isSolarProjectType(p)),
+    [filteredProjects]
+  );
+
+  const solarProjects = useMemo(
+    () => filteredProjects.filter((p) => isSolarProjectType(p)),
+    [filteredProjects]
+  );
+
+  const isCurrentProjectSolar = isSolarProjectType(project);
+  const activeQuickServiceTemplates = isCurrentProjectSolar
+    ? QUICK_SOLAR_SERVICE_TEMPLATES
+    : QUICK_ELECTRICAL_SERVICE_TEMPLATES;
 
   const activeStatusConfig = BUDGET_STATUS_CONFIG[budgetStatus] || BUDGET_STATUS_CONFIG.rascunho;
 
@@ -887,25 +929,229 @@ export default function BudgetPage() {
         }
       />
 
-      <div className="mx-auto grid w-full max-w-7xl gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-        {/* Painel lateral: Projetos */}
+      {/* Painel Superior de Divisão Meio a Meio: Orçamentos Elétricos vs Orçamentos Solares */}
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Card 1: Orçamentos Elétricos */}
+        <div
+          className={`flex flex-col justify-between rounded-2xl border p-4 transition-all ${
+            project && !isCurrentProjectSolar
+              ? "border-blue-300 bg-gradient-to-br from-blue-50/90 via-white to-white shadow-sm ring-1 ring-blue-200"
+              : "border-[#E5EBF1] bg-white hover:border-blue-200"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 ring-1 ring-blue-200">
+                <Zap className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm sm:text-base font-black text-[#101828]">Orçamentos Elétricos</h2>
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-blue-800">
+                    Instalações Elétricas • NBR 5410
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs font-medium text-[#64748B]">
+                  Propostas de quadros (QDC), circuitos, cabeamento, infraestrutura e mão de obra elétrica.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-black text-blue-900">
+                {allElectricalProjects.length} {allElectricalProjects.length === 1 ? "projeto" : "projetos"}
+              </span>
+              {project && !isCurrentProjectSolar && (
+                <span className="rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                  Em edição
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-blue-100/80 pt-3">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              {allElectricalProjects.length === 0 ? (
+                <span className="text-xs font-semibold text-[#64748B]">Nenhum projeto elétrico cadastrado</span>
+              ) : (
+                allElectricalProjects.slice(0, 4).map((elecProj) => {
+                  const isSelected = elecProj.id === projectId;
+                  return (
+                    <button
+                      key={elecProj.id}
+                      type="button"
+                      onClick={() => {
+                        setBudgetCategoryFilter("split");
+                        selectProject(elecProj.id);
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
+                        isSelected
+                          ? "border-blue-600 bg-blue-600 text-white shadow-xs"
+                          : "border-blue-200 bg-blue-50/60 text-blue-900 hover:bg-blue-100"
+                      }`}
+                    >
+                      <Zap className="h-3 w-3 shrink-0" />
+                      <span className="truncate max-w-[150px]">{elecProj.name}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setBudgetCategoryFilter((prev) => (prev === "electrical" ? "split" : "electrical"))
+              }
+              className={`rounded-lg border px-2.5 py-1 text-[11px] font-extrabold transition shrink-0 ${
+                budgetCategoryFilter === "electrical"
+                  ? "border-blue-600 bg-blue-50 text-blue-800"
+                  : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {budgetCategoryFilter === "electrical" ? "Mostrar todos" : "Filtrar Elétricos"}
+            </button>
+          </div>
+        </div>
+
+        {/* Card 2: Orçamentos Solares */}
+        <div
+          className={`flex flex-col justify-between rounded-2xl border p-4 transition-all ${
+            project && isCurrentProjectSolar
+              ? "border-amber-300 bg-gradient-to-br from-amber-50/90 via-white to-white shadow-sm ring-1 ring-amber-200"
+              : "border-[#E5EBF1] bg-white hover:border-amber-200"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 ring-1 ring-amber-200">
+                <Sun className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm sm:text-base font-black text-[#101828]">Orçamentos Solares</h2>
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-800">
+                    Solar Fotovoltaico • GD
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs font-medium text-[#64748B]">
+                  Propostas de kits fotovoltaicos, módulos, inversores, proteção CC/CA e homologação.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-black text-amber-900">
+                {allSolarProjects.length} {allSolarProjects.length === 1 ? "projeto" : "projetos"}
+              </span>
+              {project && isCurrentProjectSolar && (
+                <span className="rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                  Em edição
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-amber-100/80 pt-3">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              {allSolarProjects.length === 0 ? (
+                <span className="text-xs font-semibold text-[#64748B]">Nenhum projeto solar cadastrado</span>
+              ) : (
+                allSolarProjects.slice(0, 4).map((solarProj) => {
+                  const isSelected = solarProj.id === projectId;
+                  return (
+                    <button
+                      key={solarProj.id}
+                      type="button"
+                      onClick={() => {
+                        setBudgetCategoryFilter("split");
+                        selectProject(solarProj.id);
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
+                        isSelected
+                          ? "border-amber-500 bg-amber-500 text-white shadow-xs"
+                          : "border-amber-200 bg-amber-50/70 text-amber-900 hover:bg-amber-100"
+                      }`}
+                    >
+                      <Sun className="h-3 w-3 shrink-0" />
+                      <span className="truncate max-w-[150px]">{solarProj.name}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setBudgetCategoryFilter((prev) => (prev === "solar" ? "split" : "solar"))
+              }
+              className={`rounded-lg border px-2.5 py-1 text-[11px] font-extrabold transition shrink-0 ${
+                budgetCategoryFilter === "solar"
+                  ? "border-amber-500 bg-amber-50 text-amber-800"
+                  : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {budgetCategoryFilter === "solar" ? "Mostrar todos" : "Filtrar Solares"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto grid w-full max-w-7xl gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+        {/* Painel lateral: Projetos separados entre Orçamentos Elétricos e Orçamentos Solares */}
         <aside className="space-y-4">
           <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-extrabold text-[#101828]">Projetos</h3>
-                <p className="text-xs font-medium text-[#64748B]">Selecione para ver orçamentos</p>
+                <h3 className="text-sm font-extrabold text-[#101828]">Orçamentos por Projeto</h3>
+                <p className="text-xs font-medium text-[#64748B]">Divididos entre Elétricos e Solares</p>
               </div>
               <FolderOpen className="h-5 w-5 text-[#006F51]" />
             </div>
 
-            <div className="mb-3">
+            <div className="mb-2.5">
               <Input
-                placeholder="Buscar projeto..."
+                placeholder="Buscar projeto ou cliente..."
                 value={projectSearch}
                 onChange={(e) => setProjectSearch(e.target.value)}
                 className="h-8 text-xs bg-slate-50 border-border/70"
               />
+            </div>
+
+            {/* Abas rápidas de filtro na barra lateral */}
+            <div className="mb-3 grid grid-cols-3 gap-1 rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-1">
+              <button
+                type="button"
+                onClick={() => setBudgetCategoryFilter("split")}
+                className={`flex h-7 items-center justify-center rounded-lg text-[11px] font-extrabold transition ${
+                  budgetCategoryFilter === "split"
+                    ? "bg-white text-[#006F51] shadow-xs"
+                    : "text-[#64748B] hover:text-[#101828]"
+                }`}
+              >
+                Dividido ({filteredProjects.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBudgetCategoryFilter("electrical")}
+                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${
+                  budgetCategoryFilter === "electrical"
+                    ? "bg-white text-blue-700 shadow-xs"
+                    : "text-[#64748B] hover:text-[#101828]"
+                }`}
+              >
+                <Zap className="h-3 w-3 text-blue-600" />
+                Elétrico ({electricalProjects.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBudgetCategoryFilter("solar")}
+                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${
+                  budgetCategoryFilter === "solar"
+                    ? "bg-white text-amber-700 shadow-xs"
+                    : "text-[#64748B] hover:text-[#101828]"
+                }`}
+              >
+                <Sun className="h-3 w-3 text-amber-500" />
+                Solar ({solarProjects.length})
+              </button>
             </div>
 
             {loadingProjects ? (
@@ -915,31 +1161,124 @@ export default function BudgetPage() {
                 Nenhum projeto encontrado.
               </div>
             ) : (
-              <div className="max-h-[580px] space-y-2 overflow-y-auto pr-1">
-                {filteredProjects.map((item) => {
-                  const active = item.id === projectId;
-                  const circuitCount = Array.isArray(item.circuits) ? item.circuits.length : 0;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => selectProject(item.id)}
-                      className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition ${
-                        active
-                          ? "border-primary bg-primary/10 shadow-xs"
-                          : "border-border/60 bg-white hover:border-primary/40 hover:bg-secondary/40"
-                      }`}
-                    >
-                      <ProjectThumbBadge project={item} size="md" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-black text-[#0f172a]">{item.name || "Projeto sem nome"}</span>
-                        <span className="mt-0.5 block truncate text-[11px] font-semibold text-muted-foreground">
-                          {item.client_name || "Sem cliente"} · {circuitCount} cto{circuitCount === 1 ? "" : "s"}
-                        </span>
+              <div className="max-h-[620px] space-y-4 overflow-y-auto pr-1">
+                {/* Grupo 1: Orçamentos Elétricos */}
+                {(budgetCategoryFilter === "split" || budgetCategoryFilter === "electrical") && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50/70 px-2.5 py-1.5">
+                      <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-blue-900">
+                        <Zap className="h-3.5 w-3.5 text-blue-600" />
+                        Orçamentos Elétricos
                       </span>
-                    </button>
-                  );
-                })}
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-800">
+                        {electricalProjects.length}
+                      </span>
+                    </div>
+
+                    {electricalProjects.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-blue-100 bg-blue-50/20 p-3 text-center text-[11px] font-semibold text-slate-500">
+                        Nenhum orçamento elétrico encontrado.
+                      </div>
+                    ) : (
+                      electricalProjects.map((item) => {
+                        const active = item.id === projectId;
+                        const circuitCount = Array.isArray(item.circuits) ? item.circuits.length : 0;
+                        const savedTotal = Number(item.budget_total ?? item.total_budget ?? 0);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => selectProject(item.id)}
+                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${
+                              active
+                                ? "border-blue-500 bg-blue-50/70 shadow-xs ring-1 ring-blue-500/20"
+                                : "border-border/60 bg-white hover:border-blue-300 hover:bg-blue-50/30"
+                            }`}
+                          >
+                            <ProjectThumbBadge project={item} size="md" />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center justify-between gap-1.5">
+                                <span className="truncate text-xs font-black text-[#0f172a]">
+                                  {item.name || "Projeto sem nome"}
+                                </span>
+                                <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-black uppercase text-blue-800">
+                                  Elétrico
+                                </span>
+                              </span>
+                              <span className="mt-0.5 block truncate text-[11px] font-semibold text-muted-foreground">
+                                {item.client_name || "Sem cliente"} · {circuitCount} cto{circuitCount === 1 ? "" : "s"}
+                              </span>
+                              {savedTotal > 0 && (
+                                <span className="mt-0.5 block text-[10px] font-extrabold text-blue-700">
+                                  {formatCurrencyBR(savedTotal)}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+
+                {/* Grupo 2: Orçamentos Solares */}
+                {(budgetCategoryFilter === "split" || budgetCategoryFilter === "solar") && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-lg border border-amber-200/80 bg-amber-50/80 px-2.5 py-1.5">
+                      <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-amber-900">
+                        <Sun className="h-3.5 w-3.5 text-amber-500" />
+                        Orçamentos Solares
+                      </span>
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">
+                        {solarProjects.length}
+                      </span>
+                    </div>
+
+                    {solarProjects.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-amber-200/70 bg-amber-50/20 p-3 text-center text-[11px] font-semibold text-slate-500">
+                        Nenhum orçamento solar encontrado.
+                      </div>
+                    ) : (
+                      solarProjects.map((item) => {
+                        const active = item.id === projectId;
+                        const circuitCount = Array.isArray(item.circuits) ? item.circuits.length : 0;
+                        const savedTotal = Number(item.budget_total ?? item.total_budget ?? 0);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => selectProject(item.id)}
+                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${
+                              active
+                                ? "border-amber-500 bg-amber-50/80 shadow-xs ring-1 ring-amber-500/25"
+                                : "border-border/60 bg-white hover:border-amber-300 hover:bg-amber-50/30"
+                            }`}
+                          >
+                            <ProjectThumbBadge project={item} size="md" />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center justify-between gap-1.5">
+                                <span className="truncate text-xs font-black text-[#0f172a]">
+                                  {item.name || "Projeto sem nome"}
+                                </span>
+                                <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-800">
+                                  Solar
+                                </span>
+                              </span>
+                              <span className="mt-0.5 block truncate text-[11px] font-semibold text-muted-foreground">
+                                {item.client_name || "Sem cliente"} · {circuitCount} cto{circuitCount === 1 ? "" : "s"}
+                              </span>
+                              {savedTotal > 0 && (
+                                <span className="mt-0.5 block text-[10px] font-extrabold text-amber-700">
+                                  {formatCurrencyBR(savedTotal)}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -967,9 +1306,28 @@ export default function BudgetPage() {
                       customLogo={logoUrl && logoUrl.startsWith("data:") ? logoUrl : null}
                     />
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
                           Projeto Selecionado
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                            isCurrentProjectSolar
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
+                              : "border-blue-200 bg-blue-50 text-blue-800"
+                          }`}
+                        >
+                          {isCurrentProjectSolar ? (
+                            <>
+                              <Sun className="h-3 w-3 text-amber-500" />
+                              Orçamento Solar Fotovoltaico
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="h-3 w-3 text-blue-600" />
+                              Orçamento Elétrico • NBR 5410
+                            </>
+                          )}
                         </span>
                         <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
                           {projectBudgets.length} proposta{projectBudgets.length === 1 ? "" : "s"}
@@ -1098,9 +1456,18 @@ export default function BudgetPage() {
               <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-xs">
                 <div className="flex items-center justify-between gap-3 border-b border-border/50 p-5 pb-4">
                   <div>
-                    <h3 className="font-extrabold text-[#0f172a] flex items-center gap-2">
+                    <h3 className="font-extrabold text-[#0f172a] flex flex-wrap items-center gap-2">
                       <Package className="w-4 h-4 text-primary" />
-                      1. Materiais & Componentes
+                      <span>1. Materiais & Componentes</span>
+                      <span
+                        className={`rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                          isCurrentProjectSolar
+                            ? "border-amber-200 bg-amber-50 text-amber-800"
+                            : "border-blue-200 bg-blue-50 text-blue-800"
+                        }`}
+                      >
+                        {isCurrentProjectSolar ? "Equipamentos & Kit Solar" : "Materiais Elétricos"}
+                      </span>
                     </h3>
                     <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
                       Quantitativos, unidades e preços unitários congelados para esta proposta.
@@ -1119,7 +1486,11 @@ export default function BudgetPage() {
                       <Input
                         value={manualName}
                         onChange={(e) => setManualName(e.target.value)}
-                        placeholder="Ex: Disjuntor bipolar 32A DIN, Eletroduto 3/4..."
+                        placeholder={
+                          isCurrentProjectSolar
+                            ? "Ex: Módulo Fotovoltaico 550W, Inversor 5kW, String Box..."
+                            : "Ex: Disjuntor bipolar 32A DIN, Eletroduto 3/4..."
+                        }
                         className="h-9 text-xs"
                         onKeyDown={(e) => { if (e.key === "Enter") addManualMaterialItem(); }}
                       />
@@ -1289,8 +1660,10 @@ export default function BudgetPage() {
                 {/* Templates Rápidos de Serviços */}
                 <div className="border-b border-border/40 bg-slate-50/70 p-3">
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="text-[11px] font-bold text-muted-foreground mr-1">Sugestões rápidas:</span>
-                    {QUICK_SERVICE_TEMPLATES.map((tmpl, idx) => (
+                    <span className="text-[11px] font-bold text-muted-foreground mr-1">
+                      Sugestões rápidas ({isCurrentProjectSolar ? "Solar Fotovoltaico" : "Instalações Elétricas"}):
+                    </span>
+                    {activeQuickServiceTemplates.map((tmpl, idx) => (
                       <button
                         key={idx}
                         type="button"
