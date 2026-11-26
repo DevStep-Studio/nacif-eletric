@@ -110,8 +110,28 @@ export const buildApp = async () => {
   await app.register(staticPlugin, {
     root: uploadDirPath,
     prefix: "/uploads/",
+    setHeaders(res) {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+      );
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    },
   });
   await app.register(authPlugin);
+
+  // Headers globais de segurança HTTP (Hardening OWASP)
+  app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("X-Frame-Options", "SAMEORIGIN");
+    reply.header("Referrer-Policy", "strict-origin-when-cross-origin");
+    reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)");
+    if (env.NODE_ENV === "production") {
+      reply.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+    return payload;
+  });
 
   await registerHealthRoutes(app);
   await registerAuthRoutes(app);
@@ -170,8 +190,14 @@ export const buildApp = async () => {
     const status = (error as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) return reply.status(status).send({ message: error instanceof Error ? error.message : "Requisição inválida." });
     app.log.error(error);
+    const safeServerMessage =
+      env.NODE_ENV === "production"
+        ? "Erro interno do servidor. Tente novamente em instantes."
+        : error instanceof Error
+          ? error.message
+          : "Erro interno do servidor.";
     return reply.status(typeof explicitStatus === "number" && explicitStatus >= 500 ? explicitStatus : 500).send({
-      message: error instanceof Error ? error.message : "Erro interno do servidor.",
+      message: safeServerMessage,
     });
   });
 

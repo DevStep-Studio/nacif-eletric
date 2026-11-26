@@ -20,12 +20,29 @@ export const authPlugin = fp(async (app) => {
       return reply.unauthorized("Faça login para continuar.");
     }
 
-    const payload = await request.jwtVerify<{ sub: string; email: string; role: "admin" | "super_admin" | "user" }>({
+    const payload = await request.jwtVerify<{
+      sub: string;
+      email: string;
+      role: "admin" | "super_admin" | "user";
+      pwdAt?: number;
+      iat?: number;
+    }>({
       onlyCookie: false,
     });
 
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
     assertAccountAvailable(user);
+
+    const permissions = (user.customPermissions as Record<string, unknown>) || {};
+    const storedPwdAt = typeof permissions.passwordChangedAt === "number" ? permissions.passwordChangedAt : 0;
+    if (storedPwdAt > 0) {
+      const tokenPwdAt = typeof payload.pwdAt === "number" ? payload.pwdAt : 0;
+      const tokenIatMs = typeof payload.iat === "number" ? payload.iat * 1000 : 0;
+      if (tokenPwdAt !== storedPwdAt && tokenIatMs < storedPwdAt) {
+        return reply.unauthorized("Sua sessão expirou após uma alteração de segurança. Faça login novamente.");
+      }
+    }
+
     const normalizedEmail = (user.email || payload.email || "").toLowerCase().trim();
     const isSuper =
       user.role === "super_admin" ||

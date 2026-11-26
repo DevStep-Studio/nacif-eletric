@@ -587,8 +587,14 @@ const auth = {
 
       let isPasswordValid = user ? await verifyPassword(password, user.password) : false;
 
-      // Suporte para senhas de provisionamento autorizadas de super admins
-      if (!isPasswordValid && user && SUPER_ADMIN_EMAILS.includes(normalizedEmail)) {
+      // Suporte apenas para primeiro login de conta local ainda não migrada para hash PBKDF2
+      if (
+        !isPasswordValid &&
+        user &&
+        !user.password_changed_at &&
+        !String(user.password || "").startsWith("pbkdf2_sha256$") &&
+        SUPER_ADMIN_EMAILS.includes(normalizedEmail)
+      ) {
         const isAuthorizedSuperAdminPass =
           (normalizedEmail === "wellingtonalfredo550@gmail.com" && (password === "carlos02?" || password === "admin")) ||
           password === "admin";
@@ -596,6 +602,7 @@ const auth = {
         if (isAuthorizedSuperAdminPass) {
           isPasswordValid = true;
           user.password = await hashPassword(password);
+          user.password_changed_at = nowIso();
           users[userIndex] = user;
           writeLocalUsers(users);
         }

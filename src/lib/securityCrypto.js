@@ -192,11 +192,18 @@ export const FORBIDDEN_EXTENSIONS = [
   ".php",
   ".vbs",
   ".js",
+  ".mjs",
+  ".cjs",
+  ".html",
+  ".htm",
   ".msi",
   ".dll",
   ".scr",
   ".com",
   ".pif",
+  ".jsp",
+  ".asp",
+  ".aspx",
 ];
 
 export function validateUploadedFile(file, { maxSize = 10 * 1024 * 1024 } = {}) {

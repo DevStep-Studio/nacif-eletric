@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { invokeAI } from "../lib/openai.js";
+import { checkRateLimit } from "../lib/rateLimit.js";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../lib/errors.js";
 import {
@@ -11,9 +12,14 @@ import {
   isServerAdmin,
 } from "../lib/planGovernance.js";
 
+const safeFileUrlSchema = z.string().refine(
+  (url) => url.startsWith("data:image/") || url.startsWith("https://") || url.startsWith("http://"),
+  "URL de arquivo inválida para análise de IA.",
+);
+
 const aiSchema = z.object({
-  prompt: z.string().min(1),
-  file_urls: z.array(z.string()).optional(),
+  prompt: z.string().min(1).max(40000),
+  file_urls: z.array(safeFileUrlSchema).max(10).optional(),
   response_json_schema: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -22,6 +28,11 @@ export const registerAiRoutes = async (app: FastifyInstance) => {
     "/api/ai/invoke",
     { preHandler: [app.authenticate] },
     async (request) => {
+      const rate = checkRateLimit(`ai:${request.authUser.id}`, 30, 60 * 1000);
+      if (!rate.allowed) {
+        throw new AppError("Muitas solicitações de IA em sequência. Aguarde alguns segundos e tente novamente.", 429);
+      }
+
       const payload = aiSchema.parse(request.body);
 
       await prisma.$transaction(async (tx) => {

@@ -8,12 +8,17 @@ export const verifyPassword = async (password: string, hash: string) => bcrypt.c
 
 export const generateResetToken = () => crypto.randomBytes(32).toString("hex");
 
-export const signAccessToken = (app: FastifyInstance, user: User) =>
-  app.jwt.sign(
+export const signAccessToken = (app: FastifyInstance, user: User) => {
+  const permissions = (user.customPermissions as Record<string, unknown>) || {};
+  const pwdAt = typeof permissions.passwordChangedAt === "number" ? permissions.passwordChangedAt : 0;
+
+  return app.jwt.sign(
     {
       sub: user.id,
       email: user.email,
       role: user.role,
+      pwdAt,
     },
     { expiresIn: "7d" },
   );
+};

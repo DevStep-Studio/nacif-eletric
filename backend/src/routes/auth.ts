@@ -5,6 +5,12 @@ import { env } from "../config/env.js";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../lib/errors.js";
 import { generateResetToken, hashPassword, signAccessToken, verifyPassword } from "../lib/auth.js";
+import {
+  checkRateLimit,
+  clearFailedLoginAttempts,
+  isLoginBlocked,
+  recordFailedLoginAttempt,
+} from "../lib/rateLimit.js";
 import { sendPasswordResetEmail } from "../lib/mailer.js";
 import { createNotificationsForUsers } from "../lib/notifications.js";
 import { serializeUser } from "../lib/serializers.js";
@@ -100,6 +106,11 @@ const resetPasswordSchema = z.object({
 
 export const registerAuthRoutes = async (app: FastifyInstance) => {
   app.post("/api/auth/register", async (request) => {
+    const regRate = checkRateLimit(`register:${request.ip || "local"}`, 30, 15 * 60 * 1000);
+    if (!regRate.allowed) {
+      throw new AppError("Muitas tentativas de cadastro. Aguarde alguns minutos antes de tentar novamente.", 429);
+    }
+
     const { email, password, profession, full_name } = registerSchema.parse(request.body);
     const normalizedEmail = email.toLowerCase().trim();
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
@@ -159,60 +170,37 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     const { email, password } = loginSchema.parse(request.body);
     const normalizedEmail = email.toLowerCase().trim();
     const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
+    const attemptKey = `login:${normalizedEmail}:${request.ip || "local"}`;
+
+    const lockStatus = isLoginBlocked(attemptKey);
+    if (lockStatus.blocked) {
+      throw new AppError(
+        `Muitas tentativas incorretas. Conta temporariamente bloqueada por segurança. Tente novamente em ${lockStatus.retryAfterMinutes} minuto(s).`,
+        429,
+      );
+    }
 
     let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-    // 1. Auto-provisionamento imediato para e-mails oficiais de super admin caso ainda não existam no MySQL
-    if (!user && isSuperAdminEmail) {
-      user = await prisma.user.create({
-        data: {
-          email: normalizedEmail,
-          passwordHash: await hashPassword(password),
-          fullName:
-            normalizedEmail === "wellingtonalfredo550@gmail.com"
-              ? "Wellington Alfredo"
-              : normalizedEmail.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
-          role: "super_admin",
-          plan: "completo",
-          isSuperAdmin: true,
-          status: "active",
-          profession: "engenheiro",
-          customPermissions: {},
-        },
-      });
-    }
-
     if (!user) {
+      recordFailedLoginAttempt(attemptKey);
       throw new AppError("Email ou senha inválidos.", 401);
     }
 
-    let isValid = await verifyPassword(password, user.passwordHash);
-
-    // 2. Para super admins, suporta sincronização de senhas autorizadas de provisionamento
-    if (!isValid && isSuperAdminEmail) {
-      const isAuthorizedSuperAdminPass =
-        (normalizedEmail === "wellingtonalfredo550@gmail.com" && (password === "carlos02?" || password === "admin")) ||
-        password === "admin";
-
-      if (isAuthorizedSuperAdminPass) {
-        isValid = true;
-        const newHash = await hashPassword(password);
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            passwordHash: newHash,
-            status: "active",
-            role: "super_admin",
-            isSuperAdmin: true,
-            plan: "completo",
-          },
-        });
-      }
-    }
+    const isValid = await verifyPassword(password, user.passwordHash);
 
     if (!isValid) {
+      const failStatus = recordFailedLoginAttempt(attemptKey);
+      if (failStatus.blocked) {
+        throw new AppError(
+          `Muitas tentativas incorretas. Conta temporariamente bloqueada por segurança. Tente novamente em ${failStatus.retryAfterMinutes} minuto(s).`,
+          429,
+        );
+      }
       throw new AppError("Email ou senha inválidos.", 401);
     }
+
+    clearFailedLoginAttempts(attemptKey);
 
     if (
       isSuperAdminEmail &&
@@ -330,6 +318,9 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     if (data.academic_status === "pending_review" || data.academic_status === "not_submitted") {
       nextPermissions.academicStatus = data.academic_status;
     }
+    if (nextPasswordHash) {
+      nextPermissions.passwordChangedAt = Date.now();
+    }
 
     const resolvedAvatarUrl = data.avatar_url ?? data.profile_photo_url ?? data.photo_url;
 
@@ -348,6 +339,26 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
     });
 
     return serializeUser(user);
+  });
+
+  app.post("/api/auth/logout-all", { preHandler: [app.authenticate] }, async (request) => {
+    const existingUser = await prisma.user.findUniqueOrThrow({ where: { id: request.authUser.id } });
+    const currentPermissions = (existingUser.customPermissions as Record<string, unknown>) || {};
+    const updatedUser = await prisma.user.update({
+      where: { id: request.authUser.id },
+      data: {
+        customPermissions: {
+          ...currentPermissions,
+          passwordChangedAt: Date.now(),
+        } as any,
+      },
+    });
+
+    return {
+      ok: true,
+      access_token: signAccessToken(app, updatedUser),
+      message: "Todas as outras sessões ativas foram encerradas com segurança.",
+    };
   });
 
   // ==========================================================================
@@ -370,6 +381,14 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
 
       const normalizedEmail = parsed.data.email.toLowerCase().trim();
       userEmail = normalizedEmail;
+
+      const resetRate = checkRateLimit(`reset:${normalizedEmail}`, 5, 15 * 60 * 1000);
+      if (!resetRate.allowed) {
+        return reply.status(429).send({
+          error: "TooManyRequests",
+          message: "Muitas solicitações de redefinição de senha para este e-mail. Aguarde alguns minutos antes de tentar novamente.",
+        });
+      }
 
       // 2. Consulta no banco de dados (Prisma) para checar se o usuário existe
       const user = await prisma.user.findUnique({
@@ -438,14 +457,13 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         );
       }
 
-      // 9. Retorno com status 200 de sucesso (sem erro 500)
+      // 9. Retorno com status 200 de sucesso (sem erro 500 e NUNCA vazando token em produção)
       return {
         ok: true,
         emailSent: emailResult.sent,
         message:
           "Se existir uma conta com o e-mail informado, você receberá o link de redefinição em instantes.",
-        // Fornece o link de recuperação para auxílio imediato caso o SMTP ainda esteja em configuração
-        ...(env.NODE_ENV !== "production" || !emailResult.sent ? { recoveryLink } : {}),
+        ...(env.NODE_ENV !== "production" ? { recoveryLink } : {}),
       };
     } catch (error) {
       // 10. Prevenção de Erro 500: Qualquer falha inesperada é logada detalhadamente no console
@@ -459,7 +477,7 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         emailSent: false,
         message:
           "Se existir uma conta com o e-mail informado, você receberá o link de redefinição em instantes.",
-        ...(generatedRecoveryLink ? { recoveryLink: generatedRecoveryLink } : {}),
+        ...(env.NODE_ENV !== "production" && generatedRecoveryLink ? { recoveryLink: generatedRecoveryLink } : {}),
       });
     }
   };
@@ -521,15 +539,20 @@ export const registerAuthRoutes = async (app: FastifyInstance) => {
         });
       }
 
-      // 4. Gera o hash bcrypt seguro da nova senha
+      // 4. Gera o hash bcrypt seguro da nova senha e invalida sessões anteriores
       const passwordHash = await hashPassword(newPassword);
+      const currentPermissions = (reset.user.customPermissions as Record<string, unknown>) || {};
 
-      // 5. Transação atômica do Prisma: atualiza a senha do usuário e queima o token (usedAt)
+      // 5. Transação atômica do Prisma: atualiza a senha do usuário, marca passwordChangedAt e queima o token (usedAt)
       await prisma.$transaction([
         prisma.user.update({
           where: { id: reset.userId },
           data: {
             passwordHash,
+            customPermissions: {
+              ...currentPermissions,
+              passwordChangedAt: Date.now(),
+            } as any,
           },
         }),
         prisma.passwordResetToken.update({
