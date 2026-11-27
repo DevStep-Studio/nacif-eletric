@@ -903,23 +903,28 @@ export default function SolarDesignerMap({
   showMiniMap = false,
   onViewModeChange,
 }) {
-  // Encontra a área atualmente selecionada
+  // Encontra a área atualmente selecionada (respeitando quando selectedAreaId === null)
   const selectedArea = useMemo(
-    () => areas.find((a) => a.id === selectedAreaId) || areas[0] || null,
+    () => (selectedAreaId ? areas.find((a) => a.id === selectedAreaId) || null : null),
     [areas, selectedAreaId]
   );
 
-  const selectedRoofPolygon = useMemo(
-    () => selectedArea?.polygon || getRoofPolygonFromConfig(config),
-    [selectedArea, config]
-  );
+  const selectedRoofPolygon = useMemo(() => {
+    if (selectedArea?.polygon?.length >= 3) {
+      return selectedArea.polygon;
+    }
+    if (Array.isArray(areas)) {
+      return [];
+    }
+    return getRoofPolygonFromConfig(config);
+  }, [areas, selectedArea, config]);
 
   // Reúne todos os painéis de todas as áreas
   const allAreasPanels = useMemo(() => {
-    if (areas.length > 0) {
+    if (Array.isArray(areas)) {
       return areas.map((a) => ({
         areaId: a.id,
-        isSelected: a.id === (selectedArea?.id || selectedAreaId),
+        isSelected: Boolean(selectedArea?.id && a.id === selectedArea.id),
         panels: a.panelPolygons || [],
       }));
     }
@@ -928,7 +933,7 @@ export default function SolarDesignerMap({
     }
     const generated = buildPanelPolygons(config, sizing);
     return [{ areaId: "default", isSelected: true, panels: generated }];
-  }, [areas, controlledPanelPolygons, selectedArea, selectedAreaId, config, sizing]);
+  }, [areas, controlledPanelPolygons, selectedArea, config, sizing]);
 
   const allPanelsFlat = useMemo(
     () => allAreasPanels.flatMap((group) => group.panels),
@@ -1313,7 +1318,7 @@ export default function SolarDesignerMap({
                         return;
                       }
                       L.DomEvent.stopPropagation(e);
-                      if (group.areaId !== selectedArea?.id) {
+                      if (group.areaId !== selectedAreaId) {
                         onSelectArea?.(group.areaId);
                       }
                       onSelectModule?.(globalIndex);

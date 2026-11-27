@@ -12,6 +12,7 @@ import {
   Sparkles,
   Trash2,
   Sun,
+  Zap,
   Download,
   FileSpreadsheet,
   Copy,
@@ -81,12 +82,15 @@ function BrandLogoUploaderDisplay({ logoUrl }) {
   );
 }
 
+const isSolarProjectType = (proj) =>
+  String(proj?.project_type || "").toLowerCase().includes("solar") || Boolean(proj?.solar_config);
+
 function ProjectThumbBadge({ project, size = "md", customLogo = null }) {
   const [hasError, setHasError] = useState(false);
   const rawLogo = customLogo || project?.logo_url || project?.logoUrl || project?.project_logo || project?.logo;
-  const isSolar = String(project?.project_type || "").toLowerCase().includes("solar");
+  const isSolar = isSolarProjectType(project);
 
-  const sizeClasses = size === "lg" ? "h-14 w-14" : "h-12 w-12";
+  const sizeClasses = size === "lg" ? "h-14 w-14" : "h-10 w-10";
   const iconSize = size === "lg" ? "h-7 w-7" : "h-5 w-5";
 
   if (rawLogo && typeof rawLogo === "string" && !hasError) {
@@ -103,15 +107,16 @@ function ProjectThumbBadge({ project, size = "md", customLogo = null }) {
   }
 
   return (
-    <span className={`flex shrink-0 items-center justify-center rounded-xl border border-[#CDEFE8] bg-[#F2FFFC] ${sizeClasses}`}>
+    <span
+      className={`flex shrink-0 items-center justify-center rounded-xl border ${isSolar
+          ? "border-amber-200 bg-amber-50 text-amber-600"
+          : "border-blue-200 bg-blue-50 text-blue-600"
+        } ${sizeClasses}`}
+    >
       {isSolar ? (
         <Sun className={`${iconSize} text-amber-500`} />
       ) : (
-        <img
-          src={brandMarkEnergy}
-          alt="NACIF Energy"
-          className={`${iconSize} object-contain`}
-        />
+        <Zap className={`${iconSize} text-blue-600`} />
       )}
     </span>
   );
@@ -124,13 +129,23 @@ const formatUnit = (unit = "un") => {
 };
 
 // Exemplos de serviços elétricos rápidos
-const QUICK_SERVICE_TEMPLATES = [
+const QUICK_ELECTRICAL_SERVICE_TEMPLATES = [
   { name: "Montagem e estruturação de QDC (Quadro de Distribuição)", unit: "vb.", price: 650 },
   { name: "Passagem de condutores e fiação de circuitos", unit: "m", price: 6.5 },
   { name: "Instalação e ligação de tomadas e interruptores", unit: "pt.", price: 25 },
   { name: "Sistema de aterramento e instalação de DPS", unit: "vb.", price: 450 },
-  { name: "Emissão de ART / Laudo Técnico de Conformidade", unit: "un.", price: 350 },
+  { name: "Emissão de ART / Laudo Técnico de Conformidade NBR 5410", unit: "un.", price: 350 },
   { name: "Instalação de luminárias e pontos de luz", unit: "pt.", price: 30 },
+];
+
+// Exemplos de serviços solares rápidos
+const QUICK_SOLAR_SERVICE_TEMPLATES = [
+  { name: "Instalação de estrutura de fixação e módulos fotovoltaicos", unit: "vb.", price: 1800 },
+  { name: "Montagem de inversor, String Box CC/CA e proteções", unit: "vb.", price: 950 },
+  { name: "Projeto executivo e homologação junto à concessionária", unit: "vb.", price: 1200 },
+  { name: "Cabeamento solar CC/CA e aterramento equipotencial", unit: "vb.", price: 650 },
+  { name: "Comissionamento, testes de geração e configuração de monitoramento", unit: "vb.", price: 450 },
+  { name: "Emissão de ART de Geração Distribuída Fotovoltaica", unit: "un.", price: 350 },
 ];
 
 export default function BudgetPage() {
@@ -182,8 +197,9 @@ export default function BudgetPage() {
   const [newServiceUnit, setNewServiceUnit] = useState("vb.");
   const [newServicePrice, setNewServicePrice] = useState(350);
 
-  // Filtro de busca na lista de projetos
+  // Filtro de busca e categoria na lista de projetos
   const [projectSearch, setProjectSearch] = useState("");
+  const [budgetCategoryFilter, setBudgetCategoryFilter] = useState("split"); // "split" | "electrical" | "solar"
 
   // Referência para controlar se o orçamento foi modificado
   const hasUnsavedChanges = useRef(false);
@@ -221,7 +237,7 @@ export default function BudgetPage() {
           const storedId = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
           const target = safeList.find((p) => p.id === storedId) || safeList[0];
           if (target?.id) {
-            try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch {}
+            try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch { }
             navigate(`/budget?project=${target.id}`, { replace: true });
           }
         }
@@ -235,7 +251,7 @@ export default function BudgetPage() {
       setProject(null);
       return;
     }
-    try { window.localStorage.setItem("voltai_active_project_id", projectId); } catch {}
+    try { window.localStorage.setItem("voltai_active_project_id", projectId); } catch { }
     setLoadingProject(true);
     backend.entities.Project.get(projectId)
       .then(setProject)
@@ -289,35 +305,35 @@ export default function BudgetPage() {
 
     const { materials: projMaterials } = isSolarProj
       ? {
-          materials: [...solarBudget.equipmentItems, ...solarBudget.caItems].map((item) => ({
-            name: item.name,
-            qty: item.quantity,
-            unit: item.unit,
-            price: item.unitPrice,
-            basePrice: item.unitPrice,
-            category: item.category,
-            brand: "NACIF Solar",
-          })),
-        }
+        materials: [...solarBudget.equipmentItems, ...solarBudget.caItems].map((item) => ({
+          name: item.name,
+          qty: item.quantity,
+          unit: item.unit,
+          price: item.unitPrice,
+          basePrice: item.unitPrice,
+          category: item.category,
+          brand: "NACIF Solar",
+        })),
+      }
       : buildProjectBudgetMaterials(proj, { productAdjustment: 0 });
 
     const initialServices = isSolarProj
       ? solarBudget.serviceItems.map((srv, idx) => ({
-          id: `srv-${Date.now()}-${idx + 1}`,
-          name: srv.name,
-          qty: srv.quantity,
-          unit: srv.unit,
-          price: srv.unitPrice,
-        }))
+        id: `srv-${Date.now()}-${idx + 1}`,
+        name: srv.name,
+        qty: srv.quantity,
+        unit: srv.unit,
+        price: srv.unitPrice,
+      }))
       : [
-          {
-            id: `srv-${Date.now()}-1`,
-            name: "Mão de obra e execução técnica especializada",
-            qty: 1,
-            unit: "vb.",
-            price: 800,
-          },
-        ];
+        {
+          id: `srv-${Date.now()}-1`,
+          name: "Mão de obra e execução técnica especializada",
+          qty: 1,
+          unit: "vb.",
+          price: 800,
+        },
+      ];
 
     const initialMargin = isSolarProj ? Number(solarBudget.marginPercent ?? 20) : 30;
     const initialDiscount = isSolarProj ? Number(solarBudget.discountBrl ?? 0) : 0;
@@ -769,12 +785,12 @@ export default function BudgetPage() {
 
   const selectProject = (id) => {
     if (id) {
-      try { window.localStorage.setItem("voltai_active_project_id", id); } catch {}
+      try { window.localStorage.setItem("voltai_active_project_id", id); } catch { }
       navigate(`/budget?project=${id}`, { replace: true });
     }
   };
 
-  // Filtragem de projetos na barra lateral
+  // Filtragem de projetos na barra lateral e separação Elétrico vs Solar
   const filteredProjects = useMemo(() => {
     if (!projectSearch.trim()) return projects;
     const q = projectSearch.toLowerCase();
@@ -784,6 +800,21 @@ export default function BudgetPage() {
         (p.client_name && p.client_name.toLowerCase().includes(q))
     );
   }, [projects, projectSearch]);
+
+  const electricalProjects = useMemo(
+    () => filteredProjects.filter((p) => !isSolarProjectType(p)),
+    [filteredProjects]
+  );
+
+  const solarProjects = useMemo(
+    () => filteredProjects.filter((p) => isSolarProjectType(p)),
+    [filteredProjects]
+  );
+
+  const isCurrentProjectSolar = isSolarProjectType(project);
+  const activeQuickServiceTemplates = isCurrentProjectSolar
+    ? QUICK_SOLAR_SERVICE_TEMPLATES
+    : QUICK_ELECTRICAL_SERVICE_TEMPLATES;
 
   const activeStatusConfig = BUDGET_STATUS_CONFIG[budgetStatus] || BUDGET_STATUS_CONFIG.rascunho;
 
@@ -814,13 +845,12 @@ export default function BudgetPage() {
                   type="button"
                   onClick={handleSaveBudget}
                   disabled={saveStatus === "saving"}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold shadow-xs transition ${
-                    saveStatus === "saved"
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold shadow-xs transition ${saveStatus === "saved"
                       ? "bg-[#00D98A] text-[#031923]"
                       : saveStatus === "error"
-                      ? "bg-[#EF4444] text-white"
-                      : "bg-[#031923] text-white hover:bg-[#082732]"
-                  }`}
+                        ? "bg-[#EF4444] text-white"
+                        : "bg-[#031923] text-white hover:bg-[#082732]"
+                    }`}
                   title="Salvar alterações no orçamento ativo"
                 >
                   {saveStatus === "saving" ? (
@@ -834,8 +864,8 @@ export default function BudgetPage() {
                     {saveStatus === "saving"
                       ? "Salvando..."
                       : saveStatus === "saved"
-                      ? "Salvo!"
-                      : "Salvar Orçamento"}
+                        ? "Salvo!"
+                        : "Salvar Orçamento"}
                   </span>
                 </button>
 
@@ -855,11 +885,6 @@ export default function BudgetPage() {
                     <DropdownMenuItem onClick={handleDownloadCSV} className="cursor-pointer font-medium">
                       <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600" />
                       <span>Baixar Planilha (Excel/CSV)</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => handlePrint("A4")} className="cursor-pointer font-medium">
-                      <Printer className="w-4 h-4 mr-2 text-slate-600" />
-                      <span>Imprimir em A4</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -888,24 +913,57 @@ export default function BudgetPage() {
       />
 
       <div className="mx-auto grid w-full max-w-7xl gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-        {/* Painel lateral: Projetos */}
+        {/* Painel lateral: Projetos separados entre Elétricos e Solares */}
         <aside className="space-y-4">
           <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-[#101828]">Projetos</h3>
-                <p className="text-xs font-medium text-[#64748B]">Selecione para ver orçamentos</p>
-              </div>
-              <FolderOpen className="h-5 w-5 text-[#006F51]" />
+              <h3 className="text-sm font-extrabold text-[#101828]">Projetos</h3>
+              <FolderOpen className="h-4 w-4 text-[#006F51]" />
             </div>
 
-            <div className="mb-3">
+            <div className="mb-2.5">
               <Input
-                placeholder="Buscar projeto..."
+                placeholder="Buscar projeto ou cliente..."
                 value={projectSearch}
                 onChange={(e) => setProjectSearch(e.target.value)}
                 className="h-8 text-xs bg-slate-50 border-border/70"
               />
+            </div>
+
+            {/* Abas rápidas de filtro na barra lateral */}
+            <div className="mb-3 grid grid-cols-3 gap-1 rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-1">
+              <button
+                type="button"
+                onClick={() => setBudgetCategoryFilter("split")}
+                className={`flex h-7 items-center justify-center rounded-lg text-[11px] font-extrabold transition ${budgetCategoryFilter === "split"
+                    ? "bg-white text-[#006F51] shadow-xs"
+                    : "text-[#64748B] hover:text-[#101828]"
+                  }`}
+              >
+                Todos ({filteredProjects.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBudgetCategoryFilter("electrical")}
+                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${budgetCategoryFilter === "electrical"
+                    ? "bg-white text-blue-700 shadow-xs"
+                    : "text-[#64748B] hover:text-[#101828]"
+                  }`}
+              >
+                <Zap className="h-3 w-3 text-blue-600" />
+                Elétricos ({electricalProjects.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBudgetCategoryFilter("solar")}
+                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${budgetCategoryFilter === "solar"
+                    ? "bg-white text-amber-700 shadow-xs"
+                    : "text-[#64748B] hover:text-[#101828]"
+                  }`}
+              >
+                <Sun className="h-3 w-3 text-amber-500" />
+                Solares ({solarProjects.length})
+              </button>
             </div>
 
             {loadingProjects ? (
@@ -915,31 +973,102 @@ export default function BudgetPage() {
                 Nenhum projeto encontrado.
               </div>
             ) : (
-              <div className="max-h-[580px] space-y-2 overflow-y-auto pr-1">
-                {filteredProjects.map((item) => {
-                  const active = item.id === projectId;
-                  const circuitCount = Array.isArray(item.circuits) ? item.circuits.length : 0;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => selectProject(item.id)}
-                      className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition ${
-                        active
-                          ? "border-primary bg-primary/10 shadow-xs"
-                          : "border-border/60 bg-white hover:border-primary/40 hover:bg-secondary/40"
-                      }`}
-                    >
-                      <ProjectThumbBadge project={item} size="md" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-black text-[#0f172a]">{item.name || "Projeto sem nome"}</span>
-                        <span className="mt-0.5 block truncate text-[11px] font-semibold text-muted-foreground">
-                          {item.client_name || "Sem cliente"} · {circuitCount} cto{circuitCount === 1 ? "" : "s"}
-                        </span>
+              <div className="max-h-[620px] space-y-3.5 overflow-y-auto pr-1">
+                {/* Grupo 1: Orçamentos Elétricos */}
+                {(budgetCategoryFilter === "split" || budgetCategoryFilter === "electrical") && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between px-1 py-0.5">
+                      <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-blue-800">
+                        <Zap className="h-3.5 w-3.5 text-blue-600" />
+                        Elétricos
                       </span>
-                    </button>
-                  );
-                })}
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700">
+                        {electricalProjects.length}
+                      </span>
+                    </div>
+
+                    {electricalProjects.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-slate-200 p-3 text-center text-[11px] font-semibold text-slate-400">
+                        Nenhum projeto elétrico.
+                      </div>
+                    ) : (
+                      electricalProjects.map((item) => {
+                        const active = item.id === projectId;
+                        const savedTotal = Number(item.budget_total ?? item.total_budget ?? 0);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => selectProject(item.id)}
+                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${active
+                                ? "border-blue-500 bg-blue-50/60 shadow-xs"
+                                : "border-border/60 bg-white hover:border-blue-200 hover:bg-slate-50/70"
+                              }`}
+                          >
+                            <ProjectThumbBadge project={item} size="md" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-xs font-black text-[#0f172a]">
+                                {item.name || "Projeto sem nome"}
+                              </span>
+                              <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-foreground">
+                                {item.client_name || "Sem cliente"}
+                                {savedTotal > 0 ? ` · ${formatCurrencyBR(savedTotal)}` : ""}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+
+                {/* Grupo 2: Orçamentos Solares */}
+                {(budgetCategoryFilter === "split" || budgetCategoryFilter === "solar") && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between px-1 py-0.5">
+                      <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-amber-800">
+                        <Sun className="h-3.5 w-3.5 text-amber-500" />
+                        Solares
+                      </span>
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">
+                        {solarProjects.length}
+                      </span>
+                    </div>
+
+                    {solarProjects.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-slate-200 p-3 text-center text-[11px] font-semibold text-slate-400">
+                        Nenhum projeto solar.
+                      </div>
+                    ) : (
+                      solarProjects.map((item) => {
+                        const active = item.id === projectId;
+                        const savedTotal = Number(item.budget_total ?? item.total_budget ?? 0);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => selectProject(item.id)}
+                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${active
+                                ? "border-amber-500 bg-amber-50/70 shadow-xs"
+                                : "border-border/60 bg-white hover:border-amber-200 hover:bg-slate-50/70"
+                              }`}
+                          >
+                            <ProjectThumbBadge project={item} size="md" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-xs font-black text-[#0f172a]">
+                                {item.name || "Projeto sem nome"}
+                              </span>
+                              <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-foreground">
+                                {item.client_name || "Sem cliente"}
+                                {savedTotal > 0 ? ` · ${formatCurrencyBR(savedTotal)}` : ""}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -957,40 +1086,42 @@ export default function BudgetPage() {
             </div>
           ) : (
             <>
-              {/* Barra de Seleção / Gestão de Orçamentos do Projeto */}
-              <div className="rounded-2xl border border-border/50 bg-card p-4 shadow-xs">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              {/* Cabeçalho Unificado do Projeto e Proposta Ativa */}
+              <div className="rounded-2xl border border-border/50 bg-card p-4 shadow-xs space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3 min-w-0">
                     <ProjectThumbBadge
                       project={project}
-                      size="lg"
+                      size="md"
                       customLogo={logoUrl && logoUrl.startsWith("data:") ? logoUrl : null}
                     />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
-                          Projeto Selecionado
-                        </span>
-                        <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
-                          {projectBudgets.length} proposta{projectBudgets.length === 1 ? "" : "s"}
+                        <h2 className="truncate text-base font-black text-[#0f172a]">{project.name}</h2>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase ${isCurrentProjectSolar
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
+                              : "border-blue-200 bg-blue-50 text-blue-800"
+                            }`}
+                        >
+                          {isCurrentProjectSolar ? "Solar" : "Elétrico"}
                         </span>
                       </div>
-                      <h2 className="truncate text-lg font-black text-[#0f172a]">{project.name}</h2>
-                      <p className="truncate text-xs font-semibold text-muted-foreground">
-                        {project.client_name ? `Cliente: ${project.client_name}` : "Cliente não informado"}
+                      <p className="truncate text-xs font-medium text-muted-foreground">
+                        {project.client_name || "Sem cliente"}
                         {project.voltage ? ` · ${project.voltage}V` : ""}
                         {project.supply_type ? ` · ${project.supply_type}` : ""}
                       </p>
                     </div>
                   </div>
 
-                  {/* Ações de Orçamento: Novo, Duplicar, Excluir, Sincronizar */}
-                  <div className="flex flex-wrap items-center gap-2">
+                  {/* Ações de Orçamento: Novo, Duplicar, Sincronizar, Excluir */}
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={handleCreateNewBudget}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/15 text-xs font-bold text-primary transition"
-                      title="Criar novo orçamento para este projeto"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/15 text-xs font-bold text-primary transition"
+                      title="Criar nova proposta para este projeto"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Nova Proposta</span>
@@ -999,8 +1130,8 @@ export default function BudgetPage() {
                     <button
                       type="button"
                       onClick={handleDuplicateBudget}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-slate-50 text-xs font-semibold text-[#334155] transition"
-                      title="Duplicar orçamento ativo como cópia independente"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-white hover:bg-slate-50 text-xs font-semibold text-[#334155] transition"
+                      title="Duplicar orçamento ativo"
                     >
                       <Copy className="w-3.5 h-3.5 text-muted-foreground" />
                       <span>Duplicar</span>
@@ -1009,8 +1140,8 @@ export default function BudgetPage() {
                     <button
                       type="button"
                       onClick={handleSyncWithProject}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-slate-50 text-xs font-semibold text-[#334155] transition"
-                      title="Atualizar materiais a partir dos circuitos técnicos do projeto"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-white hover:bg-slate-50 text-xs font-semibold text-[#334155] transition"
+                      title="Atualizar materiais a partir do projeto"
                     >
                       <RefreshCw className="w-3.5 h-3.5 text-primary" />
                       <span>Sincronizar</span>
@@ -1021,7 +1152,7 @@ export default function BudgetPage() {
                         type="button"
                         onClick={handleDeleteBudget}
                         className="inline-flex items-center justify-center p-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 transition"
-                        title="Excluir este orçamento"
+                        title="Excluir esta proposta"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -1029,10 +1160,9 @@ export default function BudgetPage() {
                   </div>
                 </div>
 
-                {/* Abas / Switcher de Orçamentos do Projeto */}
-                {projectBudgets.length > 0 && (
-                  <div className="mt-4 pt-3 border-t border-border/50 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground mr-1">Propostas:</span>
+                {/* Abas de Propostas (exibidas quando houver mais de 1 proposta no projeto) */}
+                {projectBudgets.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-3">
                     {projectBudgets.map((b) => {
                       const isActive = b.id === activeBudgetId;
                       const statusConf = BUDGET_STATUS_CONFIG[b.status] || BUDGET_STATUS_CONFIG.rascunho;
@@ -1041,11 +1171,10 @@ export default function BudgetPage() {
                           key={b.id}
                           type="button"
                           onClick={() => loadBudgetDataIntoForm(b)}
-                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                            isActive
+                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${isActive
                               ? "bg-slate-900 text-white shadow-xs"
                               : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                          }`}
+                            }`}
                         >
                           <span className="truncate max-w-[180px]">{b.name}</span>
                           <span className={`px-1.5 py-0.2 rounded text-[9px] uppercase tracking-wider ${statusConf.badgeClass}`}>
@@ -1056,57 +1185,50 @@ export default function BudgetPage() {
                     })}
                   </div>
                 )}
-              </div>
 
-              {/* Cabeçalho de Edição do Orçamento Ativo: Título e Status */}
-              <div className="grid gap-4 sm:grid-cols-[1fr_200px] rounded-2xl border border-border/50 bg-card p-4 shadow-xs">
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold text-muted-foreground">Título do Orçamento / Proposta</Label>
-                  <div className="flex items-center gap-2">
+                {/* Título e Status integrados no mesmo card */}
+                <div className="grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-[1fr_180px]">
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-bold text-muted-foreground">Título da Proposta</Label>
                     <Input
                       value={budgetName}
                       onChange={(e) => {
                         setBudgetName(e.target.value);
                         hasUnsavedChanges.current = true;
                       }}
-                      className="font-black text-base text-[#0f172a]"
+                      className="h-9 font-black text-sm text-[#0f172a]"
                       placeholder="Ex: Proposta Comercial Inicial"
                     />
                   </div>
-                </div>
 
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold text-muted-foreground">Status do Orçamento</Label>
-                  <select
-                    value={budgetStatus}
-                    onChange={(e) => {
-                      setBudgetStatus(e.target.value);
-                      hasUnsavedChanges.current = true;
-                    }}
-                    className={`w-full h-10 px-3 rounded-lg border text-xs font-black appearance-none cursor-pointer ${activeStatusConfig.badgeClass}`}
-                  >
-                    {Object.entries(BUDGET_STATUS_CONFIG).map(([key, cfg]) => (
-                      <option key={key} value={key} className="bg-white text-slate-900">
-                        {cfg.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-bold text-muted-foreground">Status</Label>
+                    <select
+                      value={budgetStatus}
+                      onChange={(e) => {
+                        setBudgetStatus(e.target.value);
+                        hasUnsavedChanges.current = true;
+                      }}
+                      className={`w-full h-9 px-3 rounded-lg border text-xs font-black appearance-none cursor-pointer ${activeStatusConfig.badgeClass}`}
+                    >
+                      {Object.entries(BUDGET_STATUS_CONFIG).map(([key, cfg]) => (
+                        <option key={key} value={key} className="bg-white text-slate-900">
+                          {cfg.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
               {/* Seção 1: Lista de Materiais */}
               <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-xs">
-                <div className="flex items-center justify-between gap-3 border-b border-border/50 p-5 pb-4">
-                  <div>
-                    <h3 className="font-extrabold text-[#0f172a] flex items-center gap-2">
-                      <Package className="w-4 h-4 text-primary" />
-                      1. Materiais & Componentes
-                    </h3>
-                    <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
-                      Quantitativos, unidades e preços unitários congelados para esta proposta.
-                    </p>
-                  </div>
-                  <span className="rounded-lg bg-primary/10 px-3 py-1 text-xs font-black text-primary">
+                <div className="flex items-center justify-between gap-3 border-b border-border/50 px-5 py-3.5">
+                  <h3 className="font-extrabold text-[#0f172a] flex items-center gap-2 text-sm">
+                    <Package className="w-4 h-4 text-primary" />
+                    <span>1. Materiais & Componentes</span>
+                  </h3>
+                  <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-black text-primary">
                     {materials.length} itens · {formatCurrencyBR(financials.materialTotal)}
                   </span>
                 </div>
@@ -1119,7 +1241,11 @@ export default function BudgetPage() {
                       <Input
                         value={manualName}
                         onChange={(e) => setManualName(e.target.value)}
-                        placeholder="Ex: Disjuntor bipolar 32A DIN, Eletroduto 3/4..."
+                        placeholder={
+                          isCurrentProjectSolar
+                            ? "Ex: Módulo Fotovoltaico 550W, Inversor 5kW, String Box..."
+                            : "Ex: Disjuntor bipolar 32A DIN, Eletroduto 3/4..."
+                        }
                         className="h-9 text-xs"
                         onKeyDown={(e) => { if (e.key === "Enter") addManualMaterialItem(); }}
                       />
@@ -1271,17 +1397,12 @@ export default function BudgetPage() {
 
               {/* Seção 2: Serviços & Mão de Obra Especializada */}
               <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-xs">
-                <div className="flex items-center justify-between gap-3 border-b border-border/50 p-5 pb-4">
-                  <div>
-                    <h3 className="font-extrabold text-[#0f172a] flex items-center gap-2">
-                      <Wrench className="w-4 h-4 text-primary" />
-                      2. Serviços & Mão de Obra
-                    </h3>
-                    <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
-                      Discriminação técnica de serviços, montagem, laudos e horas especializadas.
-                    </p>
-                  </div>
-                  <span className="rounded-lg bg-primary/10 px-3 py-1 text-xs font-black text-primary">
+                <div className="flex items-center justify-between gap-3 border-b border-border/50 px-5 py-3.5">
+                  <h3 className="font-extrabold text-[#0f172a] flex items-center gap-2 text-sm">
+                    <Wrench className="w-4 h-4 text-primary" />
+                    <span>2. Serviços & Mão de Obra</span>
+                  </h3>
+                  <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-black text-primary">
                     {services.length} serviços · {formatCurrencyBR(financials.servicesTotal)}
                   </span>
                 </div>
@@ -1289,8 +1410,10 @@ export default function BudgetPage() {
                 {/* Templates Rápidos de Serviços */}
                 <div className="border-b border-border/40 bg-slate-50/70 p-3">
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="text-[11px] font-bold text-muted-foreground mr-1">Sugestões rápidas:</span>
-                    {QUICK_SERVICE_TEMPLATES.map((tmpl, idx) => (
+                    <span className="text-[11px] font-bold text-muted-foreground mr-1">
+                      Sugestões rápidas:
+                    </span>
+                    {activeQuickServiceTemplates.map((tmpl, idx) => (
                       <button
                         key={idx}
                         type="button"
@@ -1524,7 +1647,7 @@ export default function BudgetPage() {
 
               {/* Seção 4: Ajustes Financeiros, Descontos, Acréscimos e Margem BDI */}
               <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-xs">
-                <h3 className="font-extrabold text-[#0f172a] flex items-center gap-2 mb-4">
+                <h3 className="font-extrabold text-[#0f172a] flex items-center gap-2 mb-4 text-sm">
                   <Percent className="w-4 h-4 text-primary" />
                   4. Ajustes Financeiros, BDI e Descontos
                 </h3>
@@ -1543,7 +1666,6 @@ export default function BudgetPage() {
                       }}
                       className="text-xs font-bold"
                     />
-                    <p className="text-[10px] text-muted-foreground">Ajuste global inflacionário ou regional</p>
                   </div>
 
                   {/* Margem / BDI (%) */}
@@ -1559,7 +1681,6 @@ export default function BudgetPage() {
                       }}
                       className="text-xs font-bold text-primary"
                     />
-                    <p className="text-[10px] text-muted-foreground">Bonificação e Despesas Indiretas</p>
                   </div>
 
                   {/* Desconto */}
@@ -1637,16 +1758,11 @@ export default function BudgetPage() {
               </div>
 
               {/* Quadro Resumo Financeiro & Consolidação */}
-              <div className="p-6 rounded-2xl bg-slate-50 border-2 border-[#009b84]/40 space-y-4 shadow-sm">
+              <div className="p-5 rounded-2xl bg-slate-50 border-2 border-[#009b84]/40 space-y-4 shadow-sm">
                 <div className="flex items-center justify-between border-b border-primary/20 pb-3">
-                  <div>
-                    <h3 className="font-black text-slate-900 text-base">Consolidação Financeira da Proposta</h3>
-                    <p className="text-xs font-semibold text-muted-foreground">
-                      Cálculos em conformidade com as regras financeiras do projeto
-                    </p>
-                  </div>
+                  <h3 className="font-black text-slate-900 text-sm sm:text-base">Consolidação Financeira da Proposta</h3>
                   <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase ${activeStatusConfig.badgeClass}`}>
-                    Status: {activeStatusConfig.label}
+                    {activeStatusConfig.label}
                   </span>
                 </div>
 

@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
-import { Layers, Loader2, MapPin, Navigation, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Layers, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { searchAddressPrecise } from "@/lib/geocodingService";
 import "leaflet/dist/leaflet.css";
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse";
 
@@ -50,11 +48,6 @@ export default function AddressPickerMap({
   const tileLayerRef = useRef(null);
 
   const [mapType, setMapType] = useState("satellite"); // "satellite" | "streets"
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
-  const debounceRef = useRef(null);
   const isInternalMoveRef = useRef(false);
 
   // Inicialização do Mapa Leaflet com suporte a satélite de alta definição
@@ -170,79 +163,8 @@ export default function AddressPickerMap({
     }
   }, [lat, lng, zoom]);
 
-  const runSearch = useCallback(async (text) => {
-    if (!text || text.trim().length < 3) {
-      setResults([]);
-      return;
-    }
-    setSearching(true);
-    setSearchError("");
-    try {
-      const candidates = await searchAddressPrecise(text);
-      setResults(Array.isArray(candidates) ? candidates : []);
-    } catch {
-      setSearchError("Não foi possível buscar no momento. Posicione o marcador manualmente.");
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
-
-  const handleQueryChange = (value) => {
-    setQuery(value);
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => runSearch(value), 350);
-  };
-
-  const handleSelectResult = (result) => {
-    const nextLat = Number(result.lat);
-    const nextLng = Number(result.lng ?? result.lon);
-    onAddressSelect?.({
-      lat: nextLat,
-      lng: nextLng,
-      address: result.road || result.display_name,
-      number: result.number || "",
-      neighborhood: result.neighborhood || "",
-      city: result.city || "",
-      state: result.state || "",
-      zip_code: result.postcode || "",
-    });
-    setResults([]);
-    setQuery(result.display_name);
-  };
-
   return (
     <div className="space-y-2.5">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => handleQueryChange(e.target.value)}
-          placeholder="Buscar rua, número, bairro ou ponto de referência..."
-          className="h-11 pl-9 pr-10 font-medium"
-        />
-        {searching && (
-          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />
-        )}
-        {results.length > 0 && (
-          <div className="absolute z-[600] mt-1 w-full overflow-hidden rounded-xl border border-border bg-white shadow-xl">
-            {results.map((result, idx) => (
-              <button
-                key={`${result.lat}-${result.lng}-${idx}`}
-                type="button"
-                onClick={() => handleSelectResult(result)}
-                className="flex w-full items-start gap-2.5 border-b border-border/50 px-3.5 py-2.5 text-left text-xs font-semibold last:border-b-0 hover:bg-primary/10 transition"
-              >
-                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                <span className="text-foreground leading-snug">{result.display_name}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {searchError && <p className="text-xs font-semibold text-amber-700">{searchError}</p>}
-
       <div className="relative h-[240px] overflow-hidden rounded-2xl border border-border shadow-sm">
         <div ref={mapContainerRef} className="h-full w-full" />
 
