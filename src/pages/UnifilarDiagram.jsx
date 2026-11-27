@@ -2364,47 +2364,116 @@ export default function UnifilarDiagram() {
       {project && <WorkspaceProjectContextBar project={project} activeTool="unifilar" />}
 
       {/* MÉTRICAS GERAIS */}
-      {metrics && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          {[
-            { l: "Potência Total",  v: `${(Number(metrics?.totalPower || 0) / 1000).toFixed(2)} kW` },
-            { l: "Corrente Geral",  v: `${metrics?.generalCurrent || 0} A` },
-            { l: "Disjuntor Geral", v: metrics?.generalBreaker ? `${metrics.generalBreaker} A` : "—" },
-            { l: "Desequilíbrio",   v: `${metrics?.imbalance_pct || 0}%`, alert: Number(metrics?.imbalance_pct || 0) > 10 },
-          ].map(k => (
-            <div key={k.l} className={`p-3 rounded-xl bg-card border ${k.alert ? "border-destructive/40" : "border-border/40"}`}>
-              <p className="text-muted-foreground">{k.l}</p>
-              <p className={`font-bold text-sm mt-0.5 ${k.alert ? "text-destructive" : "text-primary"}`}>{k.v}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {metrics && (() => {
+        const solarKwp =
+          Number(project?.solar_power_kwp) ||
+          Number(project?.solar_sizing?.installedKwp) ||
+          Number(project?.solar_config?.installed_kwp) ||
+          Number(project?.solar_config?.system_size_kw) ||
+          0;
+        const totalKw = Number(metrics?.totalPower || 0) / 1000;
+        const primaryBoard = getPrimaryPanelBoard(project?.panel_boards || []);
+        const boardGeneralComp = (primaryBoard?.layout?.rails || [])
+          .flatMap((r) => r.components || [])
+          .find((c) => c?.type === "breaker" && c?.isGeneral);
+        const effectiveBreaker =
+          metrics?.generalBreaker ||
+          Number(boardGeneralComp?.current || boardGeneralComp?.breaker_a) ||
+          (solarKwp > 0 ? 40 : null);
+        const effectiveCurrent =
+          Number(metrics?.generalCurrent || 0) > 0
+            ? Number(metrics.generalCurrent).toLocaleString("pt-BR", { maximumFractionDigits: 1 })
+            : solarKwp > 0
+            ? ((solarKwp * 1000) / (Number(project?.voltage) || 220)).toLocaleString("pt-BR", {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+              })
+            : "0";
+        const powerLabel = totalKw > 0 ? "Potência Total" : solarKwp > 0 ? "Potência FV" : "Potência Total";
+        const powerValue =
+          totalKw > 0
+            ? `${totalKw.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kW`
+            : solarKwp > 0
+            ? `${solarKwp.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWp`
+            : "0,00 kW";
 
-      {project && activeTab === "unifilar" && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-[#CDEFE8] bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)] md:flex-row md:items-center md:justify-between">
-          <div>
-            <h3 className="text-sm font-black text-slate-900">Modelo do diagrama</h3>
-            <p className="text-xs font-bold text-slate-500">Mantenha o modelo atual ou gere a prancha QGBT com os alimentadores dos quadros.</p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             {[
-              { id: "standard", label: "Quadro atual", sub: "Modelo existente" },
-              { id: "qgbt", label: "QGBT", sub: "Alimentadores e medição" },
-            ].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setDiagramModel(item.id)}
-                className={`min-w-[190px] rounded-xl border px-4 py-3 text-left transition ${
-                  diagramModel === item.id
-                    ? "border-primary bg-[#EEF7FC] text-primary shadow-sm"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-[#BCEEE5]"
+              { l: powerLabel, v: powerValue },
+              { l: "Corrente Geral", v: `${effectiveCurrent} A` },
+              { l: "Disjuntor Geral", v: effectiveBreaker ? `${effectiveBreaker} A` : "—" },
+              {
+                l: "Desequilíbrio",
+                v: `${Number(metrics?.imbalance_pct || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`,
+                alert: Number(metrics?.imbalance_pct || 0) > 10,
+              },
+            ].map((k) => (
+              <div
+                key={k.l}
+                className={`rounded-2xl bg-white px-4 py-3 border shadow-[0_1px_2px_rgba(16,24,40,0.03)] ${
+                  k.alert ? "border-red-200" : "border-[#E5EBF1]"
                 }`}
               >
-                <span className="block text-sm font-black">{item.label}</span>
-                <span className="mt-0.5 block text-[11px] font-bold opacity-75">{item.sub}</span>
-              </button>
+                <p className="text-[11px] font-semibold text-[#64748B]">{k.l}</p>
+                <p className={`font-extrabold text-base mt-0.5 tabular-nums ${k.alert ? "text-[#EF4444]" : "text-[#00A86B]"}`}>
+                  {k.v}
+                </p>
+              </div>
             ))}
+          </div>
+        );
+      })()}
+
+      {project && activeTab === "unifilar" && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-[#E5EBF1] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.03)] lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-sm font-extrabold text-[#101828]">Modelo do diagrama</h3>
+            <p className="text-xs font-medium text-[#64748B]">
+              Alterne entre a prancha unifilar do quadro e o diagrama geral de baixa tensão (QGBT).
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] p-1">
+              {[
+                { id: "standard", label: "Quadro atual", sub: "Circuitos e barramentos" },
+                { id: "qgbt", label: "QGBT", sub: "Alimentadores e medição" },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setDiagramModel(item.id)}
+                  className={`rounded-lg px-3.5 py-1.5 text-left transition ${
+                    diagramModel === item.id
+                      ? "bg-white text-[#006F51] shadow-2xs ring-1 ring-[#00D98A]/40"
+                      : "text-[#64748B] hover:text-[#101828]"
+                  }`}
+                >
+                  <span className="block text-xs font-extrabold">{item.label}</span>
+                  <span className="block text-[10px] font-medium opacity-80">{item.sub}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-xl border-[#E5EBF1] px-3 text-xs font-bold text-[#101828]"
+                onClick={exportLegacySVG}
+              >
+                <Download className="w-3.5 h-3.5 mr-1.5 text-[#00A86B]" />
+                SVG
+              </Button>
+              <Button
+                size="sm"
+                className="h-9 rounded-xl bg-[#00D98A] px-3.5 text-xs font-extrabold text-[#031923] hover:bg-[#00C47C]"
+                onClick={downloadCurrentSheetPDF}
+              >
+                <Download className="w-3.5 h-3.5 mr-1.5" />
+                Baixar PDF A0
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -3019,24 +3088,15 @@ export default function UnifilarDiagram() {
               )}
 
               <div
-                className="rounded-2xl border border-border/40 overflow-auto relative p-6 bg-slate-50"
-                style={{ background: CAD_BG }}
+                className="rounded-2xl border border-[#E5EBF1] overflow-auto relative p-4 sm:p-6 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.03)]"
                 id="legacy-svg-container"
               >
-                <div
-                  className="mx-auto"
-                  style={{
-                    width: 1189 * scale,
-                    height: 841 * scale,
-                  }}
-                >
-                  <div style={{ width: 1189, height: 841, transformOrigin: "top left", transform: `scale(${scale})` }}>
-                    {diagramModel === "qgbt" ? (
-                      <QgbtDiagramSheetSVG project={project} metrics={metrics} />
-                    ) : (
-                      <ProfessionalBoardSheetSVG project={project} metrics={metrics} sheetIndex={safeSheetIndex} />
-                    )}
-                  </div>
+                <div className="mx-auto w-full max-w-[1189px] overflow-x-auto [&_svg]:w-full [&_svg]:h-auto [&_svg]:mx-auto [&_svg]:rounded-lg [&_svg]:shadow-sm">
+                  {diagramModel === "qgbt" ? (
+                    <QgbtDiagramSheetSVG project={project} metrics={metrics} />
+                  ) : (
+                    <ProfessionalBoardSheetSVG project={project} metrics={metrics} sheetIndex={safeSheetIndex} />
+                  )}
                 </div>
               </div>
             </div>
