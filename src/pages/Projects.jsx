@@ -30,7 +30,6 @@ import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import PageHeader from "@/components/PageHeader";
 import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import ProjectProgress from "@/components/navigation/ProjectProgress";
 import EditProjectModal from "@/components/EditProjectModal";
@@ -109,11 +108,29 @@ const formatProjectDate = (project) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Sem data";
 
-  return date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return date
+    .toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
+    .replace(/\./g, "");
+};
+
+const getDistinctClientName = (project) => {
+  const client = String(project?.client_name || "").trim();
+  const name = String(project?.name || "").trim();
+  if (!client || normalizeText(client) === normalizeText(name)) return "";
+  return client;
+};
+
+const formatSupplyAndVoltage = (project, isSolar = false) => {
+  const supply = isSolar ? "Sistema Solar" : String(project?.supply_type || "Bifásico").trim();
+  const rawVolt = String(project?.voltage || "220").replace(/v$/i, "").trim();
+  if (!rawVolt || supply.toLowerCase().includes(`${rawVolt.toLowerCase()}v`) || supply.toLowerCase().includes(rawVolt.toLowerCase())) {
+    return supply;
+  }
+  return `${supply} · ${rawVolt}V`;
 };
 
 const getProjectActions = (project) => [
@@ -249,11 +266,29 @@ export default function Projects() {
   const confirmDeleteAction = async () => {
     if (!projectToDelete) return;
     try {
+      const activeStoredId = (() => {
+        try {
+          return window.localStorage.getItem("voltai_active_project_id");
+        } catch {
+          return null;
+        }
+      })();
+
       if (projectToDelete.isBulk) {
         await Promise.all(selectedIds.map((id) => backend.entities.Project.delete(id)));
+        if (activeStoredId && selectedIds.includes(activeStoredId)) {
+          try {
+            window.localStorage.removeItem("voltai_active_project_id");
+          } catch {}
+        }
         setSelectedIds([]);
       } else {
         await backend.entities.Project.delete(projectToDelete.id);
+        if (activeStoredId === projectToDelete.id) {
+          try {
+            window.localStorage.removeItem("voltai_active_project_id");
+          } catch {}
+        }
         setSelectedIds((ids) => ids.filter((selectedId) => selectedId !== projectToDelete.id));
       }
       load();
@@ -283,23 +318,26 @@ export default function Projects() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-4 pb-20">
-      <PageHeader
-        icon={FolderOpen}
-        title="Projetos"
-        actionsPlacement="right"
-        actions={
+    <div className="mx-auto w-full max-w-[1440px] space-y-3.5 pb-16">
+      <header className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-[22px] font-extrabold tracking-tight text-[#101828] leading-tight">
+            Projetos
+          </h1>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             asChild
-            className="h-10 rounded-xl bg-gradient-to-r from-[#00D98A] to-[#00C87F] px-4 font-extrabold text-white shadow-[0_4px_14px_rgba(0,217,138,0.28)] hover:brightness-105 transition"
+            className="h-9 rounded-xl bg-gradient-to-r from-[#00D98A] to-[#00C87F] px-3.5 text-xs font-extrabold text-white shadow-[0_4px_14px_rgba(0,217,138,0.28)] hover:brightness-105 transition"
           >
             <Link to="/projects/new">
-              <Plus className="mr-1.5 h-4 w-4" />
+              <Plus className="mr-1 h-3.5 w-3.5" />
               Novo projeto
             </Link>
           </Button>
-        }
-      />
+        </div>
+      </header>
 
       {(() => {
         const userPlan = getPlanByCode(user?.plan || "free");
@@ -308,25 +346,29 @@ export default function Projects() {
 
         if (!isLimitReached) return null;
 
+        const planName = String(userPlan?.name || "Gratuito").trim();
+        const isNoPlan = userPlan?.code === "free" || normalizeText(planName).includes("sem plano");
         const titleText =
           maxProjects === 0
-            ? `Plano ${userPlan.name}: para criar novos projetos, faça o upgrade da sua assinatura.`
-            : `Limite de ${maxProjects} projetos ativos atingido no plano ${userPlan.name}.`;
+            ? isNoPlan
+              ? "Conta sem plano ativo: faça o upgrade da sua assinatura para criar novos projetos."
+              : `Plano ${planName}: para criar novos projetos, faça o upgrade da sua assinatura.`
+            : `Limite de ${maxProjects} ${maxProjects === 1 ? "projeto ativo atingido" : "projetos ativos atingido"} (${planName}).`;
 
         return (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border border-amber-200/90 bg-amber-50/75 text-amber-900 text-sm shadow-2xs">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-amber-200/90 bg-amber-50/75 text-amber-900 text-xs shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
               <div>
                 <p className="font-bold text-amber-950">
                   {titleText}
                 </p>
-                <p className="text-xs text-amber-800 mt-0.5">
+                <p className="text-[11px] text-amber-800 mt-0.5">
                   Seus {projects.length} projetos existentes continuam 100% seguros, editáveis e exportáveis.
                 </p>
               </div>
             </div>
-            <Button asChild size="sm" className="h-9 rounded-xl bg-[#0f4f49] hover:bg-[#156961] text-white font-bold shrink-0">
+            <Button asChild size="sm" className="h-8 rounded-xl bg-[#0f4f49] hover:bg-[#156961] text-white text-xs font-bold shrink-0">
               <Link to="/subscription">Ver planos & Upgrade</Link>
             </Button>
           </div>
@@ -334,25 +376,25 @@ export default function Projects() {
       })()}
 
       {/* Barra de Busca, Filtro de Status, Seletor de Divisão e Ações */}
-      <section className="rounded-2xl border border-[#E5EBF1] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-        <div className="flex flex-col gap-3 border-b border-[#E5EBF1] p-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 flex-1 flex-col gap-3 md:flex-row md:items-center">
-            <label className="relative min-w-0 flex-1 md:max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+      <section className="rounded-2xl border border-[#E5EBF1] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+        <div className="flex flex-col gap-2.5 border-b border-[#E5EBF1] px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 flex-1 flex-col gap-2.5 md:flex-row md:items-center">
+            <label className="relative min-w-0 flex-1 md:max-w-xs">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#64748B]" />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar por projeto, cliente ou tipo"
-                className="h-10 rounded-xl border-[#E5EBF1] bg-[#F6F9FC] pl-9 text-sm focus:bg-white"
+                placeholder="Buscar por projeto, cliente ou tipo..."
+                className="h-9 rounded-xl border-[#E5EBF1] bg-[#F6F9FC] pl-8.5 text-xs focus:bg-white"
               />
             </label>
 
-            <label className="flex h-10 items-center gap-2 rounded-xl border border-[#E5EBF1] bg-white px-3 text-sm font-semibold text-[#101828] shrink-0">
-              <SlidersHorizontal className="h-4 w-4 text-[#64748B]" />
+            <label className="flex h-9 items-center gap-2 rounded-xl border border-[#E5EBF1] bg-white px-3 text-xs font-semibold text-[#101828] shrink-0">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-[#64748B]" />
               <select
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
-                className="bg-transparent text-sm font-semibold outline-none"
+                className="bg-transparent text-xs font-semibold outline-none cursor-pointer"
                 aria-label="Filtrar por status"
               >
                 {statusOptions.map((status) => (
@@ -368,9 +410,9 @@ export default function Projects() {
               <button
                 type="button"
                 onClick={() => setCategoryView("split")}
-                className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-extrabold transition-all ${
+                className={`flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
                   categoryView === "split"
-                    ? "bg-white text-[#006F51] shadow-xs ring-1 ring-[#00D98A]/35"
+                    ? "bg-white text-[#006F51] shadow-2xs ring-1 ring-[#00D98A]/35"
                     : "text-[#64748B] hover:text-[#101828]"
                 }`}
               >
@@ -380,44 +422,44 @@ export default function Projects() {
               <button
                 type="button"
                 onClick={() => setCategoryView("electrical")}
-                className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-extrabold transition-all ${
+                className={`flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
                   categoryView === "electrical"
-                    ? "bg-white text-blue-700 shadow-xs ring-1 ring-blue-200"
+                    ? "bg-white text-blue-700 shadow-2xs ring-1 ring-blue-200"
                     : "text-[#64748B] hover:text-[#101828]"
                 }`}
               >
                 <Zap className="h-3.5 w-3.5 text-blue-600" />
                 <span>Elétricos</span>
-                <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700">
+                <span className="rounded-md bg-blue-50 px-1.5 py-0.2 text-[10px] font-extrabold text-blue-700 tabular-nums">
                   {electricalProjects.length}
                 </span>
               </button>
               <button
                 type="button"
                 onClick={() => setCategoryView("solar")}
-                className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-extrabold transition-all ${
+                className={`flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
                   categoryView === "solar"
-                    ? "bg-white text-amber-700 shadow-xs ring-1 ring-amber-200"
+                    ? "bg-white text-amber-700 shadow-2xs ring-1 ring-amber-200"
                     : "text-[#64748B] hover:text-[#101828]"
                 }`}
               >
                 <Sun className="h-3.5 w-3.5 text-amber-500" />
                 <span>Solares</span>
-                <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">
+                <span className="rounded-md bg-amber-50 px-1.5 py-0.2 text-[10px] font-extrabold text-amber-700 tabular-nums">
                   {solarProjects.length}
                 </span>
               </button>
               <button
                 type="button"
                 onClick={() => setCategoryView("all")}
-                className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-extrabold transition-all ${
+                className={`flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-all ${
                   categoryView === "all"
-                    ? "bg-white text-[#101828] shadow-xs"
+                    ? "bg-white text-[#101828] shadow-2xs"
                     : "text-[#64748B] hover:text-[#101828]"
                 }`}
               >
                 <span>Todos</span>
-                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-700">
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.2 text-[10px] font-extrabold text-slate-700 tabular-nums">
                   {filteredProjects.length}
                 </span>
               </button>
@@ -430,9 +472,9 @@ export default function Projects() {
                 <Button
                   variant="outline"
                   onClick={() => navigate(`/projects/${selectedIds[0]}`)}
-                  className="h-10 rounded-xl border-[#00D98A] bg-[#DDFCF0] text-sm font-bold text-[#006F51] hover:bg-[#c5f9e5]"
+                  className="h-9 rounded-xl border-[#00D98A] bg-[#DDFCF0] px-3 text-xs font-bold text-[#006F51] hover:bg-[#c5f9e5]"
                 >
-                  <FolderOpen className="h-4 w-4 mr-1.5" />
+                  <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
                   Abrir
                 </Button>
                 <Button
@@ -441,25 +483,25 @@ export default function Projects() {
                     const p = projects.find((item) => item.id === selectedIds[0]);
                     if (p) handleEdit(p);
                   }}
-                  className="h-10 rounded-xl border-[#E5EBF1] bg-white text-sm font-bold text-[#101828] hover:bg-[#F6F9FC]"
+                  className="h-9 rounded-xl border-[#E5EBF1] bg-white px-3 text-xs font-bold text-[#101828] hover:bg-[#F6F9FC]"
                 >
-                  <Edit3 className="h-4 w-4 mr-1.5 text-[#006F51]" />
+                  <Edit3 className="h-3.5 w-3.5 mr-1.5 text-[#006F51]" />
                   Editar
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => handleDuplicate(selectedIds[0])}
                   disabled={duplicating}
-                  className="h-10 rounded-xl border-[#E5EBF1] bg-white text-sm font-bold text-[#101828] hover:bg-[#F6F9FC]"
+                  className="h-9 rounded-xl border-[#E5EBF1] bg-white px-3 text-xs font-bold text-[#101828] hover:bg-[#F6F9FC]"
                 >
-                  <Copy className="h-4 w-4 mr-1.5 text-[#006F51]" />
+                  <Copy className="h-3.5 w-3.5 mr-1.5 text-[#006F51]" />
                   Duplicar
                 </Button>
               </div>
             )}
             {selectedIds.length > 0 && (
-              <Button variant="outline" onClick={handleBulkDelete} className="h-10 rounded-xl border-red-200 text-sm font-bold text-[#EF4444] hover:bg-red-50">
-                <Trash2 className="h-4 w-4" />
+              <Button variant="outline" onClick={handleBulkDelete} className="h-9 rounded-xl border-red-200 px-3 text-xs font-bold text-[#EF4444] hover:bg-red-50">
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                 Excluir {selectedIds.length}
               </Button>
             )}
@@ -468,17 +510,17 @@ export default function Projects() {
                 type="button"
                 aria-label="Visualização em tabela"
                 onClick={() => setViewMode("table")}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg ${viewMode === "table" ? "bg-white text-[#006F51] shadow-xs" : "text-[#64748B]"}`}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg ${viewMode === "table" ? "bg-white text-[#006F51] shadow-2xs" : "text-[#64748B]"}`}
               >
-                <List className="h-4 w-4" />
+                <List className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
                 aria-label="Visualização em cartões"
                 onClick={() => setViewMode("cards")}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg ${viewMode === "cards" ? "bg-white text-[#006F51] shadow-xs" : "text-[#64748B]"}`}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg ${viewMode === "cards" ? "bg-white text-[#006F51] shadow-2xs" : "text-[#64748B]"}`}
               >
-                <LayoutGrid className="h-4 w-4" />
+                <LayoutGrid className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
@@ -501,7 +543,7 @@ export default function Projects() {
           <FilteredEmpty query={query} />
         ) : categoryView === "split" ? (
           /* Visualização Dividida Meio a Meio: Projetos Elétricos (50%) | Projetos Solares (50%) */
-          <div className="grid grid-cols-1 gap-5 p-4 xl:grid-cols-2 bg-[#F8FAFC]/60">
+          <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-2 xl:items-start bg-[#F8FAFC]/60">
             {/* Coluna 1: Projetos Elétricos */}
             <DisciplineSection
               title="Projetos Elétricos"
@@ -801,6 +843,8 @@ function ProjectTable({
           <TableBody>
             {projects.map((project) => {
               const isSolar = isSolarProjectType(project);
+              const distinctClient = getDistinctClientName(project);
+              const supplyVoltage = formatSupplyAndVoltage(project, isSolar);
               return (
                 <TableRow
                   key={project.id}
@@ -816,36 +860,35 @@ function ProjectTable({
                       className="h-3.5 w-3.5 rounded border-[#D0D5DD]"
                     />
                   </TableCell>
-                  <TableCell className="px-2.5 py-3">
+                  <TableCell className="px-2.5 py-2.5">
                     <Link to={`/projects/${project.id}`} className="flex min-w-0 items-center gap-2.5">
                       <span
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
                           projectToneStyles[getProjectTone(project)].icon
                         }`}
                       >
                         {isSolar ? <Sun className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00D98A] transition-colors">
+                        <span className="block truncate text-xs sm:text-[13px] font-extrabold text-[#101828] hover:text-[#006F51] transition-colors">
                           {project.name}
                         </span>
-                        <span className="mt-0.5 block truncate text-xs font-medium text-[#64748B]">
-                          {project.client_name ? `${project.client_name} · ` : ""}
-                          {isSolar ? "Sistema Solar" : project.supply_type || "Bifásico"}
-                          {project.voltage ? ` · ${project.voltage}V` : " · 220V"}
+                        <span className="mt-0.5 block truncate text-[11px] font-medium text-[#64748B]">
+                          {distinctClient ? `${distinctClient} · ` : ""}
+                          {supplyVoltage}
                         </span>
                       </span>
                     </Link>
                   </TableCell>
-                  <TableCell className="px-2 py-3 whitespace-nowrap">
+                  <TableCell className="px-2 py-2.5 whitespace-nowrap">
                     <div className="flex flex-col items-start gap-0.5">
                       <StatusBadge status={project.status} />
-                      <span className="text-[11px] font-medium text-[#64748B]">
+                      <span className="text-[10.5px] font-medium text-[#64748B]">
                         {formatProjectDate(project)}
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="px-2 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                  <TableCell className="px-2 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     <ProjectActions
                       project={project}
                       onEdit={onEdit}
@@ -888,6 +931,8 @@ function ProjectTable({
         <TableBody>
           {projects.map((project) => {
             const isSolar = isSolarProjectType(project);
+            const distinctClient = getDistinctClientName(project);
+            const supplyVoltage = formatSupplyAndVoltage(project, isSolar);
             return (
               <TableRow
                 key={project.id}
@@ -903,24 +948,26 @@ function ProjectTable({
                     className="h-4 w-4 rounded border-[#D0D5DD]"
                   />
                 </TableCell>
-                <TableCell className="px-4 py-4">
+                <TableCell className="px-4 py-3">
                   <Link to={`/projects/${project.id}`} className="flex min-w-0 items-center gap-3">
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] ${projectToneStyles[getProjectTone(project)].icon}`}>
-                      {isSolar ? <Sun className="h-5 w-5" /> : <Zap className="h-5 w-5" />}
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${projectToneStyles[getProjectTone(project)].icon}`}>
+                      {isSolar ? <Sun className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00D98A] transition-colors">{project.name}</span>
-                      <span className="mt-1 block truncate text-xs font-medium text-[#64748B]">
-                        {isSolar ? "Projeto Solar" : project.project_type || "Instalações Elétricas"} · {project.supply_type || "Bifásico"}{project.voltage ? ` · ${project.voltage}V` : " · 220V"}
+                      <span className="block truncate text-xs sm:text-sm font-extrabold text-[#101828] hover:text-[#006F51] transition-colors">{project.name}</span>
+                      <span className="mt-0.5 block truncate text-xs font-medium text-[#64748B]">
+                        {isSolar ? "Projeto Solar" : project.project_type || "Instalações Elétricas"} · {supplyVoltage}
                       </span>
                     </span>
                   </Link>
                 </TableCell>
-                <TableCell className="px-4 text-sm font-medium text-[#64748B]">{project.client_name || "—"}</TableCell>
+                <TableCell className="px-4 text-xs font-medium text-[#64748B]">
+                  {distinctClient || <span className="text-[#94A3B8]">—</span>}
+                </TableCell>
                 <TableCell className="px-4">
                   <StatusBadge status={project.status} />
                 </TableCell>
-                <TableCell className="px-4 text-sm font-medium text-[#667085]">{formatProjectDate(project)}</TableCell>
+                <TableCell className="px-4 text-xs font-medium text-[#667085]">{formatProjectDate(project)}</TableCell>
                 <TableCell className="px-4" onClick={(e) => e.stopPropagation()}>
                   <ProjectActions
                     project={project}
@@ -944,6 +991,7 @@ function ProjectCard({ project, selected, onSelect, onEdit, onDuplicate, onDelet
   const circuitCount = project?.circuits?.length || 0;
   const tone = projectToneStyles[getProjectTone(project)] || projectToneStyles.blue;
   const isSolar = isSolarProjectType(project);
+  const distinctClient = getDistinctClientName(project);
 
   return (
     <article
@@ -959,7 +1007,7 @@ function ProjectCard({ project, selected, onSelect, onEdit, onDuplicate, onDelet
           <span className="min-w-0">
             <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00D98A] transition-colors">{project.name}</span>
             <span className="mt-1 block truncate text-xs font-medium text-[#64748B]">
-              {project.client_name ? `Cliente: ${project.client_name}` : (isSolar ? "Projeto Solar" : "Instalação Elétrica")}
+              {distinctClient ? `Cliente: ${distinctClient}` : (isSolar ? "Projeto Solar" : "Instalação Elétrica")}
             </span>
           </span>
         </Link>
