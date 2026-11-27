@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Bell, Check, CheckCheck, FolderOpen, Trash2 } from "lucide-react";
+import { Bell, Check, CheckCheck, FolderOpen, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { formatNotificationTime, useNotifications } from "@/lib/appPreferences";
-import { backend } from "@/api/backendClient";
-import { isAdminUser } from "@/lib/professionalAccess";
 import PageHeader from "@/components/PageHeader";
 import FilterBar from "@/components/nacif/FilterBar";
 import EmptyState from "@/components/nacif/EmptyState";
@@ -21,23 +19,6 @@ export default function Notifications() {
   } = useNotifications(user);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [issues, setIssues] = useState([]);
-
-  useEffect(() => {
-    let active = true;
-    backend.entities.Issue.list({ limit: 50 })
-      .then((list) => {
-        if (!active || !Array.isArray(list)) return;
-        const admin = isAdminUser(user);
-        setIssues(list.filter((i) => (admin ? i.unread_admin : i.unread_user)));
-      })
-      .catch(() => {
-        if (active) setIssues([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [user]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -84,20 +65,6 @@ export default function Notifications() {
           </div>
         }
       />
-
-      {issues.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50/70 px-4 py-3 text-xs">
-          <div className="flex items-center gap-2.5 text-[#101828]">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-[#EF4444]" />
-            <span className="font-bold">
-              Você possui {issues.length} {issues.length === 1 ? "ocorrência técnica não lida" : "ocorrências técnicas não lidas"} em Avisos e Erros.
-            </span>
-          </div>
-          <Button asChild size="sm" className="h-8 rounded-xl bg-[#EF4444] text-xs font-bold text-white hover:bg-red-600">
-            <Link to="/avisos-erros">Abrir Avisos e Erros</Link>
-          </Button>
-        </div>
-      )}
 
       <FilterBar
         searchValue={search}

@@ -166,12 +166,12 @@ const CATEGORIES = [
     id: "suporte",
     title: "Suporte & Relato de Incidentes",
     icon: ShieldAlert,
-    description: "Canais oficiais de atendimento, SLAs, página Avisos e Erros e protocolos.",
+    description: "Canais oficiais de atendimento, SLAs e protocolos.",
     articles: [
       {
         id: "sup-1",
         title: "Como relatar uma inconsistência técnica ou erro de cálculo?",
-        content: "Acesse o menu 'Avisos e Erros' (/avisos-erros) ou clique em 'Reportar Problema' no rodapé. Descreva o comportamento observado e anexe capturas se necessário. Um protocolo formal de atendimento será gerado imediatamente.",
+        content: "Clique em 'Reportar Problema' no rodapé (/reportar-problema). Descreva o comportamento observado e envie os dados de diagnóstico. Um protocolo formal de atendimento será gerado imediatamente.",
       },
       {
         id: "sup-2",

@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle,
   Bell,
   BookOpen,
   Calculator,
@@ -90,7 +89,6 @@ export default function Sidebar({
   effectiveProjectId,
   accessMap = {},
   isItemActive,
-  unreadIssuesCount = 0,
   unreadNotificationsCount = 0,
   subscription,
   activeUser,
@@ -152,13 +150,6 @@ export default function Sidebar({
       icon: FileSpreadsheet,
       match: "/budget",
       locked: accessMap.budget === false,
-    },
-    {
-      label: "Avisos e Erros",
-      to: "/avisos-erros",
-      icon: AlertTriangle,
-      match: "/avisos-erros",
-      alertCount: unreadIssuesCount,
     },
   ];
 

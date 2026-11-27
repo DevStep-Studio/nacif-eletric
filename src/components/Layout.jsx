@@ -6,7 +6,6 @@ import { isAdminUser, isSuperAdmin } from "@/lib/professionalAccess";
 import { canAccessModule } from "@/lib/subscriptionPlans";
 import { useBranding, useNotifications } from "@/lib/appPreferences";
 import { backend } from "@/api/backendClient";
-import { ISSUES_CHANGED_EVENT } from "@/lib/issuePersistence";
 import { normalizeSubscription } from "@/lib/subscriptionPlans";
 import OnboardingModal from "@/components/onboarding/OnboardingModal";
 import PublicFooter from "@/components/system/PublicFooter";
@@ -50,7 +49,6 @@ export default function Layout() {
   const [searchValue, setSearchValue] = useState("");
   const [shellProjects, setShellProjects] = useState([]);
   const [currentProject, setCurrentProject] = useState(null);
-  const [unreadIssuesCount, setUnreadIssuesCount] = useState(0);
   const { branding } = useBranding();
 
   const currentProjectId = useMemo(() => {
@@ -138,28 +136,6 @@ export default function Layout() {
     return () => window.removeEventListener("keydown", handleShortcut);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadUnreadIssues = async () => {
-      try {
-        const data = await backend.entities.Issue.list({ limit: 100 });
-        if (!cancelled && Array.isArray(data)) {
-          const isUserAdminFlag = isAdminUser(activeUser);
-          const count = data.filter((i) => (isUserAdminFlag ? i.unread_admin : i.unread_user)).length;
-          setUnreadIssuesCount(count);
-        }
-      } catch {
-        if (!cancelled) setUnreadIssuesCount(0);
-      }
-    };
-    loadUnreadIssues();
-    window.addEventListener(ISSUES_CHANGED_EVENT, loadUnreadIssues);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(ISSUES_CHANGED_EVENT, loadUnreadIssues);
-    };
-  }, [activeUser]);
-
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications(activeUser);
   const initials = initialsFromUser(activeUser);
   const displayName = activeUser?.full_name || (activeUser?.email ? activeUser.email.split("@")[0] : "Minha Conta");
@@ -200,7 +176,6 @@ export default function Layout() {
     if (location.pathname === "/phase-balance") return { section: "Engenharia", page: "Balanceamento de Fases" };
     if (location.pathname === "/unifilar" || location.pathname === "/diagram") return { section: "Ferramentas", page: "Diagrama Unifilar" };
     if (location.pathname === "/memorial") return { section: "Engenharia", page: "Memorial Descritivo" };
-    if (location.pathname.startsWith("/avisos-erros")) return { section: "Ferramentas", page: "Avisos e Erros" };
     if (location.pathname === "/notifications") return { section: "Conta", page: "Notificações" };
     if (location.pathname.startsWith("/subscription") || location.pathname.startsWith("/billing")) return { section: "Conta", page: "Planos e Assinaturas" };
     if (location.pathname === "/settings") return { section: "Conta", page: "Configurações" };
@@ -260,7 +235,6 @@ export default function Layout() {
         effectiveProjectId={effectiveProjectId}
         accessMap={accessMap}
         isItemActive={isItemActive}
-        unreadIssuesCount={unreadIssuesCount}
         unreadNotificationsCount={unreadCount}
         subscription={subscription}
         activeUser={activeUser}

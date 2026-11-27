@@ -415,19 +415,6 @@ export default function SettingsPage() {
             <label className="flex items-start gap-3 rounded-xl border border-[#E2E8F0] p-3.5 cursor-pointer hover:bg-[#F8FAFC] transition">
               <input
                 type="checkbox"
-                checked={preferences.notify_issues}
-                onChange={(e) => setPreferences({ ...preferences, notify_issues: e.target.checked })}
-                className="mt-0.5 rounded border-[#CBD5E1] text-primary focus:ring-primary"
-              />
-              <div className="text-xs">
-                <p className="font-extrabold text-[#0F172A]">Respostas de Avisos e Erros</p>
-                <p className="text-[#64748B] mt-0.5">Notificar quando a equipe responder ou atualizar um relato.</p>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-3 rounded-xl border border-[#E2E8F0] p-3.5 cursor-pointer hover:bg-[#F8FAFC] transition">
-              <input
-                type="checkbox"
                 checked={preferences.notify_compliance}
                 onChange={(e) => setPreferences({ ...preferences, notify_compliance: e.target.checked })}
                 className="mt-0.5 rounded border-[#CBD5E1] text-primary focus:ring-primary"

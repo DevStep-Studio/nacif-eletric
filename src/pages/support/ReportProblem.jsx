@@ -85,9 +85,6 @@ export default function ReportProblemPage() {
               <Button asChild className="h-10 rounded-xl bg-[#00d8b8] hover:bg-[#00bda1] text-[#0f4f49] font-black text-xs px-6">
                 <Link to="/">Voltar ao Dashboard</Link>
               </Button>
-              <Button asChild variant="outline" className="h-10 rounded-xl border-[#E2E8F0] font-black text-xs px-4">
-                <Link to="/avisos-erros">Ver Meus Relatos</Link>
-              </Button>
             </div>
           </div>
         ) : (

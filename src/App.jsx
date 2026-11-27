@@ -31,7 +31,6 @@ const Notifications = React.lazy(() => import('./pages/Notifications'));
 const SettingsPage = React.lazy(() => import('./pages/Settings'));
 const Subscription = React.lazy(() => import('./pages/Subscription'));
 const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
-const AvisosErros = React.lazy(() => import('./pages/AvisosErros'));
 const SuperAdminPage = React.lazy(() => import('./pages/SuperAdmin'));
 const Login = React.lazy(() => import('./pages/Login'));
 const Register = React.lazy(() => import('./pages/Register'));
@@ -222,8 +221,6 @@ const AuthenticatedApp = () => {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/configuracoes/excluir-conta" element={<DeleteAccountPage />} />
           <Route path="/configuracoes/exportar-dados" element={<ExportDataPage />} />
-          <Route path="/avisos-erros" element={<AvisosErros />} />
-          <Route path="/avisos-erros/:issueId" element={<AvisosErros />} />
           <Route path="/admin" element={requireAdmin(<AdminPanel />)} />
           <Route path="/super-admin" element={requireSuperAdmin(<SuperAdminPage />)} />
           <Route path="/super-admin/*" element={requireSuperAdmin(<SuperAdminPage />)} />
