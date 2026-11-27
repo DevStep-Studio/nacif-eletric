@@ -45,7 +45,7 @@ export default function QuickActionsCard({ activeProjectId = null }) {
   ];
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-[#E5EBF1] bg-white p-4 sm:px-5 sm:py-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="flex h-full w-full flex-col rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       <div className="flex items-center gap-2">
         <Zap className="h-4 w-4 text-[#00A86B]" />
         <h3 className="text-[14px] font-bold text-[#101828]">Ações rápidas</h3>

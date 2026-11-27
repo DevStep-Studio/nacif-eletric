@@ -35,7 +35,7 @@ export default function NacifAICard({ project = null }) {
 
   return (
     <>
-      <div className="relative flex min-h-[240px] lg:h-[252px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-[#162032] via-[#1A2C42] to-[#123E3A] p-4 sm:p-4.5 text-white shadow-[0_8px_24px_rgba(18,62,58,0.14)] border border-white/10">
+      <div className="relative flex w-full min-h-[248px] lg:h-[256px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-[#162032] via-[#1A2C42] to-[#123E3A] p-5 text-white shadow-[0_8px_24px_rgba(18,62,58,0.14)] border border-white/10">
         {/* Aura luminosa sutil */}
         <div className="pointer-events-none absolute -right-3 -top-4 h-32 w-32 rounded-full bg-[#00F0A0]/14 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-6 left-0 h-20 w-28 rounded-full bg-[#38BDF8]/12 blur-2xl" />
@@ -63,7 +63,7 @@ export default function NacifAICard({ project = null }) {
         </div>
 
         {/* 3 Ações Principais Otimizadas */}
-        <div className="relative z-20 mt-auto space-y-1.5 pt-2">
+        <div className="relative z-20 mt-auto space-y-2 pt-2">
           {AI_ACTIONS.map((action) => {
             const Icon = action.icon;
             return (
@@ -71,7 +71,7 @@ export default function NacifAICard({ project = null }) {
                 key={action.id}
                 type="button"
                 onClick={() => handleOpenMode(action.id)}
-                className="group flex h-[33px] w-full items-center justify-between gap-2 rounded-xl bg-white/95 px-3 text-left text-[11.5px] font-semibold text-[#101828] shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-all duration-150 hover:bg-white hover:translate-x-0.5 active:scale-[0.99]"
+                className="group flex h-9 w-full items-center justify-between gap-2 rounded-xl bg-white/95 px-3 text-left text-[11.5px] font-semibold text-[#101828] shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-all duration-150 hover:bg-white hover:translate-x-0.5 active:scale-[0.99]"
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <Icon className={`h-3.5 w-3.5 shrink-0 ${action.iconColor}`} />

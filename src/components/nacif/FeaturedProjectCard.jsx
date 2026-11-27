@@ -88,7 +88,7 @@ export default function FeaturedProjectCard({
     : "Não calculado";
 
   return (
-    <div className="relative flex min-h-[240px] lg:h-[252px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-[#012224] via-[#013B30] to-[#054A42] px-5 py-4 sm:px-6 sm:py-4.5 text-white shadow-[0_12px_30px_rgba(2,38,42,0.16)]">
+    <div className="relative flex w-full min-h-[248px] lg:h-[256px] flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-[#012224] via-[#013B30] to-[#054A42] p-5 text-white shadow-[0_12px_30px_rgba(2,38,42,0.16)]">
       {/* Glow sutil de fundo verde-esmeralda na base esquerda */}
       <div className="pointer-events-none absolute -bottom-20 left-4 h-52 w-72 rounded-full bg-[#00F0A0]/18 blur-3xl" />
 
@@ -127,7 +127,7 @@ export default function FeaturedProjectCard({
       <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-[46%] bg-gradient-to-r from-[#012224]/95 via-[#012A27]/68 to-transparent md:block" />
 
       {/* Camada 4: Conteúdo HTML Real à Esquerda */}
-      <div className="relative z-10 flex h-full max-w-[385px] flex-col justify-between gap-2">
+      <div className="relative z-10 flex h-full w-full max-w-[430px] flex-col justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center rounded-md border border-[#00F0A0]/35 bg-[#053830]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
             <span>{badgeLabel}</span>
@@ -188,43 +188,43 @@ export default function FeaturedProjectCard({
               </span>
             </div>
 
-            {/* Indicadores Internos Limpos — Sem Caixas com Bordas Pesadas */}
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 py-0.5">
-              <div className="flex items-center gap-2" title={`Métrica do projeto ${project.name}`}>
+            {/* Indicadores Internos Limpos — Grade Alinhada em 3 Colunas */}
+            <div className="grid grid-cols-3 gap-2.5 py-0.5">
+              <div className="flex min-w-0 items-center gap-2" title={`Métrica do projeto ${project.name}`}>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#00F0A0]/16 text-[#00F0A0]">
                   <Zap className="h-4 w-4" />
                 </span>
-                <div>
-                  <p className="text-[13px] font-extrabold text-white leading-tight tabular-nums">{demandDisplay}</p>
-                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">{demandLabel}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-extrabold text-white leading-tight tabular-nums">{demandDisplay}</p>
+                  <p className="truncate text-[10px] font-medium text-emerald-100/75 leading-tight">{demandLabel}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2" title={`Circuitos ou arranjos de ${project.name}`}>
+              <div className="flex min-w-0 items-center gap-2" title={`Circuitos ou arranjos de ${project.name}`}>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#00F0A0]/16 text-[#00F0A0]">
                   <GitBranch className="h-4 w-4" />
                 </span>
-                <div>
-                  <p className="text-[13px] font-extrabold text-white leading-tight tabular-nums">{circuitsDisplay}</p>
-                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">{circuitsLabel}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-extrabold text-white leading-tight tabular-nums">{circuitsDisplay}</p>
+                  <p className="truncate text-[10px] font-medium text-emerald-100/75 leading-tight">{circuitsLabel}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2" title={`Orçamento estimado de ${project.name}`}>
+              <div className="flex min-w-0 items-center gap-2" title={`Orçamento estimado de ${project.name}`}>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#00F0A0]/16 text-[#00F0A0]">
                   <FileText className="h-4 w-4" />
                 </span>
-                <div>
-                  <p className="text-[13px] font-extrabold text-white leading-tight tabular-nums">{budgetDisplay}</p>
-                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">Orçamento</p>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-extrabold text-white leading-tight tabular-nums">{budgetDisplay}</p>
+                  <p className="truncate text-[10px] font-medium text-emerald-100/75 leading-tight">Orçamento</p>
                 </div>
               </div>
             </div>
 
-            <div>
+            <div className="pt-0.5">
               <Button
                 asChild
-                className="h-9 rounded-full bg-gradient-to-r from-[#00D98A] to-[#00F0A0] px-5 text-xs font-extrabold text-[#031923] shadow-[0_6px_16px_rgba(0,240,160,0.34)] hover:brightness-105 transition"
+                className="h-9 rounded-xl bg-gradient-to-r from-[#00D98A] to-[#00F0A0] px-4 text-xs font-extrabold text-[#031923] shadow-[0_6px_16px_rgba(0,240,160,0.34)] hover:brightness-105 transition"
               >
                 <Link to={`/projects/${project.id}`}>
                   <span>Abrir projeto</span>

@@ -212,7 +212,7 @@ export default function Home() {
 
   return (
     <TooltipProvider>
-      <div className="mx-auto w-full max-w-[1440px] space-y-3 pb-10">
+      <div className="mx-auto w-full max-w-[1440px] space-y-3.5 pb-10">
         {/* Cabeçalho Principal Compacto */}
         <header className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -278,17 +278,21 @@ export default function Home() {
         ) : (
           <>
             {/* Linha 1: Projeto em Andamento + Painel Nacif IA */}
-            <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.95fr)_minmax(385px,1fr)] xl:grid-cols-[minmax(0,2.24fr)_minmax(392px,1fr)]">
-              <FeaturedProjectCard
-                featuredItem={featuredItem}
-                allProjects={projects}
-                onSelectProject={handleSelectFeaturedProject}
-              />
-              <NacifAICard project={featuredItem?.project || null} />
+            <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-12 lg:items-stretch">
+              <div className="lg:col-span-8 flex">
+                <FeaturedProjectCard
+                  featuredItem={featuredItem}
+                  allProjects={projects}
+                  onSelectProject={handleSelectFeaturedProject}
+                />
+              </div>
+              <div className="lg:col-span-4 flex">
+                <NacifAICard project={featuredItem?.project || null} />
+              </div>
             </section>
 
             {/* Linha 2: 5 Indicadores Consolidados do Período */}
-            <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
               <MetricCard
                 icon={Zap}
                 value={`${kpis.demandKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
@@ -372,27 +376,37 @@ export default function Home() {
             )}
 
             {/* Linha 3: Cargas dimensionadas + Demanda média + Impacto do projeto */}
-            <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(385px,1fr)] xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1.12fr)_minmax(392px,1fr)]">
-              <LoadsBarChartCard
-                charts={charts}
-                unit={leftChartUnit}
-                onUnitChange={setLeftChartUnit}
-              />
-              <AverageDemandAreaChartCard
-                charts={charts}
-                metric={rightChartMetric}
-                onMetricChange={setRightChartMetric}
-              />
-              <ProjectImpactCard sustainability={sustainability} />
+            <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-12 lg:items-stretch">
+              <div className="lg:col-span-4 flex">
+                <LoadsBarChartCard
+                  charts={charts}
+                  unit={leftChartUnit}
+                  onUnitChange={setLeftChartUnit}
+                />
+              </div>
+              <div className="lg:col-span-4 flex">
+                <AverageDemandAreaChartCard
+                  charts={charts}
+                  metric={rightChartMetric}
+                  onMetricChange={setRightChartMetric}
+                />
+              </div>
+              <div className="lg:col-span-4 flex">
+                <ProjectImpactCard sustainability={sustainability} />
+              </div>
             </section>
 
             {/* Linha 4: Últimos projetos + Ações rápidas */}
-            <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,1.95fr)_minmax(385px,1fr)] xl:grid-cols-[minmax(0,2.24fr)_minmax(392px,1fr)]">
-              <RecentProjectsTable
-                projects={projects}
-                onRequestDelete={(proj) => setProjectToDeleteHome(proj)}
-              />
-              <QuickActionsCard activeProjectId={featuredItem?.project?.id || null} />
+            <section className="grid grid-cols-1 gap-3.5 lg:grid-cols-12 lg:items-stretch">
+              <div className="lg:col-span-8 flex">
+                <RecentProjectsTable
+                  projects={projects}
+                  onRequestDelete={(proj) => setProjectToDeleteHome(proj)}
+                />
+              </div>
+              <div className="lg:col-span-4 flex">
+                <QuickActionsCard activeProjectId={featuredItem?.project?.id || null} />
+              </div>
             </section>
           </>
         )}

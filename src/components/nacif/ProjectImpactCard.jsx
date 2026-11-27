@@ -10,7 +10,7 @@ export default function ProjectImpactCard({ sustainability }) {
   const available = Boolean(sustainability?.available);
 
   return (
-    <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#BCEAD1] bg-gradient-to-br from-[#F3FDF8] via-[#E8FAEF] to-[#D6F6E4] p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-2xl border border-[#BCEAD1] bg-gradient-to-br from-[#F3FDF8] via-[#E8FAEF] to-[#D6F6E4] p-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       {/* Ilustração botânica em camadas vibrantes no canto superior direito */}
       <div className="pointer-events-none absolute -right-2 -top-2 h-28 w-28 opacity-95">
         <svg viewBox="0 0 140 140" fill="none" aria-hidden="true" className="h-full w-full drop-shadow-sm">

@@ -113,7 +113,7 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
   };
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="flex h-full w-full flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
@@ -262,7 +262,7 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
   };
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="flex h-full w-full flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 whitespace-nowrap">
