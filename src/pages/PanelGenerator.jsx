@@ -1655,7 +1655,8 @@ export default function PanelGenerator() {
   const [scale, setScale] = useState(null);
   const [fitScale, setFitScale] = useState(0.85);
   const [showLegend, setShowLegend] = useState(true);
-  const [legendPosition, setLegendPosition] = useState(() => ({ x: PANEL_W - 230, y: 38 }));
+  const [showWiringLegendCard, setShowWiringLegendCard] = useState(false);
+  const [legendPosition, setLegendPosition] = useState(() => ({ x: PANEL_W - 228, y: 36 }));
   const [legendDrag, setLegendDrag] = useState(null);
   const layoutSaveFeedbackTimerRef = useRef(null);
   const autoSaveDebounceTimerRef = useRef(null);
@@ -10118,7 +10119,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           className="cursor-pointer"
           onClick={(event) => {
             event.stopPropagation();
-            setShowLegend(false);
+            setShowWiringLegendCard(false);
           }}
         >
           <rect x={x + width - 22} y={y + 5} width="16" height="15" rx="4" fill="#fee2e2" stroke="#fecaca" strokeWidth="0.7" />
@@ -10769,39 +10770,21 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
       <div className="flex-1 p-3 md:p-4 space-y-4">
 
       {project && (
-        <section className="overflow-hidden rounded-2xl border border-[#CDEFE8] bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EAF4FB] text-primary">
-                <PanelTop className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <h3 className="text-sm font-extrabold text-slate-900">Quadros do projeto</h3>
-                <p className="text-[11px] font-bold text-slate-500">{panelBoards.length} cadastrado(s)</p>
+        <section className="overflow-hidden rounded-2xl border border-[#E5EBF1] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            {/* Esquerda: Seletor de Quadros do Projeto */}
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 pr-1">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#DDFCF0] text-[#006F51]">
+                  <PanelTop className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#101828]">Quadros</h3>
+                  <p className="text-[10px] font-semibold text-[#64748B]">{panelBoards.length} ativo(s)</p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex shrink-0 flex-wrap justify-end gap-2">
-              <Button variant="outline" size="sm" className="h-9 rounded-lg px-3 text-xs font-extrabold" onClick={handleAddBoard}>
-                <Plus className="h-3.5 w-3.5" />
-                Novo
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 rounded-lg border-red-200 px-3 text-xs font-extrabold text-red-600 hover:text-red-700"
-                onClick={handleDeleteActiveBoard}
-                disabled={panelBoards.length <= 1}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Excluir
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-0 lg:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="border-b border-slate-100 bg-slate-50/60 p-3 lg:border-b-0 lg:border-r">
-              <div className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {panelBoards.map((board, boardIndex) => {
                   const isActive = board.id === activeBoardId;
                   const usedModules = getBoardUsedModules(board);
@@ -10814,111 +10797,95 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                       type="button"
                       onClick={() => handleSelectBoard(board.id)}
                       title={boardSector ? `${boardTitle} — ${boardSector}` : boardTitle}
-                      className={`flex min-w-[210px] items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition lg:min-w-0 ${
+                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 text-left transition ${
                         isActive
-                          ? "border-primary bg-white text-primary shadow-sm"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-[#BCEEE5] hover:bg-[#F8FBFD]"
+                          ? "border-[#00D98A] bg-[#DDFCF0]/45 text-[#031923] shadow-2xs"
+                          : "border-[#E5EBF1] bg-[#F6F9FC] text-[#475569] hover:border-[#CBD5E1] hover:bg-white"
                       }`}
                     >
-                      <span className="min-w-0 flex-1">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="truncate text-sm font-extrabold">{boardTitle}</span>
-                        </span>
-                        <span className="mt-0.5 block truncate text-[10px] font-bold text-slate-500">
-                          {boardSector ? `${boardSector} · ` : ""}{railsCount} trilhos · {usedModules} DIN
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-extrabold text-[#101828]">{boardTitle}</span>
+                        <span className="block truncate text-[10px] font-semibold text-[#64748B]">
+                          {railsCount} trilhos · {usedModules} DIN
                         </span>
                       </span>
-                      {isActive && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />}
+                      {isActive && <span className="h-2 w-2 shrink-0 rounded-full bg-[#00A86B]" />}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            <div className="p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Quadro ativo</p>
-                  <h4 className="truncate text-lg font-extrabold text-slate-950" title={activeBoardDisplayName}>
-                    {activeBoardDisplayName}
-                  </h4>
-                  {activeBoardDisplayLocation && (
-                    <p className="truncate text-xs font-semibold text-slate-500" title={activeBoardDisplayLocation}>
-                      {activeBoardDisplayLocation}
-                    </p>
-                  )}
-                </div>
-                <div className="flex shrink-0 gap-2 text-[11px] font-extrabold text-slate-600">
-                  <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">{rails.length} trilhos</span>
-                  <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">{getBoardUsedModules(activeBoard)} DIN</span>
-                  <span className="rounded-md bg-slate-100 px-2 py-1">{visibleWires.length} cabos</span>
-                </div>
+            {/* Centro/Direita: Campos Rápidos do Quadro Ativo + Ações */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="panel-board-name-input" className="sr-only">Nome do Quadro</Label>
+                <Input
+                  id="panel-board-name-input"
+                  value={boardNameInput}
+                  onFocus={() => { editingNameFieldRef.current = "boardName"; }}
+                  onChange={(event) => handleUpdateBoardName(event.target.value)}
+                  onBlur={handleCommitBoardName}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "Escape") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  autoComplete="off"
+                  spellCheck={false}
+                  maxLength={80}
+                  className="h-8 w-40 sm:w-44 rounded-xl border-[#E5EBF1] bg-[#F6F9FC] px-2.5 text-xs font-bold text-[#101828] focus:bg-white"
+                  placeholder="Nome do quadro"
+                  title="Nome do quadro ativo"
+                />
+                <Label htmlFor="panel-board-location-input" className="sr-only">Local / Setor</Label>
+                <Input
+                  id="panel-board-location-input"
+                  value={boardLocationInput}
+                  onFocus={() => { editingNameFieldRef.current = "boardLocation"; }}
+                  onChange={(event) => handleUpdateBoardLocation(event.target.value)}
+                  onBlur={handleCommitBoardLocation}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "Escape") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  autoComplete="off"
+                  spellCheck={false}
+                  maxLength={80}
+                  className="h-8 w-40 sm:w-44 rounded-xl border-[#E5EBF1] bg-[#F6F9FC] px-2.5 text-xs font-semibold text-[#475569] focus:bg-white"
+                  placeholder="Local / setor"
+                  title="Local ou setor de instalação"
+                />
               </div>
 
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="space-y-1">
-                  <Label htmlFor="panel-project-name-input" className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Nome do Projeto</Label>
-                  <Input
-                    id="panel-project-name-input"
-                    value={projectNameInput}
-                    onFocus={() => { editingNameFieldRef.current = "projectName"; }}
-                    onChange={(event) => handleUpdateProjectName(event.target.value)}
-                    onBlur={handleCommitProjectName}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === "Escape") {
-                        e.preventDefault();
-                        e.currentTarget.blur();
-                      }
-                    }}
-                    autoComplete="off"
-                    spellCheck={false}
-                    maxLength={120}
-                    className="h-10 rounded-lg bg-white text-sm font-extrabold"
-                    placeholder="Nome do projeto"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="panel-board-name-input" className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Nome do Quadro</Label>
-                  <Input
-                    id="panel-board-name-input"
-                    value={boardNameInput}
-                    onFocus={() => { editingNameFieldRef.current = "boardName"; }}
-                    onChange={(event) => handleUpdateBoardName(event.target.value)}
-                    onBlur={handleCommitBoardName}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === "Escape") {
-                        e.preventDefault();
-                        e.currentTarget.blur();
-                      }
-                    }}
-                    autoComplete="off"
-                    spellCheck={false}
-                    maxLength={80}
-                    className="h-10 rounded-lg bg-white text-sm font-extrabold"
-                    placeholder="Ex: QD-01 Principal"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="panel-board-location-input" className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Local / Setor</Label>
-                  <Input
-                    id="panel-board-location-input"
-                    value={boardLocationInput}
-                    onFocus={() => { editingNameFieldRef.current = "boardLocation"; }}
-                    onChange={(event) => handleUpdateBoardLocation(event.target.value)}
-                    onBlur={handleCommitBoardLocation}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === "Escape") {
-                        e.preventDefault();
-                        e.currentTarget.blur();
-                      }
-                    }}
-                    autoComplete="off"
-                    spellCheck={false}
-                    maxLength={80}
-                    className="h-10 rounded-lg bg-white text-sm font-bold"
-                    placeholder="Ex: Entrada / Distribuição"
-                  />
-                </div>
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-bold">
+                <span className="rounded-lg bg-[#DDFCF0] px-2 py-1 text-[#006F51] tabular-nums">
+                  {getBoardUsedModules(activeBoard)} DIN
+                </span>
+                <span className="rounded-lg bg-[#F1F5F9] px-2 py-1 text-[#475569] tabular-nums">
+                  {visibleWires.length} cabos
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button variant="outline" size="sm" className="h-8 rounded-xl border-[#E5EBF1] px-2.5 text-xs font-bold text-[#101828] hover:bg-[#F6F9FC]" onClick={handleAddBoard}>
+                  <Plus className="mr-1 h-3.5 w-3.5 text-[#00A86B]" />
+                  Novo
+                </Button>
+                {panelBoards.length > 1 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-xl border-red-200 px-2.5 text-xs font-bold text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={handleDeleteActiveBoard}
+                  >
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                    Excluir
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -10937,73 +10904,94 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
           <div className="xl:col-span-8 space-y-4" ref={containerRef}>
             
             {/* TOOLBAR DO QUADRO */}
-            <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="rounded-2xl border border-[#E5EBF1] bg-white px-3.5 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={wiringMode ? "destructive" : "secondary"} className="h-8 rounded-lg px-3 text-xs font-bold uppercase">
-                      {marqueeMode ? "Seleção em Massa (Marquee)" : wiringMode ? "Modo Conexão" : "Modo Navegação"}
+                    <Badge variant={wiringMode ? "destructive" : "secondary"} className="h-7 rounded-lg px-2.5 text-[11px] font-bold uppercase">
+                      {marqueeMode ? "Seleção em Massa" : wiringMode ? "Modo Conexão" : "Modo Navegação"}
                     </Badge>
-                    <span className="truncate text-xs font-medium text-slate-500">
-                      {marqueeMode ? "Clique e arraste no quadro para selecionar múltiplos componentes e fios" : wiringMode ? (wiringStart ? "1º Borne selecionado. Clique no 2º borne para conectar o condutor" : "Modo contínuo ativo: clique em dois bornes para ligar o cabo") : activeBoardDisplayName}
-                    </span>
+                    {(marqueeMode || wiringMode) && (
+                      <span className="truncate text-xs font-medium text-slate-500">
+                        {marqueeMode
+                          ? "Arraste no quadro para selecionar múltiplos itens"
+                          : wiringStart
+                          ? "1º borne selecionado — clique no 2º borne"
+                          : "Clique em dois bornes para conectar"}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 rounded-lg border-sky-200 bg-sky-50/70 px-3 text-xs font-bold text-sky-700 hover:bg-sky-100 hover:text-sky-800 transition-all gap-1.5 shadow-xs disabled:opacity-60"
+                    className="h-8 rounded-lg border-sky-200 bg-sky-50/70 px-2.5 text-xs font-bold text-sky-700 hover:bg-sky-100 hover:text-sky-800 transition-all gap-1.5 shadow-2xs disabled:opacity-60"
                     onClick={handleOptimizeWires}
                     disabled={optimizingWires || wires.length === 0}
                     aria-label="Otimizar Fiação"
                     title="Reorganizar e alinhar automaticamente todos os cabos"
                   >
                     {optimizingWires ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-sky-600" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600" />
                     ) : (
-                      <Wand2 className="h-4 w-4 text-sky-600" />
+                      <Wand2 className="h-3.5 w-3.5 text-sky-600" />
                     )}
                     <span>{optimizingWires ? "Otimizando..." : "Otimizar Fiação"}</span>
                   </Button>
 
-                  <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={() => setScale(s => clampPanelScale(+((s ?? fitScale) - 0.1).toFixed(2)))} aria-label="Diminuir zoom" title="Diminuir zoom">
-                      <ZoomOut className="h-4 w-4" />
+                  <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setScale(s => clampPanelScale(+((s ?? fitScale) - 0.1).toFixed(2)))} aria-label="Diminuir zoom" title="Diminuir zoom">
+                      <ZoomOut className="h-3.5 w-3.5" />
                     </Button>
-                    <span className="flex h-8 min-w-14 items-center justify-center text-xs font-extrabold text-slate-600">
+                    <span className="flex h-7 min-w-12 items-center justify-center text-xs font-extrabold text-slate-600 tabular-nums">
                       {Math.round(activeScale * 100)}%
                     </span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={() => setScale(s => clampPanelScale(+((s ?? fitScale) + 0.1).toFixed(2)))} aria-label="Aumentar zoom" title="Aumentar zoom">
-                      <ZoomIn className="h-4 w-4" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setScale(s => clampPanelScale(+((s ?? fitScale) + 0.1).toFixed(2)))} aria-label="Aumentar zoom" title="Aumentar zoom">
+                      <ZoomIn className="h-3.5 w-3.5" />
                     </Button>
                   </div>
 
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={handleFitViewport} aria-label="Ajustar ao quadro" title="Ajustar ao quadro">
-                    <Maximize2 className="h-4 w-4" />
+                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={handleFitViewport} aria-label="Ajustar ao quadro" title="Ajustar ao quadro">
+                    <Maximize2 className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     variant={showLegend ? "secondary" : "outline"}
                     size="sm"
-                    className={`h-9 rounded-lg font-bold text-xs gap-1.5 px-3 transition-colors ${
+                    className={`h-8 rounded-lg font-bold text-xs gap-1.5 px-2.5 transition-colors ${
                       !showLegend
                         ? "border-[#00d8b8] bg-[#EEF7FC] text-[#005188] hover:bg-[#E0F2FE]"
                         : "border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                     onClick={() => setShowLegend((current) => !current)}
-                    aria-label={showLegend ? "Ocultar legendas e ver só o quadro" : "Mostrar legendas do quadro"}
-                    title={showLegend ? "Ocultar legendas e ver só o quadro" : "Mostrar legendas do quadro"}
+                    aria-label={showLegend ? "Ocultar rótulos do quadro" : "Mostrar rótulos do quadro"}
+                    title={showLegend ? "Ocultar rótulos do quadro" : "Mostrar rótulos do quadro"}
                   >
-                    {showLegend ? <EyeOff className="h-4 w-4 text-slate-600" /> : <Eye className="h-4 w-4 text-[#00d8b8]" />}
-                    <span>{showLegend ? "Ocultar Legendas" : "Mostrar Legendas"}</span>
+                    {showLegend ? <EyeOff className="h-3.5 w-3.5 text-slate-600" /> : <Eye className="h-3.5 w-3.5 text-[#00d8b8]" />}
+                    <span>{showLegend ? "Rótulos" : "Mostrar Rótulos"}</span>
+                  </Button>
+                  <Button
+                    variant={showWiringLegendCard ? "default" : "outline"}
+                    size="sm"
+                    className={`h-8 rounded-lg font-bold text-xs gap-1.5 px-2.5 transition-colors ${
+                      showWiringLegendCard
+                        ? "bg-[#031923] text-white hover:bg-[#082732]"
+                        : "border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                    onClick={() => setShowWiringLegendCard((current) => !current)}
+                    aria-label="Alternar quadro de legenda de cores"
+                    title="Exibir ou ocultar card flutuante de legenda das cores no quadro"
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                    <span>Legenda</span>
                   </Button>
                   <Button
                     variant={marqueeMode ? "default" : "secondary"}
                     size="icon"
-                    className={`h-9 w-9 rounded-lg transition-all duration-150 ${
+                    className={`h-8 w-8 rounded-lg transition-all duration-150 ${
                       marqueeMode
-                        ? "bg-[#00d8b8] text-slate-900 hover:bg-[#00bda1] shadow-sm ring-2 ring-[#00d8b8]/40 font-bold scale-105"
+                        ? "bg-[#00d8b8] text-slate-900 hover:bg-[#00bda1] shadow-sm ring-2 ring-[#00d8b8]/40 font-bold"
                         : "hover:bg-slate-200 text-slate-700"
                     }`}
                     onClick={() => {
@@ -11017,12 +11005,12 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     aria-label={marqueeMode ? "Desativar seleção retangular" : "Seleção retangular em massa (Marquee)"}
                     title={marqueeMode ? "Desativar seleção retangular" : "Seleção retangular em massa (Marquee)"}
                   >
-                    <BoxSelect className="h-4 w-4" />
+                    <BoxSelect className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     variant={wiringMode ? "destructive" : "secondary"}
                     size="icon"
-                    className="h-9 w-9 rounded-lg"
+                    className="h-8 w-8 rounded-lg"
                     onClick={() => {
                       setWiringMode(!wiringMode);
                       setWiringStart("");
@@ -11030,23 +11018,10 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     aria-label={wiringMode ? "Cancelar fiação" : "Fiação rápida"}
                     title={wiringMode ? "Cancelar fiação" : "Fiação rápida"}
                   >
-                    <Cable className="h-4 w-4" />
+                    <Cable className="h-3.5 w-3.5" />
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 rounded-lg border-emerald-200 px-3 text-xs font-extrabold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                    onClick={handleSavePanelLayout}
-                    disabled={!selectedId || savingLayout}
-                  >
-                    {savingLayout ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : savedLayout ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-                    {savingLayout ? "Salvando" : savedLayout ? "Salvo" : "Salvar"}
-                  </Button>
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={handleExportSvg} aria-label="Exportar SVG" title="Exportar SVG">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg border-red-200 text-red-500" onClick={handleClearWires} aria-label="Limpar fiação" title="Limpar fiação">
-                    <Trash2 className="h-4 w-4" />
+                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg border-red-200 text-red-500 hover:bg-red-50" onClick={handleClearWires} aria-label="Limpar fiação" title="Limpar fiação">
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
@@ -11924,7 +11899,7 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                         </g>
                       );
                     })()}
-                    {showLegend && renderWiringLegend()}
+                    {showWiringLegendCard && renderWiringLegend()}
 
                     {/* Tooltip flutuante inteligente de cabo posicionado para fora do quadro */}
                     {hoveredWireId && (() => {
@@ -12082,7 +12057,9 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     const displayLabel = getComponentDisplayLabel(component);
                     const identityEditKey = `component:${component.id}:identity`;
                     const currentRail = rails[railIndex] || { components: [] };
-                    const railOccupied = currentRail.components.reduce((acc, c) => acc + (Number(c.poles) || 1), 0);
+                    const railOccupied = currentRail.components
+                      .filter((c) => c.type !== "spacer")
+                      .reduce((acc, c) => acc + (Number(c.poles) || 1), 0);
                     const railFree = Math.max(0, 18 - railOccupied);
                     const circuitRef = component.circuitNumber || component.circuitLabel || component.label;
 
@@ -12471,15 +12448,23 @@ const getGroundBusPoint = (descriptor = {}, infrastructure = [], panelHeight = 8
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       {rails.map((r, idx) => {
-                        const occupied = r.components.reduce((acc, c) => acc + (Number(c.poles) || 1), 0);
+                        const occupied = (r.components || [])
+                          .filter((c) => c.type !== "spacer")
+                          .reduce((acc, c) => acc + (Number(c.poles) || 1), 0);
                         const free = Math.max(0, 18 - occupied);
                         return (
-                          <div key={r.id} className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-[10px]">
-                            <div className="flex justify-between font-bold">
-                              <span>T{idx + 1}</span>
-                              <span className="text-slate-500">{occupied}/18 DIN</span>
+                          <div key={r.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[10px] space-y-1.5">
+                            <div className="flex justify-between items-center font-bold">
+                              <span className="text-slate-800">T{idx + 1}</span>
+                              <span className="text-slate-500 tabular-nums">{occupied}/18 DIN</span>
                             </div>
-                            <div className="text-[9px] text-emerald-600 font-extrabold mt-0.5">{free} DIN livres</div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                              <div
+                                className="h-full rounded-full bg-[#00D98A] transition-all"
+                                style={{ width: `${Math.min(100, (occupied / 18) * 100)}%` }}
+                              />
+                            </div>
+                            <div className="text-[9.5px] text-emerald-700 font-extrabold tabular-nums">{free} DIN livres</div>
                           </div>
                         );
                       })}
