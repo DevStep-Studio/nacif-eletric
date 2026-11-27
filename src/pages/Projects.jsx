@@ -283,16 +283,18 @@ export default function Projects() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-6 pb-20">
+    <div className="mx-auto w-full max-w-[1440px] space-y-4 pb-20">
       <PageHeader
         icon={FolderOpen}
         title="Projetos"
-        subtitle="Gerencie projetos elétricos e solares, clientes, status técnico e documentação."
         actionsPlacement="right"
         actions={
-          <Button asChild className="h-10 rounded-[8px] font-extrabold">
+          <Button
+            asChild
+            className="h-10 rounded-xl bg-gradient-to-r from-[#00D98A] to-[#00C87F] px-4 font-extrabold text-white shadow-[0_4px_14px_rgba(0,217,138,0.28)] hover:brightness-105 transition"
+          >
             <Link to="/projects/new">
-              <Plus className="h-4 w-4" />
+              <Plus className="mr-1.5 h-4 w-4" />
               Novo projeto
             </Link>
           </Button>
@@ -306,20 +308,25 @@ export default function Projects() {
 
         if (!isLimitReached) return null;
 
+        const titleText =
+          maxProjects === 0
+            ? `Plano ${userPlan.name}: para criar novos projetos, faça o upgrade da sua assinatura.`
+            : `Limite de ${maxProjects} projetos ativos atingido no plano ${userPlan.name}.`;
+
         return (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50/70 text-amber-900 text-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border border-amber-200/90 bg-amber-50/75 text-amber-900 text-sm shadow-2xs">
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
               <div>
-                <p className="font-semibold text-amber-950">
-                  Limite de {maxProjects} projetos ativos atingido no plano {userPlan.name}.
+                <p className="font-bold text-amber-950">
+                  {titleText}
                 </p>
                 <p className="text-xs text-amber-800 mt-0.5">
-                  Seus {projects.length} projetos existentes continuam 100% seguros, editáveis e exportáveis. Para criar novos projetos, realize upgrade de plano.
+                  Seus {projects.length} projetos existentes continuam 100% seguros, editáveis e exportáveis.
                 </p>
               </div>
             </div>
-            <Button asChild size="sm" className="bg-[#0f4f49] hover:bg-[#156961] text-white font-bold shrink-0">
+            <Button asChild size="sm" className="h-9 rounded-xl bg-[#0f4f49] hover:bg-[#156961] text-white font-bold shrink-0">
               <Link to="/subscription">Ver planos & Upgrade</Link>
             </Button>
           </div>
@@ -668,18 +675,6 @@ function DisciplineSection({
             {projects.length}
           </span>
         </div>
-
-        <Button
-          asChild
-          variant="outline"
-          size="sm"
-          className={`h-8 rounded-lg border text-xs font-extrabold shrink-0 ${theme.addBtn}`}
-        >
-          <Link to={newProjectHref}>
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            {newProjectLabel}
-          </Link>
-        </Button>
       </div>
 
       {/* Corpo da Coluna */}
@@ -779,26 +774,26 @@ function ProjectTable({
 
   if (compactSplit) {
     return (
-      <div className="overflow-x-auto">
+      <div className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-[#F9FAFB] hover:bg-[#F9FAFB]">
-              <TableHead className="w-9 px-3">
+              <TableHead className="w-8 px-2.5">
                 <input
                   type="checkbox"
                   checked={allSelected}
                   onChange={onToggleAll}
                   aria-label="Selecionar todos os projetos desta seção"
-                  className="h-4 w-4 rounded border-[#D0D5DD]"
+                  className="h-3.5 w-3.5 rounded border-[#D0D5DD]"
                 />
               </TableHead>
-              <TableHead className="px-3 text-[11px] font-extrabold uppercase tracking-[0.06em]">
+              <TableHead className="px-2.5 text-[11px] font-extrabold uppercase tracking-[0.06em]">
                 Projeto
               </TableHead>
-              <TableHead className="px-3 text-[11px] font-extrabold uppercase tracking-[0.06em]">
+              <TableHead className="w-24 px-2 text-[11px] font-extrabold uppercase tracking-[0.06em]">
                 Status
               </TableHead>
-              <TableHead className="px-3 text-right text-[11px] font-extrabold uppercase tracking-[0.06em]">
+              <TableHead className="w-18 px-2 text-right text-[11px] font-extrabold uppercase tracking-[0.06em]">
                 Ações
               </TableHead>
             </TableRow>
@@ -812,16 +807,16 @@ function ProjectTable({
                   className="hover:bg-[#F9FAFB] cursor-pointer"
                   onClick={() => navigate(`/projects/${project.id}`)}
                 >
-                  <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
+                  <TableCell className="px-2.5" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selectedIds.includes(project.id)}
                       onChange={() => onToggleSelected(project.id)}
                       aria-label={`Selecionar ${project.name}`}
-                      className="h-4 w-4 rounded border-[#D0D5DD]"
+                      className="h-3.5 w-3.5 rounded border-[#D0D5DD]"
                     />
                   </TableCell>
-                  <TableCell className="px-3 py-3">
+                  <TableCell className="px-2.5 py-3">
                     <Link to={`/projects/${project.id}`} className="flex min-w-0 items-center gap-2.5">
                       <span
                         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${
@@ -831,31 +826,32 @@ function ProjectTable({
                         {isSolar ? <Sun className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00d8b8] transition-colors">
+                        <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00D98A] transition-colors">
                           {project.name}
                         </span>
-                        <span className="mt-0.5 block truncate text-xs font-medium text-[#667085]">
-                          {project.client_name || "Sem cliente"}
-                          {project.supply_type ? ` · ${project.supply_type}` : ""}
-                          {project.voltage ? ` · ${project.voltage}V` : ""}
+                        <span className="mt-0.5 block truncate text-xs font-medium text-[#64748B]">
+                          {project.client_name ? `${project.client_name} · ` : ""}
+                          {isSolar ? "Sistema Solar" : project.supply_type || "Bifásico"}
+                          {project.voltage ? ` · ${project.voltage}V` : " · 220V"}
                         </span>
                       </span>
                     </Link>
                   </TableCell>
-                  <TableCell className="px-3 py-3">
+                  <TableCell className="px-2 py-3 whitespace-nowrap">
                     <div className="flex flex-col items-start gap-0.5">
                       <StatusBadge status={project.status} />
-                      <span className="text-[11px] font-medium text-[#667085]">
+                      <span className="text-[11px] font-medium text-[#64748B]">
                         {formatProjectDate(project)}
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <TableCell className="px-2 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     <ProjectActions
                       project={project}
                       onEdit={onEdit}
                       onDuplicate={onDuplicate}
                       onDelete={() => onDelete(project.id)}
+                      compact={true}
                       align="end"
                     />
                   </TableCell>
@@ -913,14 +909,14 @@ function ProjectTable({
                       {isSolar ? <Sun className="h-5 w-5" /> : <Zap className="h-5 w-5" />}
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00d8b8] transition-colors">{project.name}</span>
-                      <span className="mt-1 block truncate text-xs font-medium text-[#667085]">
-                        {isSolar ? "Projeto Solar" : project.project_type || "Instalações Elétricas"} - {project.supply_type || "Sem alimentação"} - {project.voltage ? `${project.voltage}V` : "Sem tensão"}
+                      <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00D98A] transition-colors">{project.name}</span>
+                      <span className="mt-1 block truncate text-xs font-medium text-[#64748B]">
+                        {isSolar ? "Projeto Solar" : project.project_type || "Instalações Elétricas"} · {project.supply_type || "Bifásico"}{project.voltage ? ` · ${project.voltage}V` : " · 220V"}
                       </span>
                     </span>
                   </Link>
                 </TableCell>
-                <TableCell className="px-4 text-sm font-medium text-[#667085]">{project.client_name || "Sem cliente"}</TableCell>
+                <TableCell className="px-4 text-sm font-medium text-[#64748B]">{project.client_name || "—"}</TableCell>
                 <TableCell className="px-4">
                   <StatusBadge status={project.status} />
                 </TableCell>
@@ -961,8 +957,10 @@ function ProjectCard({ project, selected, onSelect, onEdit, onDuplicate, onDelet
             {isSolar ? <Sun className="h-5 w-5" /> : <Zap className="h-5 w-5" />}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00d8b8] transition-colors">{project.name}</span>
-            <span className="mt-1 block truncate text-xs font-medium text-[#667085]">{project.client_name || "Sem cliente"}</span>
+            <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00D98A] transition-colors">{project.name}</span>
+            <span className="mt-1 block truncate text-xs font-medium text-[#64748B]">
+              {project.client_name ? `Cliente: ${project.client_name}` : (isSolar ? "Projeto Solar" : "Instalação Elétrica")}
+            </span>
           </span>
         </Link>
         <div onClick={(e) => e.stopPropagation()}>
@@ -1014,20 +1012,28 @@ function StatusBadge({ status }) {
   return <ProjectStatusBadge status={status} />;
 }
 
-function ProjectActions({ project, onEdit, onDuplicate, onDelete, align = "end" }) {
+function ProjectActions({ project, onEdit, onDuplicate, onDelete, compact = false, align = "end" }) {
   const actions = getProjectActions(project);
+  const visibleCount = compact ? 1 : 3;
+  const visibleActions = actions.slice(0, visibleCount);
+  const overflowActions = actions.slice(visibleCount);
 
   return (
-    <div className="flex items-center justify-end gap-1.5">
+    <div className="flex items-center justify-end gap-1">
       <TooltipProvider delayDuration={160}>
-        {actions.slice(0, 4).map((action) => {
+        {visibleActions.map((action) => {
           const ActionIcon = action.icon;
           return (
             <Tooltip key={action.href}>
               <TooltipTrigger asChild>
-                <Button asChild variant="outline" size="icon" className="h-9 w-9 rounded-[8px] border-[#D0D5DD] bg-white text-[#344054] shadow-none hover:bg-[#F9FAFB]">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg border-[#E5EBF1] bg-white text-[#344054] shadow-none hover:border-[#CBD5E1] hover:bg-[#F6F9FC] hover:text-[#006F51] transition"
+                >
                   <Link to={action.href} aria-label={action.label}>
-                    <ActionIcon className="h-4 w-4" />
+                    <ActionIcon className="h-3.5 w-3.5" />
                     <span className="sr-only">{action.label}</span>
                   </Link>
                 </Button>
@@ -1040,17 +1046,22 @@ function ProjectActions({ project, onEdit, onDuplicate, onDelete, align = "end" 
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-[8px] text-[#667085] hover:bg-[#F2F4F7]" aria-label="Mais opções">
-            <MoreVertical className="h-4 w-4" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-lg text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#101828]"
+            aria-label="Mais opções"
+          >
+            <MoreVertical className="h-3.5 w-3.5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align={align} className="w-56 rounded-[10px] border-[#E4E7EC] bg-white p-1 shadow-lg">
-          {actions.slice(4).map((action) => {
+        <DropdownMenuContent align={align} className="w-52 rounded-xl border-[#E5EBF1] bg-white p-1 shadow-xl text-xs font-semibold">
+          {overflowActions.map((action) => {
             const ActionIcon = action.icon;
             return (
               <DropdownMenuItem key={action.href} asChild>
-                <Link to={action.href} className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold">
-                  <ActionIcon className="h-4 w-4" />
+                <Link to={action.href} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold">
+                  <ActionIcon className="h-3.5 w-3.5 text-[#006F51]" />
                   {action.label}
                 </Link>
               </DropdownMenuItem>
@@ -1059,23 +1070,26 @@ function ProjectActions({ project, onEdit, onDuplicate, onDelete, align = "end" 
           {onEdit && (
             <DropdownMenuItem
               onClick={() => onEdit(project)}
-              className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold text-slate-800 focus:bg-slate-50"
+              className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#101828] focus:bg-slate-50"
             >
-              <Edit3 className="h-4 w-4 text-[#00d8b8]" />
+              <Edit3 className="h-3.5 w-3.5 text-[#00D98A]" />
               Editar dados
             </DropdownMenuItem>
           )}
           {onDuplicate && (
             <DropdownMenuItem
               onClick={() => onDuplicate(project.id)}
-              className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold text-slate-800 focus:bg-slate-50"
+              className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#101828] focus:bg-slate-50"
             >
-              <Copy className="h-4 w-4 text-[#00d8b8]" />
+              <Copy className="h-3.5 w-3.5 text-[#00D98A]" />
               Duplicar projeto
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={onDelete} className="flex cursor-pointer items-center gap-2 rounded-[8px] px-3 py-2 text-sm font-bold text-red-600 focus:text-red-600">
-            <Trash2 className="h-4 w-4" />
+          <DropdownMenuItem
+            onClick={onDelete}
+            className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-600 focus:text-red-600 focus:bg-red-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
             Excluir
           </DropdownMenuItem>
         </DropdownMenuContent>
