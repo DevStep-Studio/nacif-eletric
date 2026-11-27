@@ -451,9 +451,26 @@ label.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10),
 
 .solar-draw-vertex-marker,
 .solar-roof-vertex-handle,
-.solar-roof-midpoint-handle {
+.solar-roof-midpoint-handle,
+.solar-area-badge {
   background: transparent !important;
   border: 0 !important;
+}
+
+.solar-area-badge .solar-area-move-pill {
+  cursor: grab !important;
+  user-select: none;
+}
+
+.solar-area-badge .solar-area-move-pill:active,
+.solar-area-badge--dragging,
+.solar-area-badge--dragging .solar-area-move-pill {
+  cursor: grabbing !important;
+}
+
+.solar-area-badge--dragging .solar-area-move-ring {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 4px rgba(0, 216, 184, 0.35), 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 
 .solar-edge-workspace {

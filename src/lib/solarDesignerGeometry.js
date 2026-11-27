@@ -1608,6 +1608,21 @@ export function moveVertex(points, vertexIndex, newLatLng) {
 }
 
 /**
+ * Translada todos os vértices de um polígono de telhado por (deltaLat, deltaLng),
+ * preservando integralmente as dimensões, ângulos e orientação da água.
+ */
+export function translateRoofPolygon(points, deltaLat, deltaLng) {
+  const polygon = normalizeRoofPolygon(points);
+  const dLat = Number(deltaLat) || 0;
+  const dLng = Number(deltaLng) || 0;
+  if (!polygon.length || (dLat === 0 && dLng === 0)) return polygon;
+  return polygon.map((pt) => ({
+    lat: roundCoordinate(pt.lat + dLat),
+    lng: roundCoordinate(pt.lng + dLng),
+  }));
+}
+
+/**
  * Inserts a new vertex along an edge
  */
 export function insertVertexAtEdge(points, edgeIndex, latlng = null) {

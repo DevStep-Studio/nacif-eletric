@@ -1133,20 +1133,21 @@ export default function SolarProject() {
     });
   }, [config, getSafeExistingAreas, pushAreasHistory, toast]);
 
-  // Alteração de vértices na área ativa
-  const handleRoofGeometryChange = useCallback((positions) => {
-    if (!selectedArea) return;
+  // Alteração de vértices ou translação completa da área solar
+  const handleRoofGeometryChange = useCallback((positions, targetAreaId = null) => {
+    const activeId = targetAreaId || selectedArea?.id;
+    if (!activeId) return;
     const normalizedPositions = serializeRoofPolygon(normalizeRoofPolygon(positions));
     const existingAreas = getSafeExistingAreas();
 
-    const nextAreas = existingAreas.map((a) => {
-      if (a.id !== selectedArea.id) return a;
+    const nextAreas = existingAreas.map((a, idx) => {
+      if (a.id !== activeId) return a;
       return createDefaultSolarArea(
         {
           ...a,
           polygon: normalizedPositions,
         },
-        1,
+        idx + 1,
         config
       );
     });
@@ -1155,6 +1156,16 @@ export default function SolarProject() {
     setConfig(nextConfig);
     pushAreasHistory(nextAreas);
   }, [config, selectedArea, getSafeExistingAreas, pushAreasHistory]);
+
+  // Movimentação do bloco inteiro (água + painéis) pela alça central
+  const handleMoveArea = useCallback((areaId, translatedPositions) => {
+    if (!areaId || !Array.isArray(translatedPositions) || translatedPositions.length < 3) return;
+    if (areaId !== selectedAreaId) {
+      setSelectedAreaId(areaId);
+      setSelectedEntity({ type: "roof", id: areaId });
+    }
+    handleRoofGeometryChange(translatedPositions, areaId);
+  }, [selectedAreaId, handleRoofGeometryChange]);
 
   // Duplicação de área solar
   const handleDuplicateArea = (areaId) => {
@@ -3739,6 +3750,7 @@ export default function SolarProject() {
             }}
             onCreateArea={handleCreateArea}
             onRoofChange={handleRoofGeometryChange}
+            onMoveArea={handleMoveArea}
             onAlignToEdge={handleAlignToEdge}
             onViewModeChange={setViewMode}
             onViewportChange={({ center, zoom }) => {

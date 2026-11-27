@@ -31,6 +31,7 @@ import {
   insertVertexAtEdge,
   moveVertex,
   normalizeRoofPolygon,
+  translateRoofPolygon,
   SOLAR_PANEL_THEME,
   PHOTOVOLTAIC_BASE_COLORS,
   PANEL_VISUAL_STYLES,
@@ -164,9 +165,31 @@ function EdgeAlignmentLayer({ roofPolygon, onAlignToEdge }) {
 }
 
 /**
- * Badge flutuante de identificação e quantidade de módulos por área
+ * Alça central arrastável (mãozinha de movimento) + Badge de identificação da área solar.
+ * Move toda a água (polígono do telhado + todos os módulos + listras) em 60fps via atualização
+ * imperativa no Leaflet, aplicando a translação exata no estado do projeto ao soltar.
  */
-function AreaBadge({ area, isSelected, onClick, isPlacingObstacle, onMapClick }) {
+function AreaBadge({
+  area,
+  isSelected,
+  isDrawing = false,
+  isMeasuring = false,
+  isPlacingObstacle = false,
+  activeStyle = PANEL_VISUAL_STYLES.realistic,
+  showCellStripes = true,
+  effectiveCellOpacity = 0.35,
+  onClick,
+  onMapClick,
+  onMoveArea,
+  onDragStateChange,
+}) {
+  const map = useMap();
+  const markerRef = useRef(null);
+  const previewGroupRef = useRef(null);
+  const dragContextRef = useRef(null);
+  const isDraggingRef = useRef(false);
+  const justDraggedUntilRef = useRef(0);
+
   const centroid = useMemo(() => {
     if (area.panelPolygons && area.panelPolygons.length > 0) {
       return getPolygonCentroid(area.panelPolygons.flat());
@@ -174,38 +197,327 @@ function AreaBadge({ area, isSelected, onClick, isPlacingObstacle, onMapClick })
     return getPolygonCentroid(area.polygon);
   }, [area.polygon, area.panelPolygons]);
 
+  const canDrag =
+    !isDrawing &&
+    !isMeasuring &&
+    !isPlacingObstacle &&
+    Array.isArray(area.polygon) &&
+    area.polygon.length >= 3 &&
+    typeof onMoveArea === "function";
+
+  const cleanupPreview = useCallback(() => {
+    if (previewGroupRef.current) {
+      try {
+        map.removeLayer(previewGroupRef.current);
+      } catch {}
+      previewGroupRef.current = null;
+    }
+    dragContextRef.current = null;
+    if (isDraggingRef.current) {
+      isDraggingRef.current = false;
+      try {
+        map.dragging.enable();
+      } catch {}
+      onDragStateChange?.(null);
+    }
+    const el = markerRef.current?.getElement?.();
+    if (el) {
+      el.classList.remove("solar-area-badge--dragging");
+    }
+  }, [map, onDragStateChange]);
+
+  useEffect(() => cleanupPreview, [cleanupPreview]);
+
+  useEffect(() => {
+    if (!isDraggingRef.current && markerRef.current && centroid) {
+      markerRef.current.setLatLng([centroid.lat, centroid.lng]);
+    }
+  }, [centroid]);
+
+  const safeName = String(area.name || "Área")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const panelCountDisplay = area.panelCount || area.panelPolygons?.length || 0;
+  const roofAreaDisplay = Math.round(area.roof_area_m2 || 0);
+
+  const badgeIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: "solar-area-badge",
+        html: `
+          <div class="group relative flex items-center -translate-x-1/2 -translate-y-1/2 pointer-events-auto">
+            <div class="solar-area-move-pill flex items-center gap-1.5 rounded-full p-0.5 pr-2.5 shadow-lg transition-all ${
+              isSelected
+                ? "bg-slate-900/95 text-white border-2 border-[#00d8b8]"
+                : "bg-white/95 text-slate-800 border border-slate-300 hover:border-[#00d8b8]"
+            }">
+              <span class="solar-area-move-ring flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-transform ${
+                isSelected
+                  ? "bg-[#00d8b8] text-slate-950 shadow-sm"
+                  : "bg-slate-900 text-[#00d8b8]"
+              }" title="Arrastar bloco de painéis">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/>
+                  <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/>
+                  <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/>
+                  <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+                </svg>
+              </span>
+              <span class="text-[11px] whitespace-nowrap leading-none ${
+                isSelected ? "font-black text-[#00d8b8]" : "font-bold text-slate-800"
+              }">${safeName}</span>
+              <span class="opacity-40 text-[10px]">·</span>
+              <span class="text-[10px] font-semibold whitespace-nowrap opacity-90">${panelCountDisplay} mods</span>
+              <span class="text-[10px] whitespace-nowrap opacity-60">(${roofAreaDisplay}m²)</span>
+            </div>
+            ${
+              canDrag
+                ? `<div class="opacity-0 group-hover:opacity-100 absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded-md bg-slate-900/95 text-[#00d8b8] border border-[#00d8b8]/50 px-2 py-0.5 text-[9.5px] font-bold shadow-xl pointer-events-none transition-opacity">
+                    Arraste para mover toda a água
+                  </div>`
+                : ""
+            }
+          </div>
+        `,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      }),
+    [isSelected, safeName, panelCountDisplay, roofAreaDisplay, canDrag]
+  );
+
+  const eventHandlers = useMemo(
+    () => ({
+      click: (e) => {
+        if (Date.now() < justDraggedUntilRef.current) {
+          L.DomEvent.stopPropagation(e);
+          return;
+        }
+        if (isPlacingObstacle) {
+          onMapClick?.(e.latlng);
+          return;
+        }
+        L.DomEvent.stopPropagation(e);
+        onClick?.();
+      },
+      dragstart: (e) => {
+        if (!canDrag) return;
+        const startLatLng = e.target.getLatLng();
+        const basePolygon = normalizeRoofPolygon(area.polygon);
+        if (basePolygon.length < 3) return;
+
+        isDraggingRef.current = true;
+        try {
+          map.dragging.disable();
+        } catch {}
+
+        const el = markerRef.current?.getElement?.();
+        if (el) {
+          el.classList.add("solar-area-badge--dragging");
+        }
+
+        const basePanels = (area.panelPolygons || [])
+          .map((panel) => normalizeRoofPolygon(panel))
+          .filter((panel) => panel.length >= 3);
+
+        // Pré-calcula as linhas de células uma única vez no início do arraste para manter 60fps
+        const baseCellSegments = [];
+        const baseHalfCutSegments = [];
+        if (showCellStripes && basePanels.length > 0) {
+          const fullCells = basePanels.length <= 120;
+          for (let i = 0; i < basePanels.length; i++) {
+            const lines = buildRealisticPanelCellLines(basePanels[i], fullCells ? 18 : 15, false);
+            if (fullCells && lines.primary?.length) {
+              for (let j = 0; j < lines.primary.length; j++) {
+                baseCellSegments.push(lines.primary[j]);
+              }
+            }
+            if (lines.halfCut?.length) {
+              for (let j = 0; j < lines.halfCut.length; j++) {
+                baseHalfCutSegments.push(lines.halfCut[j]);
+              }
+            }
+          }
+        }
+
+        const targetPane = map.getPane("solar-panels-pane") ? "solar-panels-pane" : "overlayPane";
+        const group = L.layerGroup();
+
+        const roofLayer = L.polygon(
+          basePolygon.map((pt) => [pt.lat, pt.lng]),
+          {
+            pane: targetPane,
+            interactive: false,
+            noClip: true,
+            color: "#00e5bf",
+            fillColor: "#e2e8f0",
+            fillOpacity: 0.16,
+            opacity: 0.95,
+            weight: 2,
+          }
+        ).addTo(group);
+
+        const panelsLayer =
+          basePanels.length > 0
+            ? L.polygon(
+                basePanels.map((panel) => [panel.map((pt) => [pt.lat, pt.lng])]),
+                {
+                  pane: targetPane,
+                  interactive: false,
+                  noClip: true,
+                  color: activeStyle.frameColor || "#cbd5e1",
+                  fillColor: activeStyle.siliconColor || "#0f233d",
+                  fillOpacity: 0.95,
+                  opacity: 1,
+                  weight: activeStyle.frameWidth || 1.2,
+                }
+              ).addTo(group)
+            : null;
+
+        const cellsLayer =
+          baseCellSegments.length > 0
+            ? L.polyline(
+                baseCellSegments.map((seg) => [
+                  [seg[0].lat, seg[0].lng],
+                  [seg[1].lat, seg[1].lng],
+                ]),
+                {
+                  pane: targetPane,
+                  interactive: false,
+                  noClip: true,
+                  color: activeStyle.cellLineColor || "#6484a4",
+                  opacity: effectiveCellOpacity,
+                  weight: activeStyle.cellLineWidth || 0.65,
+                }
+              ).addTo(group)
+            : null;
+
+        const halfCutLayer =
+          baseHalfCutSegments.length > 0
+            ? L.polyline(
+                baseHalfCutSegments.map((seg) => [
+                  [seg[0].lat, seg[0].lng],
+                  [seg[1].lat, seg[1].lng],
+                ]),
+                {
+                  pane: targetPane,
+                  interactive: false,
+                  noClip: true,
+                  color: activeStyle.halfCutColor || "#8baac9",
+                  opacity: Math.min(0.9, effectiveCellOpacity * 1.4),
+                  weight: activeStyle.halfCutWidth || 1.0,
+                }
+              ).addTo(group)
+            : null;
+
+        group.addTo(map);
+        previewGroupRef.current = group;
+
+        dragContextRef.current = {
+          startLat: startLatLng.lat,
+          startLng: startLatLng.lng,
+          basePolygon,
+          basePanels,
+          baseCellSegments,
+          baseHalfCutSegments,
+          roofLayer,
+          panelsLayer,
+          cellsLayer,
+          halfCutLayer,
+        };
+
+        onDragStateChange?.(area.id);
+      },
+      drag: (e) => {
+        const ctx = dragContextRef.current;
+        if (!ctx) return;
+        const curr = e.target.getLatLng();
+        const dLat = curr.lat - ctx.startLat;
+        const dLng = curr.lng - ctx.startLng;
+
+        ctx.roofLayer.setLatLngs(ctx.basePolygon.map((pt) => [pt.lat + dLat, pt.lng + dLng]));
+
+        if (ctx.panelsLayer) {
+          ctx.panelsLayer.setLatLngs(
+            ctx.basePanels.map((panel) => [panel.map((pt) => [pt.lat + dLat, pt.lng + dLng])])
+          );
+        }
+
+        if (ctx.cellsLayer) {
+          ctx.cellsLayer.setLatLngs(
+            ctx.baseCellSegments.map((seg) => [
+              [seg[0].lat + dLat, seg[0].lng + dLng],
+              [seg[1].lat + dLat, seg[1].lng + dLng],
+            ])
+          );
+        }
+
+        if (ctx.halfCutLayer) {
+          ctx.halfCutLayer.setLatLngs(
+            ctx.baseHalfCutSegments.map((seg) => [
+              [seg[0].lat + dLat, seg[0].lng + dLng],
+              [seg[1].lat + dLat, seg[1].lng + dLng],
+            ])
+          );
+        }
+      },
+      dragend: (e) => {
+        const ctx = dragContextRef.current;
+        const endLatLng = e.target.getLatLng();
+
+        if (!ctx) {
+          cleanupPreview();
+          return;
+        }
+
+        const startPt = map.latLngToContainerPoint([ctx.startLat, ctx.startLng]);
+        const endPt = map.latLngToContainerPoint([endLatLng.lat, endLatLng.lng]);
+        const movedPx = startPt.distanceTo(endPt);
+
+        const dLat = endLatLng.lat - ctx.startLat;
+        const dLng = endLatLng.lng - ctx.startLng;
+        const basePolygon = ctx.basePolygon;
+
+        cleanupPreview();
+
+        if (movedPx >= 3) {
+          justDraggedUntilRef.current = Date.now() + 250;
+          const translatedPolygon = translateRoofPolygon(basePolygon, dLat, dLng);
+          onMoveArea?.(area.id, translatedPolygon);
+        } else if (centroid && markerRef.current) {
+          markerRef.current.setLatLng([centroid.lat, centroid.lng]);
+        }
+      },
+    }),
+    [
+      area.id,
+      area.polygon,
+      area.panelPolygons,
+      activeStyle,
+      canDrag,
+      centroid,
+      cleanupPreview,
+      effectiveCellOpacity,
+      isPlacingObstacle,
+      map,
+      onClick,
+      onDragStateChange,
+      onMapClick,
+      onMoveArea,
+      showCellStripes,
+    ]
+  );
+
   if (!centroid) return null;
 
   return (
     <Marker
+      ref={markerRef}
       position={[centroid.lat, centroid.lng]}
-      eventHandlers={{
-        click: (e) => {
-          if (isPlacingObstacle) {
-            onMapClick?.(e.latlng);
-            return;
-          }
-          L.DomEvent.stopPropagation(e);
-          onClick?.();
-        },
-      }}
-      icon={L.divIcon({
-        className: "solar-area-badge",
-        html: `
-          <div class="cursor-pointer ${
-            isSelected
-              ? "bg-slate-900 text-white border-2 border-[#00d8b8] shadow-sm scale-105"
-              : "bg-white text-slate-800 border border-slate-300 hover:border-[#00d8b8] hover:scale-105"
-          } px-2.5 py-1 rounded-md text-[11px] font-bold shadow-sm whitespace-nowrap flex items-center gap-1.5 -translate-x-1/2 -translate-y-1/2 transition-all">
-            <span class="h-2 w-2 rounded-full ${isSelected ? "bg-[#00d8b8] animate-pulse" : "bg-emerald-500"}"></span>
-            <span class="${isSelected ? "font-black text-[#00d8b8]" : "font-bold"}">${area.name || "Área"}</span>
-            <span class="opacity-40">·</span>
-            <span class="text-[10px] opacity-90">${area.panelCount || (area.panelPolygons?.length || 0)} mods</span>
-            <span class="text-[10px] opacity-60">(${Math.round(area.roof_area_m2 || 0)}m²)</span>
-          </div>
-        `,
-        iconSize: [0, 0],
-      })}
+      draggable={canDrag}
+      zIndexOffset={isSelected ? 650 : 520}
+      eventHandlers={eventHandlers}
+      icon={badgeIcon}
     />
   );
 }
@@ -524,6 +836,7 @@ function InteractiveRoofDrawingLayer({
 function EditableRoofPolygonLayer({
   positions,
   isEditing,
+  isDraggingArea = false,
   isPlacingObstacle = false,
   onMapClick,
   onSelectRoof,
@@ -601,9 +914,10 @@ function EditableRoofPolygonLayer({
         pathOptions={{
           color: "#00e5bf",
           fillColor: "#e2e8f0",
-          fillOpacity: 0.18,
-          opacity: 0.95,
-          weight: 1.6,
+          fillOpacity: isDraggingArea ? 0.06 : 0.18,
+          opacity: isDraggingArea ? 0.42 : 0.95,
+          weight: isDraggingArea ? 1.4 : 1.6,
+          dashArray: isDraggingArea ? "5 5" : undefined,
           className: "cursor-pointer hover:stroke-[#00c4a7] transition-all",
         }}
       />
@@ -894,6 +1208,7 @@ export default function SolarDesignerMap({
   onSelectArea,
   onCreateArea,
   onRoofChange,
+  onMoveArea,
   onAlignToEdge,
   onViewportChange,
   onFitRoof,
@@ -949,7 +1264,19 @@ export default function SolarDesignerMap({
   const mapCenter = useMemo(() => getMapCenterFromConfig(config), [config]);
   const mapZoom = Math.max(3, Math.min(22, Math.round(Number(config.map_zoom) || DEFAULT_SOLAR_MAP_ZOOM)));
   const [currentZoom, setCurrentZoom] = useState(mapZoom);
+  const [draggingAreaId, setDraggingAreaId] = useState(null);
   const programmaticMoveUntilRef = useRef(0);
+
+  const handleMoveAreaCommit = useCallback(
+    (areaId, translatedPolygon) => {
+      if (typeof onMoveArea === "function") {
+        onMoveArea(areaId, translatedPolygon);
+      } else {
+        onRoofChange?.(translatedPolygon, areaId);
+      }
+    },
+    [onMoveArea, onRoofChange]
+  );
 
   // Estilo visual dos painéis fotovoltaicos (100% customizável)
   const visualStyleKey = config.panel_visual_style || "realistic";
@@ -1177,10 +1504,10 @@ export default function SolarDesignerMap({
               pathOptions={{
                 color: "#0284c7",
                 fillColor: "#0284c7",
-                fillOpacity: isDrawing ? 0.08 : 0.16,
-                opacity: isDrawing ? 0.5 : 0.85,
-                weight: 2,
-                dashArray: isDrawing ? "4, 4" : undefined,
+                fillOpacity: draggingAreaId === area.id ? 0.06 : (isDrawing ? 0.08 : 0.16),
+                opacity: draggingAreaId === area.id ? 0.35 : (isDrawing ? 0.5 : 0.85),
+                weight: draggingAreaId === area.id ? 1.4 : 2,
+                dashArray: draggingAreaId === area.id ? "5, 5" : (isDrawing ? "4, 4" : undefined),
               }}
             />
           ))}
@@ -1199,7 +1526,8 @@ export default function SolarDesignerMap({
         {!isDrawing && selectedRoofPolygon?.length >= 3 && (
           <EditableRoofPolygonLayer
             positions={selectedRoofPolygon}
-            isEditing={editorMode === "edit" || editorMode === "select"}
+            isEditing={(editorMode === "edit" || editorMode === "select") && draggingAreaId !== selectedArea?.id}
+            isDraggingArea={Boolean(draggingAreaId && draggingAreaId === selectedArea?.id)}
             isPlacingObstacle={isPlacingObstacle}
             onMapClick={onMapClick}
             onSelectRoof={onSelectRoof}
@@ -1221,32 +1549,40 @@ export default function SolarDesignerMap({
           />
         )}
 
-        {/* 4. Badges de Identificação de todas as Áreas */}
+        {/* 4. Alça Central de Movimento (Mãozinha) & Badges de todas as Áreas */}
         {showBadges && areas.map((area) => (
           <AreaBadge
             key={`badge-${area.id}`}
             area={area}
             isSelected={area.id === selectedArea?.id}
+            isDrawing={isDrawing}
+            isMeasuring={isMeasuring}
             isPlacingObstacle={isPlacingObstacle}
+            activeStyle={activeStyle}
+            showCellStripes={showPanelCellStripes}
+            effectiveCellOpacity={effectiveCellOpacity}
             onMapClick={onMapClick}
             onClick={() => onSelectArea?.(area.id)}
+            onMoveArea={handleMoveAreaCommit}
+            onDragStateChange={setDraggingAreaId}
           />
         ))}
 
         {/* 5. Medições de arestas na área ativa */}
-        {showMeasurements && !isDrawing && selectedRoofPolygon?.length >= 3 && (
+        {showMeasurements && !isDrawing && draggingAreaId !== selectedArea?.id && selectedRoofPolygon?.length >= 3 && (
           <MeasurementLabels roofPolygon={selectedRoofPolygon} isSelected={true} zoom={currentZoom} />
         )}
 
         {/* 6. Alinhamento de bordas na área ativa */}
-        {hasRoof && !isDrawing && selectedRoofPolygon?.length >= 3 && onAlignToEdge && (
+        {hasRoof && !isDrawing && draggingAreaId !== selectedArea?.id && selectedRoofPolygon?.length >= 3 && onAlignToEdge && (
           <EdgeAlignmentLayer roofPolygon={selectedRoofPolygon} onAlignToEdge={onAlignToEdge} />
         )}
 
         {/* 7. Camada de Módulos Fotovoltaicos Realistas */}
         <Pane name="solar-panels-pane" style={{ zIndex: 440, pointerEvents: isDrawing ? "none" : "auto" }}>
-          {allAreasPanels.map((group) =>
-            group.panels.map((panel, idx) => {
+          {allAreasPanels.map((group) => {
+            const isGroupDragging = Boolean(draggingAreaId && draggingAreaId === group.areaId);
+            return group.panels.map((panel, idx) => {
               const globalIndex = idx;
               const isSelected = group.isSelected && selectedModuleIndex === globalIndex;
               const stringInfo = moduleStringMap.get(globalIndex);
@@ -1262,8 +1598,8 @@ export default function SolarDesignerMap({
               let strokeColor = isSelected ? SOLAR_PANEL_THEME.selectionActive : frameColor;
               let strokeWidth = isSelected ? 2.0 : (activeStyle.frameWidth || 1.2);
               let fillColor = viewMode === "irradiation" ? "#00c853" : siliconColor;
-              let opacity = 1.0;
-              let fillOpacity = isSelected ? 0.98 : 0.96;
+              let opacity = isGroupDragging ? 0.16 : 1.0;
+              let fillOpacity = isGroupDragging ? 0.10 : (isSelected ? 0.98 : 0.96);
 
               if (electricalMode || selectedStringIndex !== null) {
                 fillColor = strColor.fill;
@@ -1275,7 +1611,7 @@ export default function SolarDesignerMap({
                 }
               }
 
-              if (isSelected) {
+              if (isSelected && !isGroupDragging) {
                 strokeColor = SOLAR_PANEL_THEME.selectionActive;
                 fillColor = SOLAR_PANEL_THEME.selectionActiveDark;
                 strokeWidth = 2.2;
@@ -1287,7 +1623,7 @@ export default function SolarDesignerMap({
               const panelCoordKey = panel[0]
                 ? `${Number(panel[0].lat).toFixed(6)}_${Number(panel[0].lng).toFixed(6)}`
                 : idx;
-              const panelLines = showPanelCellStripes
+              const panelLines = showPanelCellStripes && !isGroupDragging
                 ? buildRealisticPanelCellLines(panel, effectiveZoom, highDetailCells)
                 : null;
               const panelCellPositions = panelLines?.primary?.length
@@ -1384,8 +1720,8 @@ export default function SolarDesignerMap({
                   )}
                 </Fragment>
               );
-            })
-          )}
+            });
+          })}
         </Pane>
 
         {/* 8. Camada da Régua / Medição */}
