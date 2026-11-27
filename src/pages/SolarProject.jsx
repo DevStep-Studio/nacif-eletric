@@ -3393,15 +3393,106 @@ export default function SolarProject() {
             </div>
           </aside>
         ) : (
-          /* Botão Flutuante para Reabrir Inspector */
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="absolute top-14 left-3 z-30 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-900 transition"
-            title="Abrir Inspetor"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          /* Barra Lateral Encolhida (Rail Compacto à Esquerda) */
+          <aside className="w-12 shrink-0 flex flex-col items-center justify-between border-r border-[#E2E8F0] bg-white overflow-hidden z-20 shadow-sm transition-all duration-150">
+            {/* Topo: Botão de Reabrir */}
+            <div className="flex h-10 w-full shrink-0 items-center justify-center border-b border-[#E2E8F0] bg-slate-50/90">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-2xs hover:border-[#00d8b8] hover:bg-[#E6FAF7] hover:text-[#009b84] transition"
+                title="Expandir painel lateral de Áreas Solares"
+                aria-label="Expandir painel lateral de Áreas Solares"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Centro: Atalhos Rápidos & Rótulo Vertical Clicável */}
+            <div className="flex-1 flex flex-col items-center gap-2 py-3 w-full">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-[#009b84] hover:border-[#00d8b8] hover:bg-[#E6FAF7] transition"
+                title={`Áreas Solares (${multiAreaLayouts.length}) — Clique para expandir`}
+              >
+                <Box className="h-4 w-4" />
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#00d8b8] px-1 text-[9px] font-black text-slate-950 shadow-2xs">
+                  {multiAreaLayouts.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSidebarOpen(true);
+                  handleStartDrawNewArea();
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:border-[#00d8b8] hover:bg-[#E6FAF7] hover:text-[#009b84] transition"
+                title="Criar nova área solar"
+              >
+                <Plus className="h-4 w-4 stroke-[2.5]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSidebarOpen(true);
+                  setInspectorSections((prev) => ({ ...prev, modules: true }));
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:border-[#00d8b8] hover:bg-[#E6FAF7] hover:text-[#009b84] transition"
+                title="Módulos Fotovoltaicos"
+              >
+                <Grid className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSidebarOpen(true);
+                  setInspectorSections((prev) => ({ ...prev, obstacles: true }));
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-rose-500 hover:border-rose-300 hover:bg-rose-50 transition"
+                title={`Obstáculos (${(config?.obstacles || []).length})`}
+              >
+                <ShieldAlert className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="mt-2 flex-1 flex items-center justify-center w-full py-2 text-slate-400 hover:text-[#009b84] transition cursor-pointer"
+                title="Clique para expandir Áreas Solares"
+              >
+                <span className="[writing-mode:vertical-rl] rotate-180 text-[10px] font-extrabold uppercase tracking-[0.18em] select-none whitespace-nowrap">
+                  Áreas Solares
+                </span>
+              </button>
+            </div>
+
+            {/* Rodapé Compacto: Parâmetros & Confirmar Arranjo */}
+            <div className="p-2 border-t border-slate-200 bg-slate-50/90 flex flex-col items-center gap-2 w-full shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setProjectParamsInitialStep("equipamentos");
+                  setProjectParamsOpen(true);
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-[#00d8b8] hover:bg-[#E6FAF7] hover:text-[#009b84] transition"
+                title="Parâmetros do Projeto (5 Etapas)"
+              >
+                <Sliders className="h-4 w-4 text-[#009b84]" />
+              </button>
+              <button
+                type="button"
+                onClick={handleAcceptLayout}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#00d8b8] text-slate-950 hover:bg-[#00c4a7] shadow-xs transition"
+                title="Confirmar Arranjo"
+              >
+                <Check className="h-4 w-4 stroke-[2.5]" />
+              </button>
+            </div>
+          </aside>
         )}
 
         {/* Canvas Central (Mapa 2D / 3D) */}
