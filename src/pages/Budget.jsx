@@ -30,7 +30,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { openHTMLPrint, PAPER_SIZES } from "@/lib/printUtils";
 import { downloadBudgetPDF, downloadBudgetCSV } from "@/lib/budgetExportUtils";
@@ -43,7 +42,6 @@ import {
 } from "@/lib/budgetFinancialMath";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import PageHeader from "@/components/PageHeader";
 import BrandLoadingScreen from "@/components/system/BrandLoadingScreen";
 import { DEFAULT_LOGO_URL } from "@/lib/brandingDefaults";
 import MaterialProductThumb from "@/components/MaterialProductThumb";
@@ -56,7 +54,6 @@ import {
   estimateLocalMaterialPrice,
 } from "@/lib/projectBudgetMaterials";
 import brandLogoEnergy from "@/assets/brand-logo-principal.png";
-import brandMarkEnergy from "@/assets/brand-mark-principal.png";
 
 function BrandLogoUploaderDisplay({ logoUrl }) {
   const [hasError, setHasError] = useState(false);
@@ -84,6 +81,13 @@ function BrandLogoUploaderDisplay({ logoUrl }) {
 
 const isSolarProjectType = (proj) =>
   String(proj?.project_type || "").toLowerCase().includes("solar") || Boolean(proj?.solar_config);
+
+const getDistinctClientName = (proj) => {
+  const client = String(proj?.client_name || "").trim();
+  const name = String(proj?.name || "").trim();
+  if (!client || client.toLowerCase() === name.toLowerCase()) return "";
+  return client;
+};
 
 function ProjectThumbBadge({ project, size = "md", customLogo = null }) {
   const [hasError, setHasError] = useState(false);
@@ -262,12 +266,17 @@ export default function BudgetPage() {
       .finally(() => setLoadingProject(false));
   }, [projectId]);
 
-  // Carregar ou inicializar orçamentos do projeto
+  // Carregar ou inicializar orçamentos do projeto (com fallback resiliente em memória caso a API restrinja criação no plano gratuito)
   useEffect(() => {
     if (!project || !project.id) return;
 
     let isMounted = true;
     setLoadingBudgets(true);
+
+    const buildLocalDraftBudget = () => ({
+      id: `draft-${project.id}`,
+      ...createInitialBudgetFromProject(project),
+    });
 
     backend.entities.Budget.filter({ project_id: project.id })
       .then(async (budgets) => {
@@ -277,19 +286,44 @@ export default function BudgetPage() {
         if (list.length > 0) {
           setProjectBudgets(list);
           const chosen = list.find((b) => b.id === activeBudgetId) || list[0];
-          loadBudgetDataIntoForm(chosen);
+          const isEmptyShell =
+            (!Array.isArray(chosen.materials) || chosen.materials.length === 0) &&
+            (!Array.isArray(chosen.services) || chosen.services.length === 0);
+          if (isEmptyShell) {
+            const initialFromProj = createInitialBudgetFromProject(project);
+            const hydrated = {
+              ...initialFromProj,
+              ...chosen,
+              name: chosen.name || initialFromProj.name,
+              materials: initialFromProj.materials,
+              services: initialFromProj.services,
+            };
+            loadBudgetDataIntoForm(hydrated);
+          } else {
+            loadBudgetDataIntoForm(chosen);
+          }
         } else {
-          // Inicializar primeiro orçamento a partir do projeto
           const initial = createInitialBudgetFromProject(project);
-          const created = await backend.entities.Budget.create(initial);
-          if (isMounted) {
-            setProjectBudgets([created]);
-            loadBudgetDataIntoForm(created);
+          try {
+            const created = await backend.entities.Budget.create(initial);
+            if (isMounted) {
+              setProjectBudgets([created]);
+              loadBudgetDataIntoForm(created);
+            }
+          } catch {
+            if (isMounted) {
+              const draft = { id: `draft-${project.id}`, ...initial };
+              setProjectBudgets([draft]);
+              loadBudgetDataIntoForm(draft);
+            }
           }
         }
       })
-      .catch((err) => {
-        console.error("Erro ao carregar orçamentos:", err);
+      .catch(() => {
+        if (!isMounted) return;
+        const draft = buildLocalDraftBudget();
+        setProjectBudgets([draft]);
+        loadBudgetDataIntoForm(draft);
       })
       .finally(() => {
         if (isMounted) setLoadingBudgets(false);
@@ -418,8 +452,26 @@ export default function BudgetPage() {
         ...financials,
       };
 
-      const updated = await backend.entities.Budget.update(activeBudgetId, payload);
-      setProjectBudgets((prev) => prev.map((b) => (b.id === activeBudgetId ? updated : b)));
+      const isDraftId = String(activeBudgetId).startsWith("draft-");
+      let savedRecord = null;
+      if (isDraftId) {
+        try {
+          savedRecord = await backend.entities.Budget.create({
+            project_id: project.id,
+            project_name: project.name,
+            client_name: project.client_name,
+            ...payload,
+          });
+          setActiveBudgetId(savedRecord.id);
+        } catch {
+          savedRecord = { id: activeBudgetId, project_id: project.id, ...payload };
+        }
+      } else {
+        savedRecord = await backend.entities.Budget.update(activeBudgetId, payload);
+      }
+      setProjectBudgets((prev) =>
+        prev.map((b) => (b.id === activeBudgetId ? savedRecord : b))
+      );
 
       // Sincronizar total do orçamento no projeto se aprovado ou orçamento principal
       await backend.entities.Project.update(project.id, {
@@ -452,9 +504,10 @@ export default function BudgetPage() {
       const created = await backend.entities.Budget.create(newBudgetData);
       setProjectBudgets((prev) => [created, ...prev]);
       loadBudgetDataIntoForm(created);
-    } catch (err) {
-      console.error("Erro ao criar novo orçamento:", err);
-      alert("Não foi possível criar um novo orçamento.");
+    } catch {
+      const draft = { id: `draft-${project.id}-${Date.now()}`, ...newBudgetData };
+      setProjectBudgets((prev) => [draft, ...prev]);
+      loadBudgetDataIntoForm(draft);
     }
   };
 
@@ -819,103 +872,106 @@ export default function BudgetPage() {
   const activeStatusConfig = BUDGET_STATUS_CONFIG[budgetStatus] || BUDGET_STATUS_CONFIG.rascunho;
 
   return (
-    <div className="w-full max-w-none space-y-6 pb-20">
-      <PageHeader
-        icon={FileText}
-        title="Orçamentos & Propostas"
-        subtitle={
-          project?.name
-            ? `Elaboração e gestão financeira para ${project.name}`
-            : "Gerencie orçamentos detalhados com precisão matemática, materiais e serviços."
-        }
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <label
-              className="flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-[11px] border border-dashed border-[#BCEEE5] bg-white hover:bg-[#F2FFFC] text-xs font-bold text-[#5f6877] transition shadow-xs"
-              title="Carregar logotipo personalizado para a proposta/orçamento"
-            >
-              <Upload className="w-3.5 h-3.5 text-primary shrink-0" />
-              <BrandLogoUploaderDisplay logoUrl={logoUrl} />
-              <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-            </label>
+    <div className="mx-auto w-full max-w-[1440px] space-y-4 pb-16">
+      <header className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-[22px] font-extrabold tracking-tight text-[#101828] leading-tight">
+            Orçamentos e Propostas
+          </h1>
+          <p className="mt-0.5 text-xs font-medium text-[#64748B]">
+            {project?.name
+              ? `Composição de materiais, serviços, BDI e proposta comercial para ${project.name}.`
+              : "Gerencie orçamentos detalhados com materiais, serviços e condições comerciais."}
+          </p>
+        </div>
 
-            {project && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleSaveBudget}
-                  disabled={saveStatus === "saving"}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold shadow-xs transition ${saveStatus === "saved"
-                      ? "bg-[#00D98A] text-[#031923]"
-                      : saveStatus === "error"
-                        ? "bg-[#EF4444] text-white"
-                        : "bg-[#031923] text-white hover:bg-[#082732]"
-                    }`}
-                  title="Salvar alterações no orçamento ativo"
-                >
-                  {saveStatus === "saving" ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : saveStatus === "saved" ? (
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                  ) : (
-                    <Save className="w-3.5 h-3.5" />
-                  )}
-                  <span>
-                    {saveStatus === "saving"
-                      ? "Salvando..."
-                      : saveStatus === "saved"
-                        ? "Salvo!"
-                        : "Salvar Orçamento"}
-                  </span>
-                </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            className="flex h-9 items-center gap-2 cursor-pointer px-3 rounded-xl border border-dashed border-[#BCEEE5] bg-white hover:bg-[#F2FFFC] text-xs font-bold text-[#5f6877] transition shadow-2xs"
+            title="Carregar logotipo personalizado para a proposta/orçamento"
+          >
+            <Upload className="w-3.5 h-3.5 text-primary shrink-0" />
+            <BrandLogoUploaderDisplay logoUrl={logoUrl} />
+            <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+          </label>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white text-xs font-bold hover:bg-secondary/50 shadow-xs transition">
-                      <Download className="w-3.5 h-3.5 text-primary" />
-                      <span>Exportar</span>
-                      <ChevronDown className="w-3 h-3 ml-0.5 text-muted-foreground" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem onClick={handleDownloadPDF} className="cursor-pointer font-medium">
-                      <Download className="w-4 h-4 mr-2 text-primary" />
-                      <span>Baixar Proposta em PDF</span>
+          {project && (
+            <>
+              <button
+                type="button"
+                onClick={handleSaveBudget}
+                disabled={saveStatus === "saving"}
+                className={`flex h-9 items-center gap-1.5 px-3.5 rounded-xl text-xs font-extrabold shadow-2xs transition ${
+                  saveStatus === "saved"
+                    ? "bg-[#00D98A] text-[#031923]"
+                    : saveStatus === "error"
+                    ? "bg-[#EF4444] text-white"
+                    : "bg-[#031923] text-white hover:bg-[#082732]"
+                }`}
+                title="Salvar alterações no orçamento ativo"
+              >
+                {saveStatus === "saving" ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : saveStatus === "saved" ? (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {saveStatus === "saving"
+                    ? "Salvando..."
+                    : saveStatus === "saved"
+                    ? "Salvo!"
+                    : "Salvar Orçamento"}
+                </span>
+              </button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex h-9 items-center gap-1.5 px-3 rounded-xl border border-[#E5EBF1] bg-white text-xs font-bold text-[#101828] hover:bg-[#F6F9FC] shadow-2xs transition">
+                    <Download className="w-3.5 h-3.5 text-[#00A86B]" />
+                    <span>Exportar</span>
+                    <ChevronDown className="w-3 h-3 ml-0.5 text-[#64748B]" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 rounded-xl border-[#E5EBF1]">
+                  <DropdownMenuItem onClick={handleDownloadPDF} className="cursor-pointer font-semibold text-xs">
+                    <FileText className="w-4 h-4 mr-2 text-[#00A86B]" />
+                    <span>Baixar Proposta em PDF</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDownloadCSV} className="cursor-pointer font-semibold text-xs">
+                    <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600" />
+                    <span>Baixar Planilha (Excel/CSV)</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex h-9 items-center gap-1.5 px-3 rounded-xl border border-[#E5EBF1] bg-white text-xs font-semibold text-[#101828] hover:bg-[#F6F9FC] shadow-2xs transition">
+                    <Printer className="w-3.5 h-3.5 text-[#64748B]" />
+                    <span>Imprimir</span>
+                    <ChevronDown className="w-3 h-3 text-[#64748B]" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="rounded-xl border-[#E5EBF1]">
+                  {Object.keys(PAPER_SIZES).map((size) => (
+                    <DropdownMenuItem key={size} onClick={() => handlePrint(size)} className="cursor-pointer text-xs font-semibold">
+                      <Printer className="w-4 h-4 mr-2" />
+                      Formato {size}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDownloadCSV} className="cursor-pointer font-medium">
-                      <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600" />
-                      <span>Baixar Planilha (Excel/CSV)</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
+        </div>
+      </header>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold hover:bg-secondary/50 transition">
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Imprimir</span>
-                      <ChevronDown className="w-3 h-3" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {Object.keys(PAPER_SIZES).map((size) => (
-                      <DropdownMenuItem key={size} onClick={() => handlePrint(size)} className="cursor-pointer">
-                        <Printer className="w-4 h-4 mr-2" />
-                        Formato {size}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            )}
-          </div>
-        }
-      />
-
-      <div className="mx-auto grid w-full max-w-7xl gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="grid w-full gap-4 lg:grid-cols-[290px_minmax(0,1fr)] lg:items-start">
         {/* Painel lateral: Projetos separados entre Elétricos e Solares */}
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h3 className="text-sm font-extrabold text-[#101828]">Projetos</h3>
               <FolderOpen className="h-4 w-4 text-[#006F51]" />
@@ -926,7 +982,7 @@ export default function BudgetPage() {
                 placeholder="Buscar projeto ou cliente..."
                 value={projectSearch}
                 onChange={(e) => setProjectSearch(e.target.value)}
-                className="h-8 text-xs bg-slate-50 border-border/70"
+                className="h-8.5 rounded-xl text-xs bg-[#F6F9FC] border-[#E5EBF1] focus:bg-white"
               />
             </div>
 
@@ -935,34 +991,37 @@ export default function BudgetPage() {
               <button
                 type="button"
                 onClick={() => setBudgetCategoryFilter("split")}
-                className={`flex h-7 items-center justify-center rounded-lg text-[11px] font-extrabold transition ${budgetCategoryFilter === "split"
-                    ? "bg-white text-[#006F51] shadow-xs"
+                className={`flex h-7 items-center justify-center rounded-lg px-1 text-[10.5px] font-extrabold whitespace-nowrap transition ${
+                  budgetCategoryFilter === "split"
+                    ? "bg-white text-[#006F51] shadow-2xs"
                     : "text-[#64748B] hover:text-[#101828]"
-                  }`}
+                }`}
               >
                 Todos ({filteredProjects.length})
               </button>
               <button
                 type="button"
                 onClick={() => setBudgetCategoryFilter("electrical")}
-                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${budgetCategoryFilter === "electrical"
-                    ? "bg-white text-blue-700 shadow-xs"
+                className={`flex h-7 items-center justify-center gap-1 rounded-lg px-1 text-[10.5px] font-extrabold whitespace-nowrap transition ${
+                  budgetCategoryFilter === "electrical"
+                    ? "bg-white text-blue-700 shadow-2xs"
                     : "text-[#64748B] hover:text-[#101828]"
-                  }`}
+                }`}
               >
-                <Zap className="h-3 w-3 text-blue-600" />
-                Elétricos ({electricalProjects.length})
+                <Zap className="h-3 w-3 shrink-0 text-blue-600" />
+                <span>Elétricos ({electricalProjects.length})</span>
               </button>
               <button
                 type="button"
                 onClick={() => setBudgetCategoryFilter("solar")}
-                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${budgetCategoryFilter === "solar"
-                    ? "bg-white text-amber-700 shadow-xs"
+                className={`flex h-7 items-center justify-center gap-1 rounded-lg px-1 text-[10.5px] font-extrabold whitespace-nowrap transition ${
+                  budgetCategoryFilter === "solar"
+                    ? "bg-white text-amber-700 shadow-2xs"
                     : "text-[#64748B] hover:text-[#101828]"
-                  }`}
+                }`}
               >
-                <Sun className="h-3 w-3 text-amber-500" />
-                Solares ({solarProjects.length})
+                <Sun className="h-3 w-3 shrink-0 text-amber-500" />
+                <span>Solares ({solarProjects.length})</span>
               </button>
             </div>
 
@@ -995,23 +1054,25 @@ export default function BudgetPage() {
                       electricalProjects.map((item) => {
                         const active = item.id === projectId;
                         const savedTotal = Number(item.budget_total ?? item.total_budget ?? 0);
+                        const distinctClient = getDistinctClientName(item);
                         return (
                           <button
                             key={item.id}
                             type="button"
                             onClick={() => selectProject(item.id)}
-                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${active
-                                ? "border-blue-500 bg-blue-50/60 shadow-xs"
-                                : "border-border/60 bg-white hover:border-blue-200 hover:bg-slate-50/70"
-                              }`}
+                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${
+                              active
+                                ? "border-blue-500 bg-blue-50/60 shadow-2xs"
+                                : "border-[#E5EBF1] bg-white hover:border-blue-200 hover:bg-slate-50/70"
+                            }`}
                           >
                             <ProjectThumbBadge project={item} size="md" />
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-xs font-black text-[#0f172a]">
+                              <span className="block truncate text-xs font-extrabold text-[#101828]">
                                 {item.name || "Projeto sem nome"}
                               </span>
-                              <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-foreground">
-                                {item.client_name || "Sem cliente"}
+                              <span className="mt-0.5 block truncate text-[11px] font-medium text-[#64748B]">
+                                {distinctClient || item.supply_type || "Instalação elétrica"}
                                 {savedTotal > 0 ? ` · ${formatCurrencyBR(savedTotal)}` : ""}
                               </span>
                             </span>
@@ -1043,23 +1104,25 @@ export default function BudgetPage() {
                       solarProjects.map((item) => {
                         const active = item.id === projectId;
                         const savedTotal = Number(item.budget_total ?? item.total_budget ?? 0);
+                        const distinctClient = getDistinctClientName(item);
                         return (
                           <button
                             key={item.id}
                             type="button"
                             onClick={() => selectProject(item.id)}
-                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${active
-                                ? "border-amber-500 bg-amber-50/70 shadow-xs"
-                                : "border-border/60 bg-white hover:border-amber-200 hover:bg-slate-50/70"
-                              }`}
+                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${
+                              active
+                                ? "border-amber-500 bg-amber-50/70 shadow-2xs"
+                                : "border-[#E5EBF1] bg-white hover:border-amber-200 hover:bg-slate-50/70"
+                            }`}
                           >
                             <ProjectThumbBadge project={item} size="md" />
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-xs font-black text-[#0f172a]">
+                              <span className="block truncate text-xs font-extrabold text-[#101828]">
                                 {item.name || "Projeto sem nome"}
                               </span>
-                              <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-foreground">
-                                {item.client_name || "Sem cliente"}
+                              <span className="mt-0.5 block truncate text-[11px] font-medium text-[#64748B]">
+                                {distinctClient || "Sistema fotovoltaico"}
                                 {savedTotal > 0 ? ` · ${formatCurrencyBR(savedTotal)}` : ""}
                               </span>
                             </span>
@@ -1107,8 +1170,8 @@ export default function BudgetPage() {
                           {isCurrentProjectSolar ? "Solar" : "Elétrico"}
                         </span>
                       </div>
-                      <p className="truncate text-xs font-medium text-muted-foreground">
-                        {project.client_name || "Sem cliente"}
+                      <p className="truncate text-xs font-medium text-[#64748B]">
+                        {getDistinctClientName(project) || "Cliente não informado"}
                         {project.voltage ? ` · ${project.voltage}V` : ""}
                         {project.supply_type ? ` · ${project.supply_type}` : ""}
                       </p>
