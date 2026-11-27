@@ -10,7 +10,7 @@ export default function ProjectImpactCard({ sustainability }) {
   const available = Boolean(sustainability?.available);
 
   return (
-    <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#BCEAD1] bg-gradient-to-br from-[#F3FDF8] via-[#E8FAEF] to-[#D6F6E4] px-4 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#BCEAD1] bg-gradient-to-br from-[#F3FDF8] via-[#E8FAEF] to-[#D6F6E4] p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       {/* Ilustração botânica em camadas vibrantes no canto superior direito */}
       <div className="pointer-events-none absolute -right-2 -top-2 h-28 w-28 opacity-95">
         <svg viewBox="0 0 140 140" fill="none" aria-hidden="true" className="h-full w-full drop-shadow-sm">
@@ -47,9 +47,9 @@ export default function ProjectImpactCard({ sustainability }) {
             <Leaf className="h-3.5 w-3.5" />
           </span>
           <div>
-            <h3 className="text-[13px] font-bold text-[#101828] leading-tight">Impacto do projeto</h3>
+            <h3 className="text-[13px] font-bold text-[#101828] leading-tight">Impacto ambiental</h3>
             <p className="mt-0.5 text-[11px] font-medium text-[#64748B] leading-tight">
-              Sustentabilidade e eficiência
+              Sustentabilidade fotovoltaica
             </p>
           </div>
         </div>
@@ -98,7 +98,9 @@ export default function ProjectImpactCard({ sustainability }) {
 
           <p className="text-[10px] font-medium text-[#476E5A] leading-snug">
             Base: {sustainability.solarProjectsCount}{" "}
-            {sustainability.solarProjectsCount === 1 ? "sistema solar" : "sistemas solares"} ({sustainability.totalSolarKwp.toLocaleString("pt-BR")} kWp · SIN {sustainability.emissionFactorKgKwh} kg/kWh).
+            {sustainability.solarProjectsCount === 1 ? "sistema solar" : "sistemas solares"} (
+            {sustainability.totalSolarKwp.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWp · SIN{" "}
+            {Number(sustainability.emissionFactorKgKwh || 0).toLocaleString("pt-BR")} kg/kWh).
           </p>
         </div>
       ) : (

@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
-  ChevronRight,
   Eye,
   FolderOpen,
   GitBranch,
@@ -54,7 +53,7 @@ export default function RecentProjectsTable({
   }, [projects, sortBy, maxRows]);
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white px-5 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-4 sm:px-5 sm:py-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       <div>
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-[14px] font-bold text-[#101828]">Últimos projetos</h3>
@@ -67,32 +66,48 @@ export default function RecentProjectsTable({
           </Link>
         </div>
 
-        <div className="mt-2 overflow-x-auto">
+        <div className="mt-2.5 overflow-x-auto">
           <table className="w-full min-w-[500px] table-fixed text-left text-xs">
             <thead>
               <tr className="border-b border-[#E5EBF1] text-[11px] font-semibold text-[#64748B]">
-                <th className="w-[27%] py-1.5 pr-2">
-                  <button type="button" onClick={() => setSortBy("name")} className="hover:text-[#101828]">
+                <th className="w-[30%] py-2 pr-2">
+                  <button
+                    type="button"
+                    onClick={() => setSortBy("name")}
+                    className={`transition hover:text-[#101828] ${sortBy === "name" ? "text-[#101828] font-bold" : ""}`}
+                  >
                     Projeto
                   </button>
                 </th>
-                <th className="w-[18%] py-1.5 px-1.5">Status</th>
-                <th className="w-[13%] py-1.5 px-1.5">
-                  <button type="button" onClick={() => setSortBy("demand")} className="hover:text-[#101828]">
+                <th className="w-[17%] py-2 px-1.5">Status</th>
+                <th className="w-[14%] py-2 px-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSortBy("demand")}
+                    className={`transition hover:text-[#101828] ${sortBy === "demand" ? "text-[#101828] font-bold" : ""}`}
+                  >
                     Demanda
                   </button>
                 </th>
-                <th className="w-[16%] py-1.5 px-1.5">
-                  <button type="button" onClick={() => setSortBy("budget")} className="hover:text-[#101828]">
+                <th className="w-[17%] py-2 px-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSortBy("budget")}
+                    className={`transition hover:text-[#101828] ${sortBy === "budget" ? "text-[#101828] font-bold" : ""}`}
+                  >
                     Orçamento
                   </button>
                 </th>
-                <th className="w-[16%] py-1.5 px-1.5">
-                  <button type="button" onClick={() => setSortBy("updated")} className="hover:text-[#101828]">
+                <th className="w-[15%] py-2 px-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSortBy("updated")}
+                    className={`transition hover:text-[#101828] ${sortBy === "updated" ? "text-[#101828] font-bold" : ""}`}
+                  >
                     Atualizado em
                   </button>
                 </th>
-                <th className="w-[10%] py-1.5 pl-1 text-right"></th>
+                <th className="w-[7%] py-2 pl-1 text-right"></th>
               </tr>
             </thead>
 
@@ -134,15 +149,21 @@ export default function RecentProjectsTable({
                       </td>
 
                       <td className="py-2.5 px-2 font-bold text-[#101828] tabular-nums whitespace-nowrap">
-                        {item.demandKw > 0
-                          ? `${item.demandKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`
-                          : item.solarKwp > 0
-                          ? `${item.solarKwp.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWp`
-                          : "—"}
+                        {item.demandKw > 0 ? (
+                          `${item.demandKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`
+                        ) : item.solarKwp > 0 ? (
+                          `${item.solarKwp.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWp`
+                        ) : (
+                          <span className="font-normal text-[#94A3B8]">—</span>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-2 font-bold text-[#101828] tabular-nums whitespace-nowrap">
-                        {item.budgetHasRealSource ? formatBrl(item.budgetTotal) : "—"}
+                        {item.budgetHasRealSource ? (
+                          formatBrl(item.budgetTotal)
+                        ) : (
+                          <span className="font-normal text-[#94A3B8]">—</span>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-2 font-medium text-[#64748B] whitespace-nowrap">
@@ -150,15 +171,7 @@ export default function RecentProjectsTable({
                       </td>
 
                       <td className="py-2.5 pl-2 text-right">
-                        <div className="inline-flex items-center justify-end gap-0.5">
-                          <Link
-                            to={`/projects/${project.id}`}
-                            aria-label={`Abrir ${project.name}`}
-                            className="flex h-6 w-6 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#DDFCF0] hover:text-[#006F51] transition"
-                          >
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          </Link>
-
+                        <div className="inline-flex items-center justify-end">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <button

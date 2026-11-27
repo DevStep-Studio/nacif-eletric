@@ -113,14 +113,11 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
   };
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
+          <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
             <h3 className="truncate text-[13px] font-bold text-[#101828]">Cargas dimensionadas</h3>
-            <span className="hidden 2xl:inline text-[11px] font-medium text-[#64748B]">
-              ({unit === "kva" ? "Potência aparente" : "Potência ativa"})
-            </span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button type="button" aria-label="Sobre o gráfico de cargas" className="shrink-0 text-[#94A3B8] hover:text-[#101828]">
@@ -128,7 +125,7 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
                 </button>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs text-xs">
-                Somatório das cargas por projeto no período selecionado, com base nos cálculos da NBR 5410.
+                Somatório das cargas ({unit === "kva" ? "potência aparente em kVA" : "potência ativa em kW"}) por data no período selecionado, conforme NBR 5410.
               </TooltipContent>
             </Tooltip>
           </div>
@@ -174,7 +171,7 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
           />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={series} margin={{ top: 26, right: 8, left: -24, bottom: 0 }}>
+            <BarChart data={series} margin={{ top: 28, right: 12, left: -22, bottom: 0 }}>
               <defs>
                 <linearGradient id="nacifActiveBarFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#00F0A0" />
@@ -191,7 +188,9 @@ export function LoadsBarChartCard({ charts, unit = "kva", onUnitChange }) {
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                domain={[0, (dataMax) => Math.max(0.5, Number((dataMax * 1.22).toFixed(2)))]}
+                allowDecimals={false}
+                domain={[0, (dataMax) => Math.max(2, Math.ceil((dataMax || 1) * 1.25))]}
+                tickFormatter={(val) => Number(val || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}
                 tick={{ fill: "#64748B", fontSize: 10, fontWeight: 500 }}
               />
               {series.length === 1 && maxVal > 0 && (
@@ -233,7 +232,13 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
         ? formatCurrencyBrl(value)
         : `${Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`;
     const pillW = Math.max(50, formatted.length * 6.3 + 14);
-    const pillX = Math.max(4, x - pillW / 2);
+    const isLastPoint = series.length > 1 && index === series.length - 1;
+    const isFirstPoint = series.length > 1 && index === 0;
+    const pillX = isLastPoint
+      ? Math.max(4, x - pillW + 14)
+      : isFirstPoint
+      ? Math.max(4, x - 14)
+      : Math.max(4, x - pillW / 2);
     const pillY = Math.max(2, y - 26);
     return (
       <g pointerEvents="none">
@@ -257,10 +262,10 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
   };
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1 whitespace-nowrap">
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
             <h3 className="text-[13px] font-bold text-[#101828]">
               {activeMetric === "cost" ? "Orçamento médio estimado" : "Demanda média estimada"}
             </h3>
@@ -321,7 +326,7 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
           />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={series} margin={{ top: 26, right: 12, left: -24, bottom: 0 }}>
+            <AreaChart data={series} margin={{ top: 28, right: 24, left: -22, bottom: 0 }}>
               <defs>
                 <linearGradient id="nacifDemandGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#00D98A" stopOpacity={0.34} />
@@ -338,7 +343,9 @@ export function AverageDemandAreaChartCard({ charts, metric = "demand", onMetric
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                domain={[0, (dataMax) => Math.max(0.5, Number((dataMax * 1.25).toFixed(2)))]}
+                allowDecimals={false}
+                domain={[0, (dataMax) => Math.max(2, Math.ceil((dataMax || 1) * 1.25))]}
+                tickFormatter={(val) => Number(val || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}
                 tick={{ fill: "#64748B", fontSize: 10, fontWeight: 500 }}
               />
               {series.length === 1 && peakVal > 0 && (

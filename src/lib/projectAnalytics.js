@@ -362,8 +362,16 @@ export function buildDashboardAnalytics(projects = [], period = "30d", activePro
   const maxKvaIndex = series.reduce((bestIdx, curr, idx, arr) => (curr.powerKva >= (arr[bestIdx]?.powerKva ?? -1) ? idx : bestIdx), 0);
 
   const hasBudgetData = chartItems.some((item) => item.budgetHasRealSource);
-  const avgDemandKw = chartItems.length > 0 ? Math.round((sumDemandKw / chartItems.length) * 10) / 10 : 0;
-  const avgBudget = hasBudgetData && chartItems.length > 0 ? Math.round(sumBudget / chartItems.length) : 0;
+  const demandItems = chartItems.filter((item) => item.demandKw > 0);
+  const budgetItems = chartItems.filter((item) => item.budgetHasRealSource);
+  const avgDemandKw =
+    demandItems.length > 0
+      ? Math.round((sumDemandKw / demandItems.length) * 10) / 10
+      : 0;
+  const avgBudget =
+    budgetItems.length > 0
+      ? Math.round(sumBudget / budgetItems.length)
+      : 0;
 
   // Sustentabilidade (estritamente condicional à existência de dados solares/eficiência reais)
   const solarProjects = enriched.filter((item) => item.solarKwp > 0 && item.annualGenerationKwh > 0);
@@ -382,6 +390,7 @@ export function buildDashboardAnalytics(projects = [], period = "30d", activePro
 
   return {
     enriched,
+    periodProjects: kpiSource.map((item) => item.project),
     periodProjectsCount: kpiSource.length,
     featuredItem,
     kpis: {

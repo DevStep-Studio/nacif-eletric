@@ -45,29 +45,29 @@ export default function QuickActionsCard({ activeProjectId = null }) {
   ];
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-[#E5EBF1] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-      <div className="mb-2 flex items-center gap-2">
+    <div className="flex h-full flex-col rounded-2xl border border-[#E5EBF1] bg-white p-4 sm:px-5 sm:py-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+      <div className="flex items-center gap-2">
         <Zap className="h-4 w-4 text-[#00A86B]" />
         <h3 className="text-[14px] font-bold text-[#101828]">Ações rápidas</h3>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid flex-1 grid-cols-1 gap-2.5 sm:grid-cols-2">
         {tiles.map((tile) => {
           const Icon = tile.icon;
           return (
             <Link
               key={tile.title}
               to={tile.to}
-              className={`group flex items-center gap-2 rounded-xl border px-2.5 py-2 transition-all duration-150 ${tile.bg} ${tile.border}`}
+              className={`group flex h-full min-h-[68px] items-center gap-3 rounded-xl border px-3.5 py-3 transition-all duration-150 ${tile.bg} ${tile.border}`}
             >
               <span
-                className={`flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg transition-transform group-hover:scale-105 ${tile.iconBg}`}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105 ${tile.iconBg}`}
               >
                 <Icon className="h-4 w-4 stroke-[2.1]" />
               </span>
               <div className="min-w-0">
-                <p className="truncate text-[11.5px] font-bold text-[#101828] leading-tight">{tile.title}</p>
-                <p className="mt-0.5 truncate text-[10px] font-medium text-[#64748B] leading-tight">
+                <p className="truncate text-xs font-bold text-[#101828] leading-tight">{tile.title}</p>
+                <p className="mt-0.5 truncate text-[10.5px] font-medium text-[#64748B] leading-tight">
                   {tile.subtitle}
                 </p>
               </div>

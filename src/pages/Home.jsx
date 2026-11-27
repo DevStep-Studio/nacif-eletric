@@ -191,8 +191,15 @@ export default function Home() {
   const confirmDeleteHome = async () => {
     if (!projectToDeleteHome) return;
     try {
-      await backend.entities.Project.delete(projectToDeleteHome.id);
-      setProjects((prev) => prev.filter((p) => p.id !== projectToDeleteHome.id));
+      const deletedId = projectToDeleteHome.id;
+      await backend.entities.Project.delete(deletedId);
+      setProjects((prev) => prev.filter((p) => p.id !== deletedId));
+      if (selectedFeaturedId === deletedId) {
+        setSelectedFeaturedId(null);
+        try {
+          window.localStorage.removeItem("voltai_active_project_id");
+        } catch {}
+      }
     } catch (err) {
       console.error("Erro ao excluir projeto:", err);
       alert("Não foi possível excluir o projeto.");
@@ -242,7 +249,12 @@ export default function Home() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => exportDashboardCSV(projects, chartPeriod)}
+              onClick={() =>
+                exportDashboardCSV(
+                  analytics.periodProjects?.length > 0 ? analytics.periodProjects : projects,
+                  PERIOD_LABELS[chartPeriod] || chartPeriod
+                )
+              }
               className="h-9 rounded-xl border-[#E5EBF1] bg-white px-3 text-xs font-semibold text-[#101828] shadow-2xs hover:bg-[#F6F9FC]"
             >
               <Download className="mr-1.5 h-3.5 w-3.5 text-[#64748B]" />
@@ -312,7 +324,7 @@ export default function Home() {
               <MetricCard
                 icon={Gauge}
                 value={`${kpis.demandKva.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kVA`}
-                label="Cargas dimensionadas"
+                label="Potência aparente"
                 hint={`Potência aparente agregada de todos os projetos (${PERIOD_LABELS[chartPeriod]}) via NBR 5410.`}
                 delta={kpis.deltas.demandKva}
                 className="col-span-2 sm:col-span-1"
