@@ -35,32 +35,35 @@ const NA_TEAL_SOFT = [242, 255, 252];
 function addProposalPageHeader(doc, sectionLabel, projectName) {
   // Faixa superior minimalista limpa (#FFFFFF) com filete inferior #0E1726 / #00D8B8
   doc.setFillColor(255, 255, 255);
-  doc.rect(0, 0, 210, 22, "F");
+  doc.rect(0, 0, 210, 21, "F");
 
   try {
-    doc.addImage(NACIF_LOGO_PRINCIPAL_BASE64, "PNG", 14, 5.2, 31.5, 10.5, undefined, "FAST");
+    doc.addImage(NACIF_LOGO_PRINCIPAL_BASE64, "PNG", 14, 4.8, 30, 10, undefined, "FAST");
   } catch {
     try {
-      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 14, 5.5, 10, 9.3, undefined, "FAST");
+      doc.addImage(NACIF_SYMBOL_BASE64, "PNG", 14, 5.2, 9.5, 8.8, undefined, "FAST");
     } catch {}
   }
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.2);
+  doc.setFontSize(8.0);
   doc.setTextColor(...NA_NAVY);
-  doc.text("PROPOSTA COMERCIAL · ENERGIA SOLAR", 196, 9.4, { align: "right" });
+  doc.text("PROPOSTA COMERCIAL", 196, 8.8, { align: "right" });
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.2);
+  doc.setFontSize(7.1);
   doc.setTextColor(...NA_TEAL_DARK);
-  const labelText = sectionLabel || projectName || "Sistema Fotovoltaico";
-  doc.text(String(labelText).slice(0, 60), 196, 14.5, { align: "right" });
+  const rawContext = projectName || sectionLabel || "Sistema Fotovoltaico";
+  const displayContext = String(rawContext).length > 52
+    ? `${String(rawContext).slice(0, 49)}...`
+    : String(rawContext);
+  doc.text(displayContext, 196, 14.0, { align: "right" });
 
   // Linha divisória nítida sem gradiente
   doc.setFillColor(...NA_NAVY);
-  doc.rect(14, 18.8, 150, 0.7, "F");
+  doc.rect(14, 18.6, 150, 0.7, "F");
   doc.setFillColor(...NA_TEAL);
-  doc.rect(164, 18.8, 32, 0.7, "F");
+  doc.rect(164, 18.6, 32, 0.7, "F");
 }
 
 function addProposalPageFooter(doc, pageNum, totalPages = 9) {
@@ -172,16 +175,16 @@ export function buildNacifCommercialProposalPdf({ project = {}, config = {}, siz
   // PÁGINA 1: CAPA PROPOSTA COMERCIAL (MINIMALISTA NACIF ENERGY, SEM GRADIENTE)
   // =========================================================================
   doc.setFillColor(...NA_NAVY);
-  doc.rect(0, 0, 210, 16, "F");
+  doc.rect(0, 0, 210, 14, "F");
   doc.setFillColor(...NA_TEAL);
-  doc.rect(0, 16, 210, 2.2, "F");
+  doc.rect(0, 14, 210, 2.0, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.8);
+  doc.setFontSize(7.4);
   doc.setTextColor(...NA_TEAL);
-  doc.text("NACIF ENERGY · SOLUÇÕES EM ENGENHARIA ELÉTRICA E ENERGIA SOLAR", 14, 10.2);
+  doc.text("ENGENHARIA ELÉTRICA E ENERGIA SOLAR", 14, 9.0);
   doc.setTextColor(220, 232, 245);
-  doc.text(`EMISSÃO: ${todayStr}`, 196, 10.2, { align: "right" });
+  doc.text(`${fmtNum(budget.dcPowerKw, 2)} kWp · ${budget.panelCount} MÓDULOS`, 196, 9.0, { align: "right" });
 
   // Logotipo Original Principal NACIF Energy em destaque
   try {
@@ -945,7 +948,7 @@ export function buildNacifCommercialProposalPdf({ project = {}, config = {}, siz
   doc.addPage();
   addProposalPageHeader(doc, "Aceite Formal da Proposta & Contato", projectName);
 
-  y = 28;
+  y = 26;
   y = drawPdfSectionTitle(doc, "ACEITE DA PROPOSTA COMERCIAL", 14, y, 182, { accentColor: NA_TEAL });
 
   doc.setFont("helvetica", "normal");

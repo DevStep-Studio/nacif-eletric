@@ -35,7 +35,7 @@ const REPORT_CARDS = [
   {
     id: "executive",
     title: "Relatório Executivo Completo",
-    desc: "Documento consolidado de 2 páginas com capa, KPIs, layout, strings, BOM e retorno financeiro.",
+    desc: "Documento consolidado de 3 páginas com KPIs, implantação, unifilar, curva de geração, BOM e retorno financeiro.",
     icon: FileText,
     fn: generateExecutiveSolarPdf,
     filename: "00_Relatorio_Executivo_Completo_Solar.pdf",

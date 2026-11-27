@@ -712,7 +712,7 @@ export function drawElectricalUnifilarVector(
 export function drawSolarUnifilarVector(
   doc,
   params = {},
-  { x = 14, y = 48, w = 182, h = 112 } = {}
+  { x = 14, y = 48, w = 182, h = 112, showHeader = true } = {}
 ) {
   const dcPowerKw = Number(params.dcPowerKw || 0);
   const panelCount = Math.max(1, Number(params.panelCount || 20));
@@ -752,24 +752,27 @@ export function drawSolarUnifilarVector(
   doc.setLineWidth(0.4);
   doc.rect(x, y, w, h, "FD");
 
-  // Header do Diagrama
-  doc.setFillColor(...PDF_THEME.navy);
-  doc.rect(x, y, w, 9, "F");
-  doc.setFillColor(...PDF_THEME.teal);
-  doc.rect(x, y, 2.5, 9, "F");
+  // Header do Diagrama (opcional quando já existe título de seção acima)
+  if (showHeader) {
+    doc.setFillColor(...PDF_THEME.navy);
+    doc.rect(x, y, w, 9, "F");
+    doc.setFillColor(...PDF_THEME.teal);
+    doc.rect(x, y, 2.5, 9, "F");
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.2);
-  doc.setTextColor(...PDF_THEME.white);
-  txt(doc, "DIAGRAMA UNIFILAR ELÉTRICO SOLAR (CC / CA)", x + 5, y + 5.9);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.2);
+    doc.setTextColor(...PDF_THEME.white);
+    txt(doc, "DIAGRAMA UNIFILAR ELÉTRICO SOLAR (CC / CA)", x + 5, y + 5.9);
 
-  doc.setFontSize(6.8);
-  doc.setTextColor(...PDF_THEME.teal);
-  txt(doc, `NBR 16690 · NBR 5410 · ${dcPowerKw.toFixed(2)} kWp / ${inverterKw} kW`, x + w - 4, y + 5.9, { align: "right" });
+    doc.setFontSize(6.8);
+    doc.setTextColor(...PDF_THEME.teal);
+    txt(doc, `NBR 16690 · NBR 5410 · ${dcPowerKw.toFixed(2)} kWp / ${inverterKw} kW`, x + w - 4, y + 5.9, { align: "right" });
+  }
 
   // Coordenadas dos 5 estágios horizontais
-  const bodyY = y + 12;
-  const bodyH = h - 24;
+  const headerOffset = showHeader ? 12 : 3.5;
+  const bodyY = y + headerOffset;
+  const bodyH = h - headerOffset - 12;
   const midY = bodyY + bodyH / 2 - 2;
 
   const s1X = x + 4;
