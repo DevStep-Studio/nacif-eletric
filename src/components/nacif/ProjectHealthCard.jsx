@@ -100,13 +100,17 @@ export default function ProjectHealthCard({ project, className = "", compact = f
           <div className="rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] px-3 py-2">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B]">Desequilíbrio Fases</span>
             <p className="mt-0.5 text-sm font-extrabold text-[#101828] tabular-nums">
-              {health.hasCircuits ? `${Number(health.imbalancePct || 0).toFixed(1)}%` : "—"}
+              {health.hasCircuits
+                ? `${Number(health.imbalancePct || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+                : "—"}
             </p>
           </div>
           <div className="flex items-center justify-between rounded-xl border border-[#E5EBF1] bg-[#F6F9FC] px-3 py-2">
-            <div>
+            <div className="min-w-0 pr-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B]">Próximo passo</span>
-              <p className="mt-0.5 truncate text-xs font-bold text-[#006F51]">Abrir etapa</p>
+              <p className="mt-0.5 truncate text-xs font-bold text-[#006F51]">
+                {health.progress.nextStep?.label || "Ver projeto"}
+              </p>
             </div>
             <Link
               to={health.progress.nextStep?.href || `/projects/${project.id}`}
