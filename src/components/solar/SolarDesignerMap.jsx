@@ -99,23 +99,29 @@ function ViewportController({ center, zoom, viewportRequest = 0, programmaticMov
   return null;
 }
 
-function MeasurementLabels({ roofPolygon, isSelected = true }) {
+function MeasurementLabels({ roofPolygon, isSelected = true, zoom = 20 }) {
   const edges = useMemo(() => getPolygonEdges(roofPolygon), [roofPolygon]);
+
+  // Calcula um fator de escala para que a etiqueta mantenha proporção visual com a aresta e não fique gigante ao afastar o zoom
+  const zoomScale = useMemo(() => {
+    const z = Number(zoom) || 20;
+    return Math.max(0.55, Math.min(1, 0.88 * Math.pow(1.18, z - 20)));
+  }, [zoom]);
 
   return edges.map((item) => (
     <Marker
-      key={`${item.id}-${isSelected ? 'sel' : 'unsel'}`}
+      key={`${item.id}-${isSelected ? "sel" : "unsel"}`}
       position={[item.midpoint.lat, item.midpoint.lng]}
       interactive={false}
       icon={L.divIcon({
         className: "solar-measure-label",
-        html: `<span class="${
+        html: `<div class="pointer-events-none flex items-center justify-center" style="transform: translate(-50%, -50%) rotate(${item.rotation}deg) translateY(-12px) scale(${zoomScale.toFixed(3)});"><span class="${
           isSelected
-            ? "bg-white text-slate-900 border-2 border-[#00d8b8]"
-            : "bg-white text-slate-600 border border-slate-300"
-        } px-1.5 py-0.5 rounded text-[10px] font-bold shadow-sm whitespace-nowrap" style="transform: rotate(${item.rotation}deg); display: inline-block;">${item.label}</span>`,
-        iconSize: [70, 18],
-        iconAnchor: [35, 9],
+            ? "bg-slate-900/90 text-white border border-[#00d8b8]/90"
+            : "bg-slate-900/75 text-slate-200 border border-slate-400/60"
+        } px-1.5 py-0.5 rounded text-[9px] font-bold shadow-sm whitespace-nowrap">${item.label}</span></div>`,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
       })}
     />
   ));
@@ -1229,7 +1235,7 @@ export default function SolarDesignerMap({
 
         {/* 5. Medições de arestas na área ativa */}
         {showMeasurements && !isDrawing && selectedRoofPolygon?.length >= 3 && (
-          <MeasurementLabels roofPolygon={selectedRoofPolygon} isSelected={true} />
+          <MeasurementLabels roofPolygon={selectedRoofPolygon} isSelected={true} zoom={currentZoom} />
         )}
 
         {/* 6. Alinhamento de bordas na área ativa */}

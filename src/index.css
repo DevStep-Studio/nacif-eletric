@@ -541,16 +541,14 @@ label.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10),
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 54px;
-  height: 18px;
-  border-radius: 2px;
-  background: rgba(31, 41, 55, 0.62);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 11px;
+  border-radius: 3px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
   transform-origin: center;
+  will-change: transform;
 }
 
 .solar-designer-mini-map.leaflet-container {
