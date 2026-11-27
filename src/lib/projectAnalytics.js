@@ -50,9 +50,13 @@ export function isProjectArchived(project) {
 export function isSolarTypedProject(project) {
   return (
     normalizeProjectText(project?.project_type).includes("solar") ||
+    normalizeProjectText(project?.name).includes("solar") ||
     Number(project?.solar_power_kwp || 0) > 0 ||
     Number(project?.solar_config?.installed_kwp || 0) > 0 ||
-    Number(project?.solar_sizing?.installedKwp || 0) > 0
+    Number(project?.solar_sizing?.installedKwp || 0) > 0 ||
+    Number(project?.solar_config?.dc_power_kw || 0) > 0 ||
+    Number(project?.solar_config?.system_size_kw || 0) > 0 ||
+    Boolean(project?.solar_config && Object.keys(project.solar_config).length > 0)
   );
 }
 
@@ -82,6 +86,8 @@ export function computeProjectMetricsSafe(project) {
     metrics = null;
   }
 
+  const isSolar = isSolarTypedProject(project);
+
   const circuits = Array.isArray(project.circuits) && project.circuits.length > 0
     ? project.circuits
     : Array.isArray(metrics?.circuits)
@@ -89,16 +95,57 @@ export function computeProjectMetricsSafe(project) {
     : [];
   const circuitsCount = circuits.length;
 
-  const installedPowerW =
+  const solarConfig = project.solar_config || {};
+  const solarSizing = project.solar_sizing || {};
+
+  // Extrair contagem de módulos/painéis solares de áreas ou parâmetros
+  const areas = Array.isArray(solarConfig.areas)
+    ? solarConfig.areas
+    : Array.isArray(project.roof_areas)
+    ? project.roof_areas
+    : Array.isArray(project.solar_areas)
+    ? project.solar_areas
+    : [];
+  const solarPanelsCount =
+    Number(solarSizing.panelCount) ||
+    Number(solarConfig.total_panels) ||
+    Number(solarConfig.requested_panel_count) ||
+    areas.reduce((sum, a) => sum + (Number(a.panelCount) || Number(a.panelPolygons?.length) || Number(a.panels?.length) || 0), 0) ||
+    0;
+
+  const moduleWp = Number(solarConfig.module_wp || project.module_wp || 550);
+  const derivedKwpFromPanels = solarPanelsCount > 0 ? (solarPanelsCount * moduleWp) / 1000 : 0;
+
+  const solarKwp =
+    Number(project.solar_power_kwp) ||
+    Number(solarSizing.installedKwp) ||
+    Number(solarSizing.systemSizeKwp) ||
+    Number(solarSizing.dcPowerKw) ||
+    Number(solarConfig.installed_kwp) ||
+    Number(solarConfig.dc_power_kw) ||
+    Number(solarConfig.system_size_kw) ||
+    Number(solarConfig.system_power_kwp) ||
+    Number(solarConfig.inverter_kw) ||
+    derivedKwpFromPanels ||
+    0;
+
+  let installedPowerW =
     Number(metrics?.totalInstalledPower || metrics?.totalPower) ||
     Number(project.total_power_w) ||
     circuits.reduce((acc, c) => acc + Number(c?.power_w || 0), 0) ||
     0;
 
-  const demandPowerW =
+  let demandPowerW =
     Number(metrics?.totalDemandPower) ||
     Number(project.total_demand_w) ||
     (installedPowerW > 0 ? installedPowerW * 0.8 : 0);
+
+  // Se for projeto solar e não possuir cargas CA cadastradas manualmente, reflete a potência do inversor/geração
+  if (isSolar && demandPowerW === 0 && solarKwp > 0) {
+    const inverterW = Math.round((Number(solarConfig.inverter_kw) || solarKwp) * 1000);
+    installedPowerW = Math.round(solarKwp * 1000);
+    demandPowerW = inverterW;
+  }
 
   const demandKva =
     Number(metrics?.totalDemandVa) > 0
@@ -107,21 +154,24 @@ export function computeProjectMetricsSafe(project) {
       ? (demandPowerW / 0.92) / 1000
       : installedPowerW / 1000;
 
-  const explicitBudget = Number(project.budget_total || project.total_budget || 0);
+  const explicitBudget = Number(
+    project.budget_total ||
+    project.total_budget ||
+    project.investment_brl ||
+    solarConfig?.solar_budget?.finalTotal ||
+    0
+  );
   let computedBudget = explicitBudget;
-  if (!(computedBudget > 0) && (circuitsCount > 0 || (Array.isArray(project.panel_boards) && project.panel_boards.length > 0) || project.solar_config)) {
+  if (
+    !(computedBudget > 0) &&
+    (circuitsCount > 0 || (Array.isArray(project.panel_boards) && project.panel_boards.length > 0) || project.solar_config)
+  ) {
     try {
       computedBudget = Number(buildProjectBudgetMaterials(project)?.materialTotal || 0);
     } catch {
       computedBudget = 0;
     }
   }
-
-  const solarKwp =
-    Number(project.solar_power_kwp) ||
-    Number(project.solar_sizing?.installedKwp) ||
-    Number(project.solar_config?.installed_kwp) ||
-    0;
 
   const explicitAnnualKwh =
     Number(project.solar_sizing?.annualGenerationKwh) ||
@@ -159,7 +209,9 @@ export function computeProjectMetricsSafe(project) {
     metrics,
     nbrAudit,
     progress,
+    isSolar,
     circuitsCount,
+    solarPanelsCount,
     installedPowerW,
     demandPowerW,
     demandKw: demandPowerW / 1000,
@@ -241,21 +293,71 @@ export function buildDashboardAnalytics(projects = [], period = "30d", activePro
     nbrWarnCount += validations.filter((v) => v.severity === "warning").length;
   });
 
-  // Série cronológica real ordenada por atualização
+  // Agrupamento temporal por DIA ÚNICO para o eixo X (elimina repetições de datas)
   const chartItems = [...kpiSource].sort((a, b) => (a.updatedTimestamp || 0) - (b.updatedTimestamp || 0));
-  const series = chartItems.map((item) => ({
-    id: item.project.id,
-    name: item.project.name || "Projeto",
-    date: item.updatedTimestamp
-      ? new Date(item.updatedTimestamp).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(/\./g, "")
-      : "Sem data",
-    fullDate: formatShortProjectDate(item.project),
-    circuits: item.circuitsCount,
-    powerKva: Math.round(item.demandKva * 10) / 10,
-    powerKw: Math.round(item.demandKw * 10) / 10,
-    demandKw: Math.round(item.demandKw * 10) / 10,
-    budget: Math.round(item.budgetTotal),
-  }));
+  const dailyMap = new Map();
+
+  chartItems.forEach((item) => {
+    const ts = item.updatedTimestamp;
+    let dayKey;
+    let dateLabel;
+    let fullDateLabel;
+
+    if (ts) {
+      const d = new Date(ts);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      dayKey = `${year}-${month}-${day}`;
+      dateLabel = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(/\./g, "");
+      fullDateLabel = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    } else {
+      dayKey = "sem-data";
+      dateLabel = "Sem data";
+      fullDateLabel = "Data não informada";
+    }
+
+    if (!dailyMap.has(dayKey)) {
+      dailyMap.set(dayKey, {
+        dayKey,
+        date: dateLabel,
+        fullDate: fullDateLabel,
+        timestamp: ts || 0,
+        projects: [],
+        powerKva: 0,
+        powerKw: 0,
+        demandKw: 0,
+        budget: 0,
+        circuits: 0,
+      });
+    }
+
+    const group = dailyMap.get(dayKey);
+    group.projects.push(item);
+    group.powerKva += item.demandKva;
+    group.powerKw += item.demandKw;
+    group.demandKw += item.demandKw;
+    group.budget += item.budgetTotal;
+    group.circuits += item.circuitsCount;
+  });
+
+  const series = Array.from(dailyMap.values())
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((g) => ({
+      id: g.dayKey,
+      date: g.date,
+      fullDate: g.fullDate,
+      name:
+        g.projects.length === 1
+          ? g.projects[0].project.name || "Projeto"
+          : `${g.projects.length} projetos (${g.projects.map((p) => p.project.name || "Projeto").slice(0, 2).join(", ")}${g.projects.length > 2 ? "..." : ""})`,
+      projectCount: g.projects.length,
+      circuits: g.circuits,
+      powerKva: Math.round(g.powerKva * 10) / 10,
+      powerKw: Math.round(g.powerKw * 10) / 10,
+      demandKw: Math.round(g.demandKw * 10) / 10,
+      budget: Math.round(g.budget),
+    }));
 
   const maxKvaIndex = series.reduce((bestIdx, curr, idx, arr) => (curr.powerKva >= (arr[bestIdx]?.powerKva ?? -1) ? idx : bestIdx), 0);
 
@@ -270,9 +372,10 @@ export function buildDashboardAnalytics(projects = [], period = "30d", activePro
   const totalAvoidedCo2KgYear = solarProjects.reduce((acc, item) => acc + item.avoidedCo2KgYear, 0);
   const totalTreesEquivalent = solarProjects.reduce((acc, item) => acc + item.treesEquivalent, 0);
 
-  // Projeto em destaque: prioriza projeto selecionado (voltai_active_project_id), depois "em andamento" mais recente, depois mais recente
+  // Projeto em destaque: prioriza projeto ativo selecionado; caso não haja, prioriza projeto em andamento com dados de engenharia
   const featuredItem =
     (activeProjectId ? enriched.find((item) => item.project.id === activeProjectId) : null) ||
+    enriched.find((item) => (item.circuitsCount > 0 || item.solarKwp > 0 || item.demandKw > 0) && !isProjectCompleted(item.project) && !isProjectArchived(item.project)) ||
     enriched.find((item) => !isProjectCompleted(item.project) && !isProjectArchived(item.project)) ||
     enriched[0] ||
     null;

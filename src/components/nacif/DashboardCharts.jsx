@@ -31,13 +31,20 @@ function CustomBarTooltip({ active, payload, unit }) {
   const item = payload[0].payload;
   const val = unit === "kva" ? item.powerKva : item.powerKw;
   return (
-    <div className="rounded-xl border border-white/10 bg-[#031923] px-3 py-2 text-xs text-white shadow-xl">
-      <p className="font-extrabold text-[#00F0A0]">
-        {Number(val || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}{" "}
-        {unit === "kva" ? "kVA" : "kW"}
-      </p>
-      <p className="mt-0.5 max-w-[160px] truncate text-[11px] font-medium text-slate-200">{item.name}</p>
-      <p className="text-[10px] text-slate-400">{item.fullDate}</p>
+    <div className="rounded-xl border border-white/10 bg-[#031923] px-3.5 py-2.5 text-xs text-white shadow-xl">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-extrabold text-[#00F0A0] text-sm">
+          {Number(val || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}{" "}
+          {unit === "kva" ? "kVA" : "kW"}
+        </p>
+        {item.projectCount > 1 && (
+          <span className="rounded-full bg-[#00F0A0]/20 px-2 py-0.5 text-[10px] font-bold text-[#00F0A0]">
+            {item.projectCount} projetos
+          </span>
+        )}
+      </div>
+      <p className="mt-1 max-w-[220px] truncate text-[11px] font-medium text-slate-200">{item.name}</p>
+      <p className="mt-0.5 text-[10px] text-slate-400">{item.fullDate}</p>
     </div>
   );
 }
@@ -47,14 +54,21 @@ function CustomAreaTooltip({ active, payload, metric }) {
   const item = payload[0].payload;
   const val = metric === "cost" ? item.budget : item.demandKw;
   return (
-    <div className="rounded-xl border border-white/10 bg-[#031923] px-3 py-2 text-xs text-white shadow-xl">
-      <p className="font-extrabold text-[#00F0A0]">
-        {metric === "cost"
-          ? formatCurrencyBrl(val)
-          : `${Number(val || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
-      </p>
-      <p className="mt-0.5 max-w-[160px] truncate text-[11px] font-medium text-slate-200">{item.name}</p>
-      <p className="text-[10px] text-slate-400">{item.fullDate}</p>
+    <div className="rounded-xl border border-white/10 bg-[#031923] px-3.5 py-2.5 text-xs text-white shadow-xl">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-extrabold text-[#00F0A0] text-sm">
+          {metric === "cost"
+            ? formatCurrencyBrl(val)
+            : `${Number(val || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
+        </p>
+        {item.projectCount > 1 && (
+          <span className="rounded-full bg-[#00F0A0]/20 px-2 py-0.5 text-[10px] font-bold text-[#00F0A0]">
+            {item.projectCount} projetos
+          </span>
+        )}
+      </div>
+      <p className="mt-1 max-w-[220px] truncate text-[11px] font-medium text-slate-200">{item.name}</p>
+      <p className="mt-0.5 text-[10px] text-slate-400">{item.fullDate}</p>
     </div>
   );
 }

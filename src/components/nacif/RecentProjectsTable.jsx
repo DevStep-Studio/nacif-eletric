@@ -136,6 +136,8 @@ export default function RecentProjectsTable({
                       <td className="py-2.5 px-2 font-bold text-[#101828] tabular-nums whitespace-nowrap">
                         {item.demandKw > 0
                           ? `${item.demandKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`
+                          : item.solarKwp > 0
+                          ? `${item.solarKwp.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWp`
                           : "—"}
                       </td>
 
@@ -205,19 +207,13 @@ export default function RecentProjectsTable({
       </div>
 
       {rows.length > 0 && rows.length < 3 && (
-        <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl border border-[#E9F3EE] bg-[#F8FCFA] px-3 py-2 text-[11px] text-[#64748B]">
+        <div className="mt-2.5 rounded-xl border border-[#E9F3EE] bg-[#F8FCFA] px-3 py-2 text-[11px] text-[#64748B]">
           <span>
             {projects.length === 1
               ? "1 projeto ativo no workspace."
               : `${projects.length} projetos disponíveis no workspace.`}{" "}
-            Cadastre novos estudos para acompanhar histórico comparativo.
+            Cadastre novos estudos para acompanhar o histórico comparativo.
           </span>
-          <Link
-            to="/projects/new"
-            className="shrink-0 font-bold text-[#00A86B] hover:text-[#006F51] whitespace-nowrap"
-          >
-            + Novo projeto
-          </Link>
         </div>
       )}
     </div>

@@ -34,16 +34,55 @@ export default function FeaturedProjectCard({
     ? String(project.status).toUpperCase()
     : "PROJETO EM ANDAMENTO";
 
+  const isSolar = Boolean(computed?.isSolar);
   const progressPct = computed?.progress?.percent ?? 0;
-  const demandDisplay = computed
-    ? computed.demandKva > 0
-      ? `${computed.demandKva.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kVA`
-      : computed.demandKw > 0
-      ? `${computed.demandKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`
-      : "0,0 kVA"
-    : "—";
 
-  const circuitsCount = computed?.circuitsCount ?? 0;
+  // Resolução inteligente da potência e métricas do projeto
+  let demandDisplay = "—";
+  let demandLabel = "Carga total";
+  let circuitsDisplay = 0;
+  let circuitsLabel = "Circuitos";
+
+  if (computed) {
+    if (isSolar) {
+      if (computed.solarKwp > 0) {
+        demandDisplay = `${computed.solarKwp.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWp`;
+        demandLabel = "Potência FV";
+      } else if (computed.demandKva > 0) {
+        demandDisplay = `${computed.demandKva.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kVA`;
+        demandLabel = "Carga total";
+      } else {
+        demandDisplay = "A dimensionar";
+        demandLabel = "Potência FV";
+      }
+
+      if (computed.circuitsCount > 0) {
+        circuitsDisplay = computed.circuitsCount;
+        circuitsLabel = computed.circuitsCount === 1 ? "Circuito" : "Circuitos";
+      } else if (computed.solarPanelsCount > 0) {
+        circuitsDisplay = computed.solarPanelsCount;
+        circuitsLabel = computed.solarPanelsCount === 1 ? "Módulo FV" : "Módulos FV";
+      } else {
+        circuitsDisplay = "Sistema FV";
+        circuitsLabel = "Arranjo solar";
+      }
+    } else {
+      if (computed.demandKva > 0) {
+        demandDisplay = `${computed.demandKva.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kVA`;
+        demandLabel = "Carga total";
+      } else if (computed.demandKw > 0) {
+        demandDisplay = `${computed.demandKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`;
+        demandLabel = "Demanda estimada";
+      } else {
+        demandDisplay = "A dimensionar";
+        demandLabel = "Carga total";
+      }
+
+      circuitsDisplay = computed.circuitsCount;
+      circuitsLabel = computed.circuitsCount === 1 ? "Circuito" : "Circuitos";
+    }
+  }
+
   const budgetDisplay = computed?.budgetHasRealSource
     ? formatBrl(computed.budgetTotal)
     : "Não calculado";
@@ -105,8 +144,8 @@ export default function FeaturedProjectCard({
                   <ChevronDown className="h-3 w-3 opacity-80" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-60 rounded-xl border-[#E5EBF1] bg-white p-1.5 shadow-xl">
-                {allProjects.slice(0, 8).map((p) => (
+              <DropdownMenuContent align="start" className="w-64 max-h-64 overflow-y-auto rounded-xl border-[#E5EBF1] bg-white p-1.5 shadow-xl">
+                {allProjects.map((p) => (
                   <DropdownMenuItem
                     key={p.id}
                     onClick={() => onSelectProject(p.id)}
@@ -115,6 +154,9 @@ export default function FeaturedProjectCard({
                     }`}
                   >
                     <span className="truncate">{p.name}</span>
+                    <span className="ml-2 text-[10px] text-[#64748B] shrink-0 font-normal">
+                      {p.project_type || (p.circuits?.length > 0 ? `${p.circuits.length} ckt` : "Projeto")}
+                    </span>
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -148,29 +190,27 @@ export default function FeaturedProjectCard({
 
             {/* Indicadores Internos Limpos — Sem Caixas com Bordas Pesadas */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 py-0.5">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" title={`Métrica do projeto ${project.name}`}>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#00F0A0]/16 text-[#00F0A0]">
                   <Zap className="h-4 w-4" />
                 </span>
                 <div>
                   <p className="text-[13px] font-extrabold text-white leading-tight tabular-nums">{demandDisplay}</p>
-                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">Carga total</p>
+                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">{demandLabel}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" title={`Circuitos ou arranjos de ${project.name}`}>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#00F0A0]/16 text-[#00F0A0]">
                   <GitBranch className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-[13px] font-extrabold text-white leading-tight tabular-nums">{circuitsCount}</p>
-                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">
-                    {circuitsCount === 1 ? "Circuito" : "Circuitos"}
-                  </p>
+                  <p className="text-[13px] font-extrabold text-white leading-tight tabular-nums">{circuitsDisplay}</p>
+                  <p className="text-[10px] font-medium text-emerald-100/75 leading-tight">{circuitsLabel}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" title={`Orçamento estimado de ${project.name}`}>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#00F0A0]/16 text-[#00F0A0]">
                   <FileText className="h-4 w-4" />
                 </span>

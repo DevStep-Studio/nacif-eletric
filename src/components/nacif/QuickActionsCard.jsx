@@ -1,15 +1,16 @@
 import { Link } from "react-router-dom";
-import { BookOpen, Calculator, GitBranch, Plus, Zap } from "lucide-react";
+import { BookOpen, Calculator, GitBranch, LayoutGrid, Zap } from "lucide-react";
 
 export default function QuickActionsCard({ activeProjectId = null }) {
   const unifilarPath = activeProjectId ? `/unifilar?project=${activeProjectId}` : "/unifilar";
+  const plantaPath = activeProjectId ? `/planta-ia?project=${activeProjectId}` : "/planta-ia";
 
   const tiles = [
     {
-      title: "Novo projeto",
-      subtitle: "Inicie um projeto do zero",
-      to: "/projects/new",
-      icon: Plus,
+      title: "Planta elétrica",
+      subtitle: "Desenhe e posicione cargas",
+      to: plantaPath,
+      icon: LayoutGrid,
       bg: "bg-[#E8FDF3] hover:bg-[#DCFBE9]",
       border: "border-[#C7F3DE]",
       iconBg: "bg-[#00D98A]/24 text-[#007A52]",

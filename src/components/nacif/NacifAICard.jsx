@@ -35,32 +35,34 @@ export default function NacifAICard({ project = null }) {
 
   return (
     <>
-      <div className="relative flex min-h-[240px] lg:h-[252px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-[#644AEF] via-[#4D61ED] to-[#3888F8] p-4 sm:p-5 text-white shadow-[0_12px_30px_rgba(91,74,232,0.28)]">
-        {/* Aura luminosa atrás do mascote */}
-        <div className="pointer-events-none absolute -right-4 -top-6 h-44 w-44 rounded-full bg-[#B9D2FF]/35 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-10 left-0 h-28 w-36 rounded-full bg-[#00F0A0]/16 blur-2xl" />
+      <div className="relative flex min-h-[240px] lg:h-[252px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-br from-[#162032] via-[#1A2C42] to-[#123E3A] p-4 sm:p-4.5 text-white shadow-[0_8px_24px_rgba(18,62,58,0.14)] border border-white/10">
+        {/* Aura luminosa sutil */}
+        <div className="pointer-events-none absolute -right-3 -top-4 h-32 w-32 rounded-full bg-[#00F0A0]/14 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-6 left-0 h-20 w-28 rounded-full bg-[#38BDF8]/12 blur-2xl" />
 
-        {/* Mascote Nítido em Alta Resolução Integrado ao Topo Direito */}
-        <div className="pointer-events-none absolute right-1 top-1 z-10 h-[144px] w-[144px] sm:h-[156px] sm:w-[156px] select-none">
+        {/* Mascote Compacto e Proporcional Integrado ao Topo Direito */}
+        <div className="pointer-events-none absolute right-2 top-2 z-10 h-[88px] w-[88px] sm:h-[98px] sm:w-[98px] select-none opacity-90">
           <img
             src={NACIF_AI_ASSETS.mascot}
             alt={NACIF_AI_ASSETS.mascotAlt}
-            className="h-full w-full object-contain object-top drop-shadow-[0_12px_22px_rgba(20,16,78,0.34)]"
+            className="h-full w-full object-contain object-top drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)]"
           />
         </div>
 
-        {/* Cabeçalho */}
-        <div className="relative z-20 max-w-[60%] pr-2">
+        {/* Cabeçalho Limpo */}
+        <div className="relative z-20 max-w-[65%] pr-2">
           <div className="flex items-center gap-1.5">
-            <Sparkles className="h-4.5 w-4.5 text-[#DDFCF0]" />
-            <h2 className="text-[18px] font-extrabold tracking-tight text-white leading-none">Nacif IA</h2>
+            <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-[#00F0A0]/20 text-[#00F0A0]">
+              <Sparkles className="h-3 w-3" />
+            </span>
+            <h2 className="text-[17px] font-extrabold tracking-tight text-white leading-none">Nacif IA</h2>
           </div>
-          <p className="mt-1.5 text-[11px] font-medium leading-snug text-white/88">
-            Seu assistente em projetos elétricos
+          <p className="mt-1 text-[11px] font-medium leading-snug text-slate-300">
+            Assistente inteligente de engenharia
           </p>
         </div>
 
-        {/* 3 Ações Principais */}
+        {/* 3 Ações Principais Otimizadas */}
         <div className="relative z-20 mt-auto space-y-1.5 pt-2">
           {AI_ACTIONS.map((action) => {
             const Icon = action.icon;
@@ -69,13 +71,13 @@ export default function NacifAICard({ project = null }) {
                 key={action.id}
                 type="button"
                 onClick={() => handleOpenMode(action.id)}
-                className="group flex h-[36px] w-full items-center justify-between gap-2 rounded-xl bg-[#F8FAFF] px-3 text-left text-[12px] font-semibold text-[#101828] shadow-[0_2px_8px_rgba(22,36,104,0.1)] transition-all duration-150 hover:bg-white hover:translate-x-0.5 active:scale-[0.99]"
+                className="group flex h-[33px] w-full items-center justify-between gap-2 rounded-xl bg-white/95 px-3 text-left text-[11.5px] font-semibold text-[#101828] shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-all duration-150 hover:bg-white hover:translate-x-0.5 active:scale-[0.99]"
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <Icon className={`h-3.5 w-3.5 shrink-0 ${action.iconColor}`} />
                   <span className="truncate">{action.label}</span>
                 </div>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#94A3B8] transition-transform group-hover:translate-x-0.5 group-hover:text-[#5B4AE8]" />
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#94A3B8] transition-transform group-hover:translate-x-0.5 group-hover:text-[#00A86B]" />
               </button>
             );
           })}

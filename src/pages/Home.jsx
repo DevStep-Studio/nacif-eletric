@@ -212,9 +212,6 @@ export default function Home() {
             <h1 className="text-[22px] font-extrabold tracking-tight text-[#101828] leading-tight">
               Painel Geral
             </h1>
-            <p className="mt-0.5 text-xs font-medium text-[#64748B]">
-              Gerencie projetos, dimensionamentos e análises elétricas com inteligência.
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -278,13 +275,13 @@ export default function Home() {
               <NacifAICard project={featuredItem?.project || null} />
             </section>
 
-            {/* Linha 2: 5 Indicadores Compactos */}
+            {/* Linha 2: 5 Indicadores Consolidados do Período */}
             <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <MetricCard
                 icon={Zap}
                 value={`${kpis.demandKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
                 label="Demanda total"
-                hint={`Carga instalada no período: ${kpis.installedKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
+                hint={`Consolidado do período (${PERIOD_LABELS[chartPeriod]}): ${kpis.installedKw.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW de carga instalada.`}
                 delta={kpis.deltas.demandKw}
               />
 
@@ -292,7 +289,7 @@ export default function Home() {
                 icon={GitBranch}
                 value={kpis.circuits.toLocaleString("pt-BR")}
                 label="Circuitos"
-                hint="Total de circuitos terminais cadastrados nos projetos do período."
+                hint={`Total de circuitos cadastrados em todos os projetos (${PERIOD_LABELS[chartPeriod]}).`}
                 delta={kpis.deltas.circuits}
               />
 
@@ -300,7 +297,7 @@ export default function Home() {
                 icon={FolderOpen}
                 value={kpis.activeProjects.toLocaleString("pt-BR")}
                 label="Projetos ativos"
-                hint="Projetos em elaboração, andamento ou análise técnica no período."
+                hint="Projetos em elaboração, dimensionamento ou análise técnica no período."
                 delta={kpis.deltas.activeProjects}
               />
 
@@ -308,7 +305,7 @@ export default function Home() {
                 icon={CircleDollarSign}
                 value={kpis.hasBudgetData ? formatCurrencyBR(kpis.budgetTotal) : "Não calculado"}
                 label="Orçamento total"
-                hint="Consolidado de materiais elétricos e orçamentos calculados no período."
+                hint={`Consolidado de orçamentos e materiais elétricos de todos os projetos (${PERIOD_LABELS[chartPeriod]}).`}
                 delta={kpis.deltas.budgetTotal}
               />
 
@@ -316,7 +313,7 @@ export default function Home() {
                 icon={Gauge}
                 value={`${kpis.demandKva.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kVA`}
                 label="Cargas dimensionadas"
-                hint="Potência aparente agregada calculada a partir dos fatores de demanda NBR 5410."
+                hint={`Potência aparente agregada de todos os projetos (${PERIOD_LABELS[chartPeriod]}) via NBR 5410.`}
                 delta={kpis.deltas.demandKva}
                 className="col-span-2 sm:col-span-1"
               />
