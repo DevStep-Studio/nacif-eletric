@@ -108,11 +108,10 @@ function ProjectThumbBadge({ project, size = "md", customLogo = null }) {
 
   return (
     <span
-      className={`flex shrink-0 items-center justify-center rounded-xl border ${
-        isSolar
+      className={`flex shrink-0 items-center justify-center rounded-xl border ${isSolar
           ? "border-amber-200 bg-amber-50 text-amber-600"
           : "border-blue-200 bg-blue-50 text-blue-600"
-      } ${sizeClasses}`}
+        } ${sizeClasses}`}
     >
       {isSolar ? (
         <Sun className={`${iconSize} text-amber-500`} />
@@ -238,7 +237,7 @@ export default function BudgetPage() {
           const storedId = typeof window !== "undefined" ? window.localStorage.getItem("voltai_active_project_id") : null;
           const target = safeList.find((p) => p.id === storedId) || safeList[0];
           if (target?.id) {
-            try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch {}
+            try { window.localStorage.setItem("voltai_active_project_id", target.id); } catch { }
             navigate(`/budget?project=${target.id}`, { replace: true });
           }
         }
@@ -252,7 +251,7 @@ export default function BudgetPage() {
       setProject(null);
       return;
     }
-    try { window.localStorage.setItem("voltai_active_project_id", projectId); } catch {}
+    try { window.localStorage.setItem("voltai_active_project_id", projectId); } catch { }
     setLoadingProject(true);
     backend.entities.Project.get(projectId)
       .then(setProject)
@@ -306,35 +305,35 @@ export default function BudgetPage() {
 
     const { materials: projMaterials } = isSolarProj
       ? {
-          materials: [...solarBudget.equipmentItems, ...solarBudget.caItems].map((item) => ({
-            name: item.name,
-            qty: item.quantity,
-            unit: item.unit,
-            price: item.unitPrice,
-            basePrice: item.unitPrice,
-            category: item.category,
-            brand: "NACIF Solar",
-          })),
-        }
+        materials: [...solarBudget.equipmentItems, ...solarBudget.caItems].map((item) => ({
+          name: item.name,
+          qty: item.quantity,
+          unit: item.unit,
+          price: item.unitPrice,
+          basePrice: item.unitPrice,
+          category: item.category,
+          brand: "NACIF Solar",
+        })),
+      }
       : buildProjectBudgetMaterials(proj, { productAdjustment: 0 });
 
     const initialServices = isSolarProj
       ? solarBudget.serviceItems.map((srv, idx) => ({
-          id: `srv-${Date.now()}-${idx + 1}`,
-          name: srv.name,
-          qty: srv.quantity,
-          unit: srv.unit,
-          price: srv.unitPrice,
-        }))
+        id: `srv-${Date.now()}-${idx + 1}`,
+        name: srv.name,
+        qty: srv.quantity,
+        unit: srv.unit,
+        price: srv.unitPrice,
+      }))
       : [
-          {
-            id: `srv-${Date.now()}-1`,
-            name: "Mão de obra e execução técnica especializada",
-            qty: 1,
-            unit: "vb.",
-            price: 800,
-          },
-        ];
+        {
+          id: `srv-${Date.now()}-1`,
+          name: "Mão de obra e execução técnica especializada",
+          qty: 1,
+          unit: "vb.",
+          price: 800,
+        },
+      ];
 
     const initialMargin = isSolarProj ? Number(solarBudget.marginPercent ?? 20) : 30;
     const initialDiscount = isSolarProj ? Number(solarBudget.discountBrl ?? 0) : 0;
@@ -786,7 +785,7 @@ export default function BudgetPage() {
 
   const selectProject = (id) => {
     if (id) {
-      try { window.localStorage.setItem("voltai_active_project_id", id); } catch {}
+      try { window.localStorage.setItem("voltai_active_project_id", id); } catch { }
       navigate(`/budget?project=${id}`, { replace: true });
     }
   };
@@ -846,13 +845,12 @@ export default function BudgetPage() {
                   type="button"
                   onClick={handleSaveBudget}
                   disabled={saveStatus === "saving"}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold shadow-xs transition ${
-                    saveStatus === "saved"
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold shadow-xs transition ${saveStatus === "saved"
                       ? "bg-[#00D98A] text-[#031923]"
                       : saveStatus === "error"
-                      ? "bg-[#EF4444] text-white"
-                      : "bg-[#031923] text-white hover:bg-[#082732]"
-                  }`}
+                        ? "bg-[#EF4444] text-white"
+                        : "bg-[#031923] text-white hover:bg-[#082732]"
+                    }`}
                   title="Salvar alterações no orçamento ativo"
                 >
                   {saveStatus === "saving" ? (
@@ -866,8 +864,8 @@ export default function BudgetPage() {
                     {saveStatus === "saving"
                       ? "Salvando..."
                       : saveStatus === "saved"
-                      ? "Salvo!"
-                      : "Salvar Orçamento"}
+                        ? "Salvo!"
+                        : "Salvar Orçamento"}
                   </span>
                 </button>
 
@@ -937,22 +935,20 @@ export default function BudgetPage() {
               <button
                 type="button"
                 onClick={() => setBudgetCategoryFilter("split")}
-                className={`flex h-7 items-center justify-center rounded-lg text-[11px] font-extrabold transition ${
-                  budgetCategoryFilter === "split"
+                className={`flex h-7 items-center justify-center rounded-lg text-[11px] font-extrabold transition ${budgetCategoryFilter === "split"
                     ? "bg-white text-[#006F51] shadow-xs"
                     : "text-[#64748B] hover:text-[#101828]"
-                }`}
+                  }`}
               >
                 Todos ({filteredProjects.length})
               </button>
               <button
                 type="button"
                 onClick={() => setBudgetCategoryFilter("electrical")}
-                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${
-                  budgetCategoryFilter === "electrical"
+                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${budgetCategoryFilter === "electrical"
                     ? "bg-white text-blue-700 shadow-xs"
                     : "text-[#64748B] hover:text-[#101828]"
-                }`}
+                  }`}
               >
                 <Zap className="h-3 w-3 text-blue-600" />
                 Elétricos ({electricalProjects.length})
@@ -960,11 +956,10 @@ export default function BudgetPage() {
               <button
                 type="button"
                 onClick={() => setBudgetCategoryFilter("solar")}
-                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${
-                  budgetCategoryFilter === "solar"
+                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11px] font-extrabold transition ${budgetCategoryFilter === "solar"
                     ? "bg-white text-amber-700 shadow-xs"
                     : "text-[#64748B] hover:text-[#101828]"
-                }`}
+                  }`}
               >
                 <Sun className="h-3 w-3 text-amber-500" />
                 Solares ({solarProjects.length})
@@ -1005,11 +1000,10 @@ export default function BudgetPage() {
                             key={item.id}
                             type="button"
                             onClick={() => selectProject(item.id)}
-                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${
-                              active
+                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${active
                                 ? "border-blue-500 bg-blue-50/60 shadow-xs"
                                 : "border-border/60 bg-white hover:border-blue-200 hover:bg-slate-50/70"
-                            }`}
+                              }`}
                           >
                             <ProjectThumbBadge project={item} size="md" />
                             <span className="min-w-0 flex-1">
@@ -1054,11 +1048,10 @@ export default function BudgetPage() {
                             key={item.id}
                             type="button"
                             onClick={() => selectProject(item.id)}
-                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${
-                              active
+                            className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition ${active
                                 ? "border-amber-500 bg-amber-50/70 shadow-xs"
                                 : "border-border/60 bg-white hover:border-amber-200 hover:bg-slate-50/70"
-                            }`}
+                              }`}
                           >
                             <ProjectThumbBadge project={item} size="md" />
                             <span className="min-w-0 flex-1">
@@ -1106,11 +1099,10 @@ export default function BudgetPage() {
                       <div className="flex items-center gap-2">
                         <h2 className="truncate text-base font-black text-[#0f172a]">{project.name}</h2>
                         <span
-                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase ${
-                            isCurrentProjectSolar
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase ${isCurrentProjectSolar
                               ? "border-amber-200 bg-amber-50 text-amber-800"
                               : "border-blue-200 bg-blue-50 text-blue-800"
-                          }`}
+                            }`}
                         >
                           {isCurrentProjectSolar ? "Solar" : "Elétrico"}
                         </span>
@@ -1179,11 +1171,10 @@ export default function BudgetPage() {
                           key={b.id}
                           type="button"
                           onClick={() => loadBudgetDataIntoForm(b)}
-                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                            isActive
+                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition ${isActive
                               ? "bg-slate-900 text-white shadow-xs"
                               : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                          }`}
+                            }`}
                         >
                           <span className="truncate max-w-[180px]">{b.name}</span>
                           <span className={`px-1.5 py-0.2 rounded text-[9px] uppercase tracking-wider ${statusConf.badgeClass}`}>
