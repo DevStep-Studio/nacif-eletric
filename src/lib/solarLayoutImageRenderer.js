@@ -651,18 +651,77 @@ function renderCanvasInBrowser({ geo, mode = "layout", width = 1200, height = 65
       ctx.lineWidth = 1.2;
       ctx.stroke();
 
-      // Linha central Half-Cut
+      // Linhas internas da matriz de células fotovoltaicas (6 colunas x 12 fileiras + Half-Cut)
       if (pts.length >= 4) {
-        const midX1 = (pts[0].x + pts[1].x) / 2;
-        const midY1 = (pts[0].y + pts[1].y) / 2;
-        const midX2 = (pts[2].x + pts[3].x) / 2;
-        const midY2 = (pts[2].y + pts[3].y) / 2;
-        ctx.strokeStyle = "#476b92";
-        ctx.lineWidth = 0.8;
+        const p0 = pts[0];
+        const p1 = pts[1];
+        const p2 = pts[2];
+        const p3 = pts[3];
+        const len01 = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        const len12 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const isLandscape = len01 > len12;
+        const lerpPt = (a, b, t) => ({
+          x: a.x + (b.x - a.x) * t,
+          y: a.y + (b.y - a.y) * t,
+        });
+
+        ctx.strokeStyle = "rgba(126, 160, 194, 0.42)";
+        ctx.lineWidth = 0.55;
         ctx.beginPath();
-        ctx.moveTo(midX1, midY1);
-        ctx.lineTo(midX2, midY2);
-        ctx.stroke();
+
+        if (!isLandscape) {
+          for (let c = 1; c < 6; c++) {
+            const rc = c / 6;
+            const topPt = lerpPt(p0, p1, rc);
+            const btmPt = lerpPt(p3, p2, rc);
+            ctx.moveTo(topPt.x, topPt.y);
+            ctx.lineTo(btmPt.x, btmPt.y);
+          }
+          for (let r = 1; r < 12; r++) {
+            if (r === 6) continue;
+            const rr = r / 12;
+            const leftPt = lerpPt(p0, p3, rr);
+            const rightPt = lerpPt(p1, p2, rr);
+            ctx.moveTo(leftPt.x, leftPt.y);
+            ctx.lineTo(rightPt.x, rightPt.y);
+          }
+          ctx.stroke();
+
+          const midLeft = lerpPt(p0, p3, 0.5);
+          const midRight = lerpPt(p1, p2, 0.5);
+          ctx.strokeStyle = "rgba(226, 232, 240, 0.72)";
+          ctx.lineWidth = 0.85;
+          ctx.beginPath();
+          ctx.moveTo(midLeft.x, midLeft.y);
+          ctx.lineTo(midRight.x, midRight.y);
+          ctx.stroke();
+        } else {
+          for (let c = 1; c < 6; c++) {
+            const rc = c / 6;
+            const leftPt = lerpPt(p0, p3, rc);
+            const rightPt = lerpPt(p1, p2, rc);
+            ctx.moveTo(leftPt.x, leftPt.y);
+            ctx.lineTo(rightPt.x, rightPt.y);
+          }
+          for (let r = 1; r < 12; r++) {
+            if (r === 6) continue;
+            const rr = r / 12;
+            const topPt = lerpPt(p0, p1, rr);
+            const btmPt = lerpPt(p3, p2, rr);
+            ctx.moveTo(topPt.x, topPt.y);
+            ctx.lineTo(btmPt.x, btmPt.y);
+          }
+          ctx.stroke();
+
+          const midTop = lerpPt(p0, p1, 0.5);
+          const midBtm = lerpPt(p3, p2, 0.5);
+          ctx.strokeStyle = "rgba(226, 232, 240, 0.72)";
+          ctx.lineWidth = 0.85;
+          ctx.beginPath();
+          ctx.moveTo(midTop.x, midTop.y);
+          ctx.lineTo(midBtm.x, midBtm.y);
+          ctx.stroke();
+        }
       }
     }
     ctx.restore();

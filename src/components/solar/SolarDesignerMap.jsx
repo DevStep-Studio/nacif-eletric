@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { Circle, MapContainer, Marker, Pane, Polygon, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -953,39 +953,10 @@ export default function SolarDesignerMap({
       ? Math.max(0, Math.min(1, Number(config.cell_lines_opacity)))
       : activeStyle.cellLineOpacity;
 
-  // LOD Dinâmico por Zoom e estilo visual:
-  // - Zoom < 14: Sem linhas internas para não poluir o mapa
-  // - Zoom >= 14: Detalhamento fotovoltaico sutil e elegante
-  const { cellLines, halfCutLines, secondaryLines } = useMemo(() => {
-    if (currentZoom < 14 || effectiveCellOpacity <= 0) {
-      return { cellLines: [], halfCutLines: [], secondaryLines: [] };
-    }
-    const isLargeArray = allPanelsFlat.length > 500;
-    const highDetail = currentZoom >= 17 && !isLargeArray;
-
-    const allCell = [];
-    const allHalfCut = [];
-    const allSecondary = [];
-
-    for (let i = 0; i < allPanelsFlat.length; i++) {
-      const res = buildRealisticPanelCellLines(allPanelsFlat[i], currentZoom, highDetail);
-      if (res.primary && res.primary.length > 0) {
-        allCell.push(...res.primary);
-      }
-      if (res.halfCut && res.halfCut.length > 0) {
-        allHalfCut.push(...res.halfCut);
-      }
-      if (res.secondary && res.secondary.length > 0) {
-        allSecondary.push(...res.secondary);
-      }
-    }
-
-    return {
-      cellLines: allCell.map(toLeafletPositions),
-      halfCutLines: allHalfCut.map(toLeafletPositions),
-      secondaryLines: allSecondary.map(toLeafletPositions),
-    };
-  }, [allPanelsFlat, currentZoom, effectiveCellOpacity]);
+  const effectiveZoom = Math.max(18, Number(currentZoom) || 20);
+  const showPanelCellStripes = viewMode !== "irradiation" && !electricalMode && effectiveCellOpacity > 0;
+  const isLargeArray = allPanelsFlat.length > 500;
+  const highDetailCells = effectiveZoom >= 17 && !isLargeArray;
 
   const initialCenter = useMemo(
     () => [mapCenter?.lat || DEFAULT_SOLAR_MAP_CENTER.lat, mapCenter?.lng || DEFAULT_SOLAR_MAP_CENTER.lng],
@@ -1306,89 +1277,108 @@ export default function SolarDesignerMap({
                 fillOpacity = 0.98;
               }
 
+              const panelPositions = toLeafletPositions(panel);
+              const panelCoordKey = panel[0]
+                ? `${Number(panel[0].lat).toFixed(6)}_${Number(panel[0].lng).toFixed(6)}`
+                : idx;
+              const panelLines = showPanelCellStripes
+                ? buildRealisticPanelCellLines(panel, effectiveZoom, highDetailCells)
+                : null;
+              const panelCellPositions = panelLines?.primary?.length
+                ? panelLines.primary.map(toLeafletPositions)
+                : [];
+              const panelHalfCutPositions = panelLines?.halfCut?.length
+                ? panelLines.halfCut.map(toLeafletPositions)
+                : [];
+              const panelSecondaryPositions = panelLines?.secondary?.length
+                ? panelLines.secondary.map(toLeafletPositions)
+                : [];
+
               return (
-                <Polygon
-                  key={`panel-${group.areaId}-${idx}`}
-                  positions={toLeafletPositions(panel)}
-                  interactive={(editorMode === "select" || isPlacingObstacle) && !isDrawing}
-                  eventHandlers={{
-                    click: (e) => {
-                      if (isPlacingObstacle) {
-                        onMapClick?.(e.latlng);
-                        return;
-                      }
-                      L.DomEvent.stopPropagation(e);
-                      if (group.areaId !== selectedAreaId) {
-                        onSelectArea?.(group.areaId);
-                      }
-                      onSelectModule?.(globalIndex);
-                    },
-                  }}
-                  pathOptions={{
-                    color: strokeColor,
-                    className: `solar-panel-shape cursor-pointer transition-all duration-150 ${isSelected ? "solar-panel--selected" : ""}`,
-                    fillColor,
-                    fillOpacity,
-                    opacity,
-                    weight: strokeWidth,
-                  }}
-                >
-                  <Tooltip sticky direction="top" className="solar-panel-tooltip">
-                    <div className="text-[11px] font-bold">
-                      <span className="text-[#00d8b8]">Módulo #{idx + 1}</span>
-                      <span className="text-slate-300 ml-1.5">{moduleWp} Wp</span>
-                      {stringInfo && (
-                        <div className="text-[10px] text-emerald-400 mt-0.5 font-medium">
-                          {stringInfo.stringName}
-                        </div>
-                      )}
-                    </div>
-                  </Tooltip>
-                </Polygon>
+                <Fragment key={`panel-unit-${group.areaId}-${idx}-${panelCoordKey}`}>
+                  <Polygon
+                    positions={panelPositions}
+                    noClip={true}
+                    interactive={(editorMode === "select" || isPlacingObstacle) && !isDrawing}
+                    eventHandlers={{
+                      click: (e) => {
+                        if (isPlacingObstacle) {
+                          onMapClick?.(e.latlng);
+                          return;
+                        }
+                        L.DomEvent.stopPropagation(e);
+                        if (group.areaId !== selectedAreaId) {
+                          onSelectArea?.(group.areaId);
+                        }
+                        onSelectModule?.(globalIndex);
+                      },
+                    }}
+                    pathOptions={{
+                      color: strokeColor,
+                      className: `solar-panel-shape cursor-pointer transition-all duration-150 ${isSelected ? "solar-panel--selected" : ""}`,
+                      fillColor,
+                      fillOpacity,
+                      opacity,
+                      weight: strokeWidth,
+                    }}
+                  >
+                    <Tooltip sticky direction="top" className="solar-panel-tooltip">
+                      <div className="text-[11px] font-bold">
+                        <span className="text-[#00d8b8]">Módulo #{idx + 1}</span>
+                        <span className="text-slate-300 ml-1.5">{moduleWp} Wp</span>
+                        {stringInfo && (
+                          <div className="text-[10px] text-emerald-400 mt-0.5 font-medium">
+                            {stringInfo.stringName}
+                          </div>
+                        )}
+                      </div>
+                    </Tooltip>
+                  </Polygon>
+
+                  {panelCellPositions.length > 0 && (
+                    <Polyline
+                      positions={panelCellPositions}
+                      noClip={true}
+                      interactive={false}
+                      pathOptions={{
+                        color: activeStyle.cellLineColor || "#6484a4",
+                        className: "solar-panel-cell-lines pointer-events-none",
+                        opacity: effectiveCellOpacity,
+                        weight: activeStyle.cellLineWidth || 0.65,
+                      }}
+                    />
+                  )}
+
+                  {panelHalfCutPositions.length > 0 && (
+                    <Polyline
+                      positions={panelHalfCutPositions}
+                      noClip={true}
+                      interactive={false}
+                      pathOptions={{
+                        color: activeStyle.halfCutColor || "#8baac9",
+                        className: "solar-panel-half-cut-lines pointer-events-none",
+                        opacity: Math.min(0.9, effectiveCellOpacity * 1.4),
+                        weight: activeStyle.halfCutWidth || 1.0,
+                      }}
+                    />
+                  )}
+
+                  {panelSecondaryPositions.length > 0 && (
+                    <Polyline
+                      positions={panelSecondaryPositions}
+                      noClip={true}
+                      interactive={false}
+                      pathOptions={{
+                        color: activeStyle.busbarColor || "#93b5d8",
+                        className: "solar-panel-busbars pointer-events-none",
+                        opacity: activeStyle.busbarOpacity || 0.25,
+                        weight: 0.5,
+                      }}
+                    />
+                  )}
+                </Fragment>
               );
             })
-          )}
-          
-          {/* Linhas internas elegantes das células fotovoltaicas */}
-          {cellLines.length > 0 && viewMode !== "irradiation" && !electricalMode && effectiveCellOpacity > 0 && (
-            <Polyline
-              positions={cellLines}
-              interactive={false}
-              pathOptions={{
-                color: activeStyle.cellLineColor || "#6484a4",
-                className: "solar-panel-cell-lines pointer-events-none",
-                opacity: effectiveCellOpacity,
-                weight: activeStyle.cellLineWidth || 0.65,
-              }}
-            />
-          )}
-
-          {/* Linhas centrais de corte Half-Cut (nítidas e sutis) */}
-          {halfCutLines.length > 0 && viewMode !== "irradiation" && !electricalMode && effectiveCellOpacity > 0 && (
-            <Polyline
-              positions={halfCutLines}
-              interactive={false}
-              pathOptions={{
-                color: activeStyle.halfCutColor || "#8baac9",
-                className: "solar-panel-half-cut-lines pointer-events-none",
-                opacity: Math.min(0.9, effectiveCellOpacity * 1.4),
-                weight: activeStyle.halfCutWidth || 1.0,
-              }}
-            />
-          )}
-
-          {/* Barramentos secundários (busbars finos) */}
-          {secondaryLines.length > 0 && viewMode !== "irradiation" && !electricalMode && effectiveCellOpacity > 0 && (
-            <Polyline
-              positions={secondaryLines}
-              interactive={false}
-              pathOptions={{
-                color: activeStyle.busbarColor || "#93b5d8",
-                className: "solar-panel-busbars pointer-events-none",
-                opacity: activeStyle.busbarOpacity || 0.25,
-                weight: 0.5,
-              }}
-            />
           )}
         </Pane>
 

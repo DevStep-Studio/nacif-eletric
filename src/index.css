@@ -521,7 +521,6 @@ label.rounded-full:not(.w-6):not(.w-7):not(.w-8):not(.w-9):not(.w-10),
   stroke-linecap: round;
   stroke-linejoin: round;
   shape-rendering: geometricPrecision;
-  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.7));
 }
 
 .solar-panel-cell-lines,
