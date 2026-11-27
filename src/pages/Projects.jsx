@@ -368,7 +368,7 @@ export default function Projects() {
                 }`}
               >
                 <Columns2 className="h-3.5 w-3.5" />
-                <span>Meio a Meio</span>
+                <span>Dividido</span>
               </button>
               <button
                 type="button"
@@ -380,7 +380,7 @@ export default function Projects() {
                 }`}
               >
                 <Zap className="h-3.5 w-3.5 text-blue-600" />
-                <span>Projetos Elétricos</span>
+                <span>Elétricos</span>
                 <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700">
                   {electricalProjects.length}
                 </span>
@@ -395,7 +395,7 @@ export default function Projects() {
                 }`}
               >
                 <Sun className="h-3.5 w-3.5 text-amber-500" />
-                <span>Projetos Solares</span>
+                <span>Solares</span>
                 <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">
                   {solarProjects.length}
                 </span>
@@ -498,8 +498,6 @@ export default function Projects() {
             {/* Coluna 1: Projetos Elétricos */}
             <DisciplineSection
               title="Projetos Elétricos"
-              badge="Instalações Elétricas • NBR 5410"
-              subtitle="Planta elétrica, circuitos, quadros de distribuição e diagrama unifilar"
               icon={Zap}
               variant="electrical"
               newProjectHref="/projects/new?type=eletrico"
@@ -517,8 +515,6 @@ export default function Projects() {
             {/* Coluna 2: Projetos Solares */}
             <DisciplineSection
               title="Projetos Solares"
-              badge="Projeto Solar Fotovoltaico"
-              subtitle="Dimensionamento solar, inversores, geração fotovoltaica e memorial"
               icon={Sun}
               variant="solar"
               newProjectHref="/projects/new?type=solar"
@@ -624,8 +620,6 @@ export default function Projects() {
 
 function DisciplineSection({
   title,
-  badge,
-  subtitle,
   icon: SectionIcon,
   variant,
   newProjectHref,
@@ -646,18 +640,16 @@ function DisciplineSection({
   const theme = isSolar
     ? {
         wrapper: "border-amber-200/80 bg-white",
-        headerBg: "border-b border-amber-100 bg-gradient-to-r from-amber-50/90 via-amber-50/40 to-white",
-        iconBox: "bg-amber-100 text-amber-700 ring-1 ring-amber-200",
-        badgePill: "border-amber-200 bg-amber-50 text-amber-800",
+        headerBg: "border-b border-amber-100 bg-amber-50/40",
+        iconBox: "bg-amber-100 text-amber-700",
         countPill: "bg-amber-100 text-amber-900",
         addBtn: "border-amber-200 bg-white text-amber-800 hover:bg-amber-50",
         emptyIcon: "bg-amber-50 text-amber-600",
       }
     : {
         wrapper: "border-blue-200/80 bg-white",
-        headerBg: "border-b border-blue-100 bg-gradient-to-r from-blue-50/80 via-slate-50/40 to-white",
-        iconBox: "bg-blue-100 text-blue-700 ring-1 ring-blue-200",
-        badgePill: "border-blue-200 bg-blue-50 text-blue-800",
+        headerBg: "border-b border-blue-100 bg-blue-50/40",
+        iconBox: "bg-blue-100 text-blue-700",
         countPill: "bg-blue-100 text-blue-900",
         addBtn: "border-blue-200 bg-white text-blue-800 hover:bg-blue-50",
         emptyIcon: "bg-blue-50 text-blue-600",
@@ -665,24 +657,16 @@ function DisciplineSection({
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-2xl border shadow-xs ${theme.wrapper}`}>
-      {/* Cabeçalho da Coluna */}
-      <div className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 ${theme.headerBg}`}>
-        <div className="flex min-w-0 items-center gap-3">
-          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${theme.iconBox}`}>
-            <SectionIcon className="h-5 w-5" />
+      {/* Cabeçalho Enxuto da Coluna */}
+      <div className={`flex items-center justify-between gap-3 px-4 py-3 ${theme.headerBg}`}>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${theme.iconBox}`}>
+            <SectionIcon className="h-4 w-4" />
           </span>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-black tracking-tight text-[#101828]">{title}</h2>
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${theme.badgePill}`}>
-                {badge}
-              </span>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-black ${theme.countPill}`}>
-                {projects.length}
-              </span>
-            </div>
-            <p className="mt-0.5 truncate text-xs font-medium text-[#64748B]">{subtitle}</p>
-          </div>
+          <h2 className="text-sm font-black tracking-tight text-[#101828]">{title}</h2>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-black ${theme.countPill}`}>
+            {projects.length}
+          </span>
         </div>
 
         <Button
@@ -700,19 +684,14 @@ function DisciplineSection({
 
       {/* Corpo da Coluna */}
       {projects.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
-          <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${theme.emptyIcon}`}>
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${theme.emptyIcon}`}>
             <SectionIcon className="h-5 w-5" />
           </div>
-          <h3 className="mt-3 text-sm font-extrabold text-[#101828]">
-            Nenhum {isSolar ? "projeto solar" : "projeto elétrico"} encontrado
+          <h3 className="mt-2.5 text-sm font-extrabold text-[#101828]">
+            Nenhum {isSolar ? "projeto solar" : "projeto elétrico"}
           </h3>
-          <p className="mt-1 max-w-xs text-xs font-medium text-[#667085]">
-            {isSolar
-              ? "Crie um projeto solar fotovoltaico para dimensionar módulos, inversores e geração."
-              : "Crie um projeto de instalações elétricas para planta, circuitos, quadro e diagrama."}
-          </p>
-          <Button asChild variant="outline" size="sm" className={`mt-4 h-8 rounded-lg text-xs font-extrabold ${theme.addBtn}`}>
+          <Button asChild variant="outline" size="sm" className={`mt-3 h-8 rounded-lg text-xs font-extrabold ${theme.addBtn}`}>
             <Link to={newProjectHref}>
               <Plus className="h-3.5 w-3.5 mr-1" />
               {newProjectLabel}
@@ -814,10 +793,10 @@ function ProjectTable({
                 />
               </TableHead>
               <TableHead className="px-3 text-[11px] font-extrabold uppercase tracking-[0.06em]">
-                Projeto / Cliente
+                Projeto
               </TableHead>
               <TableHead className="px-3 text-[11px] font-extrabold uppercase tracking-[0.06em]">
-                Status / Data
+                Status
               </TableHead>
               <TableHead className="px-3 text-right text-[11px] font-extrabold uppercase tracking-[0.06em]">
                 Ações
@@ -842,7 +821,7 @@ function ProjectTable({
                       className="h-4 w-4 rounded border-[#D0D5DD]"
                     />
                   </TableCell>
-                  <TableCell className="px-3 py-3.5">
+                  <TableCell className="px-3 py-3">
                     <Link to={`/projects/${project.id}`} className="flex min-w-0 items-center gap-2.5">
                       <span
                         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${
@@ -855,26 +834,23 @@ function ProjectTable({
                         <span className="block truncate text-sm font-extrabold text-[#101828] hover:text-[#00d8b8] transition-colors">
                           {project.name}
                         </span>
-                        <span className="mt-0.5 block truncate text-xs font-semibold text-[#475467]">
+                        <span className="mt-0.5 block truncate text-xs font-medium text-[#667085]">
                           {project.client_name || "Sem cliente"}
-                        </span>
-                        <span className="mt-0.5 block truncate text-[11px] font-medium text-[#667085]">
-                          {isSolar ? "Projeto Solar" : project.project_type || "Instalações Elétricas"} •{" "}
-                          {project.supply_type || "Sem alimentação"} •{" "}
-                          {project.voltage ? `${project.voltage}V` : "Sem tensão"}
+                          {project.supply_type ? ` · ${project.supply_type}` : ""}
+                          {project.voltage ? ` · ${project.voltage}V` : ""}
                         </span>
                       </span>
                     </Link>
                   </TableCell>
-                  <TableCell className="px-3 py-3.5">
-                    <div className="flex flex-col items-start gap-1">
+                  <TableCell className="px-3 py-3">
+                    <div className="flex flex-col items-start gap-0.5">
                       <StatusBadge status={project.status} />
                       <span className="text-[11px] font-medium text-[#667085]">
                         {formatProjectDate(project)}
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="px-3 py-3.5" onClick={(e) => e.stopPropagation()}>
+                  <TableCell className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <ProjectActions
                       project={project}
                       onEdit={onEdit}
