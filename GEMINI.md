@@ -20,3 +20,4 @@
 >    - `refactor: <descrição>` para refatorações de código
 >    - `chore: <descrição>` para alterações de build, configs ou dependências
 > 4. **Não finalizar a resposta sem commitar**: Nunca encerre a resposta de um ajuste sem ter efetuado o commit das alterações realizadas.
+> 5. **Zero Tasks Travadas (`1 task running`)**: Use sempre `git --no-pager`, `$env:GIT_TERMINAL_PROMPT="0"; $env:GCM_INTERACTIVE="never"`, `WaitMsBeforeAsync: 10000` e validações focadas (`npx eslint <arquivos>`) para que todos os comandos concluam de forma síncrona no mesmo turno, sem deixar tasks em segundo plano pendentes.
